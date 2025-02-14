@@ -1,0 +1,98 @@
+/* prototypes for this file are in unixplot.trm-proto */
+/* GNUPLOT -- unixplot.trm */
+/*
+ * Copyright (C) 1990   
+ *
+ * Permission to use,  copy,  and distribute this software and its
+ * documentation for any purpose with or without fee is hereby granted,  
+ * provided that the above copyright notice appear in all copies and 
+ * that both that copyright notice and this permission notice appear 
+ * in supporting documentation.
+ *
+ * Permission to modify the software is granted,  but not the right to
+ * distribute the modified code.  Modifications are to be distributed 
+ * as patches to released version.
+ *  
+ * This software  is provided "as is" without express or implied warranty.
+ * 
+ * This file is included by ../term.c.
+ *
+ * This terminal driver supports:
+ *  Unix plot(5) graphics language
+ *
+ * AUTHORS
+ *  Colin Kelley,  Thomas Williams,  Russell Lang
+ * 
+ * send your comments or suggestions to (pixar!info-gnuplot@sun.com).
+ * 
+ */
+
+/*
+Unixplot library writes to stdout.  A fix was put in place by
+..!arizona!naucse!jdc to let set term and set output redirect
+stdout.  All other terminals write to outfile.
+*/
+
+#define UP_XMAX 4096
+#define UP_YMAX 4096
+
+#define UP_XLAST (UP_XMAX - 1)
+#define UP_YLAST (UP_YMAX - 1)
+
+#define UP_VCHAR (UP_YMAX/30)	/* just a guess--no way to know this! */
+#define UP_HCHAR (UP_XMAX/60)	/* just a guess--no way to know this! */
+#define UP_VTIC (UP_YMAX/80)
+#define UP_HTIC (UP_XMAX/80)
+
+int UP_init(void)
+{
+	openpl();
+	space(0,  0,  UP_XMAX,  UP_YMAX);
+}
+
+
+int UP_graphics(void)
+{
+	erase();
+}
+
+
+int UP_text(void)
+{
+}
+
+
+int UP_linetype(int linetype)
+{
+static char *lt[2+5] = {"solid",  "longdashed",  "solid",  "dotted", "shortdashed", 
+	"dotdashed",  "longdashed"};
+
+	if (linetype >= 5)
+		linetype %= 5;
+	linemod(lt[linetype+2]);
+}
+
+
+int UP_move(int x, int y)
+{
+	move(x, y);
+}
+
+
+int UP_vector(int x, int y)
+{
+	cont(x, y);
+}
+
+
+int UP_put_text(int x, int y, char *str)
+{
+	UP_move(x+UP_HCHAR/2, y+UP_VCHAR/5);
+	label(str);
+}
+
+int UP_reset(void)
+{
+	closepl();
+}
+

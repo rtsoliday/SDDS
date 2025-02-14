@@ -1,0 +1,103 @@
+/* prototypes for this file are in kyo.trm-proto */
+/* Prescribe (KYOCERA) driver - Michael Waldor */
+/* Modified for gnuplot 2.0 sk@sun4 24-Apr-1990 13:23 */
+#ifdef PRESCRIBE
+
+#define PRE_XMAX 2567
+#define PRE_YMAX 1815	/* X:Y = sqrt(2) */
+
+#define PRE_XLAST (PRE_XMAX - 1)
+#define PRE_YLAST (PRE_YMAX - 1)
+
+#define PRE_VCHAR (PRE_YMAX/30)
+#define PRE_HCHAR 33	/* about 9 chars per inch */
+#define PRE_HTIC (PRE_XMAX/80)
+#define PRE_VTIC PRE_HTIC
+
+/* for Courier font: */
+#define KYO_VCHAR (14*(300/72))	/* 12 pt + 2 pt baselineskip */
+#define KYO_HCHAR (300/10)	/*  10 chars per inch */
+
+enum JUSTIFY pre_justify=LEFT;	/* text is flush left */
+
+int PRE_init(void)
+{
+  (void) fprintf(outfile, "!R! RES;\n");
+  /* UNIT: units are dots,  300 dots = 1 in = 72 pt */
+  /* SPO: landscape format */
+  /* STM,  SLM set top,  left margin*/
+  /* Font: bold Helvetica (proportional font) */
+  (void) fprintf(outfile, "PAGE; UNIT D; SPO L; STM 280; SLM 440;\n");
+  (void) fprintf(outfile, "FTMD 15; FONT 29; SCPI 9;\n");
+}
+
+int KYO_init(void)
+{
+  (void) fprintf(outfile, "!R! RES;\n");
+  /* UNIT: units are dots,  300 dots = 1 in = 72 pt */
+  /* SPO: landscape format */
+  /* STM,  SLM set top,  left margin */
+  /* Font: Courier (fixed width font) */
+  (void) fprintf(outfile, "PAGE; UNIT D; SPO L; STM 280; SLM 440;\n");
+  (void) fprintf(outfile, "FTMD 15; FONT 17; SCPI 10;\n");
+}
+
+int PRE_graphics(void)
+{
+}
+
+int PRE_text(void)			
+{
+/* PRE_text()			  eject page after each plot */
+  (void) fprintf(outfile, "PAGE;\n"); 
+}
+
+int PRE_linetype(int linetype)
+{
+  /* actually choose pendiameter */
+  if (linetype < 0) linetype = -linetype;
+  else linetype = 3;
+  (void) fprintf(outfile, "SPD %d;\n",  linetype);
+}
+ 
+int PRE_move(int x, int y)
+{
+  (void) fprintf(outfile, "MAP %1d, %1d;\n", x, PRE_YMAX-y);
+}
+ 
+int PRE_vector(int x, int y)
+{
+  (void) fprintf(outfile, "DAP %1d,  %1d;\n", x, PRE_YMAX-y);
+}
+ 
+int PRE_put_text(int x, int y, char *str)
+{
+  PRE_move(x, y);
+  switch(pre_justify){
+  case RIGHT:
+    (void) fprintf(outfile, "RTXT \"%s\",  B;\n", str);
+    break;
+  default:
+    (void) fprintf(outfile, "TEXT \"%s\",  B;\n", str);
+  }
+}
+ 
+int PRE_justify_text(enum JUSTIFY mode)
+{
+  pre_justify=mode;
+  switch(pre_justify){
+  case LEFT:
+  case RIGHT:
+    return(TRUE);
+  default:
+    return(FALSE);
+  }
+  
+}
+
+int PRE_reset(void)
+{
+  (void) fprintf(outfile, "PAGE; RES; EXIT;\n");
+}
+
+#endif /* PRESCRIBE */

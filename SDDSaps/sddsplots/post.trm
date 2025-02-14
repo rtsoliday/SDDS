@@ -1,0 +1,996 @@
+/* prototypes for this file are in post.trm-proto */
+/* GNUPLOT - post.trm */
+/*
+ * Copyright (C) 1990   
+ *
+ * Permission to use,  copy,  and distribute this software and its
+ * documentation for any purpose with or without fee is hereby granted,  
+ * provided that the above copyright notice appear in all copies and 
+ * that both that copyright notice and this permission notice appear 
+ * in supporting documentation.
+ *
+ * Permission to modify the software is granted,  but not the right to
+ * distribute the modified code.  Modifications are to be distributed 
+ * as patches to released version.
+ *  
+ * This software  is provided "as is" without express or implied warranty.
+ * 
+ * This file is included by ../term.c.
+ *
+ * This terminal driver supports:
+ *     postscript,  psbig,  epsf1,  epsf2
+ *
+ * AUTHORS
+ *  Russell Lang
+ * 
+ * send your comments or suggestions to (pixar!info-gnuplot@sun.com).
+ * 
+ */
+
+/* PostScript driver by Russell Lang,  rjl@monu1.cc.monash.edu.au */
+
+int pspage=0;			/* page count */
+int ps_path_count=0; 	/* count of lines in path */
+int ps_ang=0;			/* text angle */
+enum JUSTIFY ps_justify=LEFT;	/* text is flush left */
+char *ps_font;			/* name of font in use */
+BOOLEAN ps_big;			/* true if big font used */
+BOOLEAN cps_useDash=0;            /* true if device paramereter dashes  is used*/
+int ncolors_ps=101;
+int spectralps=0;
+int customspectralps=0;
+unsigned short r0_ps=0, g0_ps=0, b0_ps=0, r1_ps=1, g1_ps=1, b1_ps=1;
+
+char *PS_header[] = {
+"/vpt2 vpt 2 mul def\n", 
+"/hpt2 hpt 2 mul def\n", 
+"/M {moveto} def\n", 
+"/L {lineto} def\n", 
+/* flush left show */
+#if defined(PS_EXTRAS)
+    "/Lshow { currentpoint stroke moveto\n", 
+    "  0 vshift rmoveto show } def\n",  
+    /* flush right show */
+    "/Rshow { currentpoint stroke moveto\n", 
+    "  dup stringwidth pop neg vshift rmoveto show } def\n",  
+    /* centred show */
+    "/Cshow { currentpoint stroke moveto\n", 
+    "  dup stringwidth pop -2 div vshift rmoveto show } def\n",  
+    "/D {  LT0  2 copy  vpt add moveto\n",  /* Diamond */
+    "  hpt neg vpt neg rlineto  hpt vpt neg rlineto\n", 
+    "  hpt vpt rlineto  hpt neg vpt rlineto  closepath  stroke\n", 
+    "  P  } def\n", 
+    "/A {  LT0  vpt sub moveto  0 vpt2 rlineto\n",  /* Plus (Add) */
+    "  currentpoint stroke moveto\n", 
+    "  hpt neg vpt neg rmoveto  hpt2 0 rlineto stroke\n", 
+    "  } def\n", 
+    "/B {  LT0  2 copy  exch hpt sub exch vpt add moveto\n",  /* Box */
+    "  0 vpt2 neg rlineto  hpt2 0 rlineto  0 vpt2 rlineto\n", 
+    "  hpt2 neg 0 rlineto  closepath  stroke\n", 
+    "  P  } def\n", 
+    "/C {  LT0  exch hpt sub exch vpt add moveto\n",  /* Cross */
+    "  hpt2 vpt2 neg rlineto  currentpoint  stroke  moveto\n", 
+    "  hpt2 neg 0 rmoveto  hpt2 vpt2 rlineto stroke  } def\n", 
+    "/T {  LT0  2 copy  vpt 1.12 mul add moveto\n",  /* Triangle */
+    "  hpt neg vpt -1.62 mul rlineto\n", 
+    "  hpt 2 mul 0 rlineto\n", 
+    "  hpt neg vpt 1.62 mul rlineto  closepath  stroke\n", 
+    "  P  } def\n", 
+    "/S {  LT0  2 copy A C} def\n",  /* Star */
+#endif  /* PS_EXTRAS */
+NULL
+};
+
+char *PS_BW_def[] = {
+"/BuildRectPath {\n",    /* fillrect emulation as per D.3.2 of Postscript Language Ref. Manual */
+" dup type dup /integertype eq exch /realtype eq or {\n", 
+"  4 -2 roll moveto\n", 
+"  dup 0 exch rlineto exch 0 rlineto neg 0 exch rlineto closepath\n", 
+" }{ \n", 
+"  dup length 4 sub 0 exch 4 exch \n", 
+"  { \n", 
+"   1 index exch 4 getinterval aload pop\n", 
+"   BuildRectPath\n", 
+"  } for \n", 
+"   pop\n", 
+"  } ifelse\n", 
+" } bind def\n", 
+"/RF {\n", 
+" setgray gsave newpath BuildRectPath fill grestore 0 setgray\n", 
+" } bind def\n", 
+/* bold lines */
+"/BL { stroke gnulinewidth 2.25 mul setlinewidth } def\n", 
+"/CL { stroke gnulinewidth 4 mul setlinewidth } def\n", 
+/* light lines */
+"/LL { stroke gnulinewidth 0.4 mul setlinewidth } def\n", 
+"/VL { stroke gnulinewidth 0.15 mul setlinewidth } def\n", 
+/* Plot Lines */
+"/PL { stroke gnulinewidth setlinewidth } def\n",
+/* Line Thickness */
+"/LW1 { stroke gnulinewidth 4 setlinewidth } def\n",
+"/LW2 { stroke gnulinewidth 8.0 setlinewidth } def\n",
+"/LW3 { stroke gnulinewidth 12.0 setlinewidth } def\n",
+"/LW4 { stroke gnulinewidth 16.0 setlinewidth } def\n",
+"/LW5 { stroke gnulinewidth 20.0 setlinewidth } def\n",
+"/LW6 { stroke gnulinewidth 24.0 setlinewidth } def\n",
+"/LW7 { stroke gnulinewidth 28.0 setlinewidth } def\n",
+"/LW8 { stroke gnulinewidth 32.0 setlinewidth } def\n",
+"/LW9 { stroke gnulinewidth 36.0 setlinewidth } def\n",
+/* Line Types */
+"/LT0 { PL [] 0 setdash } def\n", 
+"/LT1 { PL [4 dl 2 dl] 0 setdash } def\n", 
+"/LT2 { PL [2 dl 3 dl] 0 setdash } def\n", 
+"/LT3 { PL [1 dl 2 dl] 0 setdash } def\n", 
+"/LT4 { PL [5 dl 2 dl 1 dl 2 dl] 0 setdash } def\n", 
+"/LT5 { PL [3 dl 3 dl 1 dl 4 dl] 0 setdash } def\n", 
+"/LT6 { PL [2 dl 5 dl] 0 setdash } def\n",  
+"/LT7 { PL [4 dl 4 dl 4 dl 1 dl] 0 setdash } def\n",  
+"/LT8 { PL [8 dl 2 dl] 0 setdash } def\n",  
+"/LT9 { PL [1 dl 4 dl] 0 setdash } def\n",  
+"/P {  LT0 currentlinewidth 2 div sub moveto 0 currentlinewidth rlineto  stroke } def\n", 
+NULL
+};
+
+char *PS_color_def[] = {
+"/BuildRectPath {\n",    /* fillrect emulation as per D.3.2 of Postscript Language Ref. Manual */
+" dup type dup /integertype eq exch /realtype eq or {\n", 
+"  4 -2 roll moveto\n", 
+"  dup 0 exch rlineto exch 0 rlineto neg 0 exch rlineto closepath\n", 
+" }{ \n", 
+"  dup length 4 sub 0 exch 4 exch \n", 
+"  { \n", 
+"   1 index exch 4 getinterval aload pop\n", 
+"   BuildRectPath\n", 
+"  } for \n", 
+"   pop\n", 
+"  } ifelse\n", 
+" } bind def\n", 
+"/RF {\n", 
+" setrgbcolor gsave newpath BuildRectPath fill grestore 0 0 0 setrgbcolor\n", 
+" } bind def\n", 
+"/PL { stroke gnulinewidth setlinewidth } def\n", 
+"/THL { stroke gnulinewidth 1.5 mul setlinewidth } def\n",
+"/P { THL currentlinewidth 2 div sub moveto 0 currentlinewidth rlineto stroke } def\n",
+/* Line Thickness */
+"/LW1 { stroke gnulinewidth 4.0 setlinewidth } def\n",
+"/LW2 { stroke gnulinewidth 8.0 setlinewidth } def\n",
+"/LW3 { stroke gnulinewidth 12.0 setlinewidth } def\n",
+"/LW4 { stroke gnulinewidth 16.0 setlinewidth } def\n",
+"/LW5 { stroke gnulinewidth 20.0 setlinewidth } def\n",
+"/LW6 { stroke gnulinewidth 24.0 setlinewidth } def\n",
+"/LW7 { stroke gnulinewidth 28.0 setlinewidth } def\n",
+"/LW8 { stroke gnulinewidth 32.0 setlinewidth } def\n",
+"/LW9 { stroke gnulinewidth 36.0 setlinewidth } def\n", 
+NULL
+};
+
+#define PS_LINETYPES 10
+#define CPS_LINETYPES 16
+static struct {
+    double red, green, blue, widthMultiplier;
+    } CPS_lineParameters[CPS_LINETYPES] =  {
+{ 0.0, 0.0, 0.0, 1.0 },
+{ 1.0, 0.0, 0.0, 1.0 },
+{ 0.0, 0.749, 1.0, 1.0 },
+{ 0.0, 1.0, 0.0, 1.0 },
+{ 1.0, 1.0, 0.0, 1.0 },
+{ 0.0, 1.0, 1.0, 1.0 },
+{ 1.0, 0.647, 0.0, 1.0 },
+{ 0.0, 0.98, 0.604, 1.0 },
+{ 1.0, 0.843, 0.0, 1.0 },
+{ 1.0, 0.412, 0.706, 1.0 },
+{ 0.0, 0.0, 1.0, 1.0 },
+{ 0.196, 0.804, 0.196, 1.0 },
+{ 1.0, 0.388, 0.278, 1.0 },
+{ 0.8235, 0.706, 0.549, 1.0 },
+{ 1.0, 0.0, 1.0, 1.0 },
+{ 0.75, 0.75, 0.75, 1.0 },
+};
+
+
+
+char *PS_dashStyle[PS_LINETYPES] = {
+"[] 0 setdash", 
+"[4 dl 2 dl] 0 setdash", 
+"[2 dl 3 dl] 0 setdash", 
+"[1 dl 2 dl] 0 setdash", 
+"[5 dl 2 dl 1 dl 2 dl] 0 setdash", 
+"[3 dl 3 dl 1 dl 4 dl] 0 setdash", 
+"[2 dl 5 dl] 0 setdash",  
+"[4 dl 4 dl 4 dl 1 dl] 0 setdash",  
+"[8 dl 2 dl] 0 setdash",  
+"[1 dl 4 dl] 0 setdash"
+};
+
+
+char **CPS_extra_setups = NULL;
+
+int cps_color_index = 0;
+int cps_color_maxindex = 0;
+MotifColor *cps_colors = NULL;
+
+#define CPS_ONBLACK_BG 0x0001
+#define CPS_ONWHITE_BG 0x0002
+#define CPS_USEDASHES  0x0004
+#define PS_LINE_TABLE  0x0008
+
+int PS_ProcessDeviceArgs();
+int reset_PS_lastlinetypes();
+
+int doCPSExtraSetups()
+{
+  long i;
+  if (!CPS_extra_setups)
+     return 0;
+  for (i=0; CPS_extra_setups[i] != NULL; i++)
+    fprintf(outfile, "%s", CPS_extra_setups[i]);
+  return 0;
+}
+
+long CPS_setLineParameters(double red, double green, double blue, double widthMultiplier, long index)
+{
+    if (index<0 || index>=CPS_LINETYPES ||
+        red<0 || red>1 || green<0 || green>1 || blue<0 || blue>1 ||
+        widthMultiplier<=0)
+        return 0;
+    CPS_lineParameters[index].red = red;
+    CPS_lineParameters[index].green = green;
+    CPS_lineParameters[index].blue = blue;
+    CPS_lineParameters[index].widthMultiplier = widthMultiplier;
+    return 1;
+    }
+
+#include "ps_limits.h"
+#include "scan.h"
+#include "mdb.h"
+/*#include <stdlib.h>*/
+#if defined(_WIN32)
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
+
+#define PS_XLAST (PS_XMAX - 1)
+#define PS_YLAST (PS_YMAX - 1)
+
+#define PS_VTIC (PS_YMAX/80)
+#define PS_HTIC (PS_YMAX/80)
+
+
+#define PS_SC (PS_XMAX/360)		/* scale is 1pt = 10 units */
+#define	PS_LW (0.25*PS_SC)		/* linewidth = 0.25 pts */
+#define PS_DLSC (PS_SC/2.0)
+
+#define PS_VCHAR1 (7*PS_SC)		/* 7 point characters */
+#define PS_HCHAR1 (7*PS_SC*6/10)
+
+#define PS_VCHAR2 (11*PS_SC)		/* 11 point characters */
+#define PS_HCHAR2 (11*PS_SC*6/10)
+
+
+/* The command line is stored as metadata in the Postscript file */
+
+char *sddsplotCommandlinePS;
+char *cwd=NULL;
+void passCommandlineToPS(int argc, char **argv)
+{  
+   int i , n;
+   char *op = NULL;
+   sddsplotCommandlinePS = NULL;
+   n= (int)(strlen(argv[0]))+1;
+   sddsplotCommandlinePS = tmalloc(sizeof(char)*(n));
+   strcat(sddsplotCommandlinePS,argv[0]);
+   for (i=1; i<argc; i++ ) {
+      op  = tmalloc(sizeof(char)*(strlen(argv[i]))+1);
+      strcat(op,argv[i]);
+      n = n + (int)(strlen(op)) + 1;
+     
+      sddsplotCommandlinePS = trealloc(sddsplotCommandlinePS,sizeof(char)*n); 
+      strcat(sddsplotCommandlinePS, " ");
+      strcat(sddsplotCommandlinePS,op);
+      free(op);
+   } 
+   if (n > 1012) {
+      sddsplotCommandlinePS[1012] = 0;
+   }
+#if defined(_WIN32)
+   cwd = _getcwd(cwd, 1024);
+#else
+   cwd = getcwd(cwd, 1024);
+#endif
+}
+
+void PS_passCommandLineToPSFromMotif(char *command) {
+    sddsplotCommandlinePS = malloc(sizeof(char)*(strlen(command)+1));
+    sprintf(sddsplotCommandlinePS, "%s", command);
+    if (strlen(command) > 1012) {
+      sddsplotCommandlinePS[1012] = 0;
+    }
+#if defined(_WIN32)
+    cwd = _getcwd(cwd, 1024);
+#else
+    cwd = getcwd(cwd, 1024);
+#endif
+}
+
+
+int EPSF1_init(void)
+{
+	PS_ProcessDeviceArgs();
+	ps_big = FALSE;
+	ps_font = "Courier";
+	/* the font could also be "Courier-Bold" or "Times-Roman" etc. */
+	return 0;
+}
+
+
+int EPSF2_init(void)
+{
+        PS_ProcessDeviceArgs();
+	ps_big = TRUE;
+	ps_font = "Courier";
+	return 0;
+}
+
+
+int EPSF_graphics(void)
+{
+  int i;
+  fprintf(outfile, "%%!PS-Adobe-2.0 EPSF-2.0\n");
+  fprintf(outfile, "%%%%Creator: %s\n", sddsplotCommandlinePS);
+  fprintf(outfile, "%%%%CWD: %s\n", cwd);
+  fprintf(outfile, "%%%%DocumentFonts: %s\n",  ps_font);
+  fprintf(outfile, "%%%%DocumentNeededFonts: %s\n",  ps_font);
+  fprintf(outfile, "%%%%BoundingBox: 0 0 %d %d\n", 
+          (int)(xsize*(PS_XMAX)/PS_SC+0.5),  
+          (int)(ysize*(PS_YMAX)/PS_SC+0.5) );
+  fprintf(outfile, "%%%%EndComments\n");
+  fprintf(outfile, "40 dict begin\n");
+  fprintf(outfile, "/gnulinewidth %.3f def\n", PS_LW);
+  fprintf(outfile, "/vshift %d def\n",  
+          ps_big ? -PS_VCHAR2/3 : -PS_VCHAR1/3);
+  fprintf(outfile, "/dl {%.2f mul} def\n", PS_DLSC); /* dash length */
+  fprintf(outfile, "/hpt %.1f def\n", PS_HTIC/2.0);
+  fprintf(outfile, "/vpt %.1f def\n", PS_VTIC/2.0);
+  for ( i=0; PS_header[i] != NULL; i++)
+    fprintf(outfile, "%s", PS_header[i]);
+  for ( i=0; PS_BW_def[i] != NULL; i++)
+    fprintf(outfile, "%s", PS_BW_def[i]);
+  if (lineTypeTable.nEntries) {
+        for ( i=0; i<lineTypeTable.nEntries; i++) {
+	        fprintf(outfile,"/UL%d { ",i);
+		if (lineTypeTable.typeFlag&LINE_TABLE_DEFINE_THICKNESS) 
+                    fprintf(outfile, "LW%d ",lineTypeTable.thickness[i]%9);
+		else 
+		    fprintf(outfile, "PL ");
+		if (lineTypeTable.typeFlag&LINE_TABLE_DEFINE_DASH) {
+                    long d,j=0;
+                    fprintf(outfile,"[");
+                    while( (d = (long) lineTypeTable.dash[i].dashArray[j++]) ) 
+                           fprintf(outfile,"%ld dl ",d);
+	            fprintf(outfile,"] 0 setdash ");   
+		}
+		fprintf(outfile,"} def\n");    
+        }	                	
+ 	   
+  }  
+    
+  fprintf(outfile, "%%%%EndProlog\n");
+  fprintf(outfile, "%%%%BeginSetup\n");
+  fprintf(outfile, "/Gnu_save save def\n");
+  fprintf(outfile, "%.3f %.3f scale\n", 1.0/PS_SC, 1.0/PS_SC);
+  fprintf(outfile, "0 setgray\n0 setlinecap\n");
+  fprintf(outfile, "%%%%IncludeFont: %s\n",  ps_font);
+  fprintf(outfile, "/%s findfont %d ",  ps_font,  
+          ps_big ? PS_VCHAR2 : PS_VCHAR1 );
+  fprintf(outfile, "scalefont setfont\n");
+  fprintf(outfile, "newpath\n");
+  ps_path_count = 0;
+  fprintf(outfile, "%%%%EndSetup\n");
+  reset_PS_lastlinetypes();
+  return 0;
+}
+
+
+int CEPSF_graphics(void)
+{
+int i;
+char *line = "0123456789abcdef";
+
+	fprintf(outfile, "%%!PS-Adobe-2.0 EPSF-2.0\n");
+        fprintf(outfile, "%%%%Creator: %s\n", sddsplotCommandlinePS);
+        fprintf(outfile, "%%%%CWD: %s\n", cwd);
+	fprintf(outfile, "%%%%DocumentFonts: %s\n",  ps_font);
+	fprintf(outfile, "%%%%DocumentNeededFonts: %s\n",  ps_font);
+	fprintf(outfile, "%%%%BoundingBox: 0 0 %d %d\n", 
+		(int)(xsize*(PS_XMAX)/PS_SC+0.5),  
+		(int)(ysize*(PS_YMAX)/PS_SC+0.5) );
+	fprintf(outfile, "%%%%EndComments\n");
+	fprintf(outfile, "40 dict begin\n");
+	fprintf(outfile, "/gnulinewidth %.3f def\n", PS_LW);
+	fprintf(outfile, "/vshift %d def\n",  
+		ps_big ? -PS_VCHAR2/3 : -PS_VCHAR1/3);
+	fprintf(outfile, "/dl {%.2f mul} def\n", PS_DLSC); /* dash length */
+	fprintf(outfile, "/hpt %.1f def\n", PS_HTIC/2.0);
+	fprintf(outfile, "/vpt %.1f def\n", PS_VTIC/2.0);
+	for ( i=0; PS_header[i] != NULL; i++)
+		fprintf(outfile, "%s", PS_header[i]);
+	for ( i=0; PS_color_def[i] != NULL; i++)
+		fprintf(outfile, "%s", PS_color_def[i]);
+        for ( i=0; i<CPS_LINETYPES; i++) {
+                if (CPS_lineParameters[i].widthMultiplier==1) 
+		      	fprintf(outfile, "/LT%c { PL %.2f %.2f %.2f setrgbcolor } def\n",
+                                line[i], CPS_lineParameters[i].red, CPS_lineParameters[i].green, CPS_lineParameters[i].blue);	
+	        else 
+		        fprintf(outfile, "/LT%c { PL %.2f %.2f %.2f setrgbcolor gnulinewidth %.2f mul setlinewidth } def\n",
+                                line[i], CPS_lineParameters[i].red, CPS_lineParameters[i].green, CPS_lineParameters[i].blue,
+                                CPS_lineParameters[i].widthMultiplier);
+	        }
+	if (cps_useDash) {
+	        for (i=0; i<PS_LINETYPES; i++) 
+		        fprintf(outfile, "/DT%c  { PL %s } def\n", line[i], PS_dashStyle[i]);
+	}
+	if (lineTypeTable.nEntries) {
+	        for ( i=0; i<lineTypeTable.nEntries; i++) {
+		        fprintf(outfile,"/UL%d { ",i);
+			if (lineTypeTable.typeFlag&LINE_TABLE_DEFINE_THICKNESS) 
+	                    fprintf(outfile, "LW%d ",lineTypeTable.thickness[i]%9);
+			else 
+			    fprintf(outfile, "PL ");
+			if (lineTypeTable.typeFlag&LINE_TABLE_DEFINE_COLOR)
+                            fprintf(outfile, "%.3f %.3f %.3f setrgbcolor ",((unsigned short) 256*lineTypeTable.red[i])/65535.0,
+			             ((unsigned short) 256*lineTypeTable.green[i])/65535.0,((unsigned short) 258*lineTypeTable.blue[i])/65535.0);
+			if (lineTypeTable.typeFlag&LINE_TABLE_DEFINE_DASH) {
+	                    long d,j=0;
+	                    fprintf(outfile,"[");
+	                    while( (d = (long) lineTypeTable.dash[i].dashArray[j++]) ) 
+	                           fprintf(outfile,"%ld dl ",d);
+		            fprintf(outfile,"] 0 setdash ");   
+			}
+			fprintf(outfile,"} def\n");    
+                }	                	
+ 	   
+	}
+	
+	fprintf(outfile, "%%%%EndProlog\n");
+	fprintf(outfile, "%%%%BeginSetup\n");
+	fprintf(outfile, "/Gnu_save save def\n");
+	fprintf(outfile, "%.3f %.3f scale\n", 1.0/PS_SC, 1.0/PS_SC);
+	fprintf(outfile, "0 setgray\n0 setlinecap\n");
+	fprintf(outfile, "%%%%IncludeFont: %s\n",  ps_font);
+	fprintf(outfile, "/%s findfont %d ",  ps_font,  
+		ps_big ? PS_VCHAR2 : PS_VCHAR1 );
+	fprintf(outfile, "scalefont setfont\n");
+	fprintf(outfile, "newpath\n");
+	ps_path_count = 0;
+	fprintf(outfile, "%%%%EndSetup\n");
+        reset_PS_lastlinetypes();
+        doCPSExtraSetups();
+	return 0;
+}
+
+
+int EPSF_text(void)
+{
+	fprintf(outfile, "stroke\nGnu_save restore\n");
+	fprintf(outfile, "showpage\n");
+	ps_path_count = 0;
+	fprintf(outfile, "%%%%Trailer\n");
+	fprintf(outfile, "end\n");
+	return 0;
+}
+
+
+int EPSF_reset(void)
+{
+	return 0;
+}
+
+
+int PS1_init(void)
+{       
+       	EPSF1_init();
+	PS_init();
+        reset_PS_lastlinetypes();
+	return 0;
+}
+
+int CPS1_init(void)
+{
+       	EPSF1_init();
+	CPS_init();
+        reset_PS_lastlinetypes();
+	return 0;
+}
+
+int PS1_init_rot(void)
+{
+        EPSF1_init();
+	PS_init_rot();
+        reset_PS_lastlinetypes();
+	return 0;
+}
+
+
+int CPS1_init_rot(void)
+{
+        EPSF1_init();
+	CPS_init_rot();
+        reset_PS_lastlinetypes();
+	return 0;
+}
+
+
+int PS2_init(void)
+{
+  	EPSF2_init();
+	PS_init();
+        reset_PS_lastlinetypes();
+	return 0;
+}
+
+
+int PS_init(void)
+{
+	fprintf(outfile, "%%!PS-Adobe-2.0 EPSF-2.0\n");
+        fprintf(outfile, "%%%%Creator: %s\n", sddsplotCommandlinePS);
+        fprintf(outfile, "%%%%CWD: %s\n", cwd);
+	fprintf(outfile, "%%%%DocumentFonts: %s\n",  ps_font);
+	fprintf(outfile, "%%%%DocumentNeededFonts: %s\n",  ps_font);
+	fprintf(outfile, "%%%%Pages: (atend)\n");
+	fprintf(outfile, "%%%%BoundingBox: %d 50 550 %d\n", 
+		(int)(550.5-ysize*(PS_YMAX)/PS_SC*2),  
+		(int)(50.5+xsize*(PS_XMAX)/PS_SC*2) );
+	fprintf(outfile, "%%%%EndComments\n");
+	fprintf(outfile, "/GnuTransform {\n");
+	fprintf(outfile, "  90 rotate\n  50 -550 translate\n  2 2 scale\n");
+	fprintf(outfile, "} def\n");
+	fprintf(outfile, "%%%%EndProlog\n");
+	pspage = 0;
+        reset_PS_lastlinetypes();
+	return 0;
+}
+
+int CPS_init(void)
+{
+	fprintf(outfile, "%%!PS-Adobe-2.0 EPSF-2.0\n");
+        fprintf(outfile, "%%%%Creator: %s\n", sddsplotCommandlinePS);
+        fprintf(outfile, "%%%%CWD: %s\n", cwd);
+	fprintf(outfile, "%%%%DocumentFonts: %s\n",  ps_font);
+	fprintf(outfile, "%%%%DocumentNeededFonts: %s\n",  ps_font);
+	fprintf(outfile, "%%%%Pages: (atend)\n");
+	fprintf(outfile, "%%%%BoundingBox: %d 50 550 %d\n", 
+		(int)(550.5-ysize*(PS_YMAX)/PS_SC*2),  
+		(int)(50.5+xsize*(PS_XMAX)/PS_SC*2) );
+	fprintf(outfile, "%%%%EndComments\n");
+	fprintf(outfile, "/GnuTransform {\n");
+	fprintf(outfile, "  90 rotate\n  90 -550 translate\n  1.7 2.0 scale\n");
+	fprintf(outfile, "} def\n");
+	fprintf(outfile, "%%%%EndProlog\n");
+	pspage = 0;
+        reset_PS_lastlinetypes();
+	return 0;
+}
+
+/* rotated post-script output */
+int PS_init_rot(void)
+{
+	fprintf(outfile, "%%!PS-Adobe-2.0 EPSF-2.0\n");
+        fprintf(outfile, "%%%%Creator: %s\n", sddsplotCommandlinePS);
+        fprintf(outfile, "%%%%CWD: %s\n", cwd);
+	fprintf(outfile, "%%%%DocumentFonts: %s\n",  ps_font);
+	fprintf(outfile, "%%%%DocumentNeededFonts: %s\n",  ps_font);
+	fprintf(outfile, "%%%%Pages: (atend)\n");
+	fprintf(outfile, "%%%%BoundingBox: %d 50 550 %d\n", 
+		(int)(550.5-ysize*(PS_YMAX)/PS_SC*2),  
+		(int)(50.5+xsize*(PS_XMAX)/PS_SC*2) );
+	fprintf(outfile, "%%%%EndComments\n");
+	fprintf(outfile, "/GnuTransform {\n");
+	fprintf(outfile, "  45 90 translate\n  1.45 2.45 scale\n");
+	fprintf(outfile, "} def\n");
+	fprintf(outfile, "%%%%EndProlog\n");
+	pspage = 0;
+        reset_PS_lastlinetypes();
+	return 0;
+}
+
+
+/* rotated post-script output */
+int CPS_init_rot(void)
+{
+	fprintf(outfile, "%%!PS-Adobe-2.0 EPSF-2.0\n");
+        fprintf(outfile, "%%%%Creator: %s\n", sddsplotCommandlinePS);
+        fprintf(outfile, "%%%%CWD: %s\n", cwd);
+	fprintf(outfile, "%%%%DocumentFonts: %s\n",  ps_font);
+	fprintf(outfile, "%%%%DocumentNeededFonts: %s\n",  ps_font);
+	fprintf(outfile, "%%%%Pages: (atend)\n");
+	fprintf(outfile, "%%%%BoundingBox: %d 50 550 %d\n", 
+		(int)(550.5-ysize*(PS_YMAX)/PS_SC*2),  
+		(int)(50.5+xsize*(PS_XMAX)/PS_SC*2) );
+	fprintf(outfile, "%%%%EndComments\n");
+	fprintf(outfile, "/GnuTransform {\n");
+	fprintf(outfile, "  45 90 translate\n  1.45 2.45 scale\n");
+	fprintf(outfile, "} def\n");
+	fprintf(outfile, "%%%%EndProlog\n");
+	pspage = 0;
+        reset_PS_lastlinetypes();
+	return 0;
+}
+
+
+
+int PS_graphics(void)
+{
+	fprintf(outfile, "%%%%Page: ? %d\n", ++pspage);
+	fprintf(outfile, "gsave\nGnuTransform\n");
+	fprintf(outfile, "%%%%BeginDocument: EPSF\n");
+	fprintf(outfile, "1 dict begin\n/showpage {} def\n");
+	EPSF_graphics();
+/*        reset_PS_lastlinetypes(); */
+	return 0;
+}
+
+
+int CPS_graphics(void)
+{
+	fprintf(outfile, "%%%%Page: ? %d\n", ++pspage);
+	fprintf(outfile, "gsave\nGnuTransform\n");
+	fprintf(outfile, "%%%%BeginDocument: EPSF\n");
+	fprintf(outfile, "1 dict begin\n/showpage {} def\n");
+	CEPSF_graphics();
+/*        reset_PS_lastlinetypes(); */
+	return 0;
+}
+
+
+int PS_text(void)
+{
+	EPSF_text();
+	fprintf(outfile, "%%%%EndDocument\n");
+	fprintf(outfile, "end\nshowpage\ngrestore\n");
+	return 0;
+}
+
+
+
+int PS_reset(void)
+{
+	fprintf(outfile, "%%%%Trailer\n");
+	fprintf(outfile, "%%%%Pages: %d\n", pspage);
+	return 0;
+}
+
+
+static int force_linetype=0;
+
+int PS_line_thickness(int line_thickness)
+{       
+     if (!(lineTypeTable.typeFlag&LINE_TABLE_DEFINE_THICKNESS)) {
+	fprintf(outfile, "LW%d\n", line_thickness);
+	force_linetype=1;
+     }
+     return 0;
+}
+
+static int last_PS_linetype = -1;
+
+int PS_linetype(int linetype)
+{
+	char *line = "0123456789"; 
+        
+	if(lineTypeTable.nEntries) {
+	   if (linetype >=1000)
+	      linetype-=1000;
+	   linetype = linetype%lineTypeTable.nEntries;
+	   fprintf(outfile,"UL%d\n",linetype);
+	} else {      
+	   linetype = linetype%PS_LINETYPES;
+           if ((!force_linetype) && (linetype==last_PS_linetype))
+                   return 0;
+	   fprintf(outfile, "LT%c\n",  line[linetype%PS_LINETYPES]);
+	   
+	}   
+	ps_path_count = 0;
+        last_PS_linetype = linetype;
+	force_linetype = 0;
+	return 0;
+}
+
+static int last_CPS_linetype = -1;
+
+int CPS_linetype(int linetype)
+{
+	char *line = "0123456789abcdef";
+	if (lineTypeTable.nEntries) {
+	   if (linetype >=1000)
+	      linetype-=1000;
+	   linetype = linetype%lineTypeTable.nEntries;	
+	   fprintf(outfile, "UL%d\n",linetype);
+	} else if ((cps_color_index == 0) || (linetype < 1000)) {
+	   if ((!force_linetype) && (linetype==last_CPS_linetype))
+	      return 0;
+           fprintf(outfile, "LT%c\n",  line[linetype%CPS_LINETYPES]);
+	   force_linetype = 0;
+	} else {
+	   linetype -= 1000;
+	   CPS_color(cps_colors[linetype%cps_color_index].red, cps_colors[linetype%cps_color_index].green, cps_colors[linetype%cps_color_index].blue);
+	   force_linetype = 1;
+	}
+	
+	if ( !lineTypeTable.nEntries && cps_useDash)  
+	fprintf(outfile, "DT%c\n",  line[linetype%PS_LINETYPES]);
+	
+	ps_path_count = 0;
+	last_CPS_linetype = linetype;
+	return 0;
+}
+
+
+
+int reset_PS_lastlinetypes()
+{
+        last_CPS_linetype = last_PS_linetype = -1;
+	return 0;
+}
+
+int PS_move(int x, int y)
+{
+	fprintf(outfile, "%d %d M\n",  x,  y);
+	ps_path_count += 1;
+	return 0;
+}
+
+
+int PS_vector(int x, int y)
+{
+	fprintf(outfile, "%d %d L\n",  x,  y);
+	ps_path_count += 1;
+	if (ps_path_count >= 400) {
+		fprintf(outfile, "currentpoint stroke moveto\n");
+		ps_path_count = 0;
+	}
+	return 0;
+}
+
+
+int PS_put_text(int x, int y, char *str)
+{
+        char ch;
+	PS_move(x, y);
+	if (ps_ang != 0)
+		fprintf(outfile, "currentpoint gsave translate %d rotate 0 0 moveto\n"
+			, ps_ang*90);
+	putc('(', outfile);
+	ch = *str++;
+	while(ch!='\0') {
+		if ( (ch=='(') || (ch==')') || (ch=='\\') )
+			putc('\\', outfile);
+		putc(ch, outfile);
+		ch = *str++;
+	}
+	switch(ps_justify) {
+		case LEFT : fprintf(outfile, ") Lshow\n");
+			break;
+		case CENTRE : fprintf(outfile, ") Cshow\n");
+			break;
+		case RIGHT : fprintf(outfile, ") Rshow\n");
+			break;
+	}
+	if (ps_ang != 0)
+		fprintf(outfile, "grestore\n");
+	ps_path_count = 0;
+	return 0;
+}
+
+int PS_text_angle(int ang)
+{
+	ps_ang=ang;
+	return TRUE;
+}
+
+int PS_justify_text(enum JUSTIFY mode)
+{
+	ps_justify=mode;
+	return TRUE;
+}
+
+/* postscript point routines */
+int PS_point(int x, int y, int number)
+{
+char *point = "PDABCTS";
+	number %= POINT_TYPES;
+ 	if (number < -1)
+		number = -1;		/* negative types are all 'dot' */
+	fprintf(outfile, "%d %d %c\n",  x,  y,  point[number+1]);
+	ps_path_count = 0;
+	return 0;
+}
+
+/* postscript dot routine */
+int PS_dot(int x, int y, int number)
+{
+	fprintf(outfile, "%d %d P\n",  x,  y);
+	ps_path_count = 0;
+	return 0;
+}
+
+int PS_fill_box(int shade, int xl, int xh, int yl, int yh)
+{
+        if (ps_path_count) {
+		fprintf(outfile, "currentpoint stroke moveto\n");
+		ps_path_count = 0;
+                }
+        shade = shade%ncolors_ps;
+        fprintf(outfile,  "%d %d %d %d %.2f RF\n", 
+                xl,  yl,  xh-xl,  yh-yl, ncolors_ps > 1 ? shade/(ncolors_ps - 1.0) : 0);
+        last_PS_linetype = -1;
+	return 0;
+}
+
+
+
+int CPS_fill_box(int shade, int xl, int xh, int yl, int yh)
+{
+        double r,  g,  b;
+
+        if (ps_path_count) {
+		fprintf(outfile, "currentpoint stroke moveto\n");
+		ps_path_count = 0;
+                }
+        shade = shade%(ncolors_ps);
+        if (spectralps == 1)
+          Spectral_RGB_values(&r,  &g,  &b, ncolors_ps > 1 ? shade/(ncolors_ps - 1.0) : 0);
+        else if (spectralps == 2)
+          Spectral_BGR_values(&r,  &g,  &b, ncolors_ps > 1 ? shade/(ncolors_ps - 1.0) : 0);
+        else if (spectralps == 3)
+          Spectral_RGB_NoMagenta_values(&r,  &g,  &b, ncolors_ps > 1 ? shade/(ncolors_ps - 1.0) : 0);
+        else if (spectralps == 4)
+          Spectral_BGR_NoMagenta_values(&r,  &g,  &b, ncolors_ps > 1 ? shade/(ncolors_ps - 1.0) : 0);
+        else if (customspectralps)
+          Custom_RGB_values(&r, &g, &b, r0_ps, g0_ps, b0_ps, r1_ps, g1_ps, b1_ps, ncolors_ps > 1 ? shade/(ncolors_ps - 1.0) : 0);
+        else
+          RGB_values(&r,  &g,  &b, ncolors_ps > 1 ? shade/(ncolors_ps - 1.0) : 0);
+
+
+        fprintf(outfile,  "%d %d %d %d %.3f %.3f %.3f RF\n", 
+                xl,  yl,  xh-xl,  yh-yl,  r,  g,  b);
+        last_CPS_linetype = -1;
+	return 0;
+}
+
+int CPS_color(unsigned short red, unsigned short green, unsigned short blue)
+{
+  fprintf(outfile, "PL %.3f %.3f %.3f setrgbcolor\n", (red/65535.0), (green/65535.0), (blue/65535.0));
+  force_linetype=1;
+  return 0;
+     
+}
+
+int CPS_add_color(unsigned short red, unsigned short green, unsigned short blue, short reset)
+{
+    if (reset) {
+      //cps_color_index = 1;
+      return 0;
+    }
+    if (cps_color_index >= cps_color_maxindex) {
+	cps_color_maxindex += 100;
+	if (cps_color_index == 0) {
+	    cps_colors = tmalloc(sizeof(*cps_colors)*cps_color_maxindex);
+	} else {
+	    cps_colors = trealloc(cps_colors, sizeof(*cps_colors)*(++cps_color_maxindex));
+	}
+    }
+    cps_colors[cps_color_index].red = red;
+    cps_colors[cps_color_index].green = green;
+    cps_colors[cps_color_index].blue = blue;
+    cps_color_index++;
+    return 0;
+}
+
+
+int CPS_symbol_color(int color)
+{
+        color &= 3;
+        switch (color) {
+                case 0: /* black */
+                        CPS_linetype(0);
+                        break;
+                case 1: /* red */
+                        CPS_linetype(1);
+                        break;
+                case 2: /* green */
+                        CPS_linetype(2);
+                        break;
+                case 3: /* cyan */
+                        CPS_linetype(6);
+                        break;
+                }
+	return 0;
+        }
+
+int CPS_spectral(long num, int spec, unsigned short red0, unsigned short green0, unsigned short blue0, unsigned short red1, unsigned short green1, unsigned short blue1)
+{
+  ncolors_ps = num > 101 ? 101 : num;
+  if (spec == 0) {
+    spectralps = 0;
+    customspectralps = 1;
+    r0_ps = red0;
+    g0_ps = green0;
+    b0_ps = blue0;
+    r1_ps = red1;
+    g1_ps = green1;
+    b1_ps = blue1;
+  } else if (spec == 1) {
+    spectralps = 1;
+    customspectralps = 0;
+  } else if (spec == 2) {
+    spectralps = 2;
+    customspectralps = 0;
+  } else if (spec == 3) {
+    spectralps = 3;
+    customspectralps = 0;
+  } else if (spec == 4) {
+    spectralps = 4;
+    customspectralps = 0;
+  } else {
+    spectralps = 0;
+    customspectralps = 0;
+  }
+  return 0;
+}
+
+char **getDeviceArgv(long *argc);
+
+
+
+
+int PS_ProcessDeviceArgs()
+{
+  char **argv, s[100];
+  long argc, i;
+  unsigned long flags;
+  flags = CPS_ONWHITE_BG;
+  
+  if ((argv = getDeviceArgv(&argc))) {
+    if (!scanItemList(&flags, argv, &argc, 0,
+                      "onblack", -1, NULL, 0, CPS_ONBLACK_BG,
+                      "onwhite", -1, NULL, 0, CPS_ONWHITE_BG,
+		      "dashes", -1, NULL, 0, CPS_USEDASHES,
+		      "linetypetable", SDDS_STRING, &LineTableFile, 1, PS_LINE_TABLE,
+                      NULL) || (flags&PS_LINE_TABLE && !LineTableFile)) {
+      bomb("error scanning device arguments for PS", "-device=<postscriptName>[,onBlack][,dashes][,linetypetable=<linetypeTableFile>]");
+    }
+  
+    if (flags&CPS_USEDASHES)
+      cps_useDash = TRUE;
+    if (flags&CPS_ONBLACK_BG) {
+      /* swap white and black */
+      for (i=0; i<CPS_LINETYPES; i++) {
+        if (CPS_lineParameters[i].red==0 &&
+            CPS_lineParameters[i].green==0 &&
+            CPS_lineParameters[i].blue==0)
+          CPS_lineParameters[i].red = CPS_lineParameters[i].green =
+          CPS_lineParameters[i].blue = 1;
+      }
+      /* insert a "definition" that will fill in the plot with black */
+      if (!(CPS_extra_setups = (char**)malloc(sizeof(*CPS_extra_setups)*2))) {
+          fprintf(stderr, "memory allocation failure in PS_ProcessDeviceArgs\n");
+          exit(1);
+      }
+      sprintf(s,  "0 0 %d %d 0 0 0 RF\n",
+              PS_XLAST, PS_YLAST);
+      cp_str(&CPS_extra_setups[0], s);
+      CPS_extra_setups[1] = NULL;
+    }
+  }  
+  if (LineTableFile) {
+    if ( !SDDS_ReadLineTypeTable(&lineTypeTable,LineTableFile))
+       bomb("problem reading line-type table", NULL);
+  } else {
+    lineTypeTable.nEntries = 0;
+    lineTypeTable.typeFlag = 0x0000;
+  }  
+     
+  return 0;
+}
+

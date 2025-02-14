@@ -1,0 +1,51 @@
+DD = ../
+include ../../Makefile.rules
+
+PROD = rpn rpnl if2pf
+
+LIBRARY = rpnlib
+
+LIBRARY_SRC = array.c \
+        conditional.c \
+        execute.c \
+        get_token_rpn.c \
+        infixtopostfix.c \
+        logical.c \
+        math.c \
+        memory.c \
+        pcode.c \
+        pop_push.c \
+        prompt.c \
+        rpn_csh.c \
+        rpn_data.c \
+        rpn_draw.c \
+        rpn_error.c \
+        rpn_io.c \
+        rpn_sub.c \
+        stack.c \
+        udf.c
+
+CFLAGS += -I../../include
+
+ifeq ($(OS), Linux)
+  CFLAGS += -DUSE_GSL
+  PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+  PROD_LIBS = -lrpnlib -lmdbmth -lmdblib 
+endif
+
+ifeq ($(OS), Darwin)
+  CFLAGS += -DUSE_GSL
+  PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+  PROD_LIBS = -lrpnlib -lmdbmth -lmdblib 
+endif
+
+ifeq ($(OS), Windows)
+  CFLAGS += /wd4244 /wd4267
+  LIBRARY_CFLAGS = -DEXPORT_RPNLIB
+  LIBRARY_LIBS = mdbmth.lib mdblib.lib
+  PROD_LIBS = rpnlib.lib mdbmth.lib mdblib.lib
+endif
+
+include ../../Makefile.build
+
+.NOTPARALLEL: $(LIBRARY)

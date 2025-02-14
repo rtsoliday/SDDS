@@ -1,0 +1,48 @@
+include ../Makefile.rules
+
+LIBRARY = SDDS1mpi
+
+LIBRARY_SRC = SDDS_ascii.c \
+          SDDS_copy.c \
+          SDDS_data.c \
+          SDDS_dataprep.c \
+          SDDS_extract.c \
+          SDDS_info.c \
+          SDDS_lzma.c \
+          SDDS_mplsupport.c \
+          SDDS_process.c \
+          SDDS_rpn.c \
+          SDDS_transfer.c \
+          SDDS_utils.c \
+          SDDS_write.c \
+          SDDS_MPI_binary.c \
+          SDDSmpi_input.c \
+          SDDSmpi_output.c \
+          SDDS_binary.mpi.c \
+          SDDS_input.mpi.c \
+          SDDS_output.mpi.c
+
+CFLAGS += -DzLib -DALLOW_FILE_LOCKING=1 -DRPN_SUPPORT -DUSE_MPI=1 -DSDDS_MPI_IO=1 -DMASTER_READTITLE_ONLY -I../include
+
+ifeq ($(OS), Linux)
+  CC = $(MPI_CC)
+endif
+
+ifeq ($(OS), Darwin)
+  CC = $(MPI_CC)
+endif
+
+ifeq ($(OS), Windows)
+  CFLAGS += -I../zlib -I../lzma $(WIN_MPI_INC) -DEXPORT_SDDS /wd4244 /wd4267
+  LIBRARY_LIBS = rpnlib.lib mdbmth.lib mdblib.lib lzma.lib z.lib
+  LIBRARY_SYS_LIBS = $(WIN_MPI_LIB)
+endif
+
+include ../Makefile.build
+
+$(OBJ_DIR)/SDDS_binary.mpi.$(OBJEXT): SDDS_binary.c
+	$(CC) $(CFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)
+$(OBJ_DIR)/SDDS_input.mpi.$(OBJEXT): SDDS_input.c
+	$(CC) $(CFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)
+$(OBJ_DIR)/SDDS_output.mpi.$(OBJEXT): SDDS_output.c
+	$(CC) $(CFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)

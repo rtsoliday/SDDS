@@ -1,0 +1,111 @@
+/* prototypes for this file are in iris4d.trm-proto */
+/* GNUPLOT - iris4d.trm */
+/*
+ * Copyright (C) 1990   
+ *
+ * Permission to use,  copy,  and distribute this software and its
+ * documentation for any purpose with or without fee is hereby granted,  
+ * provided that the above copyright notice appear in all copies and 
+ * that both that copyright notice and this permission notice appear 
+ * in supporting documentation.
+ *
+ * Permission to modify the software is granted,  but not the right to
+ * distribute the modified code.  Modifications are to be distributed 
+ * as patches to released version.
+ *  
+ * This software  is provided "as is" without express or implied warranty.
+ * 
+ * This file is included by ../term.c.
+ *
+ * This terminal driver supports:
+ *   IRIS terminals
+ *
+ * AUTHORS
+ *   John H. Merritt 
+ *           (Applied Research Corporation) 7/1/89
+ *           INTERNET: merritt@iris613.gsfc.nasa.gov
+ * 
+ * send your comments or suggestions to (pixar!info-gnuplot@sun.com).
+ * 
+ */
+
+#include <gl.h>
+#define IRIS4D_XMAX 1024
+#define IRIS4D_YMAX 1024
+
+#define IRIS4D_XLAST (IRIS4D_XMAX - 1)
+#define IRIS4D_YLAST (IRIS4D_YMAX - 1)
+
+#define IRIS4D_VCHAR (IRIS4D_YMAX/30)
+#define IRIS4D_HCHAR (IRIS4D_XMAX/72)
+#define IRIS4D_VTIC (IRIS4D_YMAX/80)
+#define IRIS4D_HTIC (IRIS4D_XMAX/80)
+
+int IRIS4D_init(void)
+{
+  foreground();
+  winopen("Gnuplot");
+  deflinestyle(1,  0x3FFF); /* Long dash */
+  deflinestyle(2,  0x5555); /* dotted */
+  deflinestyle(3,  0x3333); /* short dash */
+  deflinestyle(4,  0xB5AD); /* dotdashed */
+  return;
+}
+
+int IRIS4D_graphics(void)
+{
+  reshapeviewport();
+  ortho2((Coord)0,  (Coord)IRIS4D_XMAX,  (Coord)0,  (Coord)IRIS4D_YMAX);
+  color(WHITE);
+  clear();
+  
+  return;
+}
+
+int IRIS4D_text(void)
+{
+  return; /* enter text from another window!!! */
+}
+
+int IRIS4D_linetype(int linetype)
+{
+  static int pen_color[5] = {1,  2,  3,  4,  5};
+  
+  linetype = linetype % 5;
+  color((Colorindex) pen_color[linetype]);
+  setlinestyle(linetype);
+  return;
+}
+
+int IRIS4D_move(int x, int y)
+{
+  move2i(x,  y);
+  return;
+}
+
+int IRIS4D_cmove(int x, int y)
+{
+  cmov2i(x,  y);
+  return;
+}
+
+int IRIS4D_vector(int x, int y)
+{
+  draw2i(x,  y);
+  return;
+}
+
+
+int IRIS4D_put_text(int x, int y, char *str)
+{
+  IRIS4D_cmove(x, y - IRIS4D_VCHAR/2);
+  charstr(str);
+  return;
+}
+
+
+int IRIS4D_reset(void)
+{
+  return;
+}
+

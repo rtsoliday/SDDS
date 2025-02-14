@@ -1,0 +1,301 @@
+# Detect OS and Architecture
+OS := $(shell uname -s)
+ARCH := $(shell uname -m)
+ifeq ($(findstring CYGWIN, $(OS)),CYGWIN)
+    OS := Windows
+endif
+
+OBJ_DIR = O.$(OS)-$(ARCH)
+BIN_DIR = $(DD)../bin/$(OS)-$(ARCH)
+LIB_DIR = $(DD)../lib/$(OS)-$(ARCH)
+
+# Common library search paths
+LIB_DIRS := /usr/lib64 /usr/lib/x86_64-linux-gnu /lib64 /usr/lib /lib /usr/X11/lib /opt/local/lib /sw/lib /usr/sfw/lib
+
+Z_LIB = $(firstword $(wildcard \
+           $(addsuffix /libz.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libz.so, $(LIB_DIRS)) \
+           $(addsuffix /libz.a, $(LIB_DIRS)) \
+           $(addsuffix /z.lib, $(LIB_DIR))))
+ZSTD_LIB = $(firstword $(wildcard \
+           $(addsuffix /libzstd.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libzstd.so, $(LIB_DIRS)) \
+           $(addsuffix /libzstd.a, $(LIB_DIRS))))
+LZMA_LIB = $(firstword $(wildcard \
+           $(addsuffix /liblzma.dylib, $(LIB_DIRS)) \
+           $(addsuffix /liblzma.so, $(LIB_DIRS)) \
+           $(addsuffix /liblzma.a, $(LIB_DIRS)) \
+           $(addsuffix /lzma.lib, $(LIB_DIR))))
+HDF5_LIB = $(firstword $(wildcard \
+           $(addsuffix /libhdf5.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libhdf5.so, $(LIB_DIRS)) \
+           $(addsuffix /libhdf5.a, $(LIB_DIRS))))
+SZ_LIB = $(firstword $(wildcard \
+           $(addsuffix /libsz.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libsz.so, $(LIB_DIRS)) \
+           $(addsuffix /libsz.a, $(LIB_DIRS))))
+GSL_LIB = $(firstword $(wildcard \
+           $(addsuffix /libgsl.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libgsl.so, $(LIB_DIRS)) \
+           $(addsuffix /libgsl.a, $(LIB_DIRS))))
+GSLCBLAS_LIB = $(firstword $(wildcard \
+              $(addsuffix /libgslcblas.dylib, $(LIB_DIRS)) \
+              $(addsuffix /libgslcblas.so, $(LIB_DIRS)) \
+              $(addsuffix /libgslcblas.a, $(LIB_DIRS))))
+PNG_LIB = $(firstword $(wildcard \
+           $(addsuffix /libpng.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libpng.so, $(LIB_DIRS)) \
+           $(addsuffix /libpng.a, $(LIB_DIRS)) \
+           $(addsuffix /png.lib, $(LIB_DIR))))
+GD_LIB = $(firstword $(wildcard \
+           $(addsuffix /libgd.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libgd.so, $(LIB_DIRS)) \
+           $(addsuffix /libgd.a, $(LIB_DIRS)) \
+           $(addsuffix /gd.lib, $(LIB_DIR))))
+JPEG_LIB = $(firstword $(wildcard \
+           $(addsuffix /libjpeg.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libjpeg.so, $(LIB_DIRS)) \
+           $(addsuffix /libjpeg.a, $(LIB_DIRS))))
+LERC_LIB = $(firstword $(wildcard \
+           $(addsuffix /libLerc.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libLerc.so, $(LIB_DIRS)) \
+           $(addsuffix /libLerc.a, $(LIB_DIRS))))
+DEFLATE_LIB = $(firstword $(wildcard \
+           $(addsuffix /libdeflate.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libdeflate.so, $(LIB_DIRS)) \
+           $(addsuffix /libdeflate.a, $(LIB_DIRS))))
+TIFF_LIB = $(firstword $(wildcard \
+           $(addsuffix /libtiff.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libtiff.so, $(LIB_DIRS)) \
+           $(addsuffix /libtiff.a, $(LIB_DIRS)) \
+           $(addsuffix /tiff.lib, $(LIB_DIR))))
+XM_LIB = $(firstword $(wildcard \
+         $(addsuffix /libXm.dylib, $(LIB_DIRS)) \
+         $(addsuffix /libXm.so, $(LIB_DIRS)) \
+         $(addsuffix /libXm.a, $(LIB_DIRS))))
+XMU_LIB = $(firstword $(wildcard \
+          $(addsuffix /libXmu.dylib, $(LIB_DIRS)) \
+          $(addsuffix /libXmu.so, $(LIB_DIRS)) \
+          $(addsuffix /libXmu.a, $(LIB_DIRS))))
+XT_LIB = $(firstword $(wildcard \
+         $(addsuffix /libXt.so, $(LIB_DIRS)) \
+         $(addsuffix /libXt.a, $(LIB_DIRS))))
+ICE_LIB = $(firstword $(wildcard \
+         $(addsuffix /libICE.so, $(LIB_DIRS)) \
+         $(addsuffix /libICE.a, $(LIB_DIRS))))
+SM_LIB = $(firstword $(wildcard \
+         $(addsuffix /libSM.so, $(LIB_DIRS)) \
+         $(addsuffix /libSM.a, $(LIB_DIRS))))
+X11_LIB = $(firstword $(wildcard \
+          $(addsuffix /libX11.dylib, $(LIB_DIRS)) \
+          $(addsuffix /libX11.so, $(LIB_DIRS)) \
+          $(addsuffix /libX11.a, $(LIB_DIRS))))
+XP_LIB = $(firstword $(wildcard \
+         $(addsuffix /libXp.dylib, $(LIB_DIRS)) \
+         $(addsuffix /libXp.so, $(LIB_DIRS)) \
+         $(addsuffix /libXp.a, $(LIB_DIRS))))
+XAU_LIB = $(firstword $(wildcard \
+         $(addsuffix /libXau.dylib, $(LIB_DIRS)) \
+         $(addsuffix /libXau.so, $(LIB_DIRS)) \
+         $(addsuffix /libXau.a, $(LIB_DIRS))))
+XFT_LIB = $(firstword $(wildcard \
+         $(addsuffix /libXft.dylib, $(LIB_DIRS)) \
+         $(addsuffix /libXft.so, $(LIB_DIRS)) \
+         $(addsuffix /libXft.a, $(LIB_DIRS))))
+XEXT_LIB = $(firstword $(wildcard \
+         $(addsuffix /libXext.dylib, $(LIB_DIRS)) \
+         $(addsuffix /libXext.so, $(LIB_DIRS)) \
+         $(addsuffix /libXext.a, $(LIB_DIRS))))
+FONTCONFIG_LIB = $(firstword $(wildcard \
+          $(addsuffix /libfontconfig.dylib, $(LIB_DIRS)) \
+          $(addsuffix /libfontconfig.so, $(LIB_DIRS)) \
+          $(addsuffix /libfontconfig.a, $(LIB_DIRS))))
+ICONV_LIB = $(firstword $(wildcard \
+          $(addsuffix /libiconv.dylib, $(LIB_DIRS)) \
+          $(addsuffix /libiconv.so, $(LIB_DIRS)) \
+          $(addsuffix /libiconv.a, $(LIB_DIRS))))
+
+ifeq ($(words $(wildcard /usr/local/oag/3rdParty/intel/oneapi/mkl/latest)),1)
+ MKLROOT = /usr/local/oag/3rdParty/intel/oneapi/mkl/latest
+endif
+ifneq ($(MKLROOT),)
+ MKL_CFLAG = -DMKL
+ MKL_INCLUDE = -I"$(MKLROOT)/include/"
+ifeq ($(OS), Windows)
+ MKL_LIB = mkl_intel_ilp64.lib mkl_intel_thread.lib mkl_core.lib libiomp5md.lib
+else
+ MKL_LIB = -Wl,--start-group \
+           $(MKLROOT)/lib/intel64/libmkl_intel_lp64.a \
+           $(MKLROOT)/lib/intel64/libmkl_core.a \
+           $(MKLROOT)/lib/intel64/libmkl_gnu_thread.a \
+           -Wl,--end-group \
+           -Wl,-rpath,$(MKLROOT)/lib/intel64/../../../compiler/lib/intel64 \
+           -Wl,-rpath,$(MKLROOT)/lib/intel64/../../../../compiler/latest/linux/compiler/lib/intel64_lin \
+           -L$(MKLROOT)/lib/intel64/../../../compiler/lib/intel64 \
+           -L$(MKLROOT)/lib/intel64/../../../../compiler/latest/linux/compiler/lib/intel64_lin \
+           -liomp5 -ldl
+endif
+else
+ LAPACK_CFLAG = -DLAPACK
+ LAPACK_INCLUDE = -I/usr/include/lapacke
+ LAPACK_LIB = -llapack -lblas
+endif
+
+ifeq ($(OS), Windows)
+  EXTRA_INC_DIRS = -I$(DD)../tiff -I$(DD)../gd -I$(DD)../png -I$(DD)../zlib -I$(DD)../lzma
+  EXTRA_INC_DIRS = 
+else
+  EXTRA_INC_DIRS = $(sort $(dir $(filter-out ,$(Z_LIB) $(LZMA_LIB) $(HDF5_LIB) $(SZ_LIB) $(GSL_LIB) $(GSLCBLAS_LIB))))
+  EXTRA_INC_DIRS := $(patsubst %/lib64/,%/include, $(EXTRA_INC_DIRS))
+  EXTRA_INC_DIRS := $(patsubst %/x86_64-linux-gnu/,%/include, $(EXTRA_INC_DIRS))
+  EXTRA_INC_DIRS := $(patsubst %/lib/,%/include, $(EXTRA_INC_DIRS))
+  EXTRA_INC_DIRS := $(patsubst %/$(OBJ_DIR)/,%, $(EXTRA_INC_DIRS))
+  EXTRA_INC_DIRS := $(patsubst %,-I%, $(EXTRA_INC_DIRS))
+endif
+
+ifeq ($(OS), Windows)
+  LIB_LINK_DIRS = -LIBPATH:$(DD)../lib/$(OS)-$(ARCH)
+else
+  LIB_LINK_DIRS = -L$(DD)../lib/$(OS)-$(ARCH)
+endif
+
+# Try to locate MPI compiler
+MPI_CC = $(firstword $(wildcard \
+           /usr/bin/mpicc \
+           /usr/local/bin/mpicc \
+           /usr/lib64/mpich/bin/mpicc \
+           /usr/lib64/openmpi/bin/mpicc \
+           /opt/local/bin/mpicc \
+           /opt/homebrew/bin/mpicc ))
+MPI_CCC = $(firstword $(wildcard \
+           /usr/bin/mpic++ \
+           /usr/local/bin/mpic++ \
+           /usr/lib64/mpich/bin/mpic++ \
+           /usr/lib64/openmpi/bin/mpic++ \
+           /opt/local/bin/mpic++ \
+           /opt/homebrew/bin/mpic++ ))
+WIN_MPI = $(firstword $(wildcard \
+           C:/Program\ Files/Microsoft\ MPI \
+           C:/Program\ Files\ (x86)/Microsoft\ SDKs/MPI \
+           C:/MicrosoftMPI ))
+
+ifneq ($(WIN_MPI),)
+  WIN_MPI_INC = -I$(WIN_MPI)/Include
+  WIN_MPI_LIB = $(WIN_MPI)/Lib/x64/msmpi.lib
+  MPI_CC = FOUND
+endif
+
+ifeq ($(OS), Linux)
+  CC = gcc
+  CCC = g++
+  AR = ar rcs
+  RANLIB = ranlib
+  CFLAGS = -m64 -O3 -g -Wall -fPIC $(EXTRA_INC_DIRS)
+  CCFLAGS = -m64 -O3 -g -Wall -fPIC $(EXTRA_INC_DIRS)
+  LDFLAGS = -static-libstdc++ -rdynamic -m64
+  PROD_SYS_LIBS = -lpthread -lm -lrt -ldl -lgcc
+  OBJEXT = o
+  LIBEXT = a
+  LIBPRE = lib
+  LINKEXE = $(CCC)
+
+  #-m64         Generates code for a 64-bit environment.
+  #-O3          Enables high-level optimizations, focusing on maximizing performance.
+  #-g           Includes debugging information in the compiled output.
+  #-Wall        Enables a broad set of warning messages to help identify potential issues.
+  #-fPIC        Generates position-independent code, which is essential for creating shared libraries.
+
+  CUSTOM_GCC_PATH = /usr/local/oag/3rdParty/gcc-11.3.0
+  ifneq ($(wildcard $(CUSTOM_GCC_PATH)),)
+    CC = $(CUSTOM_GCC_PATH)/bin/gcc
+    CCC = $(CUSTOM_GCC_PATH)/bin/g++
+    AR = $(CUSTOM_GCC_PATH)/bin/gcc-ar -rc
+    RANLIB = $(CUSTOM_GCC_PATH)/bin/gcc-ranlib
+  endif
+endif
+
+ifeq ($(OS), Darwin)
+  CC = clang
+  CCC = clang++
+  AR = libtool -static -o
+  RANLIB = ranlib
+  #MAC_VERSION = -mmacosx-version-min=10.13
+  CFLAGS = -Wno-deprecated-non-prototype -m64 -O3 -g -Wall -fPIC -fno-common $(MAC_VERSION) $(EXTRA_INC_DIRS)
+  CCFLAGS = -Wno-deprecated-non-prototype -m64 -O3 -g -Wall -fPIC -fno-common -std=c++11 $(MAC_VERSION) $(EXTRA_INC_DIRS)
+  LDFLAGS = $(MAC_VERSION) -std=c++11
+  PROD_SYS_LIBS = -lm
+  OBJEXT = o
+  LIBEXT = a
+  LIBPRE = lib
+  EXEEXT =
+  LINKEXE = $(CCC)
+
+  #-Wno-deprecated-non-prototype  Suppresses warnings about deprecated non-prototype function declarations.
+  #-m64         Generates code for a 64-bit environment.
+  #-O3          Enables high-level optimizations, focusing on maximizing performance.
+  #-g           Includes debugging information in the compiled output.
+  #-Wall        Enables a broad set of warning messages to help identify potential issues.
+  #-fPIC        Generates position-independent code, which is essential for creating shared libraries.
+  #-fno-common  Treats uninitialized global variables as separate entities, preventing potential linker conflicts.
+  #-std=c++11   Specifies that the code should be compiled using the C++11 standard.
+
+endif
+
+ifeq ($(ARCH), x86_64)
+    CFLAGS += -mtune=generic
+    CCFLAGS += -mtune=generic
+endif
+
+ifeq ($(ARCH), arm64)
+    CFLAGS += -mcpu=native
+    CCFLAGS += -mcpu=native
+endif
+
+# Adjust for Windows in a cygwin terminal
+ifeq ($(OS), Windows)
+  HDF_DIR = c:/HDF5/1.12.1
+  CC = cl
+  CCC = cl
+  CFLAGS = -nologo -FC -D__STDC__=0 -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE -Ox -GL -Oy- -W3 -MD $(EXTRA_INC_DIRS)
+  CCFLAGS = -EHsc -GR -nologo -FC -D__STDC__=0 -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE -Ox -GL -Oy- -W3 -MD $(EXTRA_INC_DIRS)
+  LINKEXE = link -nologo -LTCG -incremental:no -opt:ref -release -MACHINE:X64
+  LINKDLL = link -nologo -LTCG -incremental:no -opt:ref -release -MACHINE:X64 -subsystem:windows -dll
+  LINKLIB = lib -nologo
+  #PROD_SYS_LIBS = netapi32.lib
+  OBJEXT = obj
+  LIBEXT = lib
+  LIBPRE =
+  EXEEXT = .exe
+  #LIB_LINK_DIRS =
+
+
+  
+  #-nologo       Suppresses the display of the startup banner and version information.
+  #-FC           Displays the full path of source code files in diagnostic messages.
+  #-D__STDC__=0  Defines the preprocessor macro __STDC__ with a value of 0. This can be useful when dealing with code that checks for standard compliance.
+  #-D_CRT_SECURE_NO_DEPRECATE   Defines the macro _CRT_SECURE_NO_DEPRECATE, which disables deprecation warnings for older, less secure C runtime functions.
+  #-D_CRT_NONSTDC_NO_DEPRECATE  Defines the macro _CRT_NONSTDC_NO_DEPRECATE, which suppresses deprecation warnings for non-standard C runtime functions.
+  #-Ox           Enables full optimization, including favoring speed over size and other aggressive optimizations.
+  #-GL           Enables whole program optimization, allowing the compiler to perform optimizations across all modules.
+  #-Oy-          Disables frame pointer omission, which can be useful for debugging purposes.
+  #-W3           Sets the warning level to 3, which displays all but the most verbose warnings.
+  #-MD           Specifies that the application should use the multithreaded, DLL version of the runtime library.
+  #-EHsc         Enables standard C++ exception handling, allowing the use of try, catch, and throw constructs. The s specifies synchronous exception handling, and the c indicates that extern C functions can throw exceptions.
+  #-GR           Enables run-time type information (RTTI), allowing the use of the dynamic_cast and typeid operators.
+  #-LTCG         Enables Link-Time Code Generation, allowing the linker to perform optimizations across the entire program.
+  #-incremental:no  Disables incremental linking, ensuring a full linking process.
+  #-opt:ref      Eliminates functions and data that are never referenced, reducing the size of the output file.
+  #-release      Indicates a release build, typically disabling debug information and enabling optimizations.
+  #-MACHINE:X64  Specifies the target platform as x64, indicating that the output is intended for 64-bit systems.
+  #-subsystem:windows  Specifies that the application is a Windows GUI application, which affects the entry point and subsystem settings.
+  #-dll          Instructs the linker to create a dynamic-link library (DLL) instead of an executable.
+
+endif
+
+ifeq ($(OS),Windows)
+OUTPUT = /Fo$@
+OUTPUTEXE = -out:$@
+else
+OUTPUT = -o $@
+OUTPUTEXE = -o $@
+endif

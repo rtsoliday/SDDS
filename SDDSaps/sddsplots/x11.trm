@@ -1,0 +1,760 @@
+/* prototypes for this file are in x11.trm-proto */
+/*
+ *    x11.trm  --- inboard terminal driver for X11
+ */
+#include <ctype.h>
+#include "x11_limits.h"
+#include <stdio.h>
+#include "graph.h"
+#if defined(_WIN32)
+#include <winreg.h>
+#include <fcntl.h>
+#include <io.h>
+#if defined(__BORLANDC__)
+#define _setmode(handle, amode) setmode(handle, amode)
+#endif
+#endif
+/* approximations for typical font/screen sizes */
+#define X11_VCHAR (X11_YMAX/25) 
+#define X11_HCHAR (X11_XMAX/100) 
+#define X11_VTIC (X11_YMAX/100)
+#define X11_HTIC (X11_XMAX/150)
+
+#define X11_nopts 22
+char X11_opts[X11_nopts][20] = {
+  "-iconic",  "-rv",  "-reverse",  "+rv",  "-synchronous",  
+  "-display",  "-geometry",  "-bg",  "-background",  "-bd",  "-bordercolor",  "-bw", 
+  "-borderwidth",  "-fg",  "-foreground",  "-fn",  "-font",  "-name",  
+  "-selectionTimeout",  "-title",  "-xnllanguage",  "-xrm" 
+};
+int X11_optarg[X11_nopts] = { 
+  0,  0,  0,  0,  0, 
+  1,  1,  1,  1,  1,  1,  1, 
+  1,  1,  1,  1,  1,  1,  
+  1,  1,  1,  1
+};
+
+
+char X11_name[1024] = "mpl_x11 -name mpl ";
+char X11_command[1024]="";
+/*char X11_geom[100]="-geometry 700x541+200+150 ";*/
+char X11_geom[100]=" ";
+
+static int last_linetype = -1;
+int motif_color_index = 0;
+int motif_color_maxindex = 0;
+MotifColor *motif_colors = NULL;
+
+int contains_whitespace(char *s)
+{
+  while (*s)
+    if (isspace(*s++))
+      return(1);
+  return(0);
+}
+
+/*   X11_args - scan gnuplot command line for standard X Toolkit options */
+
+int X11_args(int argc, char **argv)
+{
+  int nx11 = 0,  n;
+  char *ptr;
+  /*char *getenv();*/
+
+  if ((ptr=getenv("MPL_GEOMETRY")))
+    strcpy_ss(X11_geom,  ptr);
+
+  strcat(X11_command,  X11_geom);
+
+  while(++argv,  --argc > 0) {
+    for (n=0; n<X11_nopts; n++) {
+      if (!strcmp(*argv,  X11_opts[n])) {
+	strcat(X11_command,  " ");
+	strcat(X11_command,  *argv); 
+	if (X11_optarg[n]) {
+	  if (--argc <= 0) return(nx11);
+	  if (contains_whitespace(argv[1])) {
+	    strcat(X11_command,  " \"");
+	    strcat(X11_command,  *++argv); 
+	    strcat(X11_command,  "\"");
+	  }
+	  else {
+	    strcat(X11_command,  " ");
+	    strcat(X11_command,  *++argv); 
+	  }
+	  nx11++;
+	}
+	nx11++; break;
+      }
+    }
+    if (n == X11_nopts) break; 
+  }
+  return(nx11);
+}
+
+char *sddsplotCommandline;
+
+
+void parseCommandlineToMotif(int argc, char **argv)
+{  
+   int i , n;
+   char *p = NULL;
+   char *quote = NULL;
+   char *op = NULL;
+   sddsplotCommandline = NULL;
+   n= (int)(strlen(argv[0]))+3;
+   sddsplotCommandline = tmalloc(sizeof(char)*(n));
+   strcat(sddsplotCommandline,"\"");
+   strcat(sddsplotCommandline,argv[0]);
+   for (i=1; i<argc; i++ ) {
+      op  = tmalloc(sizeof(char)*(strlen(argv[i]))+1);
+      strcat(op,argv[i]);
+      n = n + (int)(strlen(op)) +3;
+     
+      p = op;
+      do {
+         if (*p == '"' ) {
+	    
+	    op = trealloc(op,sizeof(char)*(strlen(op)+1));
+	    n = n+1;
+	    insert(p,"\\");
+	    p++;
+	 }   
+	 p ++;
+      } while ( *p);
+      quote = "'";
+      if (strchr(op,'\'')) {
+         quote = "\\\"";
+	 n = n+2;
+      }
+      sddsplotCommandline = trealloc(sddsplotCommandline,sizeof(char)*n); 
+      strcat(sddsplotCommandline, " ");
+      strcat(sddsplotCommandline,quote);
+      strcat(sddsplotCommandline,op);
+      strcat(sddsplotCommandline,quote);
+      free(op);
+   } 
+   strcat(sddsplotCommandline,"\"");   
+}
+
+
+
+
+int X11_init(void)
+{ 
+  char *devarg;
+  if (!X11_pipe) {
+    strcpy_ss(X11_name,  "mpl_x11 -name mpl ");
+    strcat(X11_name,  X11_command);
+    if ((devarg=gs_device_arguments(NULL,  1))) {
+      strcat(X11_name,  " ");
+      strcat(X11_name,  devarg);
+    }
+    X11_pipe = popen(X11_name,  "w"); 
+  }
+  return 0;
+}
+
+int X11g_init(void)
+{ 
+  char *devarg;
+  if (!X11_pipe) {
+    strcpy_ss(X11_name,  "mpl_x11g -name mpl ");
+    strcat(X11_name,  X11_command);
+    if ((devarg=gs_device_arguments(NULL,  1))) {
+      strcat(X11_name,  " ");
+      strcat(X11_name,  devarg);
+    }
+    X11_pipe = popen(X11_name,  "w"); 
+  }
+  return 0;
+}
+
+int X11c_init(void)
+{ 
+  char *devarg;
+  if (!X11_pipe) {
+    strcpy_ss(X11_name,  "mpl_x11c -name mpl ");
+    strcat(X11_name,  X11_command);
+    if ((devarg=gs_device_arguments(NULL,  1))) {
+      strcat(X11_name,  " ");
+      strcat(X11_name,  devarg);
+    }
+    X11_pipe = popen(X11_name,  "w"); 
+  }
+  return 0;
+}
+
+int X11motif_init(void)
+{ 
+  char *devarg;
+#if defined(_WIN32)
+  char *buffer=NULL;
+  char *buffer2=NULL;
+  HKEY key, sub_key;
+  long size=0;
+#endif
+  if (!X11_pipe) {
+#if defined(_WIN32)
+    if (RegOpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE", &key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegOpenKey(key, "Microsoft", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "Windows", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "CurrentVersion", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "App Paths", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "mpl_motif.exe", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+
+    if (RegQueryValue(key, NULL, NULL, &size) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+
+    buffer = malloc(size * sizeof(char));
+    buffer2 = malloc(size * sizeof(char));
+
+    if (RegQueryValue(key, NULL, buffer, &size) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    GetShortPathName(buffer, buffer2, size);
+    strcpy_ss(X11_name,  buffer2);
+    strcat(X11_name,  " ");
+#else
+    strcpy_ss(X11_name,  "mpl_motif ");
+#endif
+    strcat(X11_name,  X11_command);
+    if ((devarg=gs_device_arguments(NULL,  1))) {
+      strcat(X11_name,  " ");
+      strcat(X11_name,  devarg);
+    }
+    if (outfile==stdout)
+      X11_pipe = popen(X11_name,  "w");
+    else
+      X11_pipe = outfile;
+  }
+#if defined(_WIN32)
+  if (buffer) free(buffer);
+  if (buffer2) free(buffer2);
+#endif
+  return 0;
+}
+
+int X11bmotif_init(void)
+{ 
+  char *X11_name_long=NULL;
+  int length=0;
+  char *devarg;
+#if defined(_WIN32)
+  char *buffer=NULL;
+  HKEY key, sub_key;
+  long size=0;
+#endif
+  if (!X11_pipe) {
+#if defined(_WIN32)
+    if (RegOpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE", &key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegOpenKey(key, "Microsoft", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "Windows", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "CurrentVersion", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "App Paths", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "mpl_motif.exe", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+
+    if (RegQueryValue(key, NULL, NULL, &size) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+
+    buffer = malloc(size * sizeof(char));
+
+    if (RegQueryValue(key, NULL, buffer, &size) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+
+    strcpy_ss(X11_name,  "\"\"");
+    strcat(X11_name,  buffer);
+    strcat(X11_name,  "\" ");
+
+#else
+    strcpy_ss(X11_name,  "mpl_motif ");
+#endif
+    strcat(X11_name,  X11_command);
+    if ((devarg=gs_device_arguments(NULL,  1))) {
+      strcat(X11_name,  " ");
+      strcat(X11_name,  devarg);
+    }
+    if ( sddsplotCommandline) {
+      strcat(X11_name,  " -command ");
+      length = strlen(X11_name)+strlen(sddsplotCommandline);
+      if(length>1024) {
+         X11_name_long = tmalloc(sizeof(char)*(length+1));
+         strcat(X11_name_long,X11_name);
+	 strcat(X11_name_long,sddsplotCommandline);
+      } else {  	 
+         strcat(X11_name,  sddsplotCommandline);
+      }
+    }  
+    if (outfile==stdout) {
+#if defined(_WIN32)
+	strcat(X11_name, "\"");
+#endif
+
+#if defined(linux) || defined(__APPLE__)
+    if(X11_name_long) 
+       X11_pipe = popen(X11_name_long, "w");
+    else    
+       X11_pipe = popen(X11_name,  "w");
+#else
+    if(X11_name_long)
+       X11_pipe = popen(X11_name_long, "wb");
+    else    
+       X11_pipe = popen(X11_name,  "wb");
+#endif 
+    }
+    else {
+#if defined(_WIN32)
+      if (_setmode(_fileno(outfile), _O_BINARY) == -1) {
+	fprintf(stderr, "error: unable to create binary file\n");
+	exit(1);
+      }
+#endif
+      X11_pipe = outfile;
+    }
+  }
+#if defined(_WIN32)
+  if (buffer) free(buffer);
+#endif
+  free(X11_name_long);
+  return 0;
+}
+
+int X11_reset(void)
+{ 
+  fprintf(X11_pipe,  "R\n"); fflush(X11_pipe); 
+  last_linetype = -1;
+  return 0;
+}
+
+int X11b_reset(void)
+{ 
+  static char value = 'R';
+  fwrite(&value,  sizeof(value),  1,  X11_pipe);
+  fflush(X11_pipe); 
+  last_linetype = -1;
+  return 0;
+}
+
+int X11_text(void)
+{
+  fprintf(X11_pipe,  "E\n"); fflush(X11_pipe); 
+  last_linetype = -1;
+  return 0;
+}
+
+int X11b_sendCoordinates(void) 
+{
+  static char valueU = 'U';
+  static double conversion[4];
+  static double xmin, xmax, ymin, ymax;
+  static double pmin, pmax, qmin, qmax;
+        
+  get_mapping(&xmin, &xmax, &ymin, &ymax);
+  get_pspace(&pmin, &pmax, &qmin, &qmax);
+
+  conversion[0] = ((xmax-xmin)/(pmax-pmin))/X11_XMAX;
+  conversion[2] = ((ymax-ymin)/(qmax-qmin))/X11_YMAX;
+  conversion[1] = xmin - conversion[0]*pmin*X11_XMAX;
+  conversion[3] = ymin - conversion[2]*qmin*X11_YMAX;
+        
+  fwrite(&valueU,  sizeof(valueU), 1, X11_pipe); 
+  fwrite(conversion, sizeof(*conversion), 4, X11_pipe);
+  fflush(X11_pipe);
+  return 0;
+}
+
+int X11b_text(void)
+{ 
+  static char valueE = 'E';
+  X11b_sendCoordinates();
+  fwrite(&valueE,  sizeof(valueE), 1, X11_pipe); 
+  fflush(X11_pipe); 
+  last_linetype = -1;
+  return 0;
+}
+
+int X11_graphics(void)
+{ 
+  fprintf(X11_pipe,  "G\n");
+  return 0; 
+}
+
+int X11b_graphics(void)
+{ 
+  static char value = 'G';
+  fwrite(&value,  sizeof(value),  1,  X11_pipe); 
+  fflush(X11_pipe); 
+  return 0; 
+}
+
+int X11_move(int x, int y)
+{ 
+  fprintf(X11_pipe,  "M%04d%04d\n",  x,  y); 
+  return 0; 
+}
+
+int X11b_move(int x, int y)
+{
+  static char value = 'M';
+  static short buffer[2];
+  fwrite(&value,  sizeof(value),  1,  X11_pipe);
+  buffer[0] = x;
+  buffer[1] = y;
+  fwrite(buffer,  sizeof(buffer[0]),  2,  X11_pipe);
+  fflush(X11_pipe);
+  return 0; 
+}
+
+int X11_vector(int x, int y)
+{ 
+  fprintf(X11_pipe,  "V%04d%04d\n",  x,  y); 
+  return 0; 
+}
+
+int X11b_vector(int x, int y)
+{
+  static char value = 'V';
+  static short buffer[2];
+  fwrite(&value,  sizeof(value),  1,  X11_pipe);
+  buffer[0] = x;
+  buffer[1] = y;
+  fwrite(buffer,  sizeof(buffer[0]),  2,  X11_pipe);
+  fflush(X11_pipe);
+  return 0; 
+}
+
+static int X11_force_linetype=0;
+
+int X11_line_thickness(int lt)
+{
+  fprintf(X11_pipe, "W%d\n", lt);
+  X11_force_linetype=1;
+  return 0;
+}
+
+int X11b_line_thickness(int lt)
+{
+  static char value = 'W';
+  static short buffer;
+  fwrite(&value,  sizeof(value),  1,  X11_pipe);
+  buffer = lt;
+  fwrite(&buffer,  sizeof(buffer),  1,  X11_pipe);
+  fflush(X11_pipe);
+  return 0;
+}
+
+int X11b_spectral(long num, int spec, unsigned short red0, unsigned short green0, unsigned short blue0, unsigned short red1, unsigned short green1, unsigned short blue1)
+{
+  static char value = 'S';
+  static unsigned short buffer[8];
+  fwrite(&value, sizeof(value), 1, X11_pipe);
+  buffer[0] = num > 101 ? 101 : num;
+  buffer[1] = spec;
+  buffer[2] = red0;
+  buffer[3] = green0;
+  buffer[4] = blue0;
+  buffer[5] = red1;
+  buffer[6] = green1;
+  buffer[7] = blue1;
+  fwrite(buffer, sizeof(*buffer), 8, X11_pipe);
+  fflush(X11_pipe);
+  return 0;
+}
+
+int X11_linetype(int lt)
+{ 
+  if ((X11_force_linetype) || (lt!=last_linetype)) {
+    fprintf(X11_pipe,  "L%04d\n",  lt); 
+    last_linetype = lt;
+  }
+  return 0; 
+}
+
+int X11b_linetype(int lt)
+{
+  static char value = 'L';
+  static short buffer;
+  if ((motif_color_index == 0) || (lt < 1000)) {
+    fwrite(&value,  sizeof(value),  1,  X11_pipe);
+    buffer = lt;
+    fwrite(&buffer,  sizeof(buffer),  1,  X11_pipe);
+    fflush(X11_pipe);
+  } else {
+    lt -= 1000;
+    fwrite(&value,  sizeof(value),  1,  X11_pipe);
+    buffer = lt;
+    fwrite(&buffer,  sizeof(buffer),  1,  X11_pipe);
+    fflush(X11_pipe);
+    lt = lt%motif_color_index;
+    X11b_color(motif_colors[lt].red, motif_colors[lt].green, motif_colors[lt].blue);
+       
+  }
+  last_linetype = lt;
+  return 0; 
+}
+
+int X11_put_text(int x, int y, char *str)
+{
+  /*   fprintf(X11_pipe,  "T%04d%04d%s\n",  x,  y,  str); */
+  return 0; 
+}
+
+int X11_justify_text(enum JUSTIFY mode)
+{
+  /*   fprintf(X11_pipe,  "J%04d\n",  mode); */
+  return(TRUE);
+}
+
+int X11_fill_box(int shade, int xl, int xh, int yl, int yh)
+{
+  fprintf(X11_pipe,  "B%04d%04d%04d%04d%04d\n", 
+	  shade,  xl,  xh,  yl,  yh);
+  last_linetype = -1;
+  return 0; 
+}
+
+int X11b_fill_box(int shade, int xl, int xh, int yl, int yh)
+{
+  static char value = 'B';
+  static short buffer[5];
+  fwrite(&value,  sizeof(value),  1,  X11_pipe);
+  buffer[0] = shade;
+  buffer[1] = xl;
+  buffer[2] = xh;
+  buffer[3] = yl;
+  buffer[4] = yh;
+  fwrite(buffer, sizeof(*buffer), 5, X11_pipe);
+  fflush(X11_pipe);
+  last_linetype = -1;
+  return 0; 
+}
+
+int X11_dot(int x, int y, int number)
+{
+  fprintf(X11_pipe,  "P%04d%04d\n",  x,  y);
+  return 0; 
+}
+
+int X11b_dot(int x, int y, int number)
+{
+  static char value = 'P';
+  static short buffer[2];
+  fwrite(&value,  sizeof(value),  1,  X11_pipe);
+  buffer[0] = x;
+  buffer[1] = y;
+  fwrite(buffer, sizeof(*buffer), 2, X11_pipe);
+  fflush(X11_pipe);
+  return 0; 
+}
+
+int X11b_color(unsigned short red, unsigned short green, unsigned short blue)
+{
+  static char value = 'C';
+  static unsigned short buffer[3];
+  fwrite(&value, sizeof(value), 1, X11_pipe);
+  buffer[0] = red;
+  buffer[1] = green;
+  buffer[2] = blue;
+  fwrite(buffer, sizeof(*buffer), 3, X11_pipe);
+  fflush(X11_pipe);
+  return 0;
+}
+
+int X11b_add_color(unsigned short red, unsigned short green, unsigned short blue, short reset)
+{
+  if (reset) {
+    //motif_color_index = 1;
+    return 0;
+  }
+  if (motif_color_index >= motif_color_maxindex) {
+    motif_color_maxindex += 100;
+    if (motif_color_index == 0) {
+      motif_colors = tmalloc(sizeof(*motif_colors)*motif_color_maxindex);
+    } else {
+      motif_colors = trealloc(motif_colors, sizeof(*motif_colors)*(++motif_color_maxindex));
+    }
+  }
+  motif_colors[motif_color_index].red = red;
+  motif_colors[motif_color_index].green = green;
+  motif_colors[motif_color_index].blue = blue;
+  motif_color_index++;
+  return 0;
+}
+
+void RGB_short_values(unsigned short *red, unsigned short *green, 
+		      unsigned short *blue, double hue)
+{
+  double r,  g,  b;
+  RGB_values(&r,  &g,  &b,  hue);
+  if (r >= 1) r = .99999;
+  if (g >= 1) g = .99999;
+  if (b >= 1) b = .99999;
+  *red = r*65536;
+  *green = g*65536;
+  *blue = b*65536;
+}
+
+void Spectral_RGB_short_values(unsigned short *red, unsigned short *green, 
+		      unsigned short *blue, double hue)
+{
+  double r,  g,  b;
+  Spectral_RGB_values(&r,  &g,  &b,  hue);
+  if (r >= 1) r = .99999;
+  if (g >= 1) g = .99999;
+  if (b >= 1) b = .99999;
+  *red = r*65536;
+  *green = g*65536;
+  *blue = b*65536;
+}
+
+void Spectral_RGB_NoMagenta_short_values(unsigned short *red, unsigned short *green, 
+		      unsigned short *blue, double hue)
+{
+  double r,  g,  b;
+  Spectral_RGB_NoMagenta_values(&r,  &g,  &b,  hue);
+  if (r >= 1) r = .99999;
+  if (g >= 1) g = .99999;
+  if (b >= 1) b = .99999;
+  *red = r*65536;
+  *green = g*65536;
+  *blue = b*65536;
+}
+
+void Spectral_BGR_short_values(unsigned short *red, unsigned short *green, 
+		      unsigned short *blue, double hue)
+{
+  double r,  g,  b;
+  Spectral_BGR_values(&r,  &g,  &b,  hue);
+  if (r >= 1) r = .99999;
+  if (g >= 1) g = .99999;
+  if (b >= 1) b = .99999;
+  *red = r*65536;
+  *green = g*65536;
+  *blue = b*65536;
+}
+
+void Spectral_BGR_NoMagenta_short_values(unsigned short *red, unsigned short *green, 
+		      unsigned short *blue, double hue)
+{
+  double r,  g,  b;
+  Spectral_BGR_NoMagenta_values(&r,  &g,  &b,  hue);
+  if (r >= 1) r = .99999;
+  if (g >= 1) g = .99999;
+  if (b >= 1) b = .99999;
+  *red = r*65536;
+  *green = g*65536;
+  *blue = b*65536;
+}
+
+void Custom_RGB_short_values(unsigned short *red, unsigned short *green, unsigned short *blue, unsigned short r0, unsigned short g0, unsigned short b0, unsigned short r1, unsigned short g1, unsigned short b1, double hue)
+{
+  double r,  g,  b;
+  Custom_RGB_values(&r,  &g,  &b, r0, g0, b0, r1, g1, b1, hue);
+  if (r >= 1) r = .99999;
+  if (g >= 1) g = .99999;
+  if (b >= 1) b = .99999;
+  *red = r*65536;
+  *green = g*65536;
+  *blue = b*65536;
+}

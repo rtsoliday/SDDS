@@ -1,0 +1,381 @@
+//Microsoft Developer Studio generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#define APSTUDIO_HIDDEN_SYMBOLS
+#include "windows.h"
+#undef APSTUDIO_HIDDEN_SYMBOLS
+#include "resource.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_MPLMOTIF            ICON    DISCARDABLE     "mpl_motif.ICO"
+IDI_SMALL               ICON    DISCARDABLE     "SMALL.ICO"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDC_MPLMOTIF MENU DISCARDABLE 
+BEGIN
+    POPUP "File"
+    BEGIN
+        MENUITEM "Save As...",                  ID_FILE_SAVEAS
+        MENUITEM "Print Setup...",              ID_FILE_PRINTSETUP
+        MENUITEM "Print...",                    ID_FILE_PRINT
+        MENUITEM SEPARATOR
+        MENUITEM "Quit",                        IDM_EXIT
+    END
+    POPUP "Navigate"
+    BEGIN
+        MENUITEM "Next",                        ID_NAVIGATE_NEXT
+        MENUITEM "Previous",                    ID_NAVIGATE_PREVIOUS
+        MENUITEM "Delete",                      ID_NAVIGATE_DELETE
+        MENUITEM "To number...",                ID_NAVIGATE_TONUMBER
+    END
+    POPUP "Options"
+    BEGIN
+        POPUP "Zoom"
+        BEGIN
+            MENUITEM "In",                          ID_OPTIONS_ZOOM_IN
+            MENUITEM "Out",                         ID_OPTIONS_ZOOM_OUT
+            MENUITEM "Up",                          ID_OPTIONS_ZOOM_UP
+            MENUITEM "Down",                        ID_OPTIONS_ZOOM_DOWN
+            MENUITEM "Left",                        ID_OPTIONS_ZOOM_LEFT
+            MENUITEM "Right",                       ID_OPTIONS_ZOOM_RIGHT
+            MENUITEM "Restore",                     ID_OPTIONS_ZOOM_RESTORE
+        END
+        POPUP "Placement"
+        BEGIN
+            MENUITEM "Full Screen",                 ID_OPTIONS_PLACEMENT_FULLSCREEN
+
+            MENUITEM "First Quarter",               ID_OPTIONS_PLACEMENT_FIRSTQUARTER
+
+            MENUITEM "Second Quarter",              ID_OPTIONS_PLACEMENT_SECONDQUARTER
+
+            MENUITEM "Third Quarter",               ID_OPTIONS_PLACEMENT_THIRDQUARTER
+
+            MENUITEM "Fourth Quarter",              ID_OPTIONS_PLACEMENT_FOURTHQUARTER
+
+            MENUITEM "Top Half",                    ID_OPTIONS_PLACEMENT_TOPHALF
+
+            MENUITEM "Bottom Half",                 ID_OPTIONS_PLACEMENT_BOTTOMHALF
+
+            MENUITEM "Left Half",                   ID_OPTIONS_PLACEMENT_LEFTHALF
+
+            MENUITEM "Right Half",                  ID_OPTIONS_PLACEMENT_RIGHTHALF
+
+            MENUITEM "Center",                      ID_OPTIONS_PLACEMENT_CENTER
+
+        END
+        MENUITEM "Movie",                       ID_OPTIONS_MOVIE
+        MENUITEM "Greyscale",                   ID_OPTIONS_GREYSCALE
+        MENUITEM "Dashes",                      ID_OPTIONS_DASHES
+        MENUITEM "Double Buffer",               ID_OPTIONS_DOUBLEBUFFER
+        , CHECKED
+        MENUITEM "Mouse Tracker...",            ID_OPTIONS_MOUSETRACKER
+        MENUITEM "Color...",                    ID_OPTIONS_COLOR
+    END
+    POPUP "Help"
+    BEGIN
+        MENUITEM "Contents",                    ID_CONTENTS
+        MENUITEM "About",                       IDM_ABOUT
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Accelerator
+//
+
+IDC_MPLMOTIF ACCELERATORS MOVEABLE PURE 
+BEGIN
+    "1",            ID_OPTIONS_PLACEMENT_FIRSTQUARTER, VIRTKEY, CONTROL, 
+                                                    NOINVERT
+    "2",            ID_OPTIONS_PLACEMENT_SECONDQUARTER, VIRTKEY, CONTROL, 
+                                                    NOINVERT
+    "3",            ID_OPTIONS_PLACEMENT_THIRDQUARTER, VIRTKEY, CONTROL, 
+                                                    NOINVERT
+    "4",            ID_OPTIONS_PLACEMENT_FOURTHQUARTER, VIRTKEY, CONTROL, 
+                                                    NOINVERT
+    "<",            ID_NAVIGATE_FIRST,      ASCII,  NOINVERT
+    ">",            ID_NAVIGATE_LAST,       ASCII,  NOINVERT
+    VK_F1,          ID_OPTIONS_PLACEMENT_FIRSTQUARTER_F1, VIRTKEY, NOINVERT
+    VK_F2,          ID_OPTIONS_PLACEMENT_SECONDQUARTER_F2, VIRTKEY, NOINVERT
+    VK_F3,          ID_OPTIONS_PLACEMENT_THIRDQUARTER_F3, VIRTKEY, NOINVERT
+    VK_F4,          ID_OPTIONS_PLACEMENT_FOURTHQUARTER_F4, VIRTKEY, NOINVERT
+    "b",            ID_OPTIONS_PLACEMENT_BOTTOMHALF, ASCII, NOINVERT
+    "c",            ID_OPTIONS_PLACEMENT_CENTER, ASCII, NOINVERT
+    "d",            ID_NAVIGATE_DELETE,     ASCII,  NOINVERT
+    "f",            ID_OPTIONS_PLACEMENT_FULLSCREEN, ASCII, NOINVERT
+    "l",            ID_OPTIONS_PLACEMENT_LEFTHALF, ASCII, NOINVERT
+    "m",            ID_OPTIONS_MOVIE,       ASCII,  NOINVERT
+    "n",            ID_NAVIGATE_NEXT,       ASCII,  NOINVERT
+    "p",            ID_NAVIGATE_PREVIOUS,   ASCII,  NOINVERT
+    "q",            ID_EXIT,                ASCII,  NOINVERT
+    "r",            ID_OPTIONS_PLACEMENT_RIGHTHALF, ASCII, NOINVERT
+    "t",            ID_OPTIONS_PLACEMENT_TOPHALF, ASCII, NOINVERT
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOG DISCARDABLE  22, 17, 146, 53
+STYLE DS_MODALFRAME | DS_CENTER | WS_CAPTION | WS_SYSMENU
+CAPTION "Information"
+FONT 8, "System"
+BEGIN
+    CTEXT           "OAG WIN32 Plotter",IDC_STATIC,5,8,135,8,SS_NOPREFIX
+    CTEXT           "Written by Robert Soliday",IDC_STATIC,5,20,135,8
+    DEFPUSHBUTTON   "OK",IDOK,53,34,37,15,BS_CENTER | WS_GROUP
+END
+
+IDD_CONTENTSBOX DIALOG DISCARDABLE  0, 0, 326, 258
+STYLE DS_MODALFRAME | DS_CENTER | WS_CAPTION | WS_SYSMENU
+CAPTION "Help"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "Remove",ID_CONTENTS_REMOVE,7,7,50,14
+    EDITTEXT        IDC_EDIT1,7,25,312,226,ES_MULTILINE | ES_OEMCONVERT | 
+                    ES_READONLY | ES_WANTRETURN | WS_VSCROLL
+END
+
+IDD_NAVIGATE_NUMBER DIALOG DISCARDABLE  0, 0, 119, 55
+STYLE DS_MODALFRAME | DS_CENTER | WS_CAPTION | WS_SYSMENU
+CAPTION "Plot Number"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,7,34,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,62,34,50,14
+    LTEXT           "Enter plot number:",IDC_STATIC,7,7,58,8
+    EDITTEXT        IDC_EDIT1,7,18,105,12,ES_AUTOHSCROLL
+END
+
+IDD_MOUSETRACKER DIALOG DISCARDABLE  0, 0, 86, 57
+STYLE DS_MODALFRAME | DS_CENTER | WS_CAPTION
+CAPTION "Mouse Tracker"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "Remove",IDOK,30,39,50,14
+    LTEXT           "X:",IDC_STATIC,7,4,12,11,SS_CENTERIMAGE
+    LTEXT           "Y:",IDC_STATIC,7,22,12,13,SS_CENTERIMAGE
+    EDITTEXT        IDC_EDIT1,19,4,61,13,ES_AUTOHSCROLL | ES_READONLY
+    EDITTEXT        IDC_EDIT2,19,22,61,13,ES_AUTOHSCROLL | ES_READONLY
+END
+
+IDD_COLOR DIALOGEX 0, 0, 151, 69
+STYLE DS_MODALFRAME | DS_CENTER | WS_CAPTION | WS_SYSMENU
+CAPTION "Color"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "Remove",IDOK,7,7,50,14
+    PUSHBUTTON      "Black on White",IDC_BLACKONWHITE,7,27,64,14
+    PUSHBUTTON      "White on Black",IDC_WHITEONBLACK,78,27,60,14
+    PUSHBUTTON      "Spectrum Lines",IDC_SPECTRUMLINES,7,47,64,15
+    CONTROL         "Group Lines",IDC_GROUPLINES,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,78,47,60,15,WS_EX_DLGMODALFRAME
+END
+
+IDD_SAVEAS DIALOG DISCARDABLE  0, 0, 230, 24
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS
+FONT 8, "MS Sans Serif"
+BEGIN
+    CONTROL         "Landscape",IDC_LANDSCAPE,"Button",BS_AUTORADIOBUTTON | 
+                    BS_PUSHLIKE | WS_GROUP,5,5,50,15
+    CONTROL         "Portrait",IDC_PORTRAIT,"Button",BS_AUTORADIOBUTTON | 
+                    BS_PUSHLIKE,55,5,50,15
+    CONTROL         "B && W",IDC_BLACKANDWHITE,"Button",BS_AUTORADIOBUTTON | 
+                    BS_PUSHLIKE | WS_GROUP,110,5,34,15
+    CONTROL         "Color",IDC_COLOR,"Button",BS_AUTORADIOBUTTON | 
+                    BS_PUSHLIKE,144,5,36,15
+    CONTROL         "Border",IDC_BORDER,"Button",BS_AUTOCHECKBOX | 
+                    BS_PUSHLIKE | WS_TABSTOP,184,5,39,15
+END
+
+IDD_ERRORBOX DIALOG DISCARDABLE  0, 0, 124, 63
+STYLE DS_MODALFRAME | DS_CENTER | WS_CAPTION | WS_SYSMENU
+CAPTION "Error"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,37,42,50,14
+    EDITTEXT        IDC_EDIT1,7,7,110,28,ES_CENTER | ES_MULTILINE | 
+                    ES_READONLY | NOT WS_BORDER | NOT WS_TABSTOP
+END
+
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+2 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#define APSTUDIO_HIDDEN_SYMBOLS\r\n"
+    "#include ""windows.h""\r\n"
+    "#undef APSTUDIO_HIDDEN_SYMBOLS\r\n"
+    "#include ""resource.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+1 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "resource.h\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO DISCARDABLE 
+BEGIN
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+        VERTGUIDE, 5
+        VERTGUIDE, 140
+        BOTTOMMARGIN, 52
+    END
+
+    IDD_CONTENTSBOX, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 319
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 251
+    END
+
+    IDD_NAVIGATE_NUMBER, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 112
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 48
+    END
+
+    IDD_MOUSETRACKER, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 80
+        VERTGUIDE, 19
+        TOPMARGIN, 4
+        BOTTOMMARGIN, 53
+        HORZGUIDE, 17
+        HORZGUIDE, 22
+        HORZGUIDE, 35
+    END
+
+    IDD_COLOR, DIALOG
+    BEGIN
+        LEFTMARGIN, 2
+        RIGHTMARGIN, 144
+        VERTGUIDE, 7
+        VERTGUIDE, 71
+        VERTGUIDE, 78
+        VERTGUIDE, 138
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 62
+        HORZGUIDE, 21
+        HORZGUIDE, 27
+        HORZGUIDE, 41
+        HORZGUIDE, 47
+        HORZGUIDE, 61
+    END
+
+    IDD_SAVEAS, DIALOG
+    BEGIN
+        VERTGUIDE, 5
+        VERTGUIDE, 55
+        VERTGUIDE, 105
+        VERTGUIDE, 110
+        VERTGUIDE, 144
+        VERTGUIDE, 180
+        VERTGUIDE, 184
+        HORZGUIDE, 5
+        HORZGUIDE, 20
+    END
+
+    IDD_ERRORBOX, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 117
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 56
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    IDS_APP_TITLE           "OAG WIN32 Plotter"
+    IDC_MPLMOTIF            "MPL_MOTIF"
+    IDS_UNKNOWNFILETYPE     "Unknown file type"
+    IDS_INVALIDDRAWCOMMAND  "Received invalid draw command"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    IDS_OUTOFLOOP           "Out of loop"
+    IDS_ERRORREADINGINPUT   "Error reading input"
+    IDS_UNABLESAVEIMAGE     "Unable to save image"
+    IDS_FILEORPIPEERROR     "File or Pipe Error"
+END
+
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

@@ -1,0 +1,95 @@
+define make_prod_objs
+$(1)_OBJS = $(patsubst %.cpp, $(OBJ_DIR)/%.$(OBJEXT), $(patsubst %.cc, $(OBJ_DIR)/%.$(OBJEXT), $(patsubst %.c, $(OBJ_DIR)/%.$(OBJEXT), $($(1)_SRC))))
+endef
+
+ifneq ($(LIBRARY),)
+ ifeq ($(OS), Windows)
+  DLL = $(LIBRARY:.lib=.dll)
+  EXP = $(LIBRARY:.lib=.exp)
+  LIBRARY := $(LIBRARY:=.lib)
+  DLL := $(patsubst %,$(OBJ_DIR)/%, $(DLL))
+  EXP := $(patsubst %,$(OBJ_DIR)/%, $(EXP))
+ else
+  LIBRARY := lib$(LIBRARY:=.a)
+ endif
+ LIBRARY := $(patsubst %,$(OBJ_DIR)/%, $(LIBRARY))
+
+ LIBRARY_OBJS = $(LIBRARY_SRC:.c=.$(OBJEXT))
+ LIBRARY_OBJS := $(LIBRARY_OBJS:.cc=.$(OBJEXT))
+ LIBRARY_OBJS := $(LIBRARY_OBJS:.cpp=.$(OBJEXT))
+ LIBRARY_OBJS := $(patsubst %,$(OBJ_DIR)/%, $(LIBRARY_OBJS))
+endif
+
+ifneq ($(PROD),)
+ $(foreach prod, $(PROD), $(eval $(call make_prod_objs,$(prod))))
+ FULLPROD = $(patsubst %,$(OBJ_DIR)/%$(EXEEXT), $(PROD))
+endif
+
+ifeq ($(OS), Windows)
+ ifneq ($(PROD_LIBS),)
+  PROD_DEPS = $(addprefix $(LIB_DIR)/,$(PROD_LIBS))
+ endif
+ ifneq ($(LIBRARY_LIBS),)
+  LIBRARY_DEPS = $(addprefix $(LIB_DIR)/,$(LIBRARY_LIBS))
+ endif
+else
+ ifneq ($(PROD_LIBS),)
+  PROD_DEPS = $(addsuffix .a,$(patsubst -l%,$(LIB_DIR)/lib%,$(PROD_LIBS)))
+ endif
+endif
+
+all: $(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(LIBRARY) $(FULLPROD)
+
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
+
+$(LIB_DIR):
+	mkdir -p $(LIB_DIR)
+
+$(OBJ_DIR):
+	mkdir $(OBJ_DIR)
+
+ifeq ($(OS), Windows)
+
+ %$(EXEEXT): %.$(OBJEXT) $(PROD_DEPS)
+	$(LINKEXE) -out:$@ $(@:.exe=.obj) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+	cp -f $@ $(BIN_DIR)/
+	
+ ifeq ($(NO_DLL), 1)
+  $(LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
+	$(LINKLIB) -out:$(LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS)
+	cp -f $@ $(LIB_DIR)/
+ else
+  $(LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
+	$(LINKDLL) -out:$(DLL) -implib:$(LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS)
+	cp -f $(DLL) $(BIN_DIR)/
+	cp -f $@ $(LIB_DIR)/
+ endif
+
+else
+
+ %$(EXEEXT): %.$(OBJEXT) $(PROD_DEPS)
+	$(CCC) -o $@ $@.o $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+	cp -f $@ $(BIN_DIR)/
+ $(LIBRARY): $(LIBRARY_OBJS)
+	$(AR) $(LIBRARY) $(LIBRARY_OBJS)
+	$(RANLIB) $(LIBRARY)
+	cp -f $@ $(LIB_DIR)/
+
+endif
+
+$(OBJ_DIR)/%.$(OBJEXT): %.c
+	$(CC) $(CFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)
+$(OBJ_DIR)/%.$(OBJEXT): %.cc
+	$(CCC) $(CCFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CCFLAGS)) -c $< $(OUTPUT)
+$(OBJ_DIR)/%.$(OBJEXT): %.cpp
+	$(CCC) $(CCFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CCFLAGS)) -c $< $(OUTPUT)
+
+clean:
+	rm -rf $(OBJ_DIR)
+
+$(PROD_DEPS):
+
+$(LIBRARY_DEPS):
+
+.PHONY: all clean

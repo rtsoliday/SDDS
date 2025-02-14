@@ -1,0 +1,230 @@
+/* prototypes for this file are in hpljii.trm-proto */
+/* GNUPLOT - hpljii.trm */
+/*
+ * Copyright (C) 1990   
+ *
+ * Permission to use,  copy,  and distribute this software and its
+ * documentation for any purpose with or without fee is hereby granted,  
+ * provided that the above copyright notice appear in all copies and 
+ * that both that copyright notice and this permission notice appear 
+ * in supporting documentation.
+ *
+ * Permission to modify the software is granted,  but not the right to
+ * distribute the modified code.  Modifications are to be distributed 
+ * as patches to released version.
+ *  
+ * This software  is provided "as is" without express or implied warranty.
+ * 
+ * This file is included by ../term.c.
+ *
+ * This terminal driver supports:
+ *  hpljii_75dpi,  hpljii_100dpi,  hpljii_150dpi,  hpljii_300dpi
+ *
+ * AUTHORS
+ *  John Engels
+ *  Russell Lang
+ *
+ * send your comments or suggestions to (pixar!info-gnuplot@sun.com).
+ * 
+ */
+
+/* The following HP laserjet series II driver uses generic bit mapped graphics
+   routines from bitmap.c to build up a bit map in memory.  The driver
+   interchanges colomns and lines in order to access entire lines
+   easily and returns the lines to get bits in the right order :
+   (x, y) -> (y, XMAX-1-x). */
+/* This interchange is done by calling b_makebitmap() with reversed 
+   xmax and ymax,  and then setting b_rastermode to TRUE.  b_setpixel()
+   will then perform the interchange before each pixel is plotted */
+/* by John Engels JENGELS@BNANDP51.BITNET,  inspired by the hpljet driver
+   of Jyrki Yli-Nokari */
+
+#ifdef HPLJII
+
+/* We define 4 different print qualities : 300ppi,  150ppi,  100ppi and
+   75ppi.  (Pixel size = 1,  2,  3,  4 dots) */
+
+#define HPLJII_DPP (hplj_dpp)   /* dots per pixel */
+#define HPLJII_PPI (300/HPLJII_DPP) /* pixel per inch */
+#define HPLJII_XMAX (8*(int)(xsize*1920/HPLJII_DPP/8.0+0.9))
+#define HPLJII_YMAX (8*(int)(ysize*1920/HPLJII_DPP/8.0+0.9))
+#define HPLJII_300PPI_XMAX (1920/1)
+#define HPLJII_300PPI_YMAX (1920/1)
+#define HPLJII_150PPI_XMAX (1920/2)
+#define HPLJII_150PPI_YMAX (1920/2)
+#define HPLJII_100PPI_XMAX (1920/3)
+#define HPLJII_100PPI_YMAX (1920/3)
+#define HPLJII_75PPI_XMAX (1920/4)
+#define HPLJII_75PPI_YMAX (1920/4)
+
+#define HPLJII_XLAST (HPLJII_XMAX-1)
+#define HPLJII_YLAST (HPLJII_YMAX-1)
+
+#define HPLJII_VCHAR (HPLJII_PPI/6) /* Courier font with 6 lines per inch */
+#define HPLJII_HCHAR (HPLJII_PPI/10) /* Courier font with 10 caracters
+                                        per inch */
+#define HPLJII_300PPI_VCHAR (300/6)
+#define HPLJII_300PPI_HCHAR (300/10)
+#define HPLJII_150PPI_VCHAR (150/6)
+#define HPLJII_150PPI_HCHAR (150/10)
+#define HPLJII_100PPI_VCHAR (100/6)
+#define HPLJII_100PPI_HCHAR (100/10)
+#define HPLJII_75PPI_VCHAR (75/6)
+#define HPLJII_75PPI_HCHAR (75/10)
+
+#define HPLJII_300PPI_VTIC 8 /* Use smaller tics with greater resolution */
+#define HPLJII_300PPI_HTIC 8
+#define HPLJII_150PPI_VTIC 6
+#define HPLJII_150PPI_HTIC 6
+#define HPLJII_100PPI_VTIC 6
+#define HPLJII_100PPI_HTIC 6
+#define HPLJII_75PPI_VTIC 5
+#define HPLJII_75PPI_HTIC 5
+
+#define HPLJII_PUSH_CURSOR fprintf(outfile, "\033&f0S") /* Save current
+                  cursor position */
+#define HPLJII_POP_CURSOR fprintf(outfile, "\033&f1S") /* Restore
+                  cursor position */
+#define HPLJII_COURIER fprintf(outfile, "\033(0N\033(s0p10.0h12.0v0s0b3T\033&l6D")
+         /* be sure to use courier font with 6lpi and 10cpi */
+
+static int hplj_dpp;
+/* bm_pattern not appropriate for 300ppi graphics */
+static int b_300ppi_pattern[] = {0xffff,  0x1111, 
+        0xffff,  0x3333,  0x0f0f,  0x3f3f,  0x0fff,  0x00ff,  0x33ff};
+
+int HPLJIIinit(void)
+{
+#ifdef vms
+   reopen_binary();
+#endif /* vms */
+#ifdef PC
+   reopen_binary();
+#endif /* PC */
+}
+
+int HPLJII_300PPIgraphics(void)
+{
+   hplj_dpp = 1;
+   HPLJIIgraphics();
+}
+
+int HPLJII_150PPIgraphics(void)
+{
+   hplj_dpp = 2;
+   HPLJIIgraphics();
+}
+
+int HPLJII_100PPIgraphics(void)
+{
+   hplj_dpp = 3;
+   HPLJIIgraphics();
+}
+
+int HPLJII_75PPIgraphics(void)
+{
+   hplj_dpp = 4;
+   HPLJIIgraphics();
+}
+
+int HPLJIIgraphics(void)
+{
+   HPLJII_COURIER;
+   HPLJII_PUSH_CURSOR;
+   /* rotate plot -90 degrees by reversing XMAX and YMAX and by 
+      setting b_rastermode to TRUE */
+   b_makebitmap(HPLJII_YMAX, HPLJII_XMAX, 1);
+   b_rastermode = TRUE;
+}
+
+
+/* HPLJIItext by rjl - no compression */
+int HPLJIItext(void)
+{
+  register int x, j, row;
+
+   fprintf(outfile, "\033*t%dR",  HPLJII_PPI);
+   HPLJII_POP_CURSOR;
+   fprintf(outfile,  "\033*r1A");
+
+   /* dump bitmap in raster mode */
+   for (x = b_xsize-1; x >= 0; x--) {
+      row = (b_ysize/8)-1;
+      fprintf(outfile,  "\033*b2m%dW",  b_ysize/8);
+      for (j = row; j >= 0; j--) {
+         (void) fputc( (char)(*((*b_p)[j]+x)),  outfile );
+      }
+   }
+   fprintf(outfile,  "\033*rB");
+
+   b_freebitmap();
+
+#ifndef vms  /* most vms spoolers add a formfeed character */
+   fprintf(outfile, "\f");
+#endif /* not vms */
+}
+
+
+
+int HPLJIIlinetype(int linetype)
+{
+
+   if (hplj_dpp == 1) {
+      if (linetype>=7)
+          linetype %= 7;
+      /* b_pattern not appropriate for 300ppi graphics */
+      b_linemask = b_300ppi_pattern[linetype+2];
+      b_maskcount=0;
+   }
+   else {
+      b_setlinetype(linetype);
+   }
+}
+
+#define HPLJIImove b_move
+#define HPLJIIvector b_vector
+#define HPLJIItext_angle b_text_angle
+
+int HPLJIIput_text(int x, int y, char *str)
+{
+   switch (b_angle) {
+      case 0:
+         y -= HPLJII_VCHAR/5;
+         HPLJII_POP_CURSOR;
+         HPLJII_PUSH_CURSOR;
+         /* (0, 0) is the upper left point of the paper */
+         fprintf(outfile,  "\033*p%+dx%+dY",  x*HPLJII_DPP
+                                         ,   (HPLJII_YMAX-y-1)*HPLJII_DPP );
+         fputs(str,  outfile);
+/*       for (; *str; ++str,  x += HPLJII_HCHAR)
+            HPLJIIputc (x,  y,  *str,  b_angle);*/
+         break;
+      case 1:
+         y += (HPLJII_HCHAR-2*HPLJII_VCHAR)/2;
+         y += (HPLJII_VCHAR+HPLJII_HCHAR)*strlen(str)/2;
+         for (; *str; ++str,  y -= HPLJII_VCHAR)
+            HPLJIIputc (x,  y,  *str,  b_angle);
+         break;
+   }
+}
+
+int HPLJIIputc(int x, int y, char c, int angle)
+{
+   HPLJII_POP_CURSOR;
+   HPLJII_PUSH_CURSOR;
+   /* (0, 0) is the upper left point of the paper */
+   fprintf(outfile,  "\033*p%+dx%+dY",  x*HPLJII_DPP
+                                   ,   (HPLJII_YMAX-y-1)*HPLJII_DPP );
+   fputc(c,  outfile);
+}
+
+
+int HPLJIIreset(void)
+{
+#ifdef vms
+   fflush_binary();
+#endif /* vms */
+}
+
+#endif /* HPLJII */
+

@@ -1,0 +1,1123 @@
+/* png driver for sddsplot by M. Borland using gd1.2 routines
+ * by Thomas Boutell
+ */
+#define BGDWIN32
+#include "gd.h"
+#include "png.h"
+#include "sddsplot.h"
+#if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
+
+
+
+
+#ifdef _WIN32
+#include <windows.h>
+#define PATH_SEPARATOR ";"
+#define DIR_SEPARATOR "\\"
+#define ACCESS _access
+#define F_OK 0
+#define strtok_r(str, delim, saveptr) strtok_s(str, delim, saveptr)
+#else
+#define PATH_SEPARATOR ":"
+#define DIR_SEPARATOR "/"
+#define ACCESS access
+#endif
+
+
+
+
+#define PNG_XMAX 656
+#define PNG_YMAX 506
+
+#define MPNG_XMAX ((long)(PNG_XMAX/0.80))
+#define MPNG_YMAX ((long)(PNG_YMAX/0.80))
+
+#define LPNG_XMAX ((long)(MPNG_XMAX/0.75))
+#define LPNG_YMAX ((long)(MPNG_YMAX/0.75))
+
+#define HPNG_XMAX ((long)(LPNG_XMAX*2))
+#define HPNG_YMAX ((long)(LPNG_YMAX*2))
+
+#define GPNG_XMAX ((long)(HPNG_XMAX*2))
+#define GPNG_YMAX ((long)(HPNG_YMAX*2))
+
+#define SPNG_XMAX ((long)(PNG_XMAX*0.80))
+#define SPNG_YMAX ((long)(PNG_YMAX*0.80))
+
+#define TPNG_XMAX ((long)(SPNG_XMAX*0.75))
+#define TPNG_YMAX ((long)(SPNG_YMAX*0.75))
+
+#define PDAPNG_XMAX 230
+#define PDAPNG_YMAX 230
+
+#define SIZE640X480PNG_XMAX 640
+#define SIZE640X480PNG_YMAX 480
+
+#define SIZE512X480PNG_XMAX 512
+#define SIZE512X480PNG_YMAX 480
+
+static long png_xlast, png_ylast, png_xmax, png_ymax;
+
+static unsigned long pngFlags;
+#define PNG_ON_WHITE    0x0001
+#define PNG_ON_BLACK    0x0002
+#define PNG_TEMPLATE    0x0004
+#define PNG_ROOTNAME    0x0008
+#define PNG_LINE_TABLE  0x0010
+#define PNG_USEDASHES   0x0020
+#define PNG_MOVIE       0x0080
+
+static gdImagePtr pngImage;
+static int pngBlack, pngWhite;
+#define PNG_LINETYPES 16
+static int pngLinetype[PNG_LINETYPES], png_linetype;
+static int png_line_thickness = 1;
+
+static char *pngTemplate = NULL;
+static long pngGeneration = 1, doPngGenerations = 0;
+static FILE *pngOutfile = NULL;
+static char *pngRootname = NULL;
+
+int png_color_index = 0;
+int png_color_maxindex = 0;
+MotifColor *png_colors = NULL;
+int *png_colorList = NULL;
+
+
+int ncolors_png=101;
+int spectralpng=0;
+int customspectralpng=0;
+unsigned short r0_png=0, g0_png=0, b0_png=0, r1_png=1, g1_png=1, b1_png=1;
+BOOLEAN is_forced_color;
+int png_force_color;
+
+#define PNG_DASHTYPES 10
+static char png_dashes[PNG_DASHTYPES][5] = 
+                         { {0},
+                           {4,2,0},
+			   {2,3,0},
+			   {1,2,0},
+			   {5,2,1,2,0},
+			   {3,3,1,4,0},
+			   {2,5,0},
+			   {4,4,4,1,0},
+			   {8,2,0},
+			   {1,4,0},
+			 };  
+static int png_dashtype = 0 ;
+			 
+char **getDeviceArgv(long *argc);
+BGD_DECLARE(void) gdImagePngOAG (gdImagePtr im, FILE * outFile);
+BGD_DECLARE(void) gdImagePngCtxExOAG (gdImagePtr im, gdIOCtx * outfile, int level);
+
+int PNG_initCommon()
+{
+  char **argv;
+  long argc;
+  pngFlags = PNG_ON_WHITE;
+    
+  if ((argv = getDeviceArgv(&argc))) {
+    if (!scanItemList(&pngFlags, argv, &argc, 0,
+                      "rootname", SDDS_STRING, &pngRootname, 1, PNG_ROOTNAME,
+                      "template", SDDS_STRING, &pngTemplate, 1, PNG_TEMPLATE,
+                      "onwhite", -1, NULL, 0, PNG_ON_WHITE,
+                      "onblack", -1, NULL, 0, PNG_ON_BLACK,
+		              "dashes", -1, NULL, 0, PNG_USEDASHES,
+		              "movie", -1, NULL, 0, PNG_MOVIE,
+                      "linetypetable", SDDS_STRING, &LineTableFile, 1, PNG_LINE_TABLE,
+		                "linecolortable", SDDS_STRING, &LineTableFile, 1, PNG_LINE_TABLE,   /* for backward compatibility only */
+                      NULL) ||
+        (pngFlags&PNG_ROOTNAME && !pngRootname) || (pngFlags&PNG_TEMPLATE && !pngTemplate) ||
+        (pngFlags&PNG_LINE_TABLE && !LineTableFile)) {
+      bomb("error scanning device arguments for PNG", NULL);
+    }
+    if (pngRootname && pngTemplate) {
+      bomb("give either rootname or template for png device, not both", NULL);
+    }
+    if (!pngRootname && pngFlags&PNG_MOVIE) {
+        bomb("rootname must be used when making a movie", NULL);
+    }
+    if (pngRootname || pngTemplate) {
+      if (pngRootname) {
+        pngTemplate = (char*)malloc(sizeof(*pngTemplate)*1024);
+        if (pngFlags&PNG_MOVIE) {
+          sprintf(pngTemplate, "%s.%%03d.png", pngRootname);
+        } else {
+          sprintf(pngTemplate, "%s.%%03ld", pngRootname);
+        }
+      }
+      doPngGenerations = 1;
+      pngGeneration = 1;
+      pngOutfile = NULL;
+    }
+  }  
+  if (LineTableFile) {
+    long i; 
+    if (!SDDS_ReadLineTypeTable(&lineTypeTable, LineTableFile)) {
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      bomb("problem reading line-type table", NULL);
+    }
+    if (lineTypeTable.typeFlag&LINE_TABLE_DEFINE_COLOR) {	
+       for (i=0; i<lineTypeTable.nEntries; i++) {
+         PNG_add_color(
+                       (unsigned short)256*lineTypeTable.red[i],
+                       (unsigned short)256*lineTypeTable.green[i],
+                       (unsigned short)256*lineTypeTable.blue[i], 0);
+       }
+    }
+  
+  } else {
+    lineTypeTable.typeFlag = 0x0000;
+    lineTypeTable.nEntries = 0 ;
+  }  
+  
+  return 0;
+}
+
+
+int PNG_init(void)
+{
+  png_xlast = (png_xmax = PNG_XMAX) - 1;
+  png_ylast = (png_ymax = PNG_YMAX) - 1;
+  PNG_initCommon();
+  return 0;
+}
+
+int TPNG_init(void)
+{
+  png_xlast = (png_xmax = TPNG_XMAX) - 1;
+  png_ylast = (png_ymax = TPNG_YMAX) - 1;
+  PNG_initCommon();
+  return 0;
+}
+
+int PDAPNG_init(void)
+{
+  png_xlast = (png_xmax = PDAPNG_XMAX) - 1;
+  png_ylast = (png_ymax = PDAPNG_YMAX) - 1;
+  PNG_initCommon();
+  return 0;
+}
+
+int SPNG_init(void)
+{
+  png_xlast = (png_xmax = SPNG_XMAX) - 1;
+  png_ylast = (png_ymax = SPNG_YMAX) - 1;
+  PNG_initCommon();
+  return 0;
+}
+
+int MPNG_init(void)
+{
+  png_xlast = (png_xmax = MPNG_XMAX) - 1;
+  png_ylast = (png_ymax = MPNG_YMAX) - 1;
+  PNG_initCommon();
+  return 0;
+}
+
+int LPNG_init(void)
+{
+  png_xlast = (png_xmax = LPNG_XMAX) - 1;
+  png_ylast = (png_ymax = LPNG_YMAX) - 1;
+  PNG_initCommon();
+  return 0;
+}
+
+int HPNG_init(void)
+{
+  png_xlast = (png_xmax = HPNG_XMAX) - 1;
+  png_ylast = (png_ymax = HPNG_YMAX) - 1;
+  PNG_initCommon();
+  return 0;
+}
+
+int GPNG_init(void)
+{
+  png_xlast = (png_xmax = GPNG_XMAX) - 1;
+  png_ylast = (png_ymax = GPNG_YMAX) - 1;
+  PNG_initCommon();
+  return 0;
+}
+
+int SIZE640X480PNG_init(void)
+{
+  png_xlast = (png_xmax = SIZE640X480PNG_XMAX) - 1;
+  png_ylast = (png_ymax = SIZE640X480PNG_YMAX) - 1;
+  PNG_initCommon();
+  return 0;
+}
+
+int SIZE512X480PNG_init(void)
+{
+  png_xlast = (png_xmax = SIZE512X480PNG_XMAX) - 1;
+  png_ylast = (png_ymax = SIZE512X480PNG_YMAX) - 1;
+  PNG_initCommon();
+  return 0;
+}
+
+
+int PNG_graphics(void)
+{
+  int i;
+  if (doPngGenerations && outfile==stdout) {
+    char filename[1024];
+    sprintf(filename, pngTemplate, pngGeneration++);
+    if (!(pngOutfile = fopen(filename, FOPEN_WRITE_MODE))) {
+      fprintf(stderr, "error: unable to open PNG output file %s\n",
+              filename);
+      exit(1);
+    }
+  } else {
+#if defined(_WIN32)
+    if (_setmode(_fileno(outfile), _O_BINARY) == -1) {
+      fprintf(stderr, "error: unable to create binary PNG file\n");
+      exit(1);
+    }
+#endif
+    pngOutfile = outfile;
+  }
+  pngImage = gdImageCreateTrueColor(png_xmax, png_ymax);
+  if (pngFlags&PNG_ON_BLACK) {
+    pngBlack = gdImageColorAllocate(pngImage, 0, 0, 0);
+    pngWhite = gdImageColorAllocate(pngImage, 255, 255, 255);
+  } else {
+    pngBlack = gdImageColorAllocate(pngImage, 255, 255, 255);
+    pngWhite = gdImageColorAllocate(pngImage, 0, 0, 0);
+  }
+  pngLinetype[0] = pngWhite;
+  pngLinetype[1] = gdImageColorAllocate(pngImage, 255, 0, 0);
+  pngLinetype[2] = gdImageColorAllocate(pngImage, 0, 191, 255);
+  pngLinetype[3] = gdImageColorAllocate(pngImage, 0, 255, 0);
+  pngLinetype[4] = gdImageColorAllocate(pngImage, 255, 255, 0);
+  pngLinetype[5] = gdImageColorAllocate(pngImage, 0, 255, 255);
+  pngLinetype[6] = gdImageColorAllocate(pngImage, 255, 165, 0);
+  pngLinetype[7] = gdImageColorAllocate(pngImage, 0, 250, 154);
+  pngLinetype[8] = gdImageColorAllocate(pngImage, 255, 215, 0);
+  pngLinetype[9] = gdImageColorAllocate(pngImage, 255, 105, 180);
+  pngLinetype[10] = gdImageColorAllocate(pngImage, 0, 0, 255);
+  pngLinetype[11] = gdImageColorAllocate(pngImage, 50, 205, 50);
+  pngLinetype[12] = gdImageColorAllocate(pngImage, 255, 99, 71);
+  pngLinetype[13] = gdImageColorAllocate(pngImage, 210, 180, 140);
+  pngLinetype[14] = gdImageColorAllocate(pngImage, 255, 0, 255);
+  pngLinetype[15] = gdImageColorAllocate(pngImage, 191, 191, 191);
+  png_linetype = 0;
+  if (png_color_index != 0) {
+    png_colorList = tmalloc(sizeof(*png_colorList)*png_color_index);
+    for (i=0;i<png_color_index;i++) {
+      png_colorList[i] = gdImageColorAllocate(pngImage, png_colors[i].red / 256, png_colors[i].green / 256, png_colors[i].blue / 256);
+    }
+  }
+
+  gdImageFilledRectangle(pngImage, 0, 0, png_xmax - 1, png_ymax - 1, pngBlack);
+  return 0;
+}
+
+int PNG_text(void)
+     /* end current graph page */
+{
+  gdImagePngOAG(pngImage, pngOutfile);
+  fflush(pngOutfile);
+  if (doPngGenerations && outfile==stdout) {
+    /* using filename passed by device arguments to do generation files */
+    fclose(pngOutfile);
+    pngOutfile = NULL;
+  }
+  gdImageDestroy(pngImage);
+  return 0;
+}
+
+
+int PNG_reset(void)
+     /* end graphing altogether */
+{
+  return 0;
+}
+
+
+
+
+// Function to check if ffmpeg is in the PATH
+int is_ffmpeg_in_path() {
+    const char *path_env = getenv("PATH");
+    if (path_env == NULL) {
+        fprintf(stderr, "Error: PATH environment variable not found.\n");
+        return 0; // ffmpeg not found
+    }
+
+    // Duplicate the PATH environment variable to avoid modifying the original
+    char *path_copy = strdup(path_env);
+    if (path_copy == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed.\n");
+        return 0; // ffmpeg not found
+    }
+
+    char *token = NULL;
+    char *saveptr = NULL;
+    char ffmpeg_path[1024];
+
+    // Determine the executable name based on the operating system
+    const char *ffmpeg_executable = "ffmpeg";
+#ifdef _WIN32
+    const char *ffmpeg_executable_ext = ".exe";
+#else
+    const char *ffmpeg_executable_ext = "";
+#endif
+
+    int ffmpeg_found = 0;
+
+    // Tokenize the PATH using the appropriate separator
+    token = strtok_r(path_copy, PATH_SEPARATOR, &saveptr);
+    while (token != NULL) {
+
+        // Build the full path to the ffmpeg executable
+        snprintf(ffmpeg_path, sizeof(ffmpeg_path), "%s%s%s%s", token, DIR_SEPARATOR, ffmpeg_executable, ffmpeg_executable_ext);
+
+        // Check if the executable exists and is accessible
+        if (ACCESS(ffmpeg_path, F_OK) == 0) {
+            ffmpeg_found = 1;
+            break;
+        }
+
+        token = strtok_r(NULL, PATH_SEPARATOR, &saveptr);
+
+    }
+
+    free(path_copy);
+    return ffmpeg_found;
+}
+
+
+
+
+
+
+int PNG_movie(void)
+     /* make movie */
+{
+  char command[1024], filename[950];
+  int fps=1, i;
+  
+  if (doPngGenerations && outfile==stdout && pngFlags&PNG_MOVIE) {
+    if (!is_ffmpeg_in_path()) {
+      fprintf(stderr, "ffmpeg is not in your path. Cannot make an MP4 movie on this computer.\n");
+      return 0;
+    }
+     sprintf(filename, "%s.mp4", pngRootname);
+     snprintf(command, sizeof(command),
+             "ffmpeg -y -framerate %d -i %s -c:v libx264 -pix_fmt yuv420p %s",
+             fps, pngTemplate, filename);
+     system(command);
+     for (i=1; i<pngGeneration; i++) {
+       sprintf(filename, pngTemplate, i);
+       remove(filename);
+     }
+     return 0;
+  }
+  return 0;
+}
+
+int PNG_linetype(int linetype)
+{
+  if (lineTypeTable.nEntries) {
+     if(linetype >= 1000)
+        linetype-=1000;
+     png_linetype = linetype%lineTypeTable.nEntries;
+  } else if ((png_color_index == 0) || (linetype < 1000)) {
+     png_linetype = linetype%PNG_LINETYPES;
+     if ( pngFlags&PNG_USEDASHES) 
+          png_dashtype = linetype%PNG_DASHTYPES;
+  } else {
+     png_linetype = linetype;
+  }
+  png_line_thickness = 1;
+  is_forced_color = FALSE;
+  return 0;
+}
+
+
+static int png_xposition, png_yposition;
+
+int PNG_move(int x, int y)
+{
+  y = png_ylast - y;
+  png_xposition = x;
+  png_yposition = y;
+  return 0;
+}
+
+int PNG_dot(int x, int y, int number)
+{
+  y = png_ylast - y;
+  if (lineTypeTable.nEntries && png_color_index) {
+    gdImageSetPixel(pngImage, x, y, png_colorList[png_linetype%lineTypeTable.nEntries]);
+  } else if ((png_color_index == 0) || (png_linetype < 1000)) {
+    gdImageSetPixel(pngImage, x, y, pngLinetype[png_linetype]);
+  } else {
+    gdImageSetPixel(pngImage, x, y, png_colorList[(png_linetype - 1000)%png_color_index]);
+  }
+  png_xposition = x;
+  png_yposition = y;
+  return 0;
+}
+
+
+int PNG_vector(int x, int y)
+{
+  gdImagePtr brush;
+  int i, j,n,color, npts=0 ;
+  int *styledash=NULL;
+  int use_line_thickness, use_line_color;
+  char *use_line_dash =NULL;
+  
+    
+  y = png_ylast - y;
+        
+  if (lineTypeTable.nEntries) {
+    if ( lineTypeTable.typeFlag&LINE_TABLE_DEFINE_THICKNESS) 
+       use_line_thickness = (int) lineTypeTable.thickness[png_linetype];
+    else 
+       use_line_thickness =  png_line_thickness;
+    
+          
+    if( (lineTypeTable.typeFlag&LINE_TABLE_DEFINE_COLOR) && png_color_index)
+       use_line_color = png_colorList[png_color_index-lineTypeTable.nEntries+png_linetype];
+    else 
+       use_line_color = pngWhite;   
+                
+    if ( lineTypeTable.typeFlag & LINE_TABLE_DEFINE_DASH ) 
+       use_line_dash = lineTypeTable.dash[png_linetype].dashArray;
+       
+  } else if ((png_color_index == 0) || (png_linetype < 1000)) {
+     use_line_thickness = png_line_thickness;
+     if(is_forced_color)
+        use_line_color = png_force_color;
+     else 
+       use_line_color = pngLinetype[png_linetype];
+     use_line_dash = png_dashes[png_dashtype];
+  } else {
+     use_line_thickness = png_line_thickness;
+     use_line_color = png_colorList[(png_linetype-1000)%png_color_index];
+     if(pngFlags&PNG_USEDASHES)
+        use_line_dash = png_dashes[(png_linetype-1000)%PNG_DASHTYPES];      		   
+  }
+  
+  brush = gdImageCreateTrueColor(use_line_thickness,use_line_thickness);
+  gdImagePaletteCopy(brush, pngImage);
+  
+  gdImageFilledRectangle(brush, 0,0,use_line_thickness-1, use_line_thickness-1, use_line_color);  
+  if ( ((pngFlags&PNG_USEDASHES) && (!lineTypeTable.nEntries)) || (lineTypeTable.typeFlag&LINE_TABLE_DEFINE_DASH) ) {
+       for (i=0; i<5; i++) {
+          n =  ((int) use_line_dash[i])*use_line_thickness;
+	  if ( n == 0 ) {
+	     break;
+	  } else {
+	     npts += n;
+	     if ( !styledash) {
+	        styledash = tmalloc(sizeof(int)*n);
+	        for (j=0; j<n; j++) 
+		   styledash[j] = use_line_color; 
+	     } else {
+	        styledash = trealloc(styledash,sizeof(int)*npts);
+	        if (i%2) 
+		   color = gdTransparent;
+	        else 
+		   color = use_line_color;
+	        for (j=npts-n;j<npts;j++) 
+		   styledash[j] = color;
+	     }      
+          } 
+       }
+    }   
+    
+  if (npts) {
+     gdImageSetThickness(pngImage,use_line_thickness);  
+     gdImageSetStyle(pngImage, styledash, npts);
+     gdImageLine(pngImage, png_xposition, png_yposition, x, y, gdStyled);
+     gdImageSetThickness(pngImage,0);
+     free(styledash);
+  } else {
+     gdImageSetBrush(pngImage, brush);
+     gdImageLine(pngImage, png_xposition, png_yposition, x, y, gdBrushed);
+  }   
+  
+  gdImageDestroy(brush);
+  png_xposition = x;
+  png_yposition = y;
+
+  return 0;
+}
+
+
+int PNG_put_text(int x, int y, char *str)
+{
+  return 0;
+}
+
+
+int PNG_text_angle(int ang)
+{
+  return 0;
+}
+
+
+int PNG_fill_box(int shade, int xl, int xh, int yl, int yh)
+{
+  int n;
+  double r,  g,  b;
+  unsigned short red, green, blue;
+
+  shade = shade%(ncolors_png);
+  if (spectralpng == 1)
+    Spectral_RGB_values(&r,  &g,  &b, ncolors_png > 1 ? shade/(ncolors_png - 1.0) : 0);
+  else if (spectralpng == 2)
+    Spectral_BGR_values(&r,  &g,  &b, ncolors_png > 1 ? shade/(ncolors_png - 1.0) : 0);
+  else if (spectralpng == 3)
+    Spectral_RGB_NoMagenta_values(&r,  &g,  &b, ncolors_png > 1 ? shade/(ncolors_png - 1.0) : 0);
+  else if (spectralpng == 4)
+    Spectral_BGR_NoMagenta_values(&r,  &g,  &b, ncolors_png > 1 ? shade/(ncolors_png - 1.0) : 0);
+  else if (customspectralpng)
+    Custom_RGB_values(&r, &g, &b, r0_png, g0_png, b0_png, r1_png, g1_png, b1_png, ncolors_png > 1 ? shade/(ncolors_png - 1.0) : 0);
+  else
+    RGB_values(&r,  &g,  &b, ncolors_png > 1 ? shade/(ncolors_png - 1.0) : 0);
+  if (r >= 1) r = .99999;
+  if (g >= 1) g = .99999;
+  if (b >= 1) b = .99999;
+  red = (unsigned short)(65536 * r);
+  green = (unsigned short)(65536 * g);
+  blue = (unsigned short)(65536 * b);
+  PNG_color(red, green, blue);
+  n = xl - xh;
+  if (n >= 0) {
+    while (n >= 0) {
+      gdImageLine(pngImage, xl+n, png_ylast - yl, xl+n, png_ylast - yh, /*png_colorList[png_color_index - 1]*/ png_force_color);
+      n--;
+    }
+  } else {
+    while (n <= 0) {
+      gdImageLine(pngImage, xh+n, png_ylast - yl, xh+n, png_ylast - yh, /*png_colorList[png_color_index - 1]*/ png_force_color);
+      n++;
+    }
+  }
+
+  png_xposition = xl;
+  png_yposition = png_ylast - yh;
+  return 0;
+}
+
+int PNG_add_color(unsigned short red, unsigned short green, unsigned short blue, short reset)
+{
+  if (reset) {
+    //png_color_index = 1;
+    return 0;
+  }
+  if (png_color_index >= png_color_maxindex) {
+    png_color_maxindex += 100;
+    if (png_color_index == 0) {
+      png_colors = tmalloc(sizeof(*png_colors)*png_color_maxindex);
+    } else {
+      png_colors = trealloc(png_colors, sizeof(*png_colors)*(++png_color_maxindex));
+    }
+  }
+  png_colors[png_color_index].red = red;
+  png_colors[png_color_index].green = green;
+  png_colors[png_color_index].blue = blue;
+  png_color_index++;
+  return 0;
+}
+
+int PNG_line_thickness(int lt)
+{
+  if (lt < 1)
+    lt = 1;
+  if (lt > 9)
+    lt = 9;
+  png_line_thickness = lt;
+  return 0;
+}
+
+
+int PNG_color(unsigned short red, unsigned short green, unsigned short blue)
+{
+  is_forced_color = TRUE;
+  png_force_color = gdImageColorAllocate(pngImage, red / 256, green / 256, blue / 256);
+  return 0;
+}  
+
+
+
+int PNG_spectral(long num, int spec, unsigned short red0, unsigned short green0, unsigned short blue0, unsigned short red1, unsigned short green1, unsigned short blue1)
+{
+  ncolors_png = num > 101 ? 101 : num;
+  if (spec == 0) {
+    spectralpng = 0;
+    customspectralpng = 1;
+    r0_png = red0;
+    g0_png = green0;
+    b0_png = blue0;
+    r1_png = red1;
+    g1_png = green1;
+    b1_png = blue1;
+  } else if (spec == 1){
+    spectralpng = 1;
+    customspectralpng = 0;
+  } else if (spec == 2){
+    spectralpng = 2;
+    customspectralpng = 0;
+  } else if (spec == 3){
+    spectralpng = 3;
+    customspectralpng = 0;
+  } else if (spec == 4){
+    spectralpng = 4;
+    customspectralpng = 0;
+  } else {
+    spectralpng = 0;
+    customspectralpng = 0;
+  }
+  return 0;
+}
+
+
+/* The command line is stored as metadata in the PNG file */
+
+char *sddsplotCommandlinePNG;
+
+void passCommandlineToPNG(int argc, char **argv)
+{  
+   int i , n;
+   char *op = NULL;
+   sddsplotCommandlinePNG = NULL;
+   n= (int)(strlen(argv[0]))+1;
+   sddsplotCommandlinePNG = tmalloc(sizeof(char)*(n));
+   strcat(sddsplotCommandlinePNG,argv[0]);
+   for (i=1; i<argc; i++ ) {
+      op  = tmalloc(sizeof(char)*(strlen(argv[i]))+1);
+      strcat(op,argv[i]);
+      n = n + (int)(strlen(op)) + 1;
+     
+      sddsplotCommandlinePNG = trealloc(sddsplotCommandlinePNG,sizeof(char)*n); 
+      strcat(sddsplotCommandlinePNG, " ");
+      strcat(sddsplotCommandlinePNG,op);
+      free(op);
+   } 
+}
+
+void PNG_passCommandLineToPNGFromMotif(char *command) {
+    sddsplotCommandlinePNG = command;
+}
+
+
+/* code below is derived from gd_png.c but altered so that we can insert meta data */
+
+#define DPI2DPM(dpi)   (unsigned int)((dpi)/0.0254 + 0.5)
+
+#ifdef PNG_SETJMP_SUPPORTED
+typedef struct _jmpbuf_wrapper {
+	jmp_buf jmpbuf;
+}
+jmpbuf_wrapper;
+
+static void
+gdPngErrorHandler (png_structp png_ptr, png_const_charp msg)
+{
+	jmpbuf_wrapper *jmpbuf_ptr;
+
+	/* This function, aside from the extra step of retrieving the "error
+	 * pointer" (below) and the fact that it exists within the application
+	 * rather than within libpng, is essentially identical to libpng's
+	 * default error handler.  The second point is critical:  since both
+	 * setjmp() and longjmp() are called from the same code, they are
+	 * guaranteed to have compatible notions of how big a jmp_buf is,
+	 * regardless of whether _BSD_SOURCE or anything else has (or has not)
+	 * been defined. */
+
+	fprintf(stderr, "gd-png: fatal libpng error: %s\n", msg);
+
+	jmpbuf_ptr = png_get_error_ptr (png_ptr);
+	if (jmpbuf_ptr == NULL) {				/* we are completely hosed now */
+		fprintf(stderr, "gd-png: EXTREMELY fatal error: jmpbuf unrecoverable; terminating.\n");
+		exit (99);
+	}
+
+	longjmp (jmpbuf_ptr->jmpbuf, 1);
+}
+#endif
+
+int overflow2(int a, int b)
+{
+	if(a <= 0 || b <= 0) {
+		fprintf(stderr, "one parameter to a memory allocation multiplication is negative or zero, failing operation gracefully\n");
+		return 1;
+	}
+	if(a > INT_MAX / b) {
+		fprintf(stderr, "product of memory allocation multiplication would exceed INT_MAX, failing operation gracefully\n");
+		return 1;
+	}
+	return 0;
+}
+
+int gdPutBuf(const void *buf, int size, gdIOCtx *ctx)
+{
+	return (ctx->putBuf)(ctx, buf, size);
+}
+
+static void
+gdPngWriteData (png_structp png_ptr, png_bytep data, png_size_t length)
+{
+	gdPutBuf (data, length, (gdIOCtx *) png_get_io_ptr (png_ptr));
+}
+
+static void
+gdPngFlushData (png_structp png_ptr)
+{
+	(void)png_ptr;
+}
+
+BGD_DECLARE(void) gdImagePngOAG (gdImagePtr im, FILE * outFile)
+{
+	gdIOCtx *out = gdNewFileCtx (outFile);
+	if (out == NULL) return;
+	gdImagePngCtxExOAG (im, out, -1);
+	out->gd_free (out);
+}
+
+/* This routine is based in part on code from Dale Lutz (Safe Software Inc.)
+ *  and in part on demo code from Chapter 15 of "PNG: The Definitive Guide"
+ *  (http://www.libpng.org/pub/png/book/).
+ */
+BGD_DECLARE(void) gdImagePngCtxExOAG (gdImagePtr im, gdIOCtx * outfile, int level)
+{
+	int i, j, bit_depth = 0, interlace_type;
+	int width = im->sx;
+	int height = im->sy;
+	int colors = im->colorsTotal;
+	int *open = im->open;
+	int mapping[gdMaxColors];	/* mapping[gd_index] == png_index */
+	png_byte trans_values[256];
+	png_color_16 trans_rgb_value;
+	png_color palette[gdMaxColors];
+	png_structp png_ptr;
+	png_infop info_ptr;
+	volatile int transparent = im->transparent;
+	volatile int remap = FALSE;
+#ifdef PNG_SETJMP_SUPPORTED
+	jmpbuf_wrapper jbw;
+#endif
+        png_text comment_text;
+        png_text description_text;
+        char *cwd=NULL;
+
+	/* width or height of value 0 is invalid in IHDR;
+	   see http://www.w3.org/TR/PNG-Chunks.html */
+	if (width == 0 || height ==0) return;
+
+#ifdef PNG_SETJMP_SUPPORTED
+	png_ptr = png_create_write_struct (PNG_LIBPNG_VER_STRING,
+	                                   &jbw, gdPngErrorHandler,
+	                                   NULL);
+#else
+	png_ptr = png_create_write_struct (PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+#endif
+	if (png_ptr == NULL) {
+		fprintf(stderr, "gd-png error: cannot allocate libpng main struct\n");
+		return;
+	}
+
+	info_ptr = png_create_info_struct (png_ptr);
+	if (info_ptr == NULL) {
+		fprintf(stderr, "gd-png error: cannot allocate libpng info struct\n");
+		png_destroy_write_struct (&png_ptr, (png_infopp) NULL);
+		return;
+	}
+
+#ifdef PNG_SETJMP_SUPPORTED
+	if (setjmp(jbw.jmpbuf)) {
+		fprintf(stderr, "gd-png error: setjmp returns error condition\n");
+		png_destroy_write_struct (&png_ptr, &info_ptr);
+		return;
+	}
+#endif
+
+	png_set_write_fn (png_ptr, (void *) outfile, gdPngWriteData,
+	                  gdPngFlushData);
+
+	/* This is best for palette images, and libpng defaults to it for
+	   palette images anyway, so we don't need to do it explicitly.
+	   What to ideally do for truecolor images depends, alas, on the image.
+	   gd is intentionally imperfect and doesn't spend a lot of time
+	   fussing with such things. */
+
+	/* Faster if this is uncommented, but may produce larger truecolor files.
+	   Wait for gdImagePngCtxEx. */
+#if 0
+	png_set_filter (png_ptr, 0, PNG_FILTER_NONE);
+#endif
+
+	/* 2.0.12: this is finally a parameter */
+	png_set_compression_level (png_ptr, level);
+
+#ifdef PNG_pHYs_SUPPORTED
+	/* 2.1.0: specify the resolution */
+/*	png_set_pHYs(png_ptr, info_ptr, DPI2DPM(im->res_x), DPI2DPM(im->res_y),
+	             PNG_RESOLUTION_METER);*/
+#endif
+
+	/* can set this to a smaller value without compromising compression if all
+	 * image data is 16K or less; will save some decoder memory [min == 8] */
+	/*  png_set_compression_window_bits(png_ptr, 15);  */
+
+	if (!im->trueColor) {
+		if (transparent >= im->colorsTotal ||
+		        (transparent >= 0 && open[transparent]))
+			transparent = -1;
+	}
+	if (!im->trueColor) {
+		for (i = 0; i < gdMaxColors; ++i)
+			mapping[i] = -1;
+	}
+	if (!im->trueColor) {
+		/* count actual number of colors used (colorsTotal == high-water mark) */
+		colors = 0;
+		for (i = 0; i < im->colorsTotal; ++i) {
+			if (!open[i]) {
+				mapping[i] = colors;
+				++colors;
+			}
+		}
+		if (colors == 0) {
+			fprintf(stderr, "gd-png error: no colors in palette\n");
+			goto bail;
+		}
+		if (colors < im->colorsTotal) {
+			remap = TRUE;
+		}
+		if (colors <= 2)
+			bit_depth = 1;
+		else if (colors <= 4)
+			bit_depth = 2;
+		else if (colors <= 16)
+			bit_depth = 4;
+		else
+			bit_depth = 8;
+	}
+	interlace_type = im->interlace ? PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE;
+
+	if (im->trueColor) {
+		if (im->saveAlphaFlag) {
+			png_set_IHDR (png_ptr, info_ptr, width, height, 8,
+			              PNG_COLOR_TYPE_RGB_ALPHA, interlace_type,
+			              PNG_COMPRESSION_TYPE_DEFAULT,
+			              PNG_FILTER_TYPE_DEFAULT);
+		} else {
+			png_set_IHDR (png_ptr, info_ptr, width, height, 8,
+			              PNG_COLOR_TYPE_RGB, interlace_type,
+			              PNG_COMPRESSION_TYPE_DEFAULT,
+			              PNG_FILTER_TYPE_DEFAULT);
+		}
+	} else {
+		png_set_IHDR (png_ptr, info_ptr, width, height, bit_depth,
+		              PNG_COLOR_TYPE_PALETTE, interlace_type,
+		              PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+	}
+        /* Adding META data here */
+        comment_text.compression = PNG_TEXT_COMPRESSION_NONE;
+        comment_text.key = "Comment";
+#if defined(_WIN32)
+        cwd = _getcwd(cwd, 1024);
+#else
+        cwd = getcwd(cwd, 1024);
+#endif
+        comment_text.text = cwd;
+        png_set_text(png_ptr, info_ptr, &comment_text, 1);
+        description_text.compression = PNG_TEXT_COMPRESSION_NONE;
+        description_text.key = "Description";
+        description_text.text = sddsplotCommandlinePNG;
+        png_set_text(png_ptr, info_ptr, &description_text, 1);
+
+	if (im->trueColor && (!im->saveAlphaFlag) && (transparent >= 0)) {
+		/* 2.0.9: fixed by Thomas Winzig */
+		trans_rgb_value.red = gdTrueColorGetRed (im->transparent);
+		trans_rgb_value.green = gdTrueColorGetGreen (im->transparent);
+		trans_rgb_value.blue = gdTrueColorGetBlue (im->transparent);
+		png_set_tRNS (png_ptr, info_ptr, 0, 0, &trans_rgb_value);
+	}
+	if (!im->trueColor) {
+		/* Oy veh. Remap the PNG palette to put the
+		   entries with interesting alpha channel
+		   values first. This minimizes the size
+		   of the tRNS chunk and thus the size
+		   of the PNG file as a whole. */
+		int tc = 0;
+		int i;
+		int j;
+		int k;
+		for (i = 0; (i < im->colorsTotal); i++) {
+			if ((!im->open[i]) && (im->alpha[i] != gdAlphaOpaque)) {
+				tc++;
+			}
+		}
+		if (tc) {
+#if 0
+			for (i = 0; (i < im->colorsTotal); i++) {
+				trans_values[i] = 255 -
+				                  ((im->alpha[i] << 1) + (im->alpha[i] >> 6));
+			}
+			png_set_tRNS (png_ptr, info_ptr, trans_values, 256, NULL);
+#endif
+			if (!remap) {
+				remap = TRUE;
+			}
+			/* (Semi-)transparent indexes come up from the bottom
+			   of the list of real colors; opaque
+			   indexes come down from the top */
+			j = 0;
+			k = colors - 1;
+			for (i = 0; (i < im->colorsTotal); i++) {
+				if (!im->open[i]) {
+					if (im->alpha[i] != gdAlphaOpaque) {
+						/* Andrew Hull: >> 6, not >> 7! (gd 2.0.5) */
+						trans_values[j] = 255 -
+						                  ((im->alpha[i] << 1) + (im->alpha[i] >> 6));
+						mapping[i] = j++;
+					} else {
+						mapping[i] = k--;
+					}
+				}
+			}
+			png_set_tRNS (png_ptr, info_ptr, trans_values, tc, NULL);
+		}
+	}
+
+	/* convert palette to libpng layout */
+	if (!im->trueColor) {
+		if (remap)
+			for (i = 0; i < im->colorsTotal; ++i) {
+				if (mapping[i] < 0)
+					continue;
+				palette[mapping[i]].red = im->red[i];
+				palette[mapping[i]].green = im->green[i];
+				palette[mapping[i]].blue = im->blue[i];
+			}
+		else
+			for (i = 0; i < colors; ++i) {
+				palette[i].red = im->red[i];
+				palette[i].green = im->green[i];
+				palette[i].blue = im->blue[i];
+			}
+		png_set_PLTE (png_ptr, info_ptr, palette, colors);
+	}
+
+	/* write out the PNG header info (everything up to first IDAT) */
+	png_write_info (png_ptr, info_ptr);
+
+	/* make sure < 8-bit images are packed into pixels as tightly as possible */
+	png_set_packing (png_ptr);
+
+	/* This code allocates a set of row buffers and copies the gd image data
+	 * into them only in the case that remapping is necessary; in gd 1.3 and
+	 * later, the im->pixels array is laid out identically to libpng's row
+	 * pointers and can be passed to png_write_image() function directly.
+	 * The remapping case could be accomplished with less memory for non-
+	 * interlaced images, but interlacing causes some serious complications. */
+	if (im->trueColor) {
+		/* performance optimizations by Phong Tran */
+		int channels = im->saveAlphaFlag ? 4 : 3;
+		/* Our little 7-bit alpha channel trick costs us a bit here. */
+		png_bytep *row_pointers;
+		unsigned char *pOutputRow;
+		int **ptpixels = im->tpixels;
+		int *pThisRow;
+		unsigned char a;
+		int thisPixel;
+		png_bytep *prow_pointers;
+		int saveAlphaFlag = im->saveAlphaFlag;
+		if (overflow2(sizeof (png_bytep), height)) {
+			goto bail;
+		}
+		row_pointers = malloc (sizeof (png_bytep) * height);
+		if (row_pointers == NULL) {
+			fprintf(stderr, "gd-png error: unable to allocate row_pointers\n");
+			goto bail;
+		}
+		prow_pointers = row_pointers;
+		for (j = 0; j < height; ++j) {
+			if (overflow2(width, channels) || ((*prow_pointers =
+			                                        (png_bytep) malloc (width * channels)) == NULL)) {
+				fprintf(stderr, "gd-png error: unable to allocate rows\n");
+				for (i = 0; i < j; ++i)
+					gdFree (row_pointers[i]);
+				/* 2.0.29: memory leak TBB */
+				gdFree(row_pointers);
+				goto bail;
+			}
+			pOutputRow = *prow_pointers++;
+			pThisRow = *ptpixels++;
+			for (i = 0; i < width; ++i) {
+				thisPixel = *pThisRow++;
+				*pOutputRow++ = gdTrueColorGetRed (thisPixel);
+				*pOutputRow++ = gdTrueColorGetGreen (thisPixel);
+				*pOutputRow++ = gdTrueColorGetBlue (thisPixel);
+
+				if (saveAlphaFlag) {
+					/* convert the 7-bit alpha channel to an 8-bit alpha channel.
+					   We do a little bit-flipping magic, repeating the MSB
+					   as the LSB, to ensure that 0 maps to 0 and
+					   127 maps to 255. We also have to invert to match
+					   PNG's convention in which 255 is opaque. */
+					a = gdTrueColorGetAlpha (thisPixel);
+					/* Andrew Hull: >> 6, not >> 7! (gd 2.0.5) */
+					*pOutputRow++ = 255 - ((a << 1) + (a >> 6));
+				}
+			}
+		}
+
+		png_write_image (png_ptr, row_pointers);
+		png_write_end (png_ptr, info_ptr);
+
+		for (j = 0; j < height; ++j)
+			gdFree (row_pointers[j]);
+		gdFree (row_pointers);
+	} else {
+		if (remap) {
+			png_bytep *row_pointers;
+			if (overflow2(sizeof (png_bytep), height)) {
+				goto bail;
+			}
+			row_pointers = malloc (sizeof (png_bytep) * height);
+			if (row_pointers == NULL) {
+				fprintf(stderr, "gd-png error: unable to allocate row_pointers\n");
+				goto bail;
+			}
+			for (j = 0; j < height; ++j) {
+				if ((row_pointers[j] = (png_bytep) malloc (width)) == NULL) {
+					fprintf(stderr, "gd-png error: unable to allocate rows\n");
+					for (i = 0; i < j; ++i)
+						gdFree (row_pointers[i]);
+					/* TBB: memory leak */
+					gdFree (row_pointers);
+					goto bail;
+				}
+				for (i = 0; i < width; ++i)
+					row_pointers[j][i] = mapping[im->pixels[j][i]];
+			}
+
+			png_write_image (png_ptr, row_pointers);
+			png_write_end (png_ptr, info_ptr);
+
+			for (j = 0; j < height; ++j)
+				gdFree (row_pointers[j]);
+			gdFree (row_pointers);
+		} else {
+			png_write_image (png_ptr, im->pixels);
+			png_write_end (png_ptr, info_ptr);
+		}
+	}
+	/* 1.6.3: maybe we should give that memory BACK! TBB */
+bail:
+	png_destroy_write_struct (&png_ptr, &info_ptr);
+}
