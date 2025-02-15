@@ -34,11 +34,11 @@ The **SDDS (Self Describing Data Sets) Library** is a C/C++ library designed for
 ├── gd/             # GD support for Windows
 ├── tiff/           # TIFF support for Windows
 ├── SDDSaps/        # SDDS ToolKit applications
-│   ├── sddsplots/  # sdds plotting tool
+│   ├── sddsplots/  # SDDS plotting tool
 │       ├── winMotifDriver/  # Windows plotting tool
 │       ├── motifDriver/     # Motif (Linux and MacOS) plotting tool
-│   ├── sddscontours/   # sdds contour plotting tool
-│   ├── pseudoInverse/  # sdds matrix applications
+│   ├── sddscontours/   # SDDS contour plotting tool
+│   ├── pseudoInverse/  # SDDS matrix applications
 ├── levmar/         # Levenberg - Marquardt algorithm
 ├── pgapack/        # Parallel Genetic Algorithm
 ├── LICENSE         # Licensing information
