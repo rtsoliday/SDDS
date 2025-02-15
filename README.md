@@ -1,4 +1,4 @@
-# SDDS C/C++ Library and TookKit
+# SDDS C/C++ Library and ToolKit
 
 ## Overview
 The **SDDS (Self Describing Data Sets) Library** is a C/C++ library designed for handling structured scientific data efficiently. It provides a flexible data format and a set of utilities for writing, reading, and processing SDDS files in both ASCII and binary formats.
