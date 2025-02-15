@@ -100,6 +100,9 @@ The SDDS API provides functions for defining and manipulating SDDS datasets. Som
 
 For more details, refer to the **[SDDS API documentation](https://ops.aps.anl.gov/manuals/SDDSlib/html/files.html)**.
 
+## ChatGPT Assistant
+A custom **[ChatGPT SDDS C/C++ Language Assistant](https://chatgpt.com/g/g-67376bce92308190a01b7056cdd3d74a-sdds-c-c-language-assistant)** is available to help write new SDDS software.
+
 ## License
 This library is distributed under the **Software License Agreement** found in the `LICENSE` file.
 
