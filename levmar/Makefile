@@ -7,11 +7,7 @@ LIBRARY_SRC = lm.c Axb.c misc.c lmlec.c lmbc.c
 CFLAGS += -DHAVE_LAPACK -DUSE_MPI=1 -DSDDS_MPI_IO=1 -DMASTER_READTITLE_ONLY -I../include
 
 ifeq ($(OS), Linux)
-  CC = $(MPI_CC)
-endif
-
-ifeq ($(OS), Darwin)
-  CC = $(MPI_CC)
+  CFLAGS += -Warray-parameter=1
 endif
 
 ifeq ($(OS), Windows)

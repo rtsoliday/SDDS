@@ -24,9 +24,7 @@ DIRS += SDDSaps/sddsplots/winMotifDriver
 DIRS += SDDSaps/sddsplots/motifDriver
 DIRS += SDDSaps/sddscontours
 DIRS += SDDSaps/pseudoInverse
-ifneq ($(MPI_CC),)
 DIRS += levmar
-endif
 
 .PHONY: all $(DIRS) clean distclean
 
@@ -86,10 +84,8 @@ SDDSaps/sddscontours: SDDSaps/sddsplots/motifDriver
 	$(MAKE) -C $@
 SDDSaps/pseudoInverse: SDDSaps/sddscontours
 	$(MAKE) -C $@
-ifneq ($(MPI_CC),)
 levmar: SDDSaps/pseudoInverse
 	$(MAKE) -C $@
-endif
 
 clean:
 	$(MAKE) -C meschach clean
@@ -116,9 +112,7 @@ clean:
 	$(MAKE) -C SDDSaps/sddsplots/motifDriver clean
 	$(MAKE) -C SDDSaps/sddscontours clean
 	$(MAKE) -C SDDSaps/pseudoInverse clean
-ifneq ($(MPI_CC),)
 	$(MAKE) -C levmar clean
-endif
 
 distclean: clean
 	rm -rf bin/$(OS)-$(ARCH)
