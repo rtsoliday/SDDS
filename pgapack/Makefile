@@ -41,7 +41,7 @@ ifeq ($(OS), Darwin)
 endif
 
 ifeq ($(OS), Windows)
-  CFLAGS += $(WIN_MPI_INC) 
+  CFLAGS += $(WIN_MPI_INC) -wd4018 -wd4244 -wd4311
   LIBRARY_SYS_LIBS = $(WIN_MPI_LIB)
   NO_DLL = 1
 endif
