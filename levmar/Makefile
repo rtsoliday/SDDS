@@ -11,8 +11,7 @@ ifeq ($(OS), Linux)
 endif
 
 ifeq ($(OS), Windows)
-  CFLAGS += $(WIN_MPI_INC) -wd4244 -wd4305
-  LIBRARY_SYS_LIBS = $(WIN_MPI_LIB)
+  CFLAGS += -wd4244 -wd4305
   NO_DLL = 1
 endif
 
