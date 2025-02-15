@@ -98,7 +98,7 @@ The SDDS API provides functions for defining and manipulating SDDS datasets. Som
 - `SDDS_WritePage(SDDS_TABLE *table)` - Writes a page of data to the SDDS file.
 - `SDDS_ReadPage(SDDS_DATASET *dataset)` - Reads a page from an SDDS file.
 
-For more details, refer to the [SDDS API documentation](https://ops.aps.anl.gov/manuals/SDDSlib/html/files.html).
+For more details, refer to the **[SDDS API documentation](https://ops.aps.anl.gov/manuals/SDDSlib/html/files.html)**.
 
 ## License
 This library is distributed under the **Software License Agreement** found in the `LICENSE` file.
@@ -110,7 +110,7 @@ This library is distributed under the **Software License Agreement** found in th
 - H. Shang
 
 ## Acknowledgments
-This project is developed and maintained by **[Acclerator Operations & Physics](https://www.aps.anl.gov/Accelerator-Operations-Physics)** at the **Advanced Photon Source** at **Argonne National Laboratory**.
+This project is developed and maintained by **[Accelerator Operations & Physics](https://www.aps.anl.gov/Accelerator-Operations-Physics)** at the **Advanced Photon Source** at **Argonne National Laboratory**.
 
 For more details, visit the official **[SDDS documentation](https://www.aps.anl.gov/Accelerator-Operations-Physics/Documentation)**.
 
