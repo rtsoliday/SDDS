@@ -20,6 +20,25 @@ ifneq ($(LIBRARY),)
  LIBRARY_OBJS := $(patsubst %,$(OBJ_DIR)/%, $(LIBRARY_OBJS))
 endif
 
+ifneq ($(PYTHON_SHARED_LIBRARY),)
+ ifeq ($(OS), Windows)
+  DLL = $(PYTHON_SHARED_LIBRARY:.lib=.dll)
+  EXP = $(PYTHON_SHARED_LIBRARY:.lib=.exp)
+  PYTHON_SHARED_LIBRARY := $(PYTHON_SHARED_LIBRARY:=.lib)
+  DLL := $(patsubst %,$(OBJ_DIR)/%, $(DLL))
+  EXP := $(patsubst %,$(OBJ_DIR)/%, $(EXP))
+ else
+  PYTHON_SHARED_LIBRARY_a = lib$(PYTHON_SHARED_LIBRARY:=.a)
+  PYTHON_SHARED_LIBRARY := lib$(PYTHON_SHARED_LIBRARY:=.so)
+ endif
+ PYTHON_SHARED_LIBRARY := $(patsubst %,$(OBJ_DIR)/%, $(PYTHON_SHARED_LIBRARY))
+
+ LIBRARY_OBJS = $(LIBRARY_SRC:.c=.$(OBJEXT))
+ LIBRARY_OBJS := $(LIBRARY_OBJS:.cc=.$(OBJEXT))
+ LIBRARY_OBJS := $(LIBRARY_OBJS:.cpp=.$(OBJEXT))
+ LIBRARY_OBJS := $(patsubst %,$(OBJ_DIR)/%, $(LIBRARY_OBJS))
+endif
+
 ifneq ($(PROD),)
  $(foreach prod, $(PROD), $(eval $(call make_prod_objs,$(prod))))
  FULLPROD = $(patsubst %,$(OBJ_DIR)/%$(EXEEXT), $(PROD))
@@ -38,7 +57,7 @@ else
  endif
 endif
 
-all: $(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(LIBRARY) $(FULLPROD)
+all: $(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(LIBRARY) $(PYTHON_SHARED_LIBRARY) $(FULLPROD)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -65,6 +84,10 @@ ifeq ($(OS), Windows)
 	cp -f $(DLL) $(BIN_DIR)/
 	cp -f $@ $(LIB_DIR)/
  endif
+ $(PYTHON_SHARED_LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
+	$(LINKDLL) -out:$(DLL) -implib:$(PYTHON_SHARED_LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS)
+	cp -f $(DLL) $(BIN_DIR)/
+	cp -f $@ $(LIB_DIR)/
 
 else
 
@@ -75,6 +98,17 @@ else
 	$(AR) $(LIBRARY) $(LIBRARY_OBJS)
 	$(RANLIB) $(LIBRARY)
 	cp -f $@ $(LIB_DIR)/
+	
+ifeq ($(OS), Linux)
+ $(PYTHON_SHARED_LIBRARY): $(LIBRARY_OBJS)
+	$(CCC) -o $@ -shared -fPIC -Wl,-h$@ $(LDFLAGS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS)
+	cp -f $@ $(LIB_DIR)/
+endif
+ifeq ($(OS), Darwin)
+ $(PYTHON_SHARED_LIBRARY): $(LIBRARY_OBJS)
+	$(CCC) -fPIC -dynamiclib -flat_namespace -o $@ $(LDFLAGS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS)
+	cp -f $@ $(LIB_DIR)/
+endif
 
 endif
 

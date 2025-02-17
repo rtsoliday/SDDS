@@ -185,6 +185,27 @@ ifneq ($(WIN_MPI),)
   MPI_CC = FOUND
 endif
 
+ifeq ($(OS), Windows)
+ifeq ($(PY),)
+  PY = 12
+endif
+endif
+ifeq (1, $(words $(wildcard /usr/local/oag/apps/bin/linux-x86_64/oagpython3)))
+  PYTHON = oagpython3
+else ifeq (1, $(words $(wildcard C:/Python3$(PY)/python.exe)))
+  PYTHON = C:/Python3$(PY)/python.exe
+else
+  PYTHON = python3
+endif
+
+PYTHON_PREFIX = $(shell $(PYTHON) -c 'import sys; print(sys.prefix)')
+PYTHON_EXEC_PREFIX = $(shell $(PYTHON) -c 'import sys; print(sys.exec_prefix)')
+PYTHON_VERSION = $(shell $(PYTHON) -c 'import sys; print("{}.{}".format(*sys.version_info[:2]))')
+PYTHON_INCLUDE_DIRS = -I$(PYTHON_PREFIX)/include/python$(PYTHON_VERSION) \
+                      -I$(PYTHON_PREFIX)/include/python$(PYTHON_VERSION)m \
+                      -I$(PYTHON_EXEC_PREFIX)/include/python$(PYTHON_VERSION) \
+                      -I$(PYTHON_EXEC_PREFIX)/include/python$(PYTHON_VERSION)m
+
 ifeq ($(OS), Linux)
   CC = gcc
   CCC = g++
@@ -193,6 +214,7 @@ ifeq ($(OS), Linux)
   CFLAGS = -m64 -O3 -g -Wall -fPIC $(EXTRA_INC_DIRS)
   CCFLAGS = -m64 -O3 -g -Wall -fPIC $(EXTRA_INC_DIRS)
   LDFLAGS = -static-libstdc++ -rdynamic -m64
+  LIBRARY_SYS_LIBS = -lpthread -lm -lrt -ldl -lgcc
   PROD_SYS_LIBS = -lpthread -lm -lrt -ldl -lgcc
   OBJEXT = o
   LIBEXT = a
@@ -223,6 +245,7 @@ ifeq ($(OS), Darwin)
   CFLAGS = -Wno-deprecated-non-prototype -m64 -O3 -g -Wall -fPIC -fno-common $(MAC_VERSION) $(EXTRA_INC_DIRS)
   CCFLAGS = -Wno-deprecated-non-prototype -m64 -O3 -g -Wall -fPIC -fno-common -std=c++11 $(MAC_VERSION) $(EXTRA_INC_DIRS)
   LDFLAGS = $(MAC_VERSION) -std=c++11
+  LIBRARY_SYS_LIBS = -lm
   PROD_SYS_LIBS = -lm
   OBJEXT = o
   LIBEXT = a
@@ -267,6 +290,10 @@ ifeq ($(OS), Windows)
   LIBPRE =
   EXEEXT = .exe
   #LIB_LINK_DIRS =
+  PYTHON_PREFIX := $(subst \,/,$(PYTHON_PREFIX))
+  PYTHON_EXEC_PREFIX := $(subst \,/,$(PYTHON_EXEC_PREFIX))
+  PYTHON_VERSION := $(subst \,/,$(PYTHON_VERSION))
+  PYTHON_INCLUDE_DIRS = -I$(PYTHON_PREFIX)/include
 
 
   
