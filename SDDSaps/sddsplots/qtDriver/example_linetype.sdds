@@ -1,0 +1,14 @@
+SDDS1
+&column name=Thickness, type=long, &end
+&column name=Dash, type=string, &end
+&column name=Red, type=long, &end
+&column name=Green, type=long, &end
+&column name=Blue, type=long, &end
+&data mode=ascii, &end
+    6
+1 "" 255 0 0
+1 "2 2" 255 255 0
+1 "4 2" 0 255 0
+1 "2 4" 0 255 255
+2 "1" 0 0 255
+2 "1" 255 0 255

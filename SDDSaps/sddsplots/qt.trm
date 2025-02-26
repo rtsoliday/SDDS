@@ -1,0 +1,515 @@
+/*
+ *    qt.trm  --- inboard terminal driver for Qt
+ */
+#include <ctype.h>
+#include <stdio.h>
+#include "graph.h"
+/* approximations for typical font/screen sizes */
+#define QT_XMAX 4096
+#define QT_YMAX 3165
+#define QT_VCHAR (QT_YMAX / 25)
+#define QT_HCHAR (QT_XMAX / 100)
+#define QT_VTIC (QT_YMAX / 100)
+#define QT_HTIC (QT_XMAX / 150)
+
+#define QT_nopts 22
+char QT_opts[QT_nopts][20] = {
+  "-iconic", "-rv", "-reverse", "+rv", "-synchronous",
+  "-display", "-geometry", "-bg", "-background", "-bd", "-bordercolor", "-bw",
+  "-borderwidth", "-fg", "-foreground", "-fn", "-font", "-name",
+  "-selectionTimeout", "-title", "-xnllanguage", "-xrm"};
+int QT_optarg[QT_nopts] = {
+  0, 0, 0, 0, 0,
+  1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1};
+
+char QT_name[1024] = "mpl_qt -name mpl ";
+char QT_command[1024] = "";
+char QT_geom[100] = " ";
+
+static int qt_last_linetype = -1;
+int qt_color_index = 0;
+int qt_color_maxindex = 0;
+MotifColor *qt_colors = NULL;
+
+int contains_whitespace(char *s) {
+  while (*s)
+    if (isspace(*s++))
+      return (1);
+  return (0);
+}
+
+int QT_args(int argc, char **argv) {
+  int nqt = 0, n;
+  char *ptr;
+
+  if ((ptr = getenv("MPL_GEOMETRY")))
+    strcpy_ss(QT_geom, ptr);
+
+  strcat(QT_command, QT_geom);
+
+  while (++argv, --argc > 0) {
+    for (n = 0; n < QT_nopts; n++) {
+      if (!strcmp(*argv, QT_opts[n])) {
+        strcat(QT_command, " ");
+        strcat(QT_command, *argv);
+        if (QT_optarg[n]) {
+          if (--argc <= 0)
+            return (nqt);
+          if (contains_whitespace(argv[1])) {
+            strcat(QT_command, " \"");
+            strcat(QT_command, *++argv);
+            strcat(QT_command, "\"");
+          } else {
+            strcat(QT_command, " ");
+            strcat(QT_command, *++argv);
+          }
+          nqt++;
+        }
+        nqt++;
+        break;
+      }
+    }
+    if (n == QT_nopts)
+      break;
+  }
+  return (nqt);
+}
+
+char *sddsplotCommandline;
+
+void parseCommandlineToQT(int argc, char **argv) {
+  int i, n;
+  char *p = NULL;
+  char *quote = NULL;
+  char *op = NULL;
+  sddsplotCommandline = NULL;
+  n = (int)(strlen(argv[0])) + 3;
+  sddsplotCommandline = tmalloc(sizeof(char) * (n));
+  strcat(sddsplotCommandline, "\"");
+  strcat(sddsplotCommandline, argv[0]);
+  for (i = 1; i < argc; i++) {
+    op = tmalloc(sizeof(char) * (strlen(argv[i])) + 1);
+    strcat(op, argv[i]);
+    n = n + (int)(strlen(op)) + 3;
+
+    p = op;
+    do {
+      if (*p == '"') {
+
+        op = trealloc(op, sizeof(char) * (strlen(op) + 1));
+        n = n + 1;
+        insert(p, "\\");
+        p++;
+      }
+      p++;
+    } while (*p);
+    quote = "'";
+    if (strchr(op, '\'')) {
+      quote = "\\\"";
+      n = n + 2;
+    }
+    sddsplotCommandline = trealloc(sddsplotCommandline, sizeof(char) * n);
+    strcat(sddsplotCommandline, " ");
+    strcat(sddsplotCommandline, quote);
+    strcat(sddsplotCommandline, op);
+    strcat(sddsplotCommandline, quote);
+    free(op);
+  }
+  strcat(sddsplotCommandline, "\"");
+}
+
+int QT_init(void) {
+  char *QT_name_long = NULL;
+  int length = 0;
+  char *devarg;
+#if defined(_WIN32)
+  char *buffer = NULL;
+  HKEY key, sub_key;
+  long size = 0;
+#endif
+  if (!QT_pipe) {
+#if defined(_WIN32)
+    if (RegOpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE", &key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegOpenKey(key, "Microsoft", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "Windows", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "CurrentVersion", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "App Paths", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+    if (RegOpenKey(key, "mpl_qt.exe", &sub_key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    key = sub_key;
+
+    if (RegQueryValue(key, NULL, NULL, &size) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+
+    buffer = malloc(size * sizeof(char));
+
+    if (RegQueryValue(key, NULL, buffer, &size) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+    if (RegCloseKey(key) != ERROR_SUCCESS) {
+      fprintf(stderr, "error: reading registry\n");
+      exit(1);
+    }
+
+    strcpy_ss(QT_name, "\"\"");
+    strcat(QT_name, buffer);
+    strcat(QT_name, "\" ");
+
+#else
+    strcpy_ss(QT_name, "mpl_qt ");
+#endif
+    strcat(QT_name, QT_command);
+    if ((devarg = gs_device_arguments(NULL, 1))) {
+      strcat(QT_name, " ");
+      strcat(QT_name, devarg);
+    }
+    if (sddsplotCommandline) {
+      strcat(QT_name, " -command ");
+      length = strlen(QT_name) + strlen(sddsplotCommandline);
+      if (length > 1024) {
+        QT_name_long = tmalloc(sizeof(char) * (length + 1));
+        strcat(QT_name_long, QT_name);
+        strcat(QT_name_long, sddsplotCommandline);
+      } else {
+        strcat(QT_name, sddsplotCommandline);
+      }
+    }
+    if (outfile == stdout) {
+#if defined(_WIN32)
+      strcat(QT_name, "\"");
+#endif
+
+#if defined(linux) || defined(__APPLE__)
+      if (QT_name_long)
+        QT_pipe = popen(QT_name_long, "w");
+      else
+        QT_pipe = popen(QT_name, "w");
+#else
+      if (QT_name_long)
+        QT_pipe = popen(QT_name_long, "wb");
+      else
+        QT_pipe = popen(QT_name, "wb");
+#endif
+    } else {
+#if defined(_WIN32)
+      if (_setmode(_fileno(outfile), _O_BINARY) == -1) {
+        fprintf(stderr, "error: unable to create binary file\n");
+        exit(1);
+      }
+#endif
+      QT_pipe = outfile;
+    }
+  }
+#if defined(_WIN32)
+  if (buffer)
+    free(buffer);
+#endif
+  free(QT_name_long);
+  return 0;
+}
+
+int QT_reset(void) {
+  static char value = 'R';
+  fwrite(&value, sizeof(value), 1, QT_pipe);
+  fflush(QT_pipe);
+  qt_last_linetype = -1;
+  return 0;
+}
+
+int QT_sendCoordinates(void) {
+  static char valueU = 'U';
+  static double conversion[4];
+  static double xmin, xmax, ymin, ymax;
+  static double pmin, pmax, qmin, qmax;
+
+  get_mapping(&xmin, &xmax, &ymin, &ymax);
+  get_pspace(&pmin, &pmax, &qmin, &qmax);
+
+  conversion[0] = ((xmax - xmin) / (pmax - pmin)) / QT_XMAX;
+  conversion[2] = ((ymax - ymin) / (qmax - qmin)) / QT_YMAX;
+  conversion[1] = xmin - conversion[0] * pmin * QT_XMAX;
+  conversion[3] = ymin - conversion[2] * qmin * QT_YMAX;
+
+  fwrite(&valueU, sizeof(valueU), 1, QT_pipe);
+  fwrite(conversion, sizeof(*conversion), 4, QT_pipe);
+  fflush(QT_pipe);
+  return 0;
+}
+
+int QT_text(void) {
+  static char valueE = 'E';
+  QT_sendCoordinates();
+  fwrite(&valueE, sizeof(valueE), 1, QT_pipe);
+  fflush(QT_pipe);
+  qt_last_linetype = -1;
+  return 0;
+}
+
+int QT_graphics(void) {
+  static char value = 'G';
+  fwrite(&value, sizeof(value), 1, QT_pipe);
+  fflush(QT_pipe);
+  return 0;
+}
+
+int QT_move(int x, int y) {
+  static char value = 'M';
+  static short buffer[2];
+  fwrite(&value, sizeof(value), 1, QT_pipe);
+  buffer[0] = x;
+  buffer[1] = y;
+  fwrite(buffer, sizeof(buffer[0]), 2, QT_pipe);
+  fflush(QT_pipe);
+  return 0;
+}
+
+int QT_vector(int x, int y) {
+  static char value = 'V';
+  static short buffer[2];
+  fwrite(&value, sizeof(value), 1, QT_pipe);
+  buffer[0] = x;
+  buffer[1] = y;
+  fwrite(buffer, sizeof(buffer[0]), 2, QT_pipe);
+  fflush(QT_pipe);
+  return 0;
+}
+
+int QT_line_thickness(int lt) {
+  static char value = 'W';
+  static short buffer;
+  fwrite(&value, sizeof(value), 1, QT_pipe);
+  buffer = lt;
+  fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
+  fflush(QT_pipe);
+  return 0;
+}
+
+int QT_spectral(long num, int spec, unsigned short red0, unsigned short green0, unsigned short blue0, unsigned short red1, unsigned short green1, unsigned short blue1) {
+  static char value = 'S';
+  static unsigned short buffer[8];
+  fwrite(&value, sizeof(value), 1, QT_pipe);
+  buffer[0] = num > 101 ? 101 : num;
+  buffer[1] = spec;
+  buffer[2] = red0;
+  buffer[3] = green0;
+  buffer[4] = blue0;
+  buffer[5] = red1;
+  buffer[6] = green1;
+  buffer[7] = blue1;
+  fwrite(buffer, sizeof(*buffer), 8, QT_pipe);
+  fflush(QT_pipe);
+  return 0;
+}
+
+int QT_linetype(int lt) {
+  static char value = 'L';
+  static short buffer;
+  if ((qt_color_index == 0) || (lt < 1000)) {
+    fwrite(&value, sizeof(value), 1, QT_pipe);
+    buffer = lt;
+    fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
+    fflush(QT_pipe);
+  } else {
+    lt -= 1000;
+    fwrite(&value, sizeof(value), 1, QT_pipe);
+    buffer = lt;
+    fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
+    fflush(QT_pipe);
+    lt = lt % qt_color_index;
+    QT_color(qt_colors[lt].red, qt_colors[lt].green, qt_colors[lt].blue);
+  }
+  qt_last_linetype = lt;
+  return 0;
+}
+
+int QT_fill_box(int shade, int xl, int xh, int yl, int yh) {
+  static char value = 'B';
+  static short buffer[5];
+  fwrite(&value, sizeof(value), 1, QT_pipe);
+  buffer[0] = shade;
+  buffer[1] = xl;
+  buffer[2] = xh;
+  buffer[3] = yl;
+  buffer[4] = yh;
+  fwrite(buffer, sizeof(*buffer), 5, QT_pipe);
+  fflush(QT_pipe);
+  qt_last_linetype = -1;
+  return 0;
+}
+
+int QT_dot(int x, int y, int number) {
+  static char value = 'P';
+  static short buffer[2];
+  fwrite(&value, sizeof(value), 1, QT_pipe);
+  buffer[0] = x;
+  buffer[1] = y;
+  fwrite(buffer, sizeof(*buffer), 2, QT_pipe);
+  fflush(QT_pipe);
+  return 0;
+}
+
+int QT_color(unsigned short red, unsigned short green, unsigned short blue) {
+  static char value = 'C';
+  static unsigned short buffer[3];
+  fwrite(&value, sizeof(value), 1, QT_pipe);
+  buffer[0] = red;
+  buffer[1] = green;
+  buffer[2] = blue;
+  fwrite(buffer, sizeof(*buffer), 3, QT_pipe);
+  fflush(QT_pipe);
+  return 0;
+}
+
+int QT_add_color(unsigned short red, unsigned short green, unsigned short blue, short reset) {
+  if (reset) {
+    return 0;
+  }
+  if (qt_color_index >= qt_color_maxindex) {
+    qt_color_maxindex += 100;
+    if (qt_color_index == 0) {
+      qt_colors = tmalloc(sizeof(*qt_colors) * qt_color_maxindex);
+    } else {
+      qt_colors = trealloc(qt_colors, sizeof(*qt_colors) * (++qt_color_maxindex));
+    }
+  }
+  qt_colors[qt_color_index].red = red;
+  qt_colors[qt_color_index].green = green;
+  qt_colors[qt_color_index].blue = blue;
+  qt_color_index++;
+  return 0;
+}
+
+void RGB_short_values(unsigned short *red, unsigned short *green,
+                      unsigned short *blue, double hue) {
+  double r, g, b;
+  RGB_values(&r, &g, &b, hue);
+  if (r >= 1)
+    r = .99999;
+  if (g >= 1)
+    g = .99999;
+  if (b >= 1)
+    b = .99999;
+  *red = r * 65536;
+  *green = g * 65536;
+  *blue = b * 65536;
+}
+
+void Spectral_RGB_short_values(unsigned short *red, unsigned short *green,
+                               unsigned short *blue, double hue) {
+  double r, g, b;
+  Spectral_RGB_values(&r, &g, &b, hue);
+  if (r >= 1)
+    r = .99999;
+  if (g >= 1)
+    g = .99999;
+  if (b >= 1)
+    b = .99999;
+  *red = r * 65536;
+  *green = g * 65536;
+  *blue = b * 65536;
+}
+
+void Spectral_RGB_NoMagenta_short_values(unsigned short *red, unsigned short *green,
+                                         unsigned short *blue, double hue) {
+  double r, g, b;
+  Spectral_RGB_NoMagenta_values(&r, &g, &b, hue);
+  if (r >= 1)
+    r = .99999;
+  if (g >= 1)
+    g = .99999;
+  if (b >= 1)
+    b = .99999;
+  *red = r * 65536;
+  *green = g * 65536;
+  *blue = b * 65536;
+}
+
+void Spectral_BGR_short_values(unsigned short *red, unsigned short *green,
+                               unsigned short *blue, double hue) {
+  double r, g, b;
+  Spectral_BGR_values(&r, &g, &b, hue);
+  if (r >= 1)
+    r = .99999;
+  if (g >= 1)
+    g = .99999;
+  if (b >= 1)
+    b = .99999;
+  *red = r * 65536;
+  *green = g * 65536;
+  *blue = b * 65536;
+}
+
+void Spectral_BGR_NoMagenta_short_values(unsigned short *red, unsigned short *green,
+                                         unsigned short *blue, double hue) {
+  double r, g, b;
+  Spectral_BGR_NoMagenta_values(&r, &g, &b, hue);
+  if (r >= 1)
+    r = .99999;
+  if (g >= 1)
+    g = .99999;
+  if (b >= 1)
+    b = .99999;
+  *red = r * 65536;
+  *green = g * 65536;
+  *blue = b * 65536;
+}
+
+void Custom_RGB_short_values(unsigned short *red, unsigned short *green, unsigned short *blue, unsigned short r0, unsigned short g0, unsigned short b0, unsigned short r1, unsigned short g1, unsigned short b1, double hue) {
+  double r, g, b;
+  Custom_RGB_values(&r, &g, &b, r0, g0, b0, r1, g1, b1, hue);
+  if (r >= 1)
+    r = .99999;
+  if (g >= 1)
+    g = .99999;
+  if (b >= 1)
+    b = .99999;
+  *red = r * 65536;
+  *green = g * 65536;
+  *blue = b * 65536;
+}
