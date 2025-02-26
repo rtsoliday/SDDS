@@ -35,8 +35,9 @@ The **SDDS (Self Describing Data Sets) Library** is a C/C++ library designed for
 ├── tiff/           # TIFF support for Windows
 ├── SDDSaps/        # SDDS ToolKit applications
 │   ├── sddsplots/  # SDDS plotting tool
-│       ├── winMotifDriver/  # Windows plotting tool
-│       ├── motifDriver/     # Motif (Linux and MacOS) plotting tool
+│       ├── qtDriver/  # plotting GUI used by sddsplot
+│       ├── winMotifDriver/  # Windows plotting tool (depreciated)
+│       ├── motifDriver/     # Motif (Linux and MacOS) plotting tool (depreciated)
 │   ├── sddscontours/   # SDDS contour plotting tool
 │   ├── pseudoInverse/  # SDDS matrix applications
 ├── levmar/         # Levenberg - Marquardt algorithm
@@ -51,14 +52,13 @@ The **SDDS (Self Describing Data Sets) Library** is a C/C++ library designed for
 To compile and use the SDDS library, ensure you have:
 - A **C/C++ compiler** (e.g., GCC, Clang, MSVC)
 - **make** the GNU make utility (for building the project)
-- **zlib** (system library used for Linux and MacOS)
-- **lzma** (system library used for Linux and MacOS)
-- **png** (system library used for Linux and MacOS)
-- **gd** (system library used for Linux and MacOS)
-- **tiff** (system library used for Linux and MacOS)
+- **zlib** (Windows only, system library used for Linux and MacOS)
+- **lzma** (Windows only, system library used for Linux and MacOS)
+- **png** (Windows only, system library used for Linux and MacOS)
+- **gd** (Windows only, system library used for Linux and MacOS)
+- **tiff** (Windows only, system library used for Linux and MacOS)
 - **mpich** or **openmpi** (optional, for parallel SDDS file operations)
-- **motif** (for plottig on Linux)
-- **XQuartz** (for plotting on MacOS)
+- **qt5 or qt6** (for plottig GUI)
 
 
 ### Compilation
