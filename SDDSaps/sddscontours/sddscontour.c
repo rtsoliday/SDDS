@@ -236,6 +236,7 @@ void get_xyaxis_value(char *xscalePar, char *xoffsetPar, char *yscalPar, char *y
                       char **users_xlabel, char **users_ylabel);
 void SetupFontSize(FONT_SIZE *fs);
 void parseCommandlineToMotif(int argc, char **argv);
+void parseCommandlineToQT(int argc, char **argv);
 void passCommandlineToPNG(int argc, char **argv);
 void passCommandlineToPS(int argc, char **argv);
 
@@ -247,7 +248,7 @@ FILE *outfile;
 #  define DEFAULT_DEVICE "regis"
 #  include <unixlib.h>
 #endif
-#define DEFAULT_DEVICE "motif"
+#define DEFAULT_DEVICE "qt"
 
 #define DEFAULT_FONT "rowmans"
 
@@ -431,6 +432,7 @@ void sddscontour_main(char *input_line)
   }
 #endif
   parseCommandlineToMotif(argc, argv);
+  parseCommandlineToQT(argc, argv);
   passCommandlineToPNG(argc, argv);
   passCommandlineToPS(argc, argv);
 
@@ -1302,6 +1304,11 @@ void sddscontour_main(char *input_line)
     device = DEFAULT_DEVICE;
 
   if (strncmp("motif", device, strlen(device)) == 0) {
+    devargs = gs_device_arguments(NULL, 1);
+    buffer = tmalloc(sizeof(*buffer) * (strlen(devargs ? devargs : "") + strlen(SPECTRUM_TRUE) + 1));
+    sprintf(buffer, "%s%s", devargs ? devargs : "", SPECTRUM_TRUE);
+    gs_device_arguments(buffer, 0);
+  } else if (strncmp("qt", device, strlen(device)) == 0) {
     devargs = gs_device_arguments(NULL, 1);
     buffer = tmalloc(sizeof(*buffer) * (strlen(devargs ? devargs : "") + strlen(SPECTRUM_TRUE) + 1));
     sprintf(buffer, "%s%s", devargs ? devargs : "", SPECTRUM_TRUE);
