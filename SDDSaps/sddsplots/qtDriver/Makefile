@@ -1,51 +1,43 @@
-#*************************************************************************
-# Copyright (c) 2002 The University of Chicago, as Operator of Argonne
-# National Laboratory.
-# Copyright (c) 2002 The Regents of the University of California, as
-# Operator of Los Alamos National Laboratory.
-# This file is distributed subject to a Software License Agreement found
-# in the file LICENSE that is included with this distribution.
-#*************************************************************************
+DD  = ../../
+include ../../../Makefile.rules
 
-TOP=../../../../..
+PROD = mpl_qt
+mpl_qt_SRC = mpl_qt.cc mpl_qt_utils.cc mpl_qt_zoom.cc mpl_qt_print_save.cc mpl_qt_readdata.cc
 
-include $(TOP)/configure/CONFIG
-
-OS := $(shell uname -s)
-ARCH := $(shell uname -m)
-ifeq ($(findstring CYGWIN, $(OS)),CYGWIN)
-    OS := Windows
-endif
-
-CMPLR=ANSI
-
-STATIC_BUILD=NO
-
-PROD_HOST = mpl_qt
-
-mpl_qt_SRCS = mpl_qt.cc mpl_qt_utils.cc mpl_qt_zoom.cc mpl_qt_print_save.cc mpl_qt_readdata.cc
-
-ifeq ($(OS), Windows)
-mpl_qt_LIBS = mdbplt gd png SDDS1 rpnlib mdbmth mdblib gsl gslcblas z lzma
-PROD_SYS_LIBS = Advapi32
-USR_CXXFLAGS = /std:c++17 /Zc:__cplusplus /permissive- -I../../../../include -I"C:\Qt\6.8.2\msvc2022_64\include" -I"C:\Qt\6.8.2\msvc2022_64\include\QtCore" -I"C:\Qt\6.8.2\msvc2022_64\include\QtGui" -I"C:\Qt\6.8.2\msvc2022_64\include\QtWidgets"
-USR_LDFLAGS =  /LIBPATH:"C:\Qt\6.8.2\msvc2022_64\lib" Qt6PrintSupport.lib Qt6Widgets.lib Qt6Gui.lib Qt6Core.lib
-MOC = moc.exe
-else
-mpl_qt_LIBS = mdbplt SDDS1 rpnlib mdbmth mdblib
-PROD_SYS_LIBS_DEFAULT = gd png gsl gslcblas z lzma
-USR_CXXFLAGS = -I../../../../include $(shell pkg-config --cflags Qt5Widgets) -fPIC
-USR_LDFLAGS = $(shell pkg-config --libs Qt5Widgets Qt5PrintSupport)
-MOC = $(wildcard /opt/local/libexec/qt5/bin/moc)
-ifeq ($(MOC),)
+ifeq ($(OS), Linux)
+  CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt5Widgets)
+  LDFLAGS += $(shell pkg-config --libs Qt5Widgets Qt5PrintSupport)
+  PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
+  PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
   MOC = moc-qt5
 endif
+
+ifeq ($(OS), Darwin)
+  CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt5Widgets)
+  LDFLAGS += $(shell pkg-config --libs Qt5Widgets Qt5PrintSupport)
+  PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
+  PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
+  MOC = $(wildcard /opt/local/libexec/qt5/bin/moc)
+  ifeq ($(MOC),)
+    MOC = moc-qt5
+  endif
 endif
 
-include $(TOP)/configure/RULES
+ifeq ($(OS), Windows)
+  CCFLAGS += -I../../../include -I$(OBJ_DIR) /std:c++17 /Zc:__cplusplus /permissive- -I../../../../include -I"C:\Qt\6.8.2\msvc2022_64\include" -I"C:\Qt\6.8.2\msvc2022_64\include\QtCore" -I"C:\Qt\6.8.2\msvc2022_64\include\QtGui" -I"C:\Qt\6.8.2\msvc2022_64\include\QtWidgets"
+  LDFLAGS += /LIBPATH:"C:\Qt\6.8.2\msvc2022_64\lib" Qt6PrintSupport.lib Qt6Widgets.lib Qt6Gui.lib Qt6Core.lib
+  PROD_LIBS = mdbplt.lib gd.lib png.lib mdbcommon.lib SDDS1.lib rpnlib.lib mdbmth.lib mdblib.lib lzma.lib z.lib
+  PROD_SYS_LIBS = advapi32.lib
+  MOC = moc.exe
+endif
 
-mpl_qt_moc.h:
-	$(MOC) ../mpl_qt.cc -o mpl_qt_moc.h
+include ../../../Makefile.build
 
-../mpl_qt.cc: mpl_qt_moc.h
+$(OBJ_DIR)/mpl_qt_moc.h:
+	$(MOC) mpl_qt.cc -o $(OBJ_DIR)/mpl_qt_moc.h
 
+mpl_qt.cc: $(OBJ_DIR)/mpl_qt_moc.h
+
+$(OBJ_DIR)/mpl_qt$(EXEEXT): $(mpl_qt_OBJS) $(LIBRARY) $(PROD_DEPS)
+	$(LINKEXE) $(OUTPUTEXE) $(mpl_qt_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+	cp -f $@ $(BIN_DIR)/
