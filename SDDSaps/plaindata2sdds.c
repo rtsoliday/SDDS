@@ -1303,13 +1303,13 @@ int main(int argc, char **argv) {
 
         if (noRowCount) {
           cp_str(&ptr2, ptr);
-          rows = 0;
+          i = 0;
           while (getToken(ptr2, data, 10240, separator, whitespace) >= 0) {
-            rows++;
+            i++;
           }
           free(ptr2);
           ptr2 = NULL;
-          if ((rows != columns) && (parameters > 0 && rows == 1)) {
+          if ((i != columns) && (parameters > 0 && i == 1)) {
             if (row > 0) {
               if (row > maxRows) {
                 if (!SDDS_LengthenTable(&SDDS_dataset, row - maxRows)) {
