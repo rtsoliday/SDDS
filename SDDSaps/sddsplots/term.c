@@ -76,7 +76,6 @@ char *outstr="stdout";
 #include <math.h>
 #include "mdb.h"
 
-#if !defined(__TURBOC__) || defined(__BORLANDC__)
 #define REGIS
 #define POSTSCRIPT
 #define MIF
@@ -85,16 +84,8 @@ char *outstr="stdout";
 #define TEK
 #define EEPIC
 #define PNG
-#endif
 #define X11
-#ifdef SUNOS4
-#define SUN
-#endif /* SUNOS4 */
-#if defined(__TURBOC__) && !defined(__BORLANDC__)
-#define PC
-#define POSTSCRIPT
-#define HPGL
-#endif
+#define QT
 
 /* for use by all drivers */
 #define sign(x) ((x) >= 0 ? 1 : -1)
@@ -126,8 +117,6 @@ char *LineTableFile = NULL ;
 LINE_TYPE_TABLE lineTypeTable ;
 
 
-#if defined(__TURBOC__) && !defined(__BORLANDC__)
-#endif
 #ifdef PC
 #endif
 #ifdef VMS
@@ -822,6 +811,10 @@ int do_arrow(int sx, int sy, int ex, int ey)
 #include "x11.trm"
 #endif /* X11 */
 
+#ifdef QT
+#include "qt.trm"
+#endif /* QT */
+
 #ifdef USE_GD_LIBRARY
 #ifdef PNG
 #include "png.trm"
@@ -873,72 +866,6 @@ struct termentry term_tbl[] = {
    NULL_linetype,  NULL_put_text,  NULL_text_angle,  
    NULL_justify_text,  NULL_dot,  NULL_arrow,  NULL_fillbox, NULL_line_thickness, NULL_color,NULL_add_color,NULL_sendCoordinates,NULL_spectral,NULL_movie}
 #ifdef PC
-#if defined(__TURBOC__) && !defined(__BORLANDC__)
-
-  , {"egalib",  "IBM PC/Clone with EGA graphics board", 
-     EGALIB_XMAX,  EGALIB_YMAX,  EGALIB_VCHAR,  EGALIB_HCHAR, 
-     EGALIB_VTIC,  EGALIB_HTIC,  
-     TERM_COLOR|TERM_IBMCLONE, 
-     EGALIB_init,  EGALIB_reset, 
-     EGALIB_text,  NULL_scale,  EGALIB_graphics,  EGALIB_move,  EGALIB_vector, 
-     EGALIB_linetype,  EGALIB_put_text,  EGALIB_text_angle,  
-     EGALIB_justify_text,  do_dot,  do_arrow, NULL_fillbox, NULL_line_thickness, NULL_color,NULL_add_color,NULL_sendCoordinates,NULL_spectral,NULL_movie}
-
-  , {"vgalib",  "IBM PC/Clone with VGA graphics board", 
-     VGA_XMAX,  VGA_YMAX,  VGA_VCHAR,  VGA_HCHAR, 
-     VGA_VTIC,  VGA_HTIC,  
-     TERM_COLOR|TERM_IBMCLONE,
-     VGA_init,  VGA_reset, 
-     VGA_text,  NULL_scale,  VGA_graphics,  VGA_move,  VGA_vector, 
-     VGA_linetype,  VGA_put_text,  VGA_text_angle,  
-     VGA_justify_text,  do_dot,  do_arrow, NULL_fillbox, NULL_line_thickness, NULL_color,NULL_add_color,NULL_sendCoordinates,NULL_spectral,NULL_movie}
-
-  , {"vgamono",  "IBM PC/Clone with VGA Monochrome graphics board", 
-     VGA_XMAX,  VGA_YMAX,  VGA_VCHAR,  VGA_HCHAR, 
-     VGA_VTIC,  VGA_HTIC,  
-     TERM_IBMCLONE, 
-     VGA_init,  VGA_reset, 
-     VGA_text,  NULL_scale,  VGA_graphics,  VGA_move,  VGA_vector, 
-     VGAMONO_linetype,  VGA_put_text,  VGA_text_angle,  
-     VGA_justify_text,  line_and_point,  do_arrow, NULL_fillbox, NULL_line_thickness, NULL_color,NULL_add_color,NULL_sendCoordinates,NULL_spectral,NULL_movie}
-
-  , {"mcga",  "IBM PC/Clone with MCGA graphics board", 
-     MCGA_XMAX,  MCGA_YMAX,  MCGA_VCHAR,  MCGA_HCHAR, 
-     MCGA_VTIC,  MCGA_HTIC,  
-     TERM_COLOR|TERM_IBMCLONE, 
-     MCGA_init,  MCGA_reset, 
-     MCGA_text,  NULL_scale,  MCGA_graphics,  MCGA_move,  MCGA_vector, 
-     MCGA_linetype,  MCGA_put_text,  MCGA_text_angle,  
-     MCGA_justify_text,  line_and_point,  do_arrow, NULL_fillbox, NULL_line_thickness, NULL_color,NULL_add_color,NULL_sendCoordinates,NULL_spectral,NULL_movie}
-
-  , {"cga",  "IBM PC/Clone with CGA graphics board", 
-     CGA_XMAX,  CGA_YMAX,  CGA_VCHAR,  CGA_HCHAR, 
-     CGA_VTIC,  CGA_HTIC,  
-     TERM_COLOR|TERM_IBMCLONE,
-     CGA_init,  CGA_reset, 
-     CGA_text,  NULL_scale,  CGA_graphics,  CGA_move,  CGA_vector, 
-     CGA_linetype,  CGA_put_text,  MCGA_text_angle,  
-     CGA_justify_text,  line_and_point,  do_arrow, NULL_fillbox, NULL_line_thickness, NULL_color,NULL_add_color,NULL_sendCoordinates,NULL_spectral,NULL_movie}
-
-  , {"hercules",  "IBM PC/Clone with Hercules graphics board", 
-     HERC_XMAX,  HERC_YMAX,  HERC_VCHAR,  HERC_HCHAR, 
-     HERC_VTIC,  HERC_HTIC,
-     TERM_COLOR|TERM_IBMCLONE,
-     HERC_init,  HERC_reset, 
-     HERC_text,  NULL_scale,  HERC_graphics,  HERC_move,  HERC_vector, 
-     HERC_linetype,  HERC_put_text,  MCGA_text_angle,  
-     HERC_justify_text,  line_and_point,  do_arrow, NULL_fillbox, NULL_line_thickness, NULL_color,NULL_add_color,NULL_sendCoordinates,NULL_spectral,NULL_movie}
-#ifdef ATT6300
-  , {"att",  "IBM PC/Clone with AT&T 6300 graphics board", 
-     ATT_XMAX,  ATT_YMAX,  ATT_VCHAR,  ATT_HCHAR, 
-     ATT_VTIC,  ATT_HTIC,  
-     TERM_COLOR|TERM_IBMCLONE,
-     ATT_init,  ATT_reset, 
-     ATT_text,  NULL_scale,  ATT_graphics,  ATT_move,  ATT_vector, 
-     ATT_linetype,  ATT_put_text,  ATT_text_angle,  
-     ATT_justify_text,  line_and_point,  do_arrow, NULL_fillbox, NULL_line_thickness, NULL_color,NULL_add_color,NULL_sendCoordinates,NULL_spectral,NULL_movie}
-#endif
-#else                                   /* TURBO */
 
   , {"cga",  "IBM PC/Clone with CGA graphics board", 
      CGA_XMAX,  CGA_YMAX,  CGA_VCHAR,  CGA_HCHAR, 
@@ -1010,7 +937,6 @@ struct termentry term_tbl[] = {
      COR_linetype,  COR_put_text,  COR_text_angle,  
      NULL_justify_text,  line_and_point,  do_arrow, NULL_fillbox, NULL_line_thickness, NULL_color,NULL_add_color,NULL_sendCoordinates,NULL_spectral,NULL_movie}
 #endif                                  /* CORONA */
-#endif                                  /* TURBO */
 #endif                                  /* PC */
 
 #ifdef AED
@@ -1543,6 +1469,17 @@ struct termentry term_tbl[] = {
      X11b_text,  NULL_scale,  X11b_graphics,  X11b_move,  X11b_vector,  
      X11b_linetype,  X11_put_text,  NULL_text_angle,  
      X11_justify_text,  X11b_dot,  do_arrow, X11b_fill_box, X11b_line_thickness, X11b_color, X11b_add_color,X11b_sendCoordinates,X11b_spectral,NULL_movie}
+#endif
+
+#ifdef QT
+  , {"qt",  "QT GUI", 
+     QT_XMAX,  QT_YMAX,  QT_VCHAR,  QT_HCHAR,  
+     QT_VTIC,  QT_HTIC,  
+     TERM_WINDOWS|TERM_XWINDOWS|TERM_COLOR|TERM_POLYFILL|TERM_NOPROMPT|TERM_FLUSHSTDOUT,
+     QT_init,  QT_reset,  
+     QT_text,  NULL_scale,  QT_graphics,  QT_move,  QT_vector,  
+     QT_linetype,  NULL_put_text,  NULL_text_angle,  
+     NULL_justify_text,  QT_dot,  do_arrow, QT_fill_box, QT_line_thickness, QT_color, QT_add_color,QT_sendCoordinates,QT_spectral,NULL_movie}
 #endif
 
 #ifdef USE_GD_LIBRARY

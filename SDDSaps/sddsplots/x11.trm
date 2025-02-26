@@ -45,14 +45,6 @@ int motif_color_index = 0;
 int motif_color_maxindex = 0;
 MotifColor *motif_colors = NULL;
 
-int contains_whitespace(char *s)
-{
-  while (*s)
-    if (isspace(*s++))
-      return(1);
-  return(0);
-}
-
 /*   X11_args - scan gnuplot command line for standard X Toolkit options */
 
 int X11_args(int argc, char **argv)
@@ -682,79 +674,4 @@ int X11b_add_color(unsigned short red, unsigned short green, unsigned short blue
   return 0;
 }
 
-void RGB_short_values(unsigned short *red, unsigned short *green, 
-		      unsigned short *blue, double hue)
-{
-  double r,  g,  b;
-  RGB_values(&r,  &g,  &b,  hue);
-  if (r >= 1) r = .99999;
-  if (g >= 1) g = .99999;
-  if (b >= 1) b = .99999;
-  *red = r*65536;
-  *green = g*65536;
-  *blue = b*65536;
-}
 
-void Spectral_RGB_short_values(unsigned short *red, unsigned short *green, 
-		      unsigned short *blue, double hue)
-{
-  double r,  g,  b;
-  Spectral_RGB_values(&r,  &g,  &b,  hue);
-  if (r >= 1) r = .99999;
-  if (g >= 1) g = .99999;
-  if (b >= 1) b = .99999;
-  *red = r*65536;
-  *green = g*65536;
-  *blue = b*65536;
-}
-
-void Spectral_RGB_NoMagenta_short_values(unsigned short *red, unsigned short *green, 
-		      unsigned short *blue, double hue)
-{
-  double r,  g,  b;
-  Spectral_RGB_NoMagenta_values(&r,  &g,  &b,  hue);
-  if (r >= 1) r = .99999;
-  if (g >= 1) g = .99999;
-  if (b >= 1) b = .99999;
-  *red = r*65536;
-  *green = g*65536;
-  *blue = b*65536;
-}
-
-void Spectral_BGR_short_values(unsigned short *red, unsigned short *green, 
-		      unsigned short *blue, double hue)
-{
-  double r,  g,  b;
-  Spectral_BGR_values(&r,  &g,  &b,  hue);
-  if (r >= 1) r = .99999;
-  if (g >= 1) g = .99999;
-  if (b >= 1) b = .99999;
-  *red = r*65536;
-  *green = g*65536;
-  *blue = b*65536;
-}
-
-void Spectral_BGR_NoMagenta_short_values(unsigned short *red, unsigned short *green, 
-		      unsigned short *blue, double hue)
-{
-  double r,  g,  b;
-  Spectral_BGR_NoMagenta_values(&r,  &g,  &b,  hue);
-  if (r >= 1) r = .99999;
-  if (g >= 1) g = .99999;
-  if (b >= 1) b = .99999;
-  *red = r*65536;
-  *green = g*65536;
-  *blue = b*65536;
-}
-
-void Custom_RGB_short_values(unsigned short *red, unsigned short *green, unsigned short *blue, unsigned short r0, unsigned short g0, unsigned short b0, unsigned short r1, unsigned short g1, unsigned short b1, double hue)
-{
-  double r,  g,  b;
-  Custom_RGB_values(&r,  &g,  &b, r0, g0, b0, r1, g1, b1, hue);
-  if (r >= 1) r = .99999;
-  if (g >= 1) g = .99999;
-  if (b >= 1) b = .99999;
-  *red = r*65536;
-  *green = g*65536;
-  *blue = b*65536;
-}

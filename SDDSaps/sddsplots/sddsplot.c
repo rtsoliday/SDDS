@@ -597,8 +597,7 @@ FILE *outfile;
 extern void shorten_filename(char *s);
 extern void cleanup_label(char *s);
 
-
-#define DEFAULT_DEVICE "motif"
+#define DEFAULT_DEVICE "qt"
 
 #define DEFAULT_FONT "rowmans"
 
@@ -680,8 +679,8 @@ char *USAGE5 = "  -offset=[{x|y}change={value>][,{x|y}parameter=<name>][,{x|y}in
   -convertunits={column|parameter},<name>,<new-units-name>,<old-units-name>[,<factor>]\n\
   -orderColors={temperature|rtemperature|spectral|rspectral|start=(<red>,<green>,<blue>){[,finish=(<red>,<green>,<blue>)]|[,increment=(<red>,<green>,<blue>)]}}\n\
   All colors range from 0 to 65535.\n\
-  -device={motif|png|postscript}[,dashes,linetypetable=<lineDefineFile>]\n\
-  for motif device arguments, use '-dashes 1 -linetype lineDefineFile' \n\
+  -device={qt|motif|png|postscript}[,dashes,linetypetable=<lineDefineFile>]\n\
+  for qt and motif device arguments, use '-dashes 1 -linetype lineDefineFile' \n\
   for png device arguments, use 'rootname=<name>,template=<string>,onwhite,onblack,dashes,movie' \n\n\
   A <match-test> is of the form <name>=<matching-string>[,!], where ! signifies logical negation.\n\
   A <logic-operation> is one of & (logical and) or | (logical or), optionally followed by a ! to \n\
@@ -981,6 +980,7 @@ static long (*main_parser[])(PLOT_SPEC *plotspec, char **item, long items) = {
 };
 
 extern void parseCommandlineToMotif(int argc, char **argv);
+extern void parseCommandlineToQT(int argc, char **argv);
 extern void passCommandlineToPNG(int argc, char **argv);
 extern void passCommandlineToPS(int argc, char **argv);
 
@@ -1054,6 +1054,7 @@ int sddsplot_main(int commandlineArgc, char **commandlineArgv)
   plot_spec.fontsize[0].autosize = 1;
 
   parseCommandlineToMotif(commandlineArgc, commandlineArgv);
+  parseCommandlineToQT(commandlineArgc, commandlineArgv);
   passCommandlineToPNG(commandlineArgc, commandlineArgv);
   passCommandlineToPS(commandlineArgc, commandlineArgv);
   argc = commandlineArgc;

@@ -531,11 +531,15 @@ int V384_vector(int x, int y);
 int V384_put_text (int x, int y, char *str);
 int V384_reset(void);
 /* prototypes for code in file x11.trm */
-FILE *X11_pipe = NULL,  *popen();
+FILE *X11_pipe = NULL;
+FILE *QT_pipe = NULL;
+//FILE *popen();
 void parseCommandlineToMotif(int argc, char **argv);
+void parseCommandlineToQT(int argc, char **argv);
 void passCommandlineToPNG(int argc, char **argv);
 void passCommandlineToPS(int argc, char **argv);
 int contains_whitespace(char *s);
+
 int X11_args(int argc, char **argv);
 int X11_init(void);
 int X11g_init(void);
@@ -595,3 +599,18 @@ int PNG_spectral(long num, int spec, unsigned short red0, unsigned short green0,
 int PNG_movie(void);
 void PNG_passCommandLineToPNGFromMotif(char *command);
 
+int QT_args(int argc, char **argv);
+int QT_init(void);
+int QT_reset(void);
+int QT_text(void);
+int QT_graphics(void);
+int QT_move(int x, int y);
+int QT_vector(int x, int y);
+int QT_linetype(int lt);
+int QT_line_thickness(int lt);
+int QT_fill_box(int shade, int xl, int xh, int yl, int yh);
+int QT_dot(int x, int y, int number);
+int QT_color(unsigned short red, unsigned short green, unsigned short blue);
+int QT_add_color(unsigned short red, unsigned short green, unsigned short blue, short reset);
+int QT_sendCoordinates(void);
+int QT_spectral(long num, int spec, unsigned short red0, unsigned short green0, unsigned short blue0, unsigned short red1, unsigned short green1, unsigned short blue1);

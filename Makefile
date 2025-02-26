@@ -21,8 +21,9 @@ DIRS += gd
 DIRS += tiff
 DIRS += SDDSaps
 DIRS += SDDSaps/sddsplots
-DIRS += SDDSaps/sddsplots/winMotifDriver
-DIRS += SDDSaps/sddsplots/motifDriver
+#DIRS += SDDSaps/sddsplots/winMotifDriver
+#DIRS += SDDSaps/sddsplots/motifDriver
+DIRS += SDDSaps/sddsplots/qtDriver
 DIRS += SDDSaps/sddscontours
 DIRS += SDDSaps/pseudoInverse
 DIRS += levmar
@@ -82,11 +83,13 @@ SDDSaps: tiff
 	$(MAKE) -C $@
 SDDSaps/sddsplots: SDDSaps
 	$(MAKE) -C $@
-SDDSaps/sddsplots/winMotifDriver: SDDSaps/sddsplots
+#SDDSaps/sddsplots/winMotifDriver: SDDSaps/sddsplots
+#	$(MAKE) -C $@
+#SDDSaps/sddsplots/motifDriver: SDDSaps/sddsplots/winMotifDriver
+#	$(MAKE) -C $@
+SDDSaps/sddsplots/qtDriver: SDDSaps/sddsplots
 	$(MAKE) -C $@
-SDDSaps/sddsplots/motifDriver: SDDSaps/sddsplots/winMotifDriver
-	$(MAKE) -C $@
-SDDSaps/sddscontours: SDDSaps/sddsplots/motifDriver
+SDDSaps/sddscontours: SDDSaps/sddsplots/qtDriver
 	$(MAKE) -C $@
 SDDSaps/pseudoInverse: SDDSaps/sddscontours
 	$(MAKE) -C $@
@@ -121,6 +124,7 @@ clean:
 	$(MAKE) -C SDDSaps/sddsplots clean
 	$(MAKE) -C SDDSaps/sddsplots/winMotifDriver clean
 	$(MAKE) -C SDDSaps/sddsplots/motifDriver clean
+	$(MAKE) -C SDDSaps/sddsplots/qtDriver clean
 	$(MAKE) -C SDDSaps/sddscontours clean
 	$(MAKE) -C SDDSaps/pseudoInverse clean
 	$(MAKE) -C levmar clean
