@@ -304,21 +304,26 @@ protected:
       case 'B': // Fill Box
         {
           VTYPE shade, xl, xh, yl, yh;
+          int x, y, width, height;
           memcpy((char *)&shade, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
           memcpy((char *)&xl, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
           memcpy((char *)&xh, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
-          memcpy((char *)&yl, bufptr, sizeof(VTYPE));
-          bufptr += sizeof(VTYPE);
           memcpy((char *)&yh, bufptr, sizeof(VTYPE));
+          bufptr += sizeof(VTYPE);
+          memcpy((char *)&yl, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
           n += sizeof(char) + 5 * sizeof(VTYPE);
           if (!spectrumallocated)
             allocspectrum();
           shade = shade % nspect;
-          bufferPainter.fillRect(QRect(Xpixel(xl), Ypixel(yl), Xpixel(xh), Ypixel(yh)), spectrum[shade]);
+          x = Xpixel(xl);
+          y = Ypixel(yl);
+          width = Xpixel(xh) - x;
+          height = Ypixel(yh) - y;
+          bufferPainter.fillRect(QRect(x, y, width, height), spectrum[shade]);
         } break;
       case 'U': // user coordinate scaling
         memcpy((char *)&userax, bufptr, sizeof(double));
@@ -650,6 +655,15 @@ int main(int argc, char *argv[]) {
       case 'm': /* -movie */
         if (!strcmp("movie", argv[i] + 1)) {
           domovie = true;
+        } else {
+          fprintf(stderr, "Invalid option %s\n", argv[i]);
+          exit(1);
+        }
+        break;
+      case 's': /* -spectrum */
+        if (!strcmp("spectrum", argv[i] + 1)) {
+          if (!spectrumallocated)
+            allocspectrum();
         } else {
           fprintf(stderr, "Invalid option %s\n", argv[i]);
           exit(1);
