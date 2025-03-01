@@ -258,6 +258,12 @@ int main(
       printf("%d replacements of \"%s\" by \"%s\"\n",
              count[i_pair], orig[i_pair], repl[i_pair]);
 
+  if (fpi && (fpi != stdin)) {
+    fclose(fpi);
+  }
+  if (fpo && (fpo != stdout)) {
+    fclose(fpo);
+  }
   if (tmp_file) {
     sprintf(s, "%s~", input_fn);
     rename(input_fn, s);
