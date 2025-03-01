@@ -84,7 +84,7 @@ int	i, j;
     if ( ! A )
 	error(E_NULL,"unord_get_val");
     if ( i < 0 || i >= A->m || j < 0 || j >= A->n )
-	error(E_BOUNDS,"unord_get_val");
+	error(ERR_BOUNDS,"unord_get_val");
 
     r = &(A->row[i]);
     idx = unord_get_idx(r,j);
@@ -114,7 +114,7 @@ int	i1, j1, idx1, i2, j2, idx2;
     if ( i1 < 0 || j1 < 0 || i2 < 0 || j2 < 0 ||
 	 i1 >= A->m || j1 >= A->n || i2 >= A->m || j2 >= A->n )
     {
-	error(E_BOUNDS,"bkp_swap_elt");
+	error(ERR_BOUNDS,"bkp_swap_elt");
     }
 
     if ( i1 == i2 && j1 == j2 )
@@ -124,7 +124,7 @@ int	i1, j1, idx1, i2, j2, idx2;
 
     r1 = &(A->row[i1]);		r2 = &(A->row[i2]);
     /* if ( idx1 >= r1->len || idx2 >= r2->len )
-	error(E_BOUNDS,"bkp_swap_elt"); */
+	error(ERR_BOUNDS,"bkp_swap_elt"); */
     if ( idx1 < 0 )	/* assume not allocated */
     {
 	idx1 = r1->len;
@@ -246,7 +246,7 @@ int	i1, i2;
     if ( ! A )
 	error(E_NULL,"bkp_interchange");
     if ( i1 < 0 || i1 >= A->n || i2 < 0 || i2 >= A->n )
-	error(E_BOUNDS,"bkp_interchange");
+	error(ERR_BOUNDS,"bkp_interchange");
     if ( A->m != A->n )
 	error(E_SQUARE,"bkp_interchange");
 
@@ -458,7 +458,7 @@ int	i, j, l;
     if ( ! A )
 	error(E_NULL,"max_row_col");
     if ( i < 0 || i > A->n || j < 0 || j >= A->n )
-	error(E_BOUNDS,"max_row_col");
+	error(ERR_BOUNDS,"max_row_col");
 
     max_val = 0.0;
 

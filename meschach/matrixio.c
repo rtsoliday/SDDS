@@ -283,7 +283,7 @@ PERM    *px;
 	       i++;
 	  }
 	  else
-	       error(E_BOUNDS,"bpx_finput");
+	       error(ERR_BOUNDS,"bpx_finput");
      }
      
      return (px);

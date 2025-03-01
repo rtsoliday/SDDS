@@ -201,39 +201,39 @@ extern  VEC *bd_mv_mlt(BAND *, VEC *, VEC *);
 
 /* returns x[i] */
 #define	v_entry(x,i)	(((i) < 0 || (i) >= (x)->dim) ? \
-			 error(E_BOUNDS,"v_entry"), 0.0 : (x)->ve[i] )
+			 error(ERR_BOUNDS,"v_entry"), 0.0 : (x)->ve[i] )
 
 /* x[i] <- val */
 #define	v_set_val(x,i,val) ((x)->ve[i] = ((i) < 0 || (i) >= (x)->dim) ? \
-			    error(E_BOUNDS,"v_set_val"), 0.0 : (val))
+			    error(ERR_BOUNDS,"v_set_val"), 0.0 : (val))
 
 /* x[i] <- x[i] + val */
 #define	v_add_val(x,i,val) ((x)->ve[i] += ((i) < 0 || (i) >= (x)->dim) ? \
-			    error(E_BOUNDS,"v_add_val"), 0.0 : (val))
+			    error(ERR_BOUNDS,"v_add_val"), 0.0 : (val))
 
 /* x[i] <- x[i] - val */
 #define	v_sub_val(x,i,val) ((x)->ve[i] -= ((i) < 0 || (i) >= (x)->dim) ? \
-			    error(E_BOUNDS,"v_sub_val"), 0.0 : (val))
+			    error(ERR_BOUNDS,"v_sub_val"), 0.0 : (val))
 
 /* returns A[i][j] */
 #define	m_entry(A,i,j)	(((i) < 0 || (i) >= (A)->m || \
 			  (j) < 0 || (j) >= (A)->n) ? \
-			 error(E_BOUNDS,"m_entry"), 0.0 : (A)->me[i][j] )
+			 error(ERR_BOUNDS,"m_entry"), 0.0 : (A)->me[i][j] )
 
 /* A[i][j] <- val */
 #define	m_set_val(A,i,j,val) ((A)->me[i][j] = ((i) < 0 || (i) >= (A)->m || \
 					       (j) < 0 || (j) >= (A)->n) ? \
-			      error(E_BOUNDS,"m_set_val"), 0.0 : (val) )
+			      error(ERR_BOUNDS,"m_set_val"), 0.0 : (val) )
 
 /* A[i][j] <- A[i][j] + val */
 #define	m_add_val(A,i,j,val) ((A)->me[i][j] += ((i) < 0 || (i) >= (A)->m || \
 						(j) < 0 || (j) >= (A)->n) ? \
-			      error(E_BOUNDS,"m_add_val"), 0.0 : (val) )
+			      error(ERR_BOUNDS,"m_add_val"), 0.0 : (val) )
 
 /* A[i][j] <- A[i][j] - val */
 #define	m_sub_val(A,i,j,val) ((A)->me[i][j] -= ((i) < 0 || (i) >= (A)->m || \
 						(j) < 0 || (j) >= (A)->n) ? \
-			      error(E_BOUNDS,"m_sub_val"), 0.0 : (val) )
+			      error(ERR_BOUNDS,"m_sub_val"), 0.0 : (val) )
 #else
 
 /* returns x[i] */

@@ -182,7 +182,7 @@ MAT	*sp_m2dense(SPMAT *A,MAT *out);
 #define SP_FREE(A)    ( sp_free((A)),  (A)=(SPMAT *)NULL) 
 
 /* utility for index computations -- ensures index returned >= 0 */
-#define	fixindex(idx)	((idx) == -1 ? (error(E_BOUNDS,"fixindex"),0) : \
+#define	fixindex(idx)	((idx) == -1 ? (error(ERR_BOUNDS,"fixindex"),0) : \
 			 (idx) < 0 ? -((idx)+2) : (idx))
 
 
@@ -203,7 +203,7 @@ MAT	*sp_m2dense(SPMAT *A,MAT *out);
 	  if ( ! (A)->flag_col )	sp_col_access((A));		\
 	  col_num = (col);						\
 	  if ( col_num < 0 || col_num >= A->n )				\
-	      error(E_BOUNDS,"loop_cols");				\
+	      error(ERR_BOUNDS,"loop_cols");				\
           _r_num = (A)->start_row[_c]; _r_idx = (A)->start_idx[_c];	\
 	  while ( _r_num >= 0 )  {					\
 	      _r = &((A)->row[_r_num]);					\

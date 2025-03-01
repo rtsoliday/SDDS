@@ -114,7 +114,7 @@ int	i0, j0, m0, n0, i1, j1;
 	error(E_NULL,"m_move");
     if ( i0 < 0 || j0 < 0 || i1 < 0 || j1 < 0 || m0 < 0 || n0 < 0 ||
 	 i0+m0 > in->m || j0+n0 > in->n )
-	error(E_BOUNDS,"m_move");
+	error(ERR_BOUNDS,"m_move");
 
     if ( ! out )
 	out = m_resize(out,i1+m0,j1+n0);
@@ -140,7 +140,7 @@ int	i0, dim0, i1;
 	error(E_NULL,"v_move");
     if ( i0 < 0 || dim0 < 0 || i1 < 0 ||
 	 i0+dim0 > in->dim )
-	error(E_BOUNDS,"v_move");
+	error(ERR_BOUNDS,"v_move");
 
     if ( (! out) || i1+dim0 > out->dim )
 	out = v_resize(out,i1+dim0);
@@ -166,7 +166,7 @@ int	i0, j0, m0, n0, i1;
 	error(E_NULL,"mv_move");
     if ( i0 < 0 || j0 < 0 || m0 < 0 || n0 < 0 || i1 < 0 ||
 	 i0+m0 > in->m || j0+n0 > in->n )
-	error(E_BOUNDS,"mv_move");
+	error(ERR_BOUNDS,"mv_move");
 
     dim1 = m0*n0;
     if ( (! out) || i1+dim1 > out->dim )
@@ -194,7 +194,7 @@ int	i0, i1, j1, m1, n1;
 	error(E_NULL,"vm_move");
     if ( i0 < 0 || i1 < 0 || j1 < 0 || m1 < 0 || n1 < 0 ||
 	 i0+m1*n1 > in->dim )
-	error(E_BOUNDS,"vm_move");
+	error(ERR_BOUNDS,"vm_move");
 
     if ( ! out )
 	out = m_resize(out,i1+m1,j1+n1);

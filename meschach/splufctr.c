@@ -330,7 +330,7 @@ double	alpha;
 	}
 	/* printf("spILUfactor: checkpoint B\n"); */
 	if ( idx_piv < 0 )
-	    error(E_BOUNDS,"spILUfactor");
+	    error(ERR_BOUNDS,"spILUfactor");
 	old_idx_piv = idx_piv;
 	piv_val = r_piv->elt[idx_piv].val;
 	/* printf("spILUfactor: checkpoint C\n"); */

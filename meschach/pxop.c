@@ -59,7 +59,7 @@ PERM	*px, *out;
 	    while (TRUE)
 	    {
 		if ( i < 0 || i >= out->size )
-		    error(E_BOUNDS,"px_inv");
+		    error(ERR_BOUNDS,"px_inv");
 		j = p[i];	p[i] = -1 - k;
 		if ( j == n )
 		{	p[n] = i;	break;		}
@@ -88,7 +88,7 @@ PERM	*px1,*px2,*out;
     size = px1->size;
     for ( i=0; i<size; i++ )
 	if ( px2->pe[i] >= size )
-	    error(E_BOUNDS,"px_mlt");
+	    error(ERR_BOUNDS,"px_mlt");
 	else
 	    out->pe[i] = px1->pe[px2->pe[i]];
     
@@ -117,7 +117,7 @@ VEC	*vector,*out;
     {
 	for ( i=0; i<size; i++ )
 	    if ( px->pe[i] >= size )
-		error(E_BOUNDS,"px_vec");
+		error(ERR_BOUNDS,"px_vec");
 	    else
 		out->ve[i] = vector->ve[px->pe[i]];
     }
@@ -154,7 +154,7 @@ VEC	*vector,*out;
 
 	for ( i = 0; i < size; i++ )
 	    if ( px->pe[i] < size )
-		error(E_BOUNDS,"px_vec");
+		error(ERR_BOUNDS,"px_vec");
 	    else
 		px->pe[i] = px->pe[i]-size;
     }
@@ -185,7 +185,7 @@ VEC	*x, *out;
     {
 	for ( i=0; i<size; i++ )
 	    if ( px->pe[i] >= size )
-		error(E_BOUNDS,"pxinv_vec");
+		error(ERR_BOUNDS,"pxinv_vec");
 	    else
 		out->ve[px->pe[i]] = x->ve[i];
     }
@@ -312,7 +312,7 @@ MAT	*A, *out;
 	{
 		px_j = px->pe[j];
 		if ( px_j >= n )
-		    error(E_BOUNDS,"px_cols");
+		    error(ERR_BOUNDS,"px_cols");
 		for ( i = 0; i < m; i++ )
 		    out_me[i][px_j] = A_me[i][j];
 	}
@@ -349,7 +349,7 @@ MAT	*A, *out;
 	{
 		px_i = px->pe[i];
 		if ( px_i >= m )
-		    error(E_BOUNDS,"px_rows");
+		    error(ERR_BOUNDS,"px_rows");
 		for ( j = 0; j < n; j++ )
 		    out_me[i][j] = A_me[px_i][j];
 	}

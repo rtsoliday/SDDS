@@ -93,7 +93,7 @@ extern  int err_list_free(int list_num);   /* freeing a list of errors */
 /* error types */
 #define	E_UNKNOWN	0
 #define	E_SIZES		1
-#define	E_BOUNDS	2
+#define	ERR_BOUNDS	2
 #define	E_MEM		3
 #define	E_SING		4
 #define	E_POSDEF	5

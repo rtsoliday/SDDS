@@ -80,7 +80,7 @@ double	beta;
 	if ( in->dim != hh->dim )
 		error(E_SIZES,"hhtrvec");
 	if ( i0 > in->dim )
-		error(E_BOUNDS,"hhtrvec");
+		error(ERR_BOUNDS,"hhtrvec");
 
 	scale = beta*_in_prod(hh,in,i0);
 	out = v_copy(in,out);
@@ -109,7 +109,7 @@ double	beta;
 	if ( M->n != hh->dim )
 		error(E_RANGE,"hhtrrows");
 	if ( i0 > M->m || j0 > M->n )
-		error(E_BOUNDS,"hhtrrows");
+		error(ERR_BOUNDS,"hhtrrows");
 
 	if ( beta == 0.0 )	return (M);
 
@@ -156,7 +156,7 @@ double	beta;
 	if ( M->m != hh->dim )
 		error(E_SIZES,"hhtrcols");
 	if ( i0 > M->m || j0 > M->n )
-		error(E_BOUNDS,"hhtrcols");
+		error(ERR_BOUNDS,"hhtrcols");
 
 	if ( beta == 0.0 )	return (M);
 

@@ -357,7 +357,7 @@ MAT   *Q, *H;
    if ( ! ip->Ax || ! Q || ! ip->x )
      error(E_NULL,"iter_arnoldi_iref");
    if ( ip->k <= 0 )
-     error(E_BOUNDS,"iter_arnoldi_iref");
+     error(ERR_BOUNDS,"iter_arnoldi_iref");
    if ( Q->n != ip->x->dim ||	Q->m != ip->k )
      error(E_SIZES,"iter_arnoldi_iref");
    
@@ -454,7 +454,7 @@ MAT   *Q, *H;
    if ( ! ip->Ax || ! Q || ! ip->x )
      error(E_NULL,"iter_arnoldi");
    if ( ip->k <= 0 )
-     error(E_BOUNDS,"iter_arnoldi");
+     error(ERR_BOUNDS,"iter_arnoldi");
    if ( Q->n != ip->x->dim ||	Q->m != ip->k )
      error(E_SIZES,"iter_arnoldi");
    
@@ -611,7 +611,7 @@ ITER *ip;
    if ( ! ip->stop_crit )
      error(E_NULL,"iter_gmres");
    if ( ip->k <= 0 )
-     error(E_BOUNDS,"iter_gmres");
+     error(ERR_BOUNDS,"iter_gmres");
    if (ip->x != VNULL && ip->x->dim != ip->b->dim)
      error(E_SIZES,"iter_gmres");
    if (ip->eps <= 0.0) ip->eps = MACHEPS;
@@ -904,7 +904,7 @@ ITER *ip;
    if (! ip->Ax || ! ip->b || ! ip->stop_crit) 
      error(E_NULL,"mgcr");
    /* at least one direction vector must exist */
-   if ( ip->k <= 0) error(E_BOUNDS,"mgcr");
+   if ( ip->k <= 0) error(ERR_BOUNDS,"mgcr");
    /* if the vector x is given then b and x must have the same dimension */
    if ( ip->x && ip->x->dim != ip->b->dim)
      error(E_SIZES,"mgcr");

@@ -54,7 +54,7 @@ complex	*newval;
 	Real	norm, abs_val;
 
 	if ( i0 < 0 || i0 >= vec->dim )
-	    error(E_BOUNDS,"zhhvec");
+	    error(ERR_BOUNDS,"zhhvec");
 	out = _zv_copy(vec,out,i0);
 	tmp = _zin_prod(out,out,i0,Z_CONJ);
 	if ( tmp.re <= 0.0 )
@@ -97,7 +97,7 @@ double	beta;
 	if ( in->dim != hh->dim )
 		error(E_SIZES,"zhhtrvec");
 	if ( i0 < 0 || i0 > in->dim )
-	    error(E_BOUNDS,"zhhvec");
+	    error(ERR_BOUNDS,"zhhvec");
 
 	tmp = _zin_prod(hh,in,i0,Z_CONJ);
 	scale.re = -beta*tmp.re;
@@ -129,7 +129,7 @@ double	beta;
 	if ( M->n != hh->dim )
 		error(E_RANGE,"zhhtrrows");
 	if ( i0 < 0 || i0 > M->m || j0 < 0 || j0 > M->n )
-		error(E_BOUNDS,"zhhtrrows");
+		error(ERR_BOUNDS,"zhhtrrows");
 
 	if ( beta == 0.0 )	return (M);
 
@@ -180,7 +180,7 @@ double	beta;
 	if ( M->m != hh->dim )
 		error(E_SIZES,"zhhtrcols");
 	if ( i0 < 0 || i0 > M->m || j0 < 0 || j0 > M->n )
-		error(E_BOUNDS,"zhhtrcols");
+		error(ERR_BOUNDS,"zhhtrcols");
 
 	if ( beta == 0.0 )	return (M);
 

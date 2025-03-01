@@ -73,7 +73,7 @@ static	void	hhldr3cols(MAT *A, int k, int j0, double beta,
 	int	j, n;
 
 	if ( k < 0 || k+3 > A->m || j0 < 0 )
-		error(E_BOUNDS,"hhldr3cols");
+		error(ERR_BOUNDS,"hhldr3cols");
 	n = A->n;
 
 	/* printf("hhldr3cols:(l.%d) j0 = %d, k = %d, A at 0x%lx, m = %d, n = %d\n",
@@ -124,7 +124,7 @@ static	void	hhldr3rows(MAT *A, int k, int i0, double beta,
 	/* printf("hhldr3rows:(l.%d) A at 0x%lx\n", __LINE__, (long)A); */
 	/* printf("hhldr3rows: k = %d\n", k); */
 	if ( k < 0 || k+3 > A->n )
-		error(E_BOUNDS,"hhldr3rows");
+		error(ERR_BOUNDS,"hhldr3rows");
 	m = A->m;
 	i0 = min(i0,m-1);
 

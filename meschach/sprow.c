@@ -413,7 +413,7 @@ int	j0, type;
    if ( r1 == r_out || r2 == r_out )
      error(E_INSITU,"sprow_mltadd");
    if ( j0 < 0 )
-     error(E_BOUNDS,"sprow_mltadd");
+     error(ERR_BOUNDS,"sprow_mltadd");
    if ( ! r_out )
      r_out = sprow_get(MINROWLEN);
    
@@ -482,7 +482,7 @@ int	j0, type;
    if ( r1 == r_out || r2 == r_out )
      error(E_INSITU,"sprow_add");
    if ( j0 < 0 )
-     error(E_BOUNDS,"sprow_add");
+     error(ERR_BOUNDS,"sprow_add");
    if ( ! r_out )
      r_out = sprow_get(MINROWLEN);
    
@@ -551,7 +551,7 @@ int	j0, type;
    if ( r1 == r_out || r2 == r_out )
      error(E_INSITU,"sprow_sub");
    if ( j0 < 0 )
-     error(E_BOUNDS,"sprow_sub");
+     error(ERR_BOUNDS,"sprow_sub");
    if ( ! r_out )
      r_out = sprow_get(MINROWLEN);
    
@@ -617,7 +617,7 @@ int	j0, type;
    if ( ! r1 )
      error(E_NULL,"sprow_smlt");
    if ( j0 < 0 )
-     error(E_BOUNDS,"sprow_smlt");
+     error(ERR_BOUNDS,"sprow_smlt");
    if ( ! r_out )
      r_out = sprow_get(MINROWLEN);
    

@@ -67,7 +67,7 @@ int	max_row;
 	col = col_list->ive[j_idx];
 
 	if ( col < 0 || col >= A->n )
-	    error(E_BOUNDS,"scan_to");
+	    error(ERR_BOUNDS,"scan_to");
 	if ( row_num < 0 )
 	{
 	    idx = col;
@@ -138,7 +138,7 @@ int	col, *row_num, *idx, max_row;
     row_elt	*e=NULL;
     
     if ( col < 0 || col >= A->n )
-	error(E_BOUNDS,"chase_col");
+	error(ERR_BOUNDS,"chase_col");
     tmp_row = *row_num;
     if ( tmp_row < 0 )
     {

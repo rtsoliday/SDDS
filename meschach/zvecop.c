@@ -43,7 +43,7 @@ unsigned int	i0, flag;
 		error(E_NULL,"_zin_prod");
 	limit = min(a->dim,b->dim);
 	if ( i0 > limit )
-		error(E_BOUNDS,"_zin_prod");
+		error(ERR_BOUNDS,"_zin_prod");
 
 	return __zip__(&(a->ve[i0]),&(b->ve[i0]),(int)(limit-i0),flag);
 }
@@ -414,7 +414,7 @@ ZVEC	*vector,*out;
     {
 	for ( i=0; i<size; i++ )
 	    if ( px->pe[i] >= size )
-		error(E_BOUNDS,"px_vec");
+		error(ERR_BOUNDS,"px_vec");
 	    else
 		out->ve[i] = vector->ve[px->pe[i]];
     }
@@ -451,7 +451,7 @@ ZVEC	*vector,*out;
 	
 	for ( i = 0; i < size; i++ )
 	    if ( px->pe[i] < size )
-		error(E_BOUNDS,"px_vec");
+		error(ERR_BOUNDS,"px_vec");
 	    else
 		px->pe[i] = px->pe[i]-size;
     }
@@ -481,7 +481,7 @@ ZVEC	*x, *out;
     {
 	for ( i=0; i<size; i++ )
 	    if ( px->pe[i] >= size )
-		error(E_BOUNDS,"pxinv_vec");
+		error(ERR_BOUNDS,"pxinv_vec");
 	    else
 		out->ve[px->pe[i]] = x->ve[i];
     }

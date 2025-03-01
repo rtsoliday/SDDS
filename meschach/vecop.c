@@ -43,7 +43,7 @@ unsigned int	i0;
 		error(E_NULL,"_in_prod");
 	limit = min(a->dim,b->dim);
 	if ( i0 > limit )
-		error(E_BOUNDS,"_in_prod");
+		error(ERR_BOUNDS,"_in_prod");
 
 	return __ip__(&(a->ve[i0]),&(b->ve[i0]),(int)(limit-i0));
 	/*****************************************

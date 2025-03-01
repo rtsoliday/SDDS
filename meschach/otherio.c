@@ -95,7 +95,7 @@ int	low, high;
 		if ( retcode <= 0 )
 			error(E_FORMAT,"fin_int");
 		if ( low <= high && ( x < low || x > high ) )
-			error(E_BOUNDS,"fin_int");
+			error(ERR_BOUNDS,"fin_int");
 		return x;
 	}
 
@@ -138,7 +138,7 @@ double	low, high;
 		if ( retcode <= 0 )
 			error(E_FORMAT,"fin_double");
 		if ( low <= high && ( x < low || x > high ) )
-			error(E_BOUNDS,"fin_double");
+			error(ERR_BOUNDS,"fin_double");
 		return (double)x;
 	}
 

@@ -193,7 +193,7 @@ MAT	*Q;
    if ( ! ip->Ax || ! ip->x || ! a || ! b )
      error(E_NULL,"iter_lanczos");
    if ( ip->k <= 0 )
-     error(E_BOUNDS,"iter_lanczos");
+     error(ERR_BOUNDS,"iter_lanczos");
    if ( Q && ( Q->n < ip->x->dim || Q->m < ip->k ) )
      error(E_SIZES,"iter_lanczos");
    
@@ -335,7 +335,7 @@ int	*expt;
    if ( ! a )
      error(E_NULL,"product2");
    if ( k < 0 || k >= a->dim )
-     error(E_BOUNDS,"product2");
+     error(ERR_BOUNDS,"product2");
    
    mant = 1.0;
    *expt = 0;
