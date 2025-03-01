@@ -2,6 +2,10 @@ define make_prod_objs
 $(1)_OBJS = $(patsubst %.cpp, $(OBJ_DIR)/%.$(OBJEXT), $(patsubst %.cc, $(OBJ_DIR)/%.$(OBJEXT), $(patsubst %.c, $(OBJ_DIR)/%.$(OBJEXT), $($(1)_SRC))))
 endef
 
+ifneq ($(SCRIPTS),)
+ SCRIPTS := $(patsubst %,$(BIN_DIR)/%, $(SCRIPTS))
+endif
+
 ifneq ($(LIBRARY),)
  ifeq ($(OS), Windows)
   DLL = $(LIBRARY:.lib=.dll)
@@ -57,7 +61,7 @@ else
  endif
 endif
 
-all: $(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(LIBRARY) $(PYTHON_SHARED_LIBRARY) $(FULLPROD)
+all: $(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(LIBRARY) $(PYTHON_SHARED_LIBRARY) $(FULLPROD) $(SCRIPTS)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -118,6 +122,8 @@ $(OBJ_DIR)/%.$(OBJEXT): %.cc
 	$(CCC) $(CCFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CCFLAGS)) -c $< $(OUTPUT)
 $(OBJ_DIR)/%.$(OBJEXT): %.cpp
 	$(CCC) $(CCFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CCFLAGS)) -c $< $(OUTPUT)
+$(SCRIPTS): $(subst $(BIN_DIR)/,,$@)
+	cp -f $(subst $(BIN_DIR)/,,$@) $@
 
 clean:
 	rm -rf $(OBJ_DIR)
