@@ -12,6 +12,10 @@ LIB_DIR = $(DD)../lib/$(OS)-$(ARCH)
 # Common library search paths
 LIB_DIRS := /usr/lib64 /usr/lib/x86_64-linux-gnu /lib64 /usr/lib /lib /usr/X11/lib /opt/local/lib /sw/lib /usr/sfw/lib
 
+FFTW3_LIB = $(firstword $(wildcard \
+           $(addsuffix /libfftw3.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libfftw3.so, $(LIB_DIRS)) \
+           $(addsuffix /libfftw3.a, $(LIB_DIRS))))
 Z_LIB = $(firstword $(wildcard \
            $(addsuffix /libz.dylib, $(LIB_DIRS)) \
            $(addsuffix /libz.so, $(LIB_DIRS)) \
@@ -145,7 +149,7 @@ ifeq ($(OS), Windows)
   EXTRA_INC_DIRS = -I$(DD)../tiff -I$(DD)../gd -I$(DD)../png -I$(DD)../zlib -I$(DD)../lzma
   EXTRA_INC_DIRS = 
 else
-  EXTRA_INC_DIRS = $(sort $(dir $(filter-out ,$(Z_LIB) $(LZMA_LIB) $(HDF5_LIB) $(SZ_LIB) $(GSL_LIB) $(GSLCBLAS_LIB))))
+  EXTRA_INC_DIRS = $(sort $(dir $(filter-out ,$(Z_LIB) $(LZMA_LIB) $(HDF5_LIB) $(FFTW3_LIB) $(SZ_LIB) $(GSL_LIB) $(GSLCBLAS_LIB))))
   EXTRA_INC_DIRS := $(patsubst %/lib64/,%/include, $(EXTRA_INC_DIRS))
   EXTRA_INC_DIRS := $(patsubst %/x86_64-linux-gnu/,%/include, $(EXTRA_INC_DIRS))
   EXTRA_INC_DIRS := $(patsubst %/lib/,%/include, $(EXTRA_INC_DIRS))
@@ -169,11 +173,17 @@ MPI_CC = $(firstword $(wildcard \
            /opt/homebrew/bin/mpicc ))
 MPI_CCC = $(firstword $(wildcard \
            /usr/bin/mpic++ \
+           /usr/bin/mpicxx \
            /usr/local/bin/mpic++ \
+           /usr/local/bin/mpicxx \
            /usr/lib64/mpich/bin/mpic++ \
+           /usr/lib64/mpich/bin/mpicxx \
            /usr/lib64/openmpi/bin/mpic++ \
+           /usr/lib64/openmpi/bin/mpicxx \
            /opt/local/bin/mpic++ \
-           /opt/homebrew/bin/mpic++ ))
+           /opt/local/bin/mpicxx \
+           /opt/homebrew/bin/mpic++ \
+           /opt/homebrew/bin/mpicxx ))
 WIN_MPI = $(firstword $(wildcard \
            C:/Program\ Files/Microsoft\ MPI \
            C:/Program\ Files\ (x86)/Microsoft\ SDKs/MPI \
