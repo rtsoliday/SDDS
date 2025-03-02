@@ -53,13 +53,13 @@ ifeq ($(OS), Windows)
   PROD_DEPS = $(addprefix $(LIB_DIR)/,$(PROD_LIBS))
  endif
  ifneq ($(PROD_LIBS_SDDS),)
-  PROD_DEPS = $(addprefix $(SDDS_REPO)/lib/$(OS)-$(ARCH)/,$(PROD_LIBS))
+  PROD_DEPS = $(addprefix $(SDDS_REPO)/lib/$(OS)-$(ARCH)/,$(PROD_LIBS_SDDS))
  endif
  ifneq ($(LIBRARY_LIBS),)
   LIBRARY_DEPS = $(addprefix $(LIB_DIR)/,$(LIBRARY_LIBS))
  endif
  ifneq ($(LIBRARY_LIBS_SDDS),)
-  LIBRARY_DEPS = $(addprefix $(SDDS_REPO)/lib/$(OS)-$(ARCH)/,$(LIBRARY_LIBS))
+  LIBRARY_DEPS = $(addprefix $(SDDS_REPO)/lib/$(OS)-$(ARCH)/,$(LIBRARY_LIBS_SDDS))
  endif
 else
  ifneq ($(PROD_LIBS),)
