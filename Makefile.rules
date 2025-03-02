@@ -231,6 +231,8 @@ ifeq ($(OS), Linux)
   LIBPRE = lib
   LINKEXE = $(CCC)
 
+  F77 = gfortran -m64 -ffixed-line-length-132
+
   #-m64         Generates code for a 64-bit environment.
   #-O3          Enables high-level optimizations, focusing on maximizing performance.
   #-g           Includes debugging information in the compiled output.
@@ -243,6 +245,8 @@ ifeq ($(OS), Linux)
     CCC = $(CUSTOM_GCC_PATH)/bin/g++
     AR = $(CUSTOM_GCC_PATH)/bin/gcc-ar -rc
     RANLIB = $(CUSTOM_GCC_PATH)/bin/gcc-ranlib
+    F77 = $(CUSTOM_GCC_PATH)/bin/gfortran -m64 -ffixed-line-length-132
+    RPATH = -Wl,-rpath,/usr/local/oag/3rdParty/gcc-11.3.0/lib64
   endif
 endif
 
@@ -262,6 +266,8 @@ ifeq ($(OS), Darwin)
   LIBPRE = lib
   EXEEXT =
   LINKEXE = $(CCC)
+
+  F77 = gfortran -m64 -ffixed-line-length-132
 
   #-Wno-deprecated-non-prototype  Suppresses warnings about deprecated non-prototype function declarations.
   #-m64         Generates code for a 64-bit environment.

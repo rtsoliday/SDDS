@@ -52,12 +52,21 @@ ifeq ($(OS), Windows)
  ifneq ($(PROD_LIBS),)
   PROD_DEPS = $(addprefix $(LIB_DIR)/,$(PROD_LIBS))
  endif
+ ifneq ($(PROD_LIBS_SDDS),)
+  PROD_DEPS = $(addprefix $(SDDS_REPO)/lib/$(OS)-$(ARCH)/,$(PROD_LIBS))
+ endif
  ifneq ($(LIBRARY_LIBS),)
   LIBRARY_DEPS = $(addprefix $(LIB_DIR)/,$(LIBRARY_LIBS))
+ endif
+ ifneq ($(LIBRARY_LIBS_SDDS),)
+  LIBRARY_DEPS = $(addprefix $(SDDS_REPO)/lib/$(OS)-$(ARCH)/,$(LIBRARY_LIBS))
  endif
 else
  ifneq ($(PROD_LIBS),)
   PROD_DEPS = $(addsuffix .a,$(patsubst -l%,$(LIB_DIR)/lib%,$(PROD_LIBS)))
+ endif
+ ifneq ($(PROD_LIBS_SDDS),)
+  PROD_DEPS += $(addsuffix .a,$(patsubst -l%,$(SDDS_REPO)/lib/$(OS)-$(ARCH)/lib%,$(PROD_LIBS_SDDS)))
  endif
 endif
 
@@ -75,29 +84,30 @@ $(OBJ_DIR):
 ifeq ($(OS), Windows)
 
  %$(EXEEXT): %.$(OBJEXT) $(PROD_DEPS)
-	$(LINKEXE) -out:$@ $(@:.exe=.obj) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+	$(LINKEXE) -out:$@ $(@:.exe=.obj) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_LIBS_SDDS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
 	
  ifeq ($(NO_DLL), 1)
   $(LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
-	$(LINKLIB) -out:$(LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS)
+	$(LINKLIB) -out:$(LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_LIBS_SDDS) $(LIBRARY_SYS_LIBS)
 	cp -f $@ $(LIB_DIR)/
  else
   $(LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
-	$(LINKDLL) -out:$(DLL) -implib:$(LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS)
+	$(LINKDLL) -out:$(DLL) -implib:$(LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_LIBS_SDDS) $(LIBRARY_SYS_LIBS)
 	cp -f $(DLL) $(BIN_DIR)/
 	cp -f $@ $(LIB_DIR)/
  endif
  $(PYTHON_SHARED_LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
-	$(LINKDLL) -out:$(DLL) -implib:$(PYTHON_SHARED_LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS)
+	$(LINKDLL) -out:$(DLL) -implib:$(PYTHON_SHARED_LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_LIBS_SDDS) $(LIBRARY_SYS_LIBS)
 	cp -f $(DLL) $(BIN_DIR)/
 	cp -f $@ $(LIB_DIR)/
 
 else
 
  %$(EXEEXT): %.$(OBJEXT) $(PROD_DEPS)
-	$(CCC) -o $@ $@.o $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+	$(CCC) -o $@ $@.o $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_LIBS_SDDS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+
  $(LIBRARY): $(LIBRARY_OBJS)
 	$(AR) $(LIBRARY) $(LIBRARY_OBJS)
 	$(RANLIB) $(LIBRARY)
