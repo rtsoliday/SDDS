@@ -15,7 +15,7 @@ endif
 include Makefile.rules
 
 DIRS = $(GSL_REPO)
-DIRS += meschachs
+DIRS += meschach
 DIRS += xlslib
 DIRS += zlib
 DIRS += lzma
