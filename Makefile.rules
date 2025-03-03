@@ -223,7 +223,7 @@ ifeq ($(OS), Linux)
   RANLIB = ranlib
   CFLAGS = -m64 -O3 -g -Wall -fPIC $(EXTRA_INC_DIRS)
   CCFLAGS = -m64 -O3 -g -Wall -fPIC $(EXTRA_INC_DIRS)
-  LDFLAGS = -static-libstdc++ -rdynamic -m64
+  LDFLAGS += -rdynamic -m64
   LIBRARY_SYS_LIBS = -lpthread -lm -lrt -ldl -lgcc
   PROD_SYS_LIBS = -lpthread -lm -lrt -ldl -lgcc
   OBJEXT = o
@@ -247,6 +247,7 @@ ifeq ($(OS), Linux)
     RANLIB = $(CUSTOM_GCC_PATH)/bin/gcc-ranlib
     F77 = $(CUSTOM_GCC_PATH)/bin/gfortran -m64 -ffixed-line-length-132
     RPATH = -Wl,-rpath,/usr/local/oag/3rdParty/gcc-11.3.0/lib64
+    LDFLAGS += -static-libstdc++
   endif
 endif
 
