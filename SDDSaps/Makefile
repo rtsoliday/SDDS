@@ -173,7 +173,7 @@ endif
 ifeq ($(OS), Windows)
   CFLAGS += -I../tiff -I../lzma -I../zlib -openmp -wd4018 -wd4244 -wd4267 -wd4305 -wd4311 -wd4312
   CCFLAGS += -I../tiff -I../lzma -I../zlib -openmp -wd4018 -wd4244 -wd4267 -wd4305 -wd4311 -wd4312
-  PROD_LIBS = csa.lib nnetwork.lib mdbcommon.lib matlib.lib fftpack.lib SDDS1.lib rpnlib.lib mdbmth.lib mdblib.lib lzma.lib z.lib xls.lib
+  PROD_LIBS = csa.lib nnetwork.lib mdbcommon.lib matlib.lib fftpack.lib SDDS1.lib rpnlib.lib gsl.lib gslcblas.lib mdbmth.lib mdblib.lib lzma.lib z.lib xls.lib
   TIFF_LIBS = tiff.lib 
 endif
 

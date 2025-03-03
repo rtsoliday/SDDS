@@ -16,7 +16,7 @@ endif
 
 ifeq ($(OS), Windows)
   CFLAGS += -I../lzma -I$(HDF_DIR)/include -DEXPORT_MDBCOMMON -wd4267
-  PROD_LIBS = mdbcommon.lib SDDS1.lib mdbmth.lib mdblib.lib z.lib 
+  PROD_LIBS = mdbcommon.lib SDDS1.lib gsl.lib gslcblas.lib mdbmth.lib mdblib.lib z.lib 
   PROD_SYS_LIBS := $(HDF_DIR)/lib/libhdf5.lib $(HDF_DIR)/lib/libsz.lib $(HDF_DIR)/lib/libaec.lib $(PROD_SYS_LIBS)
 endif
 

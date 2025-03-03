@@ -146,7 +146,7 @@ else
 endif
 
 ifeq ($(OS), Windows)
-  EXTRA_INC_DIRS = -I$(DD)../tiff -I$(DD)../gd -I$(DD)../png -I$(DD)../zlib -I$(DD)../lzma
+  EXTRA_INC_DIRS = -I$(DD)../tiff -I$(DD)../gd -I$(DD)../png -I$(DD)../zlib -I$(DD)../lzma -I$(DD)../../gsl
   EXTRA_INC_DIRS = 
 else
   EXTRA_INC_DIRS = $(sort $(dir $(filter-out ,$(Z_LIB) $(LZMA_LIB) $(HDF5_LIB) $(FFTW3_LIB) $(SZ_LIB) $(GSL_LIB) $(GSLCBLAS_LIB))))
@@ -158,7 +158,7 @@ else
 endif
 
 ifeq ($(OS), Windows)
-  LIB_LINK_DIRS = -LIBPATH:$(DD)../lib/$(OS)-$(ARCH)
+  LIB_LINK_DIRS = -LIBPATH:$(DD)../lib/$(OS)-$(ARCH) -LIBPATH:$(DD)../../gsl/lib
 else
   LIB_LINK_DIRS = -L$(DD)../lib/$(OS)-$(ARCH)
 endif

@@ -25,7 +25,7 @@ endif
 ifeq ($(OS), Windows)
   CFLAGS += -I../../lzma -I../../zlib -wd4018 -wd4244 -wd4267 -wd4311 -wd4312 -openmp $(MKL_CFLAG) $(MKL_INCLUDE)
   PROD_SYS_LIBS := $(MKL_LIB) $(PROD_SYS_LIBS)
-  PROD_LIBS = mdbplt.lib gd.lib png.lib mdbcommon.lib matlib.lib fftpack.lib SDDS1.lib rpnlib.lib mdbmth.lib mdblib.lib lzma.lib z.lib meschach.lib 
+  PROD_LIBS = mdbplt.lib gd.lib png.lib mdbcommon.lib matlib.lib fftpack.lib SDDS1.lib rpnlib.lib gsl.lib gslcblas.lib mdbmth.lib mdblib.lib lzma.lib z.lib meschach.lib 
 endif
 
 include ../../Makefile.build

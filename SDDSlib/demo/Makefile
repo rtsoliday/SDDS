@@ -18,7 +18,7 @@ endif
 
 ifeq ($(OS), Windows)
   CFLAGS += -I../../lzma -I../../zlib
-  PROD_LIBS = SDDS1.lib rpnlib.lib mdbmth.lib mdblib.lib lzma.lib z.lib
+  PROD_LIBS = SDDS1.lib rpnlib.lib gsl.lib gslcblas.lib mdbmth.lib mdblib.lib lzma.lib z.lib
 endif
 
 include ../../Makefile.build

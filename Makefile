@@ -1,6 +1,21 @@
+# Detect OS and Architecture
+OS := $(shell uname -s)
+ifeq ($(findstring CYGWIN, $(OS)),CYGWIN)
+    OS := Windows
+endif
+
+# Check for external gsl repository needed on Windows
+ifeq ($(OS), Windows)
+  GSL_REPO = $(wildcard ../gsl)
+  ifeq ($(GSL_REPO),)
+    $(error GSL source code not found. Run 'git clone https://github.com/rtsoliday/gsl.git' next to the SDDS repository)
+  endif
+endif
+
 include Makefile.rules
 
-DIRS = meschach
+DIRS = $(GSL_REPO)
+DIRS += meschachs
 DIRS += xlslib
 DIRS += zlib
 DIRS += lzma
@@ -35,6 +50,11 @@ endif
 
 all: $(DIRS)
 
+ifneq ($(GSL_REPO),)
+  GSL_CLEAN = $(MAKE) -C $(GSL_REPO) -f Makefile.MSVC clean
+  $(GSL_REPO):
+	$(MAKE) -C $@ -f Makefile.MSVC all
+endif
 meschach:
 	$(MAKE) -C $@
 xlslib: meschach
@@ -47,7 +67,7 @@ mdblib: lzma
 	$(MAKE) -C $@
 mdbmth: mdblib
 	$(MAKE) -C $@
-rpns/code: mdbmth
+rpns/code: mdbmth $(GSL_REPO)
 	$(MAKE) -C $@
 namelist: rpns/code
 	$(MAKE) -C $@
@@ -101,6 +121,7 @@ pgapack: levmar
 endif
 
 clean:
+	$(GSL_CLEAN)
 	$(MAKE) -C meschach clean
 	$(MAKE) -C xlslib clean
 	$(MAKE) -C zlib clean

@@ -25,24 +25,25 @@ LIBRARY_SRC = array.c \
         stack.c \
         udf.c
 
-CFLAGS += -I../../include
+CFLAGS += -I../../include -DUSE_GSL
+CCFLAGS += -I../../include -DUSE_GSL
 
 ifeq ($(OS), Linux)
-  CFLAGS += -DUSE_GSL
+  CFLAGS += -fopenmp
+  CCFLAGS += -fopenmp
   PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lrpnlib -lmdbmth -lmdblib 
 endif
 
 ifeq ($(OS), Darwin)
-  CFLAGS += -DUSE_GSL
   PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lrpnlib -lmdbmth -lmdblib 
 endif
 
 ifeq ($(OS), Windows)
-  CFLAGS += /wd4244 /wd4267
+  CFLAGS += /wd4244 /wd4267 -I../../../gsl
   LIBRARY_CFLAGS = -DEXPORT_RPNLIB
-  LIBRARY_LIBS = mdbmth.lib mdblib.lib
+  LIBRARY_LIBS = gsl.lib gslcblas.lib mdbmth.lib mdblib.lib
   PROD_LIBS = rpnlib.lib mdbmth.lib mdblib.lib
 endif
 

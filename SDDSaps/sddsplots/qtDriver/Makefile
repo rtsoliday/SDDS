@@ -26,7 +26,7 @@ endif
 ifeq ($(OS), Windows)
   CCFLAGS += -I../../../include -I$(OBJ_DIR) /std:c++17 /Zc:__cplusplus /permissive- -I../../../../include -I"C:\Qt\6.8.2\msvc2022_64\include" -I"C:\Qt\6.8.2\msvc2022_64\include\QtCore" -I"C:\Qt\6.8.2\msvc2022_64\include\QtGui" -I"C:\Qt\6.8.2\msvc2022_64\include\QtWidgets"
   LDFLAGS += /LIBPATH:"C:\Qt\6.8.2\msvc2022_64\lib" Qt6PrintSupport.lib Qt6Widgets.lib Qt6Gui.lib Qt6Core.lib
-  PROD_LIBS = mdbplt.lib gd.lib png.lib mdbcommon.lib SDDS1.lib rpnlib.lib mdbmth.lib mdblib.lib lzma.lib z.lib
+  PROD_LIBS = mdbplt.lib gd.lib png.lib mdbcommon.lib SDDS1.lib rpnlib.lib gsl.lib gslcblas.lib mdbmth.lib mdblib.lib lzma.lib z.lib
   PROD_SYS_LIBS = advapi32.lib
   MOC = moc.exe
 endif

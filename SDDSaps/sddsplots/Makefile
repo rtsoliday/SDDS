@@ -42,7 +42,7 @@ endif
 
 ifeq ($(OS), Windows)
   CFLAGS += -I../../png -I../../gd -I../../lzma -I../../zlib -wd4018 -wd4244 -wd4267 -wd4305
-  PROD_LIBS = mdbplt.lib gd.lib png.lib mdbcommon.lib SDDS1.lib rpnlib.lib mdbmth.lib mdblib.lib lzma.lib z.lib
+  PROD_LIBS = mdbplt.lib gd.lib png.lib mdbcommon.lib SDDS1.lib rpnlib.lib gsl.lib gslcblas.lib mdbmth.lib mdblib.lib lzma.lib z.lib
   PROD_SYS_LIBS = advapi32.lib
   NO_DLL = 1
 endif
