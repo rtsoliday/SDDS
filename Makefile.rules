@@ -292,7 +292,7 @@ endif
 
 # Adjust for Windows in a cygwin terminal
 ifeq ($(OS), Windows)
-  HDF_DIR = c:/HDF5/1.12.1
+  HDF_DIR = $(DD)../../hdf5/HDF5-1.14.6-win64
   CC = cl
   CCC = cl
   CFLAGS = -nologo -FC -D__STDC__=0 -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE -Ox -GL -Oy- -W3 -MD $(EXTRA_INC_DIRS)

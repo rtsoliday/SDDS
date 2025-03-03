@@ -10,6 +10,16 @@ ifeq ($(OS), Windows)
   ifeq ($(GSL_REPO),)
     $(error GSL source code not found. Run 'git clone https://github.com/rtsoliday/gsl.git' next to the SDDS repository)
   endif
+
+  HDF5_REPO = $(wildcard ../hdf5/HDF5-1.14.6-win64)
+  ifeq ($(HDF5_REPO),)
+    $(info HDF5 source code not found. Run:)
+    $(info wget https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6-win-vs2022_cl.zip)
+    $(info unzip hdf5-1.14.6-win-vs2022_cl.zip)
+    $(info cd hdf5)
+    $(info unzip HDF5-1.14.6-win64.zip)
+    $(error exiting)
+  endif
 endif
 
 include Makefile.rules
@@ -121,7 +131,6 @@ pgapack: levmar
 endif
 
 clean:
-	$(GSL_CLEAN)
 	$(MAKE) -C meschach clean
 	$(MAKE) -C xlslib clean
 	$(MAKE) -C zlib clean
