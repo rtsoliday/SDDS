@@ -39,7 +39,7 @@ int f2c_dgemm(char *transA, char *transB, integer *M, integer *N, integer *K,
 #ifdef LAPACK
 #  include "f2c.h"
 #  include <lapacke.h>
-int dgemm_(char *transa, char *transb, const int *m, const int *n, const int *k, double *alpha, double *a, const int *lda, double *b, const int *ldb, double *beta, double *c, const int *ldc);
+int dgemm_(char *transa, char *transb, lapack_int *m, lapack_int *n, lapack_int *k, double *alpha, double *a, lapack_int *lda, double *b, lapack_int *ldb, double *beta, double *c, lapack_int *ldc);
 #endif
 
 /* m_get -- gets an mxn matrix (in MAT form) by dynamic memory allocation in column major order*/
@@ -291,11 +291,6 @@ MAT *matrix_mult(MAT *mat1, MAT *mat2) {
   lda = MAX(1, mat1->m);
   ldb = MAX(1, mat2->m);
   new_mat = matrix_get(mat1->m, mat2->n);
-#  if defined(SOLARIS)
-  f2c_dgemm("N", "N",
-            &new_mat->m, &new_mat->n, &kk, &alpha, mat1->base,
-            &lda, mat2->base, &ldb, &beta, new_mat->base, &new_mat->m);
-#  else
 #    if defined(MKL)
   dgemm_("N", "N",
          (MKL_INT *)&new_mat->m, (MKL_INT *)&new_mat->n, (MKL_INT *)&kk, &alpha, mat1->base,
@@ -307,10 +302,9 @@ MAT *matrix_mult(MAT *mat1, MAT *mat2) {
          (int *)&lda, mat2->base, (int *)&ldb, &beta, new_mat->base, (__LAPACK_int *)&new_mat->m);
 #      else
   dgemm_("N", "N",
-         &new_mat->m, &new_mat->n, (lapack_int *)&kk, &alpha, mat1->base,
-         (lapack_int *)&lda, mat2->base, (lapack_int *)&ldb, &beta, new_mat->base, &new_mat->m);
+    (lapack_int *)&new_mat->m, (lapack_int *)&new_mat->n, (lapack_int *)&kk, &alpha, mat1->base,
+         (lapack_int *)&lda, mat2->base, (lapack_int *)&ldb, &beta, new_mat->base, (lapack_int *)&new_mat->m);
 #      endif
-#    endif
 #  endif
 #else
   new_mat = op_matrix_mult(mat1, mat2);
@@ -548,11 +542,6 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
   kk = MIN(U->n, V->m);
   lda = MAX(1, U->m);
   ldb = MAX(1, V->m);
-#  if defined(SOLARIS)
-  f2c_dgemm("N", "N",
-            &U->m, &V->n, &kk, &alpha, U->base,
-            &lda, V->base, &ldb, &beta, Invt->base, &U->m);
-#  else
 #    if defined(MKL)
   dgemm_("N", "N",
          (MKL_INT *)&U->m, (MKL_INT *)&V->n, (MKL_INT *)&kk, &alpha, U->base,
@@ -564,11 +553,10 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
          (int *)&lda, V->base, &ldb, &beta, Invt->base, (__LAPACK_int *)&U->m);
 #      else
   dgemm_("N", "N",
-         &U->m, &V->n, &kk, &alpha, U->base,
-         (lapack_int *)&lda, V->base, &ldb, &beta, Invt->base, &U->m);
+    (lapack_int *)&U->m, (lapack_int *)&V->n, &kk, &alpha, U->base,
+         (lapack_int *)&lda, V->base, (lapack_int *)&ldb, &beta, Invt->base, (lapack_int *)&U->m);
 #      endif
 #    endif
-#  endif
   matrix_free(V);
   if (Vt_matrix) {
     if (*Vt_matrix)
@@ -624,31 +612,31 @@ void *SDDS_GetCastMatrixOfRowsByColumn(SDDS_DATASET *SDDS_dataset, int32_t *n_ro
   void *data;
   long i, j, k, size;
   /*  long type;*/
-  if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_GetCastMatrixOfRows_SunPerf"))
+  if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_GetCastMatrixOfRowsByColumn"))
     return (NULL);
   if (!SDDS_NUMERIC_TYPE(sddsType)) {
-    SDDS_SetError("Unable to get matrix of rows--no columns selected (SDDS_GetCastMatrixOfRows_SunPerf) (1)");
+    SDDS_SetError("Unable to get matrix of rows--no columns selected (SDDS_GetCastMatrixOfRowsByColumn) (1)");
     return NULL;
   }
   if (SDDS_dataset->n_of_interest <= 0) {
-    SDDS_SetError("Unable to get matrix of rows--no columns selected (SDDS_GetCastMatrixOfRows_SunPerf) (2)");
+    SDDS_SetError("Unable to get matrix of rows--no columns selected (SDDS_GetCastMatrixOfRowsByColumn) (2)");
     return (NULL);
   }
-  if (!SDDS_CheckTabularData(SDDS_dataset, "SDDS_GetCastMatrixOfRows_SunPerf"))
+  if (!SDDS_CheckTabularData(SDDS_dataset, "SDDS_GetCastMatrixOfRowsByColumn"))
     return (NULL);
   size = SDDS_type_size[sddsType - 1];
   if ((*n_rows = SDDS_CountRowsOfInterest(SDDS_dataset)) <= 0) {
-    SDDS_SetError("Unable to get matrix of rows--no rows of interest (SDDS_GetCastMatrixOfRows_SunPerf) (3)");
+    SDDS_SetError("Unable to get matrix of rows--no rows of interest (SDDS_GetCastMatrixOfRowsByColumn) (3)");
     return (NULL);
   }
   for (i = 0; i < SDDS_dataset->n_of_interest; i++) {
     if (!SDDS_NUMERIC_TYPE(SDDS_dataset->layout.column_definition[SDDS_dataset->column_order[i]].type)) {
-      SDDS_SetError("Unable to get matrix of rows--not all columns are numeric (SDDS_GetCastMatrixOfRows_SunPerf) (4)");
+      SDDS_SetError("Unable to get matrix of rows--not all columns are numeric (SDDS_GetCastMatrixOfRowsByColumn) (4)");
       return NULL;
     }
   }
   if (!(data = (void *)SDDS_Malloc(size * (*n_rows) * SDDS_dataset->n_of_interest))) {
-    SDDS_SetError("Unable to get matrix of rows--memory allocation failure (SDDS_GetCastMatrixOfRows_SunPerf) (5)");
+    SDDS_SetError("Unable to get matrix of rows--memory allocation failure (SDDS_GetCastMatrixOfRowsByColumn) (5)");
     return (NULL);
   }
   for (j = k = 0; j < SDDS_dataset->n_rows; j++) {
@@ -700,10 +688,10 @@ double matrix_det(MAT *A) {
 #    endif
 #  endif
   if (info < 0) {
-    fprintf(stderr, "Error in LU decomposition, the %ld-th argument had an illegal value.\n", -info);
+    fprintf(stderr, "Error in LU decomposition, the %d-th argument had an illegal value.\n", -info);
     return 0;
   } else if (info > 0) {
-    fprintf(stderr, "Error in LU decomposition, U(%ld) is exactly zero. The factorization has been completed, but the factor U is exactly singular, and division by zero will occur if it is used to solve a system of equations.\n", info);
+    fprintf(stderr, "Error in LU decomposition, U(%d) is exactly zero. The factorization has been completed, but the factor U is exactly singular, and division by zero will occur if it is used to solve a system of equations.\n", info);
     return 0;
   }
   for (i = 0; i < n; i++)
@@ -956,11 +944,6 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
   kk = MIN(U->n, V->m);
   lda = MAX(1, U->m);
   ldb = MAX(1, V->m);
-#  if defined(SOLARIS)
-  f2c_dgemm("N", "N",
-            &U->m, &V->n, &kk, &alpha, U->base,
-            &lda, V->base, &ldb, &beta, Invt->base, &U->m);
-#  else
 #    if defined(MKL)
   dgemm_("N", "N",
          (MKL_INT *)&U->m, (MKL_INT *)&V->n, (MKL_INT *)&kk, &alpha, U->base,
@@ -972,11 +955,10 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
          (int *)&lda, V->base, &ldb, &beta, Invt->base, (__LAPACK_int *)&U->m);
 #      else
   dgemm_("N", "N",
-         &U->m, &V->n, &kk, &alpha, U->base,
-         (lapack_int *)&lda, V->base, &ldb, &beta, Invt->base, &U->m);
+    (lapack_int *)&U->m, (lapack_int *)&V->n, &kk, &alpha, U->base,
+         (lapack_int *)&lda, V->base, &ldb, &beta, Invt->base, (lapack_int *)&U->m);
 #      endif
 #    endif
-#  endif
   matrix_free(V);
   if (Vt_matrix) {
     if (*Vt_matrix)

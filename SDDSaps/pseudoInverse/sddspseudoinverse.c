@@ -65,7 +65,7 @@ int f2c_dgemm(char *transA, char *transB, integer *M, integer *N, integer *K,
 #ifdef LAPACK
 #  include "f2c.h"
 #  include <lapacke.h>
-int dgemm_(char *transa, char *transb, const int *m, const int *n, const int *k, double *alpha, double *a, const int *lda, double *b, const int *ldb, double *beta, double *c, const int *ldc);
+int dgemm_(char *transa, char *transb, lapack_int *m, lapack_int *n, lapack_int *k, double *alpha, double *a, const lapack_int *lda, double *b, const lapack_int *ldb, double *beta, double *c, const lapack_int *ldc);
 #endif
 
 /* matrix.h requires machine.h  err.h and meminfo.h. */
@@ -1442,7 +1442,9 @@ int main(int argc, char **argv) {
            (MKL_INT *)&lda, V->base, (MKL_INT *)&ldb, &beta, RInvt->base, (MKL_INT *)&U->m);
 #      endif
 #      if defined(LAPACK)
-    dgemm_("N", "N", &U->m, &V->n, &kk, &alpha, U->base, &lda, V->base, &ldb, &beta, RInvt->base, &U->m);
+    dgemm_("N", "N",
+           (lapack_int *)&U->m, (lapack_int *)&V->n, &kk, &alpha, U->base,
+           &lda, V->base, &ldb, &beta, RInvt->base, (lapack_int *)&U->m);
 #      endif
 #    endif
     m_free(V);
@@ -1534,12 +1536,12 @@ int main(int argc, char **argv) {
 #else
       if (!invertMultiply)
         dgemm_("T", "N",
-               &Product->m, &Product->n, &kk, &alpha, RInvt->base, &lda,
-               Multi->base, &ldb, &beta, Product->base, &Product->m);
+          (lapack_int *)&Product->m, (lapack_int *)&Product->n, &kk, &alpha, RInvt->base, (lapack_int *)&lda,
+               Multi->base, (lapack_int *)&ldb, &beta, Product->base, (lapack_int *)&Product->m);
       else
         dgemm_("N", "T",
-               &Product->m, &Product->n, &kk, &alpha, Multi->base, &lda,
-               RInvt->base, &ldb, &beta, Product->base, &Product->m);
+               (lapack_int *)&Product->m, (lapack_int *)&Product->n, &kk, &alpha, Multi->base, (lapack_int *)&lda,
+               RInvt->base, (lapack_int *)&ldb, &beta, Product->base, (lapack_int *)&Product->m);
 #endif
 #      endif
 #    endif
@@ -1912,8 +1914,8 @@ int main(int argc, char **argv) {
 #      endif
 #      if defined(LAPACK)
       dgemm_("N", "N",
-             &U->m, &V->n, &kk, &alpha, U->base,
-             &lda, V->base, &ldb, &beta, Rnewt->base, &U->m);
+        (lapack_int *)&U->m, (lapack_int *)&V->n, &kk, &alpha, U->base,
+             &lda, V->base, &ldb, &beta, Rnewt->base, (lapack_int *)&U->m);
 #      endif
 #    endif
       m_free(V);

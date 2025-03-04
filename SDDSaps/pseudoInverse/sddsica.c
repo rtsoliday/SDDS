@@ -283,9 +283,6 @@ int main(int argc, char **argv) {
   doublereal *work;
   lapack_int lwork;
   lapack_int lda;
-  double alpha = 1.0, beta = 0.0;
-
-  MAT *tmpR = NULL;
 #endif
 
   betaPair[0] = betaPair[1] = betaPair[2] = betaPair[3] = 0;
@@ -957,7 +954,7 @@ int main(int argc, char **argv) {
 
     lwork = work[0];
     if (verbose & FL_VERYVERBOSE)
-      fprintf(stderr, "Work space size returned from dgesvd_ is %ld.\n", lwork);
+      fprintf(stderr, "Work space size returned from dgesvd_ is %d.\n", lwork);
     work = (doublereal *)realloc(work, sizeof(doublereal) * lwork);
     if (lapackMethod == 1) {
       LAPACK_dgesdd((char *)&calcMode, (lapack_int *)&R->m, (lapack_int *)&R->n,
