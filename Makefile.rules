@@ -10,7 +10,7 @@ BIN_DIR = $(DD)../bin/$(OS)-$(ARCH)
 LIB_DIR = $(DD)../lib/$(OS)-$(ARCH)
 
 # Common library search paths
-LIB_DIRS := /usr/lib64 /usr/lib/x86_64-linux-gnu /lib64 /usr/lib /lib /usr/X11/lib /opt/local/lib /sw/lib /usr/sfw/lib
+LIB_DIRS := /usr/lib64 /usr/lib/x86_64-linux-gnu /lib64 /usr/lib /lib /usr/X11/lib /opt/local/lib /sw/lib /usr/sfw/lib $(DD)../../lib
 
 FFTW3_LIB = $(firstword $(wildcard \
            $(addsuffix /libfftw3.dylib, $(LIB_DIRS)) \
