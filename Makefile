@@ -113,10 +113,10 @@ SDDSaps: tiff
 	$(MAKE) -C $@
 SDDSaps/sddsplots: SDDSaps
 	$(MAKE) -C $@
-#SDDSaps/sddsplots/winMotifDriver: SDDSaps/sddsplots
-#	$(MAKE) -C $@
-#SDDSaps/sddsplots/motifDriver: SDDSaps/sddsplots/winMotifDriver
-#	$(MAKE) -C $@
+SDDSaps/sddsplots/winMotifDriver: SDDSaps/sddsplots
+	$(MAKE) -C $@
+SDDSaps/sddsplots/motifDriver: SDDSaps/sddsplots/winMotifDriver
+	$(MAKE) -C $@
 SDDSaps/sddsplots/qtDriver: SDDSaps/sddsplots
 	$(MAKE) -C $@
 SDDSaps/sddscontours: SDDSaps/sddsplots/qtDriver

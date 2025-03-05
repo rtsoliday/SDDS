@@ -9,8 +9,23 @@ OBJ_DIR = O.$(OS)-$(ARCH)
 BIN_DIR = $(DD)../bin/$(OS)-$(ARCH)
 LIB_DIR = $(DD)../lib/$(OS)-$(ARCH)
 
+ifneq ($(wildcard $(DD)../.svn),)
+ USE_EPICS_DIRS = 1
+ EPICS_HOST := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+ EPICS_ARCH = $(ARCH)
+ ifeq ($(findstring cygwin, $(EPICS_HOST)),cygwin)
+    EPICS_HOST := windows
+    EPICS_ARCH := x64
+ endif
+ ifeq ($(ARCH),arm64)
+    EPICS_ARCH := aarch64
+ endif
+ EPICS_LIB_DIR = $(DD)../../../lib/$(EPICS_HOST)-$(EPICS_ARCH)
+ EPICS_BIN_DIR = $(DD)../../../bin/$(EPICS_HOST)-$(EPICS_ARCH)
+endif
+
 # Common library search paths
-LIB_DIRS := /usr/lib64 /usr/lib/x86_64-linux-gnu /lib64 /usr/lib /lib /usr/X11/lib /opt/local/lib /sw/lib /usr/sfw/lib $(DD)../../lib
+LIB_DIRS := $(EPICS_LIB_DIR) /usr/lib64 /usr/lib/x86_64-linux-gnu /lib64 /usr/lib /lib /usr/X11/lib /opt/local/lib /sw/lib /usr/sfw/lib $(DD)../../lib
 
 FFTW3_LIB = $(firstword $(wildcard \
            $(addsuffix /libfftw3.dylib, $(LIB_DIRS)) \
@@ -169,6 +184,7 @@ MPI_CC = $(firstword $(wildcard \
            /usr/local/bin/mpicc \
            /usr/lib64/mpich/bin/mpicc \
            /usr/lib64/openmpi/bin/mpicc \
+           /usr/lib64/mpich-3.2/bin/mpicc \
            /opt/local/bin/mpicc \
            /opt/homebrew/bin/mpicc ))
 MPI_CCC = $(firstword $(wildcard \
@@ -180,6 +196,7 @@ MPI_CCC = $(firstword $(wildcard \
            /usr/lib64/mpich/bin/mpicxx \
            /usr/lib64/openmpi/bin/mpic++ \
            /usr/lib64/openmpi/bin/mpicxx \
+           /usr/lib64/mpich-3.2/bin/mpicxx \
            /opt/local/bin/mpic++ \
            /opt/local/bin/mpicxx \
            /opt/homebrew/bin/mpic++ \

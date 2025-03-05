@@ -39,5 +39,7 @@ include ../Makefile.build
 $(OBJ_DIR)/nlpp$(EXEEXT): $(nlpp_OBJS) $(LIBRARY) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(nlpp_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 .NOTPARALLEL: $(LIBRARY)

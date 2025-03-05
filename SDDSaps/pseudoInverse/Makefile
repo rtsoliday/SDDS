@@ -33,12 +33,18 @@ include ../../Makefile.build
 $(OBJ_DIR)/sddsmatrixop$(EXEEXT): $(sddsmatrixop_OBJS) $(LIBRARY) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsmatrixop_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sdds2dpfit$(EXEEXT): $(sdds2dpfit_OBJS) $(LIBRARY) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sdds2dpfit_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsica$(EXEEXT): $(sddsica_OBJS) $(LIBRARY) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsica_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 

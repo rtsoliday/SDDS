@@ -16,6 +16,8 @@ $(OBJ_DIR)/mpl_motif$(EXEEXT): $(mpl_motif_OBJS) $(PROD_DEPS)
 	rc -l 0x409 -fo $(OBJ_DIR)/mpl_motif.res mpl_motif.rc
 	$(LINKEXE) /SUBSYSTEM:WINDOWS $(OUTPUTEXE) $(mpl_motif_OBJS) $(OBJ_DIR)/mpl_motif.res $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 else
 

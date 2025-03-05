@@ -182,104 +182,156 @@ include ../Makefile.build
 $(OBJ_DIR)/sdds2tiff$(EXEEXT): $(sdds2tiff_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sdds2tiff_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(TIFF_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/tiff2sdds$(EXEEXT): $(tiff2sdds_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(tiff2sdds_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(TIFF_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sdds2mpl$(EXEEXT): $(sdds2mpl_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sdds2mpl_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsanalyticsignal$(EXEEXT): $(sddsanalyticsignal_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsanalyticsignal_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddscorrelate$(EXEEXT): $(sddscorrelate_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddscorrelate_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsderiv$(EXEEXT): $(sddsderiv_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsderiv_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsdistest$(EXEEXT): $(sddsdistest_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsdistest_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsfdfilter$(EXEEXT): $(sddsfdfilter_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsfdfilter_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsfft$(EXEEXT): $(sddsfft_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsfft_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sdds2dfft$(EXEEXT): $(sdds2dfft_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sdds2dfft_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsgenericfit$(EXEEXT): $(sddsgenericfit_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsgenericfit_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsinteg$(EXEEXT): $(sddsinteg_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsinteg_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsinterp$(EXEEXT): $(sddsinterp_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsinterp_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddskde$(EXEEXT): $(sddskde_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddskde_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddskde2d$(EXEEXT): $(sddskde2d_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddskde2d_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsmultihist$(EXEEXT): $(sddsmultihist_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsmultihist_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsmxref$(EXEEXT): $(sddsmxref_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsmxref_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsnaff$(EXEEXT): $(sddsnaff_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsnaff_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsoutlier$(EXEEXT): $(sddsoutlier_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsoutlier_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsprocess$(EXEEXT): $(sddsprocess_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsprocess_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsrowstats$(EXEEXT): $(sddsrowstats_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsrowstats_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsrunstats$(EXEEXT): $(sddsrunstats_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsrunstats_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsshiftcor$(EXEEXT): $(sddsshiftcor_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsshiftcor_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddssplinefit$(EXEEXT): $(sddssplinefit_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddssplinefit_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsspotanalysis$(EXEEXT): $(sddsspotanalysis_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsspotanalysis_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 $(OBJ_DIR)/sddsxref$(EXEEXT): $(sddsxref_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsxref_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 

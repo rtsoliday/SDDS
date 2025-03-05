@@ -688,10 +688,10 @@ double matrix_det(MAT *A) {
 #    endif
 #  endif
   if (info < 0) {
-    fprintf(stderr, "Error in LU decomposition, the %d-th argument had an illegal value.\n", -info);
+    fprintf(stderr, "Error in LU decomposition, the %ld-th argument had an illegal value.\n", (long)-info);
     return 0;
   } else if (info > 0) {
-    fprintf(stderr, "Error in LU decomposition, U(%d) is exactly zero. The factorization has been completed, but the factor U is exactly singular, and division by zero will occur if it is used to solve a system of equations.\n", info);
+    fprintf(stderr, "Error in LU decomposition, U(%ld) is exactly zero. The factorization has been completed, but the factor U is exactly singular, and division by zero will occur if it is used to solve a system of equations.\n", (long)info);
     return 0;
   }
   for (i = 0; i < n; i++)
