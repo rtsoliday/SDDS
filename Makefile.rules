@@ -22,6 +22,7 @@ ifneq ($(wildcard $(DD)../.svn),)
  endif
  EPICS_LIB_DIR = $(DD)../../../lib/$(EPICS_HOST)-$(EPICS_ARCH)
  EPICS_BIN_DIR = $(DD)../../../bin/$(EPICS_HOST)-$(EPICS_ARCH)
+ EPICS_INC_DIR = $(DD)../../../include
 endif
 
 # Common library search paths

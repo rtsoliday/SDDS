@@ -14,6 +14,7 @@ ifeq ($(OS), Windows)
   HDF5_REPO = $(wildcard ../hdf5/HDF5-1.14.6-win64)
   ifeq ($(HDF5_REPO),)
     $(info HDF5 source code not found. Run:)
+    $(info cd ..)
     $(info wget https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6-win-vs2022_cl.zip)
     $(info unzip hdf5-1.14.6-win-vs2022_cl.zip)
     $(info cd hdf5)
@@ -25,6 +26,7 @@ endif
 include Makefile.rules
 
 DIRS = $(GSL_REPO)
+DIRS += include
 DIRS += meschach
 DIRS += xlslib
 DIRS += zlib
@@ -65,7 +67,9 @@ ifneq ($(GSL_REPO),)
   $(GSL_REPO):
 	$(MAKE) -C $@ -f Makefile.MSVC all
 endif
-meschach:
+include:
+	$(MAKE) -C $@
+meschach: include
 	$(MAKE) -C $@
 xlslib: meschach
 	$(MAKE) -C $@
@@ -131,6 +135,7 @@ pgapack: levmar
 endif
 
 clean:
+	$(MAKE) -C include clean
 	$(MAKE) -C meschach clean
 	$(MAKE) -C xlslib clean
 	$(MAKE) -C zlib clean

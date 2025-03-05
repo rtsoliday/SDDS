@@ -150,7 +150,11 @@ sddsxref_SRC = sddsxref.c SDDSaps.c
 sdds2tiff_SRC = sdds2tiff.c
 tiff2sdds_SRC = tiff2sdds.c
 
-SVN_VERSION=GIT_$(shell git log --oneline | wc -l | sed 's/^[[:space:]]*//')
+ifneq ($(wildcard $(DD)../.svn),)
+  SVN_VERSION=$(shell svnversion .)
+else
+  SVN_VERSION=GIT_$(shell git log --oneline | wc -l | sed 's/^[[:space:]]*//')
+endif
 
 CFLAGS += -DRPN_SUPPORT -DzLib -DSVN_VERSION=\"$(SVN_VERSION)\" -I../include -I../2d_interpolate/nn -I../2d_interpolate/csa -I../xlslib -DUSE_XLS
 CCFLAGS += -DRPN_SUPPORT -DzLib -DSVN_VERSION=\"$(SVN_VERSION)\" -I../include -I../2d_interpolate/nn -I../2d_interpolate/csa -I../xlslib -DUSE_XLS

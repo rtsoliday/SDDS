@@ -6,6 +6,12 @@ ifneq ($(SCRIPTS),)
  SCRIPTS := $(patsubst %,$(BIN_DIR)/%, $(SCRIPTS))
 endif
 
+ifneq ($(EPICS_INC_DIR),)
+ifneq ($(INC),)
+ INC := $(patsubst %,$(EPICS_INC_DIR)/%, $(INC))
+endif
+endif
+
 ifneq ($(LIBRARY),)
  ifeq ($(OS), Windows)
   DLL = $(LIBRARY:.lib=.dll)
@@ -70,13 +76,16 @@ else
  endif
 endif
 
-all: $(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(EPICS_BIN_DIR) $(EPICS_LIB_DIR) $(LIBRARY) $(PYTHON_SHARED_LIBRARY) $(FULLPROD) $(SCRIPTS)
+all: $(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(EPICS_BIN_DIR) $(EPICS_LIB_DIR) $(EPICS_INC_DIR) $(LIBRARY) $(PYTHON_SHARED_LIBRARY) $(FULLPROD) $(SCRIPTS) $(INC)
 
 $(EPICS_BIN_DIR):
 	mkdir -p $(EPICS_BIN_DIR)
 
 $(EPICS_LIB_DIR):
 	mkdir -p $(EPICS_LIB_DIR)
+
+$(EPICS_INC_DIR):
+	mkdir -p $(EPICS_INC_DIR)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -161,6 +170,11 @@ $(SCRIPTS): $(subst $(BIN_DIR)/,,$@)
 	cp -f $(subst $(BIN_DIR)/,,$@) $@
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
+ifneq ($(EPICS_INC_DIR),)
+$(INC): $(subst $(EPICS_INC_DIR)/,,$@)
+	cp -f $(subst $(EPICS_INC_DIR)/,,$@) $@
+
+endif
 
 clean:
 	rm -rf $(OBJ_DIR)
