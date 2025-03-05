@@ -1,0 +1,116 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsprintout}
+\label{sddsprintout}
+
+\begin{itemize}
+\item {\bf description:} \hspace*{1mm}\\
+{\tt sddsprintout} provides formatted text output of data from columns and parameters.  It is similar to 
+{\tt sdds2stream}, but provides better control of the appearance of the text.
+
+\item {\bf examples:}
+Make a printout of APS design beta functions along with the tunes:
+\begin{flushleft}{\tt
+sddsprintout APS0.twi -column=ElementName -column='beta?' -parameters='nu?' 
+}\end{flushleft}
+
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsprintout [-pipe[=input]] [{\em SDDSinput}] [{\em outputFile}] 
+[-columns[={\em nameList}[,format={\em string}][,label={\em string}][,editLabel={\em command}]\\
+ \hspace*{5mm} [,useDefaultFormat][,endsLine][,blankLines={\em number}]]]
+[-parameters[={\em nameList}[,format={\em string}][,label={\em string}][,editLabel={\em command}] \\
+ \hspace*{5mm} [,useDefaultFormat][,endsLine][,blankLines={\em number}]]]
+[-spreadsheet[=delimiter={\em string}][,quoteMark={\em string}][,noLabels][,schFile={\em filename}]]
+[-fromPage={\em number}] [-toPage={\em number}] 
+[-formatDefaults={\em SDDStype}={\em formatString}[,...]]
+[-width={\em integer}] [-pageAdvance] [-paginate[=lines={\em number}][,noTitle][,noLabels]]
+[-postPageLines={\em number}] [-title={\em string}] [-noTitle] [-noWarnings]
+
+}\end{flushleft}
+\item {\bf files:}
+{\em SDDSinput} is the SDDS file from which data is printed.  {\em outputFile} is a file to which the
+printout will go; by default, the printout goes to the standard output.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns[={\em nameList}[,format={\em string}][,label={\em string}][,editLabel={\em command}]}
+        {\tt [,useDefaultFormat][,endsline][,blankLines={\em number}]]} --- Specifies the names of 
+        columns to appear in the printout.  {\em nameList} may contain one or more comma-separated
+        strings, each of which may contain wildcards.  If more than one string is given, the list
+        must be enclosed in parentheses, e.g., {\tt -columns='(betax,betay)'}.  
+
+        The {\tt format} qualifier may be used to specify a {\tt printf}-style format string for the
+        named columns; in this case, all of the columns must have the same data type.  The format
+        string should contain a width field, to ensure proper alignment of text, e.g., \verb|%30s|
+        rather than \verb|%s|. The {\tt useDefaultFormat} qualifier directs that {\tt sddsprintout}
+        use its own default format for the data type in question, as opposed to any format that might
+        be specified in the SDDS header.
+
+        The {\tt label} qualifier can be used to specify the column label in the
+        printout (by default, the column name is used); the label may be edited using the
+        {\tt editLabel} qualifier and a standard editing sequence.
+
+        If the {\tt endsLine} qualifier is given, a line break is issued after the last column of the
+        list is printed.  The {\tt blankLies} qualifier may be used to specify that one or more
+        blank lines be emitted following such a line break.
+
+        Any number of {\tt -columns} options may be given.
+
+    \item {\tt -parameters...} --- Identical to {\tt -columns}, except that printout of parameters
+        is specified.
+
+
+    \item {\tt -spreadsheet[=delimiter={\em string}][,quoteMark={\em string}][,noLabels][,schFile={\em filename}]} --- Specifies spreadsheet compatible output,
+        using the given delimiter between columns. In this mode, simplified header is printed and
+        no line width limits are imposed.  The default delimiter is a tab.  The default quotation mark
+        is \".  If the {\tt schfile} qualifier is given, a header file for comma-separated-values
+        data is generated. In this case, the delimiter should be a comma.
+
+    \item {\tt fromPage={\em number}} --- Specifies the first data page of the file that will 
+        appear in the printout.  By default, the printout starts with data page 1.
+
+    \item {\tt toPage={\em number}} --- Specifies the last page of the file that will appear in 
+        the printout.  By default, the printout ends with the last data page in the file.
+
+    \item {\tt formatDefaults={\em SDDStype}={\em formatString}[,...]} --- Specifies default 
+        {\tt printf} format strings for named SDDS data types.  The {\em SDDStype} qualifier may be
+        one of {\tt float}, {\tt double}, {\tt long}, {\tt short}, {\tt string}, or {\em character}.
+
+    \item {\tt -width={\em integer}} --- Specifies the width of the output line in number of characters. 
+        The default is 130.
+
+    \item {\tt -pageAdvance} --- Specifies that the page be advanced at the end of every data
+        page of the SDDS file.  This is done by emitting any ASCII page advance character, which
+        will probably work only if the output is sent to a printer.
+
+    \item {\tt -paginate} --- Specifies pagination of the output, using a default 66 line page.
+        The {\tt lines} qualifier may be used to change the page length.  By default, the title
+        and column labels are printed for each page.  These may be disabled using the 
+        {\tt notitle} and {\tt nolabels} qualifiers.
+
+    \item {\tt -postPageLines} --- Specifies that a number of blank lines shall be emitted
+        at the end of the printout for each page.  By default, there are no blank lines between
+        pages.
+
+    \item {\tt -title={\em string}} --- Specifies the title for the printout.
+    \item {\tt -noTitle} --- Specifies that no title be printed.
+    \item {\tt -noWarnings} --- Suppresses warning messages, such as those concerning data elements
+        requested in the printout that are not in the input file.
+
+    \end{itemize}
+\item {\bf see also:}
+        \begin{itemize}
+        \item \hyperref[exampleData]{Data for Examples}
+        \item \progref{sdds2plaindata}
+        \item \progref{sdds2spreadsheet}
+        \item \progref{sdds2stream}
+        \end{itemize}
+\item {\bf Notes:} Use of \progref{sddsprintout} to create tables of ascii data to be read by other (non-SDDS) programs is not recommended.
+  Better alternatives are \progref{sdds2stream}, \progref{sdds2spreadsheet}, and \progref{sdds2plaindata}.
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+

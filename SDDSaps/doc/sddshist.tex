@@ -1,0 +1,76 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddshist}
+\label{sddshist}
+
+\begin{itemize}
+\item {\bf description:} 
+{\tt sddshist} does weighted and unweighted one-dimensional histograms of column data from an SDDS file.
+It also does limited statistical analysis of data, and basic filtering of data.
+\item {\bf examples:} 
+Make a 20-bin histogram of a series of PAR x beam-position-monitor readouts:
+\begin{flushleft}{\tt
+sddshist par.bpm par.bpmhis -data=P1P1x -bins=20
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddshist [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}]
+-dataColumn={\em columnName} [{-bins={\em number} | -sizeOfBins={\em value}}] 
+[-lowerLimit={\em value}] [-upperLimit={\em value}] [-filter={\em columnName},{\em lowerLimit},{\em upperLimit}] 
+[-weightColumn={\em columnName}] [-sides] [-normalize[=\{sum | area | peak\}]] 
+[-statistics] [-verbose]
+}\end{flushleft}
+\item {\bf files:}
+{\em inputFile} is the name of an SDDS file containing data to be
+histogrammed, along with optional weight data.  If {\em inputFile}
+contains multiple data pages, each is treated separately.  The
+histogram or histograms are placed in {\em outputFile}, which has two
+columns.  One column has the same name as the histogrammed variable,
+and consists of equispaced values giving the centers of the bins.  The
+other column, named {\tt frequency}, contains the histogram
+frequencies. Its precise meaning is dependent on normalization modes
+and weighting.  By default, it contains the number of data points in
+the corresponding bin.  
+
+If requested, {\em outputFile} will also contain parameters giving
+statistics for the data being histogrammed.  See below for details.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+    \item {\tt -dataColumn={\em columnName}} --- Specifies the name of the data column to be histogrammed.
+    \item {\tt -bins={\em number}} --- Specifies the number of bins to use.  The default is 20.
+    \item {\tt -sizeOfBins={\em value}} --- Specifies the size of bins to use.  The number of bins is
+        computed from the range of the data.
+    \item {\tt -lowerLimit={\em value}} --- Specifies the lower limit of the histogram.  By default,
+        the lower limit is the minimum value in the data.
+    \item {\tt -upperLimit={\em value}} --- Specifies the upper limit of the histogram.  By default,
+        the upper limit is the maximum value in the data.
+    \item {\tt -filter={\em columnName},{\em lowerLimit},{\em upperLimit}} --- Specifies the name of a column by which to filter the input rows.
+        Rows for which the named data is outside the specified interval are discarded.
+        Alternatively, one can use \progref{sddsprocess}
+        to winnow data and pipe it into {\tt sddshist}.
+    \item {\tt -weightColumn={\em columnName}} --- Specifies the name of a column by which to weight the
+        histogram.  This means that data points with a higher corresponding weight value
+        are counted proportionally more times in the histogram.  
+    \item {\tt -sides} --- Specifies that zero-height bins should be attached to the lower
+        and upper ends of the histogram.  Many prefer the way this looks on a graph.
+    \item {\tt -normalize[=\{sum | area | peak\}]} --- Specifies that the histogram should be normalized, and how.
+        The default is {\tt sum}.  {\tt sum} normalization means that the sum of the heights will be 1.
+        {\tt area} normalization means that the area under the histogram will be 1.
+        {\tt peak} normalization means that the maximum height will be 1.
+    \item {\tt -statistics} --- Specifies that statistics should be computed for the data and
+        placed in {\em outputFile}.  These presently include arithmetic mean, rms, and standard deviation.
+        The parameters are named by appending the strings {\tt Mean}, {\tt RMS}, and {\tt StDev} to the
+        name of the data column.  If {\tt -weigthColumn} is given, the statistics are weighted.  
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddshist2d}
+    \item \progref{sddsprocess}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

@@ -1,0 +1,37 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+\subsection{sddsshift} 
+\label{sddsshift} 
+ 
+\begin{itemize} 
+\item {\bf description:} \hspace*{1mm}\\ 
+{\tt sddsshift} shifts the given data columns by rows.
+\item {\bf examples:} 
+\begin{flushleft}
+{\tt sddsshift <inputfile> <outputfile> -columns=Values -shift=5 -zero }
+\end{flushleft} 
+\item {\bf synopsis:}  
+\begin{flushleft}
+{\tt 
+sddsshift [{\em inputfile}] [{\em outputfile}] [-pipe=[input][,output]] \\ \
+-columns={\em inputcol}[,...] \\ \
+[-zero] \\ \
+[-shift={\em points} | -match={\em matchcol}] \\ \
+[-majorOrder=row|column]}
+\end{flushleft} 
+\item {\bf files:} 
+The output file contains all the columns from the input file as well as new columns named {\tt Shifted{\em inputcol}} and new parameters named {\tt {\em inputcol}Shift}. Exposed end-points are set to zero if the zero option is provided, otherwise they are set to the value from the first or last row as appropriate.
+\item {\bf switches:} 
+    \begin{itemize} 
+    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
+    \item {\tt -columns={\em inputcol}[,...]} --- The names of the columns to be shifted.
+    \item {\tt -zero} --- Set exposed end-points to zero.
+    \item {\tt -shift={\em points}} --- Number of rows to shift columns. Positive and negative numbers are both allowed.
+    \item {\tt -match={\em matchcol}} --- The columns are shifted to minimize the least squares error relative to {\em matchcol}.
+    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout.
+\end{itemize} 
+
+\item {\bf author:} C. Saunders, M. Borland, R. Soliday, H. Shang, ANL/APS. 
+\end{itemize} 
+ 

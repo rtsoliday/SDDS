@@ -1,0 +1,68 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsrowstats}
+\label{sddsrowstats}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsrowstats} analyzes data across columns on a row-by-row basis to
+find minima, maxima, averages, standard-deviations, etc.
+The output is a copy of the input with additional columns that contain
+the desired statistics.
+\item {\bf examples:}
+Find the mean x and y orbits from PAR beam-position-monitor data collected
+with one set of x and y values (in 32 columns) per row.
+\begin{flushleft}{\tt
+sddsrowstats par.bpm par.bpm1 -mean=xMean,P?P?x -mean=yMean,P?P?y
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddsrowstats [-pipe=[input][,output]] [{\em input}] [{\em output}] 
+[-nowarnings]
+[-mean={\em newName},[,{\em limitOps}],{\em columnNameList}]
+[-rms={\em newName},[,{\em limitOps}],{\em columnNameList}]
+[-median={\em newName}[,{\em limitOps}],{\em columnNameList}]
+[-minimum={\em newName}[,{\em limitOps}],{\em columnNameList}]
+[-maximum={\em newName}[,{\em limitOps}],{\em columnNameList}]
+[-standardDeviation={\em newName}[,{\em limitOps}],{\em columnNameList}]
+[-sigma={\em newName}[,{\em limitOps}],{\em columnNameList}]
+[-mad={\em newName}[,{\em limitOps}],{\em columnNameList}]
+[-sum={\em newName}[,{\em limitOps}][,power=<integer>],{\em columnNameList}] 
+[-drange={\em newName}[,{\em limitOps}],{\em columnNameList}]
+[-qrange={\em newName}[,{\em limitOps}],{\em columnNameList}]
+[-smallest={\em newName}[,{\em limitOps}],{\em columnNameList}]
+[-largest={\em newName}[,{\em limitOps}],{\em columnNameList}]
+[-count={\em newName}[,{\em limitOps}],{\em columnNameList}]
+}\end{flushleft}
+where {\em columnList} is a comma-separated list of one or more optionally wildcarded names and
+{\em limitOps} is of the form {\tt [topLimit={\em value},][bottomLimit={\em value}]}.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -mean}, {\tt -rms},
+        {\tt median}, {\tt minimum}, {\tt maximum}, {\tt standardDeviation}, {\tt sigma}, 
+        {\tt mad}, {\tt drange}, {\tt qrange}, {\tt smallest}, {\tt largest}, {\tt count} ---
+        Compute indicated statistic across the columns specified in {\em columnList}.
+        If {\em limitOps} are given, then values above the {\tt topLimit} or below the
+        {\tt bottomLimit} are excluded from computations.
+        {\tt sigma} is the standard deviation of the mean.
+        {\tt mad} is the mean-absolute-deviation.  {\tt smallest} ({\tt largest}) is
+        the minimum (maximum) absolute value.  {\tt drange} and {\tt qrange} are the
+        decile and quartile ranges, respectively.
+    \item {\tt -sum={\em newName}[,power={\em integer}],{\em columnNameList} } --- 
+        Specifies creation of a new column
+        {\em newName} containing the row-by-row sums of the columns specified
+        in {\em columnList}.  The values are summed after being raised to the given power, which is 1 by
+        default.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddschanges}
+    \item \progref{sddsenvelope}
+    \item \progref{sddsprocess}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

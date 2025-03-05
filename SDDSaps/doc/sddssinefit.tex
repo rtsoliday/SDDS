@@ -1,0 +1,45 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+\subsection{sddssinefit} 
+\label{sddssinefit} 
+ 
+\begin{itemize} 
+\item {\bf description:} \hspace*{1mm}\\ 
+{\tt sddssinefit} does a fit to the form:\\
+y = $<$constant$>$ + $<$factor$>$ * sin(2*PI*$<$freq$>$*x+$<$phase$>$)
+\item {\bf examples:} 
+\begin{flushleft}
+{\tt sddssinefit <inputfile> <outputfile> -columns=x,y }
+\end{flushleft} 
+\item {\bf synopsis:}  
+\begin{flushleft}
+{\tt 
+sddssinefit [{\em inputfile}] [{\em outputfile}] [-pipe=[input][,output]] \\ \
+[-fulloutput] \\ \
+[-columns={\em x-name},{\em y-name}] \\ \
+[-tolerance={\em value}] \\ \
+[-limits=[evaluations={\em number}][,passes={\em number}]] \\ \
+[-verbosity={\em integer}] \\ \
+[-guess=[constant={\em constant}][,factor={\em factor}][,frequency={\em freq}][,phase={\em phase}]] \\ \
+[-majorOrder=row|column]}
+\end{flushleft} 
+\item {\bf files:} 
+The input file contains both the independent and dependent columns {\tt {\em y-name}} and {\tt {\em y-name}}. The output file contains the independent column along with fitted column {\tt {\em y-name}} and {\tt {\em y-name}Fit}.
+\item {\bf switches:} 
+    \begin{itemize} 
+    \item {\tt -fulloutput} --- Includes {\tt {\em y-name}} and {\tt {\em y-name}Residual} in the output file.
+    \item {\tt -columns={\em x-name},{\em y-name}} --- The independent and dependent columns.
+    \item {\tt -tolerance={\em value}} --- Desired tolerance of simplex minimization. Negative values are\\
+                                           fractional, positive numbers are absolute. Default: 1e-6.
+    \item {\tt -limits=[evaluations={\em number}][,passes={\em number}]} --- Evaluations and passes for\\
+                                                                             simplex minimization. Default: evaluations=100, passes=5.
+    \item {\tt -verbosity={\em integer}} --- Increases verbose messages. Valid values are 0-4.
+    \item {\tt -guess=[constant={\em constant}][,factor={\em factor}]}\\
+          {\tt [,frequency={\em freq}][,phase={\em phase}]} --- Initial guesses for simplex minimization.
+    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout.
+\end{itemize} 
+
+\item {\bf author:} C. Saunders, M. Borland, R. Soliday, L. Emery, H. Shang, ANL/APS. 
+\end{itemize} 
+ 

@@ -1,0 +1,42 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsnormalize}
+\label{sddsnormalize}
+
+\begin{itemize}
+\item {\bf description:} \verb|sddsnormalize| performs various normalizations of
+column data.
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsnormalize [{\em inputFile}] [{\em outputFile}] [-pipe[=input][,output]] \\ \ 
+-columns=[mode={\em mode}][,suffix={\em string}][,exclude={\em wildcardString}],{columnName}[,{columnName}...]
+}\end{flushleft}
+where mode is one of {\tt minimum}, {\tt maximum}, {\tt largest}, {\tt signedLargest},
+or {\tt spread}, referring to the factor used for normalization (see below).
+\item {\bf files:}
+{\em inputFile} is an SDDS file containing data to be processed.  The {\em outputFile} argument is
+optional.  If it is not given, and if an output pipe is not selected, then the input file will be
+replaced.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe=[input][,output] } --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns=[mode={\em mode}][,suffix={\em string}]} 
+        {\tt [,exclude={\em wildcardString}],{columnName}[,{columnName}...]} --- 
+Any number of these options may be given.
+Each specifies columns to normalize and in what {\em mode}.  {\em mode} may be
+one of {\tt minimum}, {\tt maximum}, {\tt largest}, {\tt signedLargest},
+or {\tt spread}, referring to the factor used for normalization:
+largest (the default) is the maximum absolute value; signed largest is the
+same value, but with the sign restored; spread is the maximum minus the minimum.
+Each {\em columnName} qualifier gives a possibly wildcarded string specifying
+columns to normalize.  {\tt exclude} may be used to exclude columns from normalization
+that are matched by a {\em columnName}.
+The {\tt suffix} qualifier optionally specifies a suffix to be appended to each
+column name, to create a new column for the output file; if not given, then the
+original data are replaced with the normalized data.
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+

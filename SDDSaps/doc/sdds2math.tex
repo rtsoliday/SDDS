@@ -1,0 +1,88 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+\subsection{sdds2math} 
+\label{sdds2math} 
+ 
+\begin{itemize} 
+\item {\bf description:} 
+\verb|sdds2math| converts an SDDS file to a file that can be read into Mathematica. 
+The file contains a single Mathematica variable of the form: 
+ 
+\begin{verbatim} 
+sdds={description,coldef,pardef,arraydef,associates,tables} 
+  description={text,contents} 
+  coldef={coldef-1, coldef-2, ...} 
+    coldef-n={name,units,symbol,format,type,fieldlength,description} 
+  pardef={pardef-1, pardef-2, ...} 
+    pardef-n={name,fixed_value,units,symbol,type,description} 
+  arraydef={arraydef-1, arraydef-2, ...} 
+    arraydef-n={name,units,symbol,format,type,fieldlength,group,description} 
+  associates={associate-1, associate-2,...} 
+    associate-n={sdds,filename,path,contents,description} 
+  tables={table-1, table-2, ...} 
+    table-n={parameters,data} 
+      parameters={parameter-1, parameter-2, ...} 
+      data={row-1, row-2, ...} 
+        row-n={val-1, val-2, ...} 
+\end{verbatim} 
+ 
+A number of Mathematica programs to extract information from this 
+variable are available in the file SDDS.m.  To include these routines 
+in your Mathematica program, put this file in your working directory 
+and use the following line in your Mathematica program: 
+\begin{verbatim} 
+Needs["SDDS`"]; 
+\end{verbatim} 
+ 
+The programs are: 
+\begin{itemize} 
+\item \verb|SDDSRead[filename_String]|---returns an SDDS structure from a file. 
+\item \verb|SDDSWrite[sdds_,filename_String]|---writes an SDDS structure to a file. 
+\item \verb|SDDSGetColumnDefinitions[sdds_]|---returns the list of column definitions. 
+\item \verb|SDDSGetParameterDefinitions[sdds_]|---returns the list of parameter definitions. 
+\item \verb|SDDSGetArrayDefinitions[sdds_]|---returns the list of array definitions. 
+\item \verb|SDDSGetAssociates[sdds_]|---returns the list of associates. 
+\item \verb|SDDSGetTable[sdds_,n_:1]|---returns the nth table {parameters,data}. 
+\item \verb|SDDSGetParameters[sdds_,n_:1]|---returns the parameters from the nth table. 
+\item \verb|SDDSGetParameter[sdds_,p_String,n_:1]|---returns the value of parameter p from the nth table. 
+\item \verb|SDDSGetData[sdds_,n_:1]|---returns the data matrix from the nth table. 
+\item \verb|SDDSGetColumn[sdds_,c_String,n_:1]|---returns the column named c from the nth table. 
+\item \verb|SDDSGetColumn[sdds_,m_,n_:1]|---returns the mth column from the nth table. 
+\item \verb|SDDSGetRow[sdds_,m_,n_:1]|---returns the mth row from the nth table. 
+\item \verb|SDDSGetNColumns[sdds_]|---returns the number of columns. 
+\item \verb|SDDSGetNParameters[sdds_]|---returns the number of parameters. 
+\item \verb|SDDSGetNArrays[sdds_]|---returns the number of arrays. 
+\item \verb|SDDSGetNAssociates[sdds_]|---returns the number of associates. 
+\item \verb|SDDSGetNTables[sdds_]|---returns the number of tables. 
+\item \verb|SDDSGetNRows[sdds_,n_:1]|---returns the number of rows in the nth table. 
+\item \verb|SDDSGetColumnNames[sdds_]|---returns the list of column names. 
+\item \verb|SDDSGetParameterNames[sdds_]|---returns the list of parameter names. 
+\item \verb|SDDSGetArrayNames[sdds_]|---returns the list of array names 
+\item \verb|SDDSGetAssociateNames[sdds_]|---returns the list  
+of associate names. 
+\end{itemize} 
+ 
+\item {\bf examples:}  
+Convert a snapshot to a Mathematica file. 
+\begin{flushleft}{\tt 
+sdds2math par.050695.snap par.050695.m 
+}\end{flushleft} 
+ 
+\item {\bf synopsis:}  
+\begin{flushleft}{\tt 
+sdds2math [{\em SDDSfilename}] [{\em outputname}]  
+   [-pipe[=input][,output]] [-comments] [-verbose] 
+   [-format={\em printfString}] 
+}\end{flushleft} 
+ 
+\item {\bf switches:} 
+    \begin{itemize} 
+    \item \verb|pipe| --- The standard SDDS Toolkit pipe option. 
+    \item \verb|comments| --- Put helpful Mathematica comments in the file. 
+    \item \verb|verbose| --- Write header information to the terminal like sddsquery. 
+    \item \verb|format| --- Format for doubles (Default: \%g) 
+    \end{itemize} 
+\item {\bf author:} K. Evans, Jr., ANL/APS. 
+\end{itemize} 
+ 

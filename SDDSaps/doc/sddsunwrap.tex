@@ -1,0 +1,33 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+\subsection{sddsunwrap} 
+\label{sddsunwrap} 
+ 
+\begin{itemize} 
+\item {\bf description:} \hspace*{1mm}\\ 
+{\tt sddsunwrap} looks for discontinuities of size $>$ threshold in a set of data. After each discontinuity it adds the appropriate multiple of the modulo to the data set.
+\item {\bf examples:} 
+\begin{flushleft}{\tt
+   sddsunwrap <inputFile> <outputFile> -col=phase
+}\end{flushleft} 
+\item {\bf synopsis:}  
+\begin{flushleft}{\tt 
+sddsunwrap [-pipe=[input][,output]] {\em inputFile} {\em outputFile}
+      [-column=list of columns] [-threshold=<value>] [-modulo<value>]
+}\end{flushleft} 
+\item {\bf files:} 
+The input file contains the column data to be unwrapped. The unwrapped data is saved into Unwrap<inputColumn> column in the output file.
+\item {\bf switches:} 
+    \begin{itemize} 
+    \item {\tt -pipe[=input]} --- The standard SDDS Toolkit pipe option. 
+    \item {\tt -threshold={\em value} } --- Specifies the discontinuity threshold used to identify a wrap in the data, default is PI..
+    \item {\tt -modulo={\em value}} --- Specifies the value used to unwrap the data, default is 2*PI.
+    \item {\tt -columns={\em columnName}[,{\em columnName}...]} ---  
+        Specifies the names of the columns to be unwrapped, separated by comma, and accept wild cards. If not specified, all numerical
+        columns in the input file will be unwrapped. The output column is named as Unwrap<inputColumn>.
+    \end{itemize} 
+
+\item {\bf author:} H. Shang, ANL/APS. 
+\end{itemize} 
+ 

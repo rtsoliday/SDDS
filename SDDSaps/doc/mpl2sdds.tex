@@ -1,0 +1,42 @@
+% $Log: not supported by cvs2svn $
+% Revision 1.2  1996/04/30  20:35:00  emery
+% corrected spelling of superseeded to superseded.
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{mpl2sdds}
+\label{mpl2sdds}
+
+\begin{itemize}
+\item {\bf description:} Adds \verb|mpl| data files to an SDDS data set.  \verb|mpl| is a simple data format used by the
+\verb|mpl| Toolkit, which is now largely superseded by SDDS and will not be supported in the future. 
+\item {\bf example:} 
+\begin{flushleft}{\tt
+mpl2sdds APS\_s\_betax.out APS\_s\_betay.out -output=APSbetas.sdds
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+mpl2sdds {\em mplFile} [{\em mplFile}...] -output={\em SDDSFile} [-erase]
+}\end{flushleft}
+\item {\bf files:}
+Any number of {\em mplFile} arguments may be given.  These name files in {\tt mpl} format, which
+has between two and four columns of data.  {\tt sdds2mpl} attempts to add all of the columns from each
+\verb|mpl| data file to the data set.  However, a column that has the same name as an existing column
+will not be used.  By default, the data in the {\tt mpl} files is added to {\em SDDSFile}, if it
+exists already.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -output={\em SDDSfile}} --- Specifies that data be added to file {\em SDDSfile}. If
+        the file does not exist, it is created. 
+    \item \verb|-erase| --- Specifies that if {\em SDDSFile} exists already, it should be
+        erased prior to adding any data to the data set.  By default, the data in {\em SDDSFilename}
+        is retained.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sdds2mpl}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

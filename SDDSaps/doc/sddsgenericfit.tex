@@ -1,0 +1,86 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsgenericfit}
+\label{sddsgenericfit}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsgenericfit} does fits to an arbitrary functional form specified by the user.
+
+\item {\bf examples:} 
+Fit a gaussian to a beam profile to get the rms beam size.  In this example, the
+file \verb|beamProfile.sdds| is assumed to contain data to be fit in columns
+\verb|x| and \verb|Intensity|.
+\begin{flushleft}{\tt
+sddsgenericfit beamProfile.sdds beamProfile.gfit -column=x,Intensity \\\
+``-equation=height x center - sqr 2 / sigma sqr / exp / baseline + Intensity - sqr'' \\\
+-variable=name=height,start=1,lower=0,upper=10,step=0.1 \\\
+-variable=name=center,start=0,lower=-10,upper=10,step=0.1 \\\
+-variable=name=sigma,start=1,lower=0.1,upper=10,step=0.1 \\\
+-variable=name=baseline,start=0,lower=-1,upper=1,step=0.1 
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsgenericfit 
+[-pipe=[input][,output]] [{\em inputfile}] [{\em outputfile}] 
+-columns={\em x-name},{\em y-name}[,ySigma={\em sy-name}] 
+-equation={\em string}[,algebraic] [-target={\em value}] [-tolerance={\em value}]
+[-simplex=[restarts={\em integer}][,cycles={\em integer},][evaluations={\em integer}]]
+-variable=name={\em name},lowerLimit={\em value},upperLimit={\em value},stepsize={\em value},startingValue={\em value}[,units={\em string}][,heat={\em value}]
+[-variable=...] [-verbosity={\em integer}] [-startFromPrevious]
+}\end{flushleft}
+
+\item {\bf files:} {\em inputFile} contains the columns of data to be
+fit.  If {\em inputFile} contains multiple pages, each page of data is
+fit separately.  {\em outputFile} has columns containing the
+independent variable data and the corresponding values of the fit.
+The name of the column is constructed by appending the string {\tt
+Fit} to the name of the dependent variable.  The name of the residual
+column is constructed by appending the string {\tt Residual} to the
+name of the dependent variable.  {\em outputFile} also contains
+parameters giving the values of the fit parameters.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns={\em x-name},{\em y-name}[,ySigma={\em name}]} 
+        --- Specifies the names of the independent and dependent columns of data, and
+        optionally the name of the column containing the errors in the dependent column.
+    \item {\tt -equation={\em string}[,algebraic]} --- Specifies the functional form of the fit, $y(x, \{p_1, p_2, ...\})$,
+      where $\{p_1, p_2, ...\}$ represents the parameters of the function and $x$ is the independent variable value.
+      The fitting process attempts to minimize the penalty function $\sum_{i=0}^{N-1} (y(x_i, \{p_1, p_2, ...\}) - y_i)^2$ 
+      (or $\sum_{i=0}^{N-1} (y(x_i, \{p_1, p_2, ...\}) - y_i)^2/\sigma_{y,i}^2$ if y sigma values are given)
+      by changing the values of the parameters $\{p_1, p_2, ...\}$.
+    \item {\tt -tolerance={\em value}} --- Specifies the minimum change in the (weighted) 
+           rms residual that is considered significant
+           enough to justify continuing optimization.
+    \item {\tt -simplex=[restarts={\em nRestarts}][,cycles={\em nCycles},][evaluations={\em nEvals}]} ---
+           Specifies parameters of the simplex optimization used to perform the fit.
+           Each start or restart allows {\em nCycles} cycles
+           with up to {\em nEvals} evaluations of the function.  
+           Defaults are 10 restarts, 10 cycles, and 5000 evaluations.
+    \item {\tt -variablename={\em name},lowerLimit={\em value},upperLimit={\em value},stepsize={\em value},startingValue={\em value}[,units={\em string}][,heat={\em value}]} --- 
+        Specifies a parameter of the fitting function.  If the \verb|heat| qualifier is
+        given, then prior to each restart the code ``heats'' the values by adding random
+        numbers to the result of the last iteration.  This can help avoid getting stuck
+        in a local minimum.  You must give one \verb|variable| option for every parameter
+        of the fit.
+    \item {\tt -startFromPrevious} --- Meaningful for multipage input files only.  If given,
+        then the optimization for each page starts from the parameter values from the fit
+        to the previous page.  By default, fitting for each page starts from the values
+        specified on the commandline.
+    \item {\tt -verbosity={\em integer}} --- Specifies that informational printouts are desired during fitting.  A larger integer produces more output.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddsexpfit}
+    \item \progref{sddsgfit}
+    \item \progref{sddsoutlier}
+    \item \progref{sddspfit}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+
+

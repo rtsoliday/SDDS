@@ -1,0 +1,104 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsmpfit}
+\label{sddsmpfit}
+
+\begin{itemize}
+\item {\bf description:} 
+{\tt sddsmpfit} does ordinary and Chebyshev polynomial fits to column data, including error analysis.
+It will do fits to with specified number of terms, with specific terms only, and with specific symmetry
+only.  It will also eliminate spurious terms.  The options for {\tt sddsmpfit} are very similar
+to those for {\tt sddspfit}.
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsmpfit [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}]
+  -independent={\em xName} [-sigmaIndependent={\em xSigmaName}]
+  -dependent={\em yName}[,{yName}...] [-sigmaDependent={\em templateString}]
+  {-terms={\em number} [-symmetry=\{none | odd | even\}] | -orders={\em number}[,{\em number}...] }
+  [-reviseOrders[=threshold={\em chiValue}][,verbose]] [-chebyshev[=convert]]
+  [-xOffset={\em value}] [-xFactor={\em value}]
+  [-sigmas={\em value},\{absolute | fractional\}] 
+  [-modifySigmas] [-generateSigmas[={keepLargest | keepSmallest}]]
+  [-sparse={\em interval}] [-range={\em lower},{\em upper}]
+  [-normalize[={\em termNumber}]] [-verbose]
+  [-evaluate={\em filename}[,begin={\em value}][,end={\em value}][,number={\em integer}]]
+  [-fitLabelFormat={\em sprintfString}] [-infoFile={\em filename}]
+}\end{flushleft}
+\item {\bf files:}
+{\em inputFile} is an SDDS file containing columns of data to be fit.
+If it contains multiple pages, they are processed separately.  {\em
+outputFile} is an SDDS file containing one page for each page of {\em
+inputFile}.  It contains columns of the independent and dependent
+variable data, plus columns for error bars (``sigmas'') as
+appropriate.  The values of the fit and of the residuals are in a
+columns named {\em yName}{\tt Fit} and {\em yName}{\tt Residual}.
+In addition, various parameters having names beginning with 
+{\em yName} are created that give reduced chi-squared, slope, intercept,
+and so on.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -evaluate={\em filename}[,begin={\em value}][,end={\em value}][,number={\em integer}]} ---
+        Specifies creation of an SDDS file called {\em filename} containing points from evaluation of the
+        fit.  The fit is normally evaluated over the range of the input data; this may be changed using
+        the {\tt begin} and {\tt end} qualifiers.  Normally, the number of points at which the fit is
+        evaluated is the number of points in the input data; this may be changed using the {\tt number}
+        qualifier.
+    \item {\tt infoFile={\em filename}} --- Specifies creation of an SDDS file containing results of
+        the fits in columns.  A column called {\em yName}Coefficient is created for each column
+        that is fitted.
+    \item By default, an ordinary polynomial fit is done using a constant and linear term.  
+        Control of what fit terms are used is provided by the following switches:
+        \begin{itemize}
+        \item {\tt -terms={\em number}} --- Specifies the number of terms to be used in fitting. 2 terms is
+         linear fit, 3 is quadratic, etc.
+        \item {\tt -symmetry=\{none | odd | even\}} --- When used with {\tt -terms}, allows specifying the
+        symmetry of the N terms used.  {\tt none} is the default.  {\tt odd} implies using linear, cubic, etc.,
+        while  {\tt even} implies using constant, quadratic, etc.
+        \item {\tt -orders={\em number}[,{\em number}...]} --- Specifies the polynomial orders to be used in
+        fitting.  The default is equivalent to {\em -orders=0,1}.
+        \item {\tt -reviseOrders[=threshold={\em value}][,verbose]} --- Asks for adaptive fitting to
+        be performed on the first data page to determine what orders to use.  Any term that does not
+        improve the reduced chi-squared by {\em value} is discarded.  Similar to but much less capable
+        than the adaptive fitting feature of {\tt sddspfit}.
+        \item {\tt [-chebyshev[=convert]] } --- Asks that Chebyshev T polynomials be used in fitting.  If {\tt convert} is
+        given, the output contains the coeffients for the equivalent ordinary polynomials.
+        \end{itemize}
+    \item {\tt -xOffset={\em value}}, {\tt -xFactor={\em value}} --- Specify offseting and scaling of the independent
+        data prior to fitting.  The transformation is ${\rm x \rightarrow (x - Offset)/Factor}$.  This feature can
+        be used to make a fit about a point other than x=0, or to scale the data to make high-order fits more
+        accurate.
+    \item {\tt sddsmpfit} will compute error bars (``sigmas'') for fit coefficients if it has knowledge of 
+        the sigmas for the data points.  These can be supplied using the {\tt -columns} switch, or generated
+        internally in several ways:
+        \begin{itemize}
+        \item {\tt -sigmas={\em value}\{absolute | fractional\}} --- Specifies that independent-variable
+        errors be generated using a specified value for all points, or a specified fraction for all points.
+        \item {\tt -modifySigmas} --- Specifies that independent-variable sigmas be modified to include the effect
+        of uncertainty in the dependent variable values.  If this option is not given, any x sigmas specified
+        are ignored.
+        \item {\tt -generateSigmas[=\{keepLargest | keepSmallest\}]} --- Specifies that independent-variable errors
+        be generated from the variance of an initial equal-weights fit. If errors are already given (via {\em -column}),
+        one may request that for every point {\tt sddsmpfit} retain the larger or smaller of the sigma in the data
+        and the one given by the variance.
+        \end{itemize}
+    \item {\tt -sparse={\em interval}} --- Specifies sparsing of the input data prior to fitting.  This can greatly
+        speed computations when the number of data points is large.
+    \item {\tt -range={\em lower},{\em upper}} --- Specifies the range of independent variable over which to do fitting.
+    \item {\tt -normalize[={\em termNumber}]} --- Specifies that coefficients be normalized so that the coefficient
+        for the indicated order is unity.  By default, the 0-order term (i.e., the constant term) is normalized to unity.
+    \item {\tt -verbose} --- Specifies that the results of the fit be printed to the standard error output.
+    \item {\tt -fitLabelFormat={\em sprintfString}} --- Specifies the format to use for printing numbers in the
+        fit label.  The default is ``\%g''.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddspfit}
+    \item \progref{sddsoutlier}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

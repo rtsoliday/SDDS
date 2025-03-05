@@ -1,0 +1,76 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsinteg}
+\label{sddsinteg}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsinteg} integrates one or more columns of data as a function of a common
+column.  The program will perform error propagation if error bars are provided in 
+the data set.
+\item {\bf examples:} 
+Find the integral ${\rm \int \eta_x ds}$ for APS lattices
+\begin{flushleft}{\tt
+sddsinteg APS.twi APS.integ -integrate=etax -versus=s
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsinteg [-pipe=[input][,output]] [{\em input}] [{\em output}]
+-integrate={\em columnName}[,{\em sigmaName}] ...
+-versus={\em columnName}[,{\em sigmaName}] [-mainTemplates={\em item}={\em string}[,...]] 
+[-errorTemplates={\em item}={\em string}[,...]] 
+[-method={\em methodName}] [-printFinal[=bare][,stdout]]
+}\end{flushleft}
+\item {\bf files:}
+{\em input} is an SDDS file containing columns of data to be
+integrated.  If it contains multiple data pages, each is treated
+separately. The independent quantity along with the requested integrals
+is placed in columns in {\em output}.  By default, the
+integral column name is constructed by appending ``Integ'' to the
+variable column name.  If applicable, the column name for the
+integral error is constructed by appending ``IntegSigma''.  
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -integrate={\em columnName}[,{\em sigmaName}]} --- Specifies the name
+        of a column to integrate, and optionally the name of the column containing
+        the error in the integrand.  May be given any number of times.
+    \item {\tt -versus={\em columnName}[,{\em sigmaName}]} --- Specifies the name
+        of the independent variable column, and optinally the name of the column
+        containing its error.
+    \item {\tt -mainTemplates={\em item}={\em string}[,...]} --- Specifies template
+        strings for  names and definition entries for the integral columns
+         in the output file.  {\em item} may be one of {\tt name}, {\tt description},
+        {\tt symbol}.  The symbols ``\%x'' and ``\%y'' are used to represent
+        the independent variable name and the name of the integrand, respectively.
+    \item {\tt -errorTemplates={\em item}={\em string}[,...]} --- Specifies template
+        strings for  names and definition entries for the integral error columns
+        in the output file.  {\em item} may be one of {\tt name}, {\tt description},
+        the independent variable name and the name of the integrand, respectively.
+    \item {\tt -method={\em methodName}} --- Specifies the integration method.  The default method
+        is ``trapazoid,'' for trapizoid rule integration.
+        Another method is ``GillMiller,'' which is based on cubic interpolation and is much more
+        accurate than trapazoid rule; unlike most higher-order formulae, it is not restricted to
+        equispaced points.  (See P.E. Gill and G. F. Miller, The Computer Journal, Vol. 15, N. 1, 80-83, 1972.)
+        Error propagation is available for trapazoid rule integration only.
+        If higher-order integration is needed, one can first interpolate the data with reduced
+        spacing of the independent variable using {\tt sddsinterp} with the {\tt -equispaced} option and
+        {\tt -order=2} or higher, then integrate using {\tt sddsinteg}.
+        This is mathematically equivalent to using a higher-order formula, but is 
+        more general as it is not restricted to initially equispaced data.
+        However, using Gill-Miller is probably the best approach.
+    \item {\tt -printFinal[=bare][,stdout]} --- Specifies that the final value of each
+        integral should be printed out.  By default, the printout goes to stderr and
+        includes the name of the integral.  If {\tt bare} is given, the names are omitted.
+        If {\tt stdout} is given, the printout goes to stdout.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddsderiv}
+    \item \progref{sddsinterp}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

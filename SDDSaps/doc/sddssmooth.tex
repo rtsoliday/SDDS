@@ -1,0 +1,83 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddssmooth}
+\label{sddssmooth}
+
+\begin{itemize}
+\item {\bf description:}
+
+{\tt sddssmooth} smooths columns of data using multipass nearest-neighbor averaging and/or
+despiking.  Any number of columns may be smoothed.  The smoothed data may be put in place of the
+original data, or included as a new column.
+
+Nearest-neighbor averaging involves repeatedly replacing each point by the average of its
+N nearest-neighbors; this is the type of smoothing that is done if nothing is specified.
+Despiking consists of replacing the most extreme of N nearest neighbors with the average
+of the same points; the most extreme point is the one with the largest mean absolute difference
+from the other points.
+
+\item {\bf examples:} 
+Smooth data in a Fourier transform:
+\begin{flushleft}{\tt
+sddssmooth data.fft data.peaks -column=FFTamplitude 
+}\end{flushleft}
+
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddssmooth [-pipe=[input][,output]] [{\em inputfile}] [{\em outputfile}] 
+-columns={\em name}[,{\em name}...] 
+[-points={\em oddInteger}] [-passes={\em integer}]
+[-SavitzkyGolay={\em left},{\em right},{\em order},[{\em derivativeOrder}]]
+[-despike[=neighbors={\em integer}][,passes={\em integer}]]
+[-newColumns] [-differenceColumns] [-medianFilter=widowSize={\em integer}]
+}\end{flushleft}
+\item {\bf files:}
+
+{\em inputFile} contains the data to be smoothed.  {\em outputFile} contains all of the array and
+parameter data from {\em inputFile}, plus at least one column for every column in {\em inputFile}.
+Columns that are not smoothed will appear unchanged in {\em outputFile}. If {\em inputFile}
+contains multiple pages, each is treated separately and is delivered to a separate page of {\em
+outputFile}.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns={\em columnName}[,{\em columnName...}} --- Specifies the names of the column to smooth.
+        The names may include wildcards.
+    \item {\tt -points={\em oddInteger}} --- Specifies the number of points to average to create a smoothed
+        value for each point.  The default is three, which implies replacing each point by the average
+        of itself and its two nearest neighbors.
+    \item {\tt -passes={\em integer}} --- Specifies the number of nearest-neighbor-averaging
+        smoothing passes to make over each column
+        of data.  The default is 1.  If 0, no such smoothing is done.
+        In the limit of an infinite number of passes, every point will 
+        tend toward the average value of the original data.    If {\tt -despike} is also given,
+        then despiking occurs first.
+    \item {\tt -SavitzkyGolay={\em left},{\em right},{\em order},[{\em derivativeOrder}]} ---
+        Specifies smoothing by use of a Savitzky-Golay filter, which involves fitting a
+        polynomial of order {\em order} through {\em left}+{\em right}+1 points.  Optionally,
+        takes the {\em derivativeOrder}-th derivative of the data.  If this option is given,
+        the nearest-neighbor-averaging smoothing is not done.  If {\tt -despike} is also given,
+        then despiking occurs first.
+    \item {\tt -despike[=neighbors={\em integer}][,passes={\em integer}]} ---
+        Specifies smoothing by despiking, as described above.  By default, 4 nearest-neighbors
+        are used and 1 pass is done.  If this option is not given, no despiking is done.
+    \item {\tt -newColumns} --- Specifies that the smoothed data will be placed in new columns, rather than
+        replacing the data in each column with the smoothed result.  The new columns are given names of
+        the form {\tt {\em columnName}Smoothed}, where {\em columnName} is the original name of a column.
+    \item {\tt -differenceColumns} --- Specifies that additional columns be created in the output file,
+        containing the difference between the original data and the smoothed data.
+        The new columns are given names of the form {\em columnName}{\tt Unsmooth}, where
+        {\em columnName} is the orignal name of the column.
+    \item {\tt -medianFilter} -- Speficies median smooth and the window size (W, an odd integer, default is 3). 
+        It smooths the orignal data through finding the median of a data point among the nearest left (W-1)/2 points, 
+        the data point, and the nearest right (W-1)/2 points.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddsdigfilter}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

@@ -1,0 +1,69 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsselect}
+\label{sddsselect}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsselect} excludes or includes rows from one file based on the presence of matching data in another
+file.  It is similar to {\tt sddsxref}, but unlike that program does not import data from the second file.
+\item {\bf examples:} 
+Use a list of quadrupole names to get just the Twiss parameters are the quadrupoles:
+\begin{flushleft}{\tt
+sddsselect APS.twi quadNames.sdds APSquad.twi -match=ElementName -reuse
+}\end{flushleft}
+where {\tt ElementName} is a column in both {\tt APS.twi} and {\tt quadNames.sdds} giving the
+name of a magnet.
+Use the same file to get the Twiss parameters everywhere but at the quadrupoles:
+\begin{flushleft}{\tt
+sddsselect APS.twi quadNames.sdds APSnquad.twi -match=ElementName -reuse -invert
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsselect [-pipe[=input][,output]] [{\em input1}] {\em input2} [{\em output}] 
+\{-match={\em columnName1}[={\em columnName2}] |
+ -equate={\em columnName1}[={\em columnName2}] \}
+[-invert] [-reuse[=page][,rows]] [-noWarnings]
+}
+\end{flushleft}
+\item {\bf files:}
+{\em input1} is an SDDS file from which rows of data will be selected for inclusion in {\em output}.  
+If {\em input1} contains multiple pages, they are processed separately. {\em input2} is an SDDS
+file containing rows of data to use in selecting data from {\em input1}.  {\em Warning:} if {\em output} is not given and
+{\tt -pipe=output} is not specified, then {\em input1} will be replaced.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -match={\em columnName1}[={\em columnName2}] } --- Specifies the names of string columns from {\em input1}
+        and {\em input2} to compare.  If {\em columnName2} is not given, it taken to be the same as {\em columnName1}.
+        Data in {\em columnName} is taken from {\em input1} and {\em columnName2} from {\em input2}.  For each row in a page
+        of {\em input1}, a match for the string in {\em columnName1} is sought in any row of {\em columnName2}.  If a match
+        is found, the row is accepted.
+    \item {\tt -equate={\em columnName1}[={\em columnName2}] } --- Identical to {\tt -match}, except the columns contain
+        numerical data.
+    \item {\tt -invert} --- Specifies that only rows that have no match or equal should be selected for output.
+    \item {\tt -reuse[=rows][,page]} --- By default, if {\em input1}  contains multiple pages, each is selected against
+        the corresponding page of {\em input2}.  In addition, each row of {\em input2} is matched or equated to only
+        one row of {\em input1}.  If {\tt -reuse=page} is given, then each page of {\em input1}
+        is selected against the first page of {\em input2}.   If {\tt -reuse=rows} is given, each row of {\em input2}
+        can select any number of rows of {\em input1}.
+    \item {\tt -noWarnings} --- Specifies that no warning messages (about, e.g., file length mismatches
+        or file overwrites) should be issued.
+    \end{itemize}
+\item {\bf sddsmselect} --- {\tt sddsmselect} is a variant of {\tt sddsselect} that permits multiple {\tt -match}
+ and {\tt -equate} options for more sophisticated cross-referencing.  In other respects, the program is
+ used just like {\tt sddsmselect}.  {\tt sddsselect} is much faster, however, for single-criterion matching or
+ equating.
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddsxref}
+    \end{itemize}
+\item {\bf author:} M. Borland, H. Shang and R. Soliday ANL/APS.
+\end{itemize}
+
+
+
+
+

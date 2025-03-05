@@ -1,0 +1,89 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsinterp}
+\label{sddsinterp}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsinterp} does polynomial interpolation of one or more columns of data as
+a function of a common independent variable.  Interpolation may be done at specified
+points, at a sequence of points, or at points given in another SDDS file.  
+\item {\bf examples:} 
+Do second-order polynomial interpolation of Twiss parameters at 250 points
+to get smoother-looking data:
+\begin{flushleft}{\tt
+sddsinterp APS.twi APS.interp -column=s,betax,betay -order=2 -sequence=250
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsinterp [-pipe[=input][,output]] [{\em inputFile}] [{\em outputFile}] 
+[-columns={\em independentQuantity},{\em name}[,{\em name}...]] \\ \ 
+\{ -atValues={\em valuesList} | \\ \ 
+-fillIn | \\ \
+-sequence={\em points}[,{\em start},{\em end}] | \\ \ 
+-fileValues={\em valuesFile}[,column={\em columnName}][,parallelPages] \}  \\ \ 
+[-order={\em number}] [-printOut[=bare][,stdout]] \\ \ 
+[-belowRange=\{value={\em value} | skip | saturate | extrapolate | wrap\}[,\{abort | warn\}] \\ \ 
+[-aboveRange=\{value={\em value} | skip | saturate | extrapolate | wrap\}[,\{abort | warn\}] \\ \ 
+}\end{flushleft}
+\item {\bf files:}
+{\em inputFile} is an SDDS file containing columns of data to be interpolated.
+One column is selected as the independent variable.  Any number of others may
+be specified as dependent variables. If {\em inputFile} contains multiple data pages,
+each is treated separately.  {\em outputFile} contains the independent variable values
+at which interpolation was performed, in a column with the same name as the independent
+variable in {\em inputFile}.   Similarly, the interpolated values are placed in
+{\em outputFile} under the same names as the independent columns from {\em inputFile}.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns={\em independentQuantity},{\em name}[,{\em name}...]} --- 
+        Specifies the names of the independent and dependent variable columns.
+    \item {\tt -atValues={\em valuesList}} --- Specifies a comma-separated list of values at
+        which interpolation is done.
+    \item {\tt -sequence={\em points}[,{\em start},{\em end}]} --- Specifies a sequence of
+        equispaced points at which interpolation is done.  If {\em start} and {\em end} are
+        given, they specify the range of these points.  If they are not given, the range is
+        the range of the independent data.
+    \item {\tt -fillIn}---Somewhat like {\tt -sequence={\em points}}, except the number
+        of points is chosen so that the spacing of the interpolation points is equal to the
+        minimum point spacing in the file.  In other words, if you have a data file with non-
+        equidistant points, this option interpolates to give you equidistant points with the
+        same minimum spacing as the original data. This tends to fill in the space between
+        widely-spaced points, hence the name.
+    \item {\tt -fileValues={\em valuesFile}[,column={\em columnName}][,parallelPages]} --- 
+        Specifies a set of values at which interpolation is to be done.  In this case,
+        the values are extracted from a column ({\em columnName}) of an SDDS file ({\em valuesFile}).
+        If {\tt parallelPages} is given, then successive pages of {\em inputFile} are
+        interpolated at points given by successive pages of {\em valuesFile}.  Otherwise,
+        each page of {\em inputFile} is interpolated at the values in all pages of
+        {\em valuesFile}; this can take quite some time if both files have many pages
+        with many rows.
+    \item {\tt -order={\em number}} --- The order of the polynomials to use for interpolation.
+        The default is 1, indicating linear interpolation.
+    \item {\tt -printOut[=bare][,stdout]} --- Specifies that interpolated values should be printed
+        to stderr.  By default, the printout contains text identifying the quantities; this may
+        be suppressed by specifying {\tt bare}.  Output may be directed to the standard output
+        by specifying {\tt stdout}.
+    \item \begin{raggedright}{
+        {\tt -belowRange=\{value={\em value} | skip | saturate | extrapolate | wrap\}[,\{ abort | warn\}},
+        {\tt -aboveRange=\{value={\em value} | skip | saturate | extrapolate | wrap\}[,\{ abort | warn\}}
+        }\end{raggedright} ---
+        These options specify the behavior in the event that an interpolation point is, respectively,
+        below or above the range of the independent data.  If such an out-of-range point occurs,
+        the default behavior is to assign the value at the nearest endpoint of the data; this is
+        identical to specifying {\tt saturate}.  One may specify use of a specific value with
+        {\tt value={\em value}}.  {\tt skip} specifies that offending points should be discarded.
+        {\tt extrapolate} specifies extrapolation beyond the limits of the data.
+        {\tt wrap} specifies that the data should be treated as periodic.  {\tt abort} specifies
+        that the program should terminate. {\tt warn} requests warnings for out-of-bounds points.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddspfit}
+    \end{itemize}
+\item {\bf author:} M. Borland, H. Shang, R. Soliday ANL/APS.
+\end{itemize}
+

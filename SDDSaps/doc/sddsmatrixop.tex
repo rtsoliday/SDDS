@@ -1,0 +1,151 @@
+% $Log: not supported by cvs2svn $
+% Revision 1.1  2003/06/20 19:34:59  shang
+% first version
+%
+% first version, Hairong Shang
+%
+%
+% Template for making SDDS Toolkit manual entries.
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+
+%
+% Substitute the program name for <programName>
+%
+\subsection{sddsmatrixop}
+\label{sddsmatrixop}
+
+\begin{itemize}
+\item {\bf description:}
+%
+% Insert text of description (typicall a paragraph) here.
+%
+\verb+sddsmatrixop + performs general matrix operations. The matrices and 
+operations are specified on the command line and the operations will
+proceed in a rpn-like fashion.
+
+String columns are ignored and not copied to the output file.
+
+\item {\bf examples:} 
+%
+% Insert text of examples in this section.  Examples should be simple and
+% should be preceeded by a brief description.  Wrap the commands for each
+% example in the following construct:
+% 
+%
+{\tt }C = A B  would be expressed as
+\begin{flushleft}{\tt
+\bf sddsmatrixop A.matrix C.matrix -push=B.matrix -multiply
+}\end{flushleft}
+
+Here A.matrix is the input matrix of the command line.
+It is pushed on the "matrix" stack. In rpn, we always need
+one quantity on the stack before doing any operations, so
+the input file may as well be it. 
+The command "push" pushes a second matrix on the stack.
+The command -multiply does the multiplication of
+A.matrix and B.matrix.
+The matrix at the top of the stack will go in the output file
+C.matrix.
+
+{\tt }A more complicated command would be
+\[{\rm Y = (1 + (A+B)C)^{-1}}\]
+
+\begin{flushleft}{\tt
+\bf sddsmatrixop A.matrix Y.matrix -push=B.matrix -add -push=C.matrix -mult -identity -add -invert
+}\end{flushleft}
+ where the -identity command pushes an identity matrix
+with the same dimension as the top element on the stack.
+{\tt }The above command will be executed as following:
+\begin{flushleft}
+\begin{verbatim}
+command          execution                    stack (from top to bottom)   
+A.matrix         push A into stack            A
+                              
+-push=B.matrix   push B into stack            B A
+
+-add             pop matrix A,B from stack    temp1
+                 execute: temp1=A+B
+                 push temp1 into stack
+
+-push=C.matrix   push C into stack            C temp1
+
+-mult            pop C and temp1 from stack   temp2
+                 execute: temp2=temp1*C
+                 push temp2 into stack
+
+-identity        pop temp2 from stack         I temp2
+                 create unit matrix(I) that
+                    has the same 
+                    dimension as temp2
+                 push temp2 into stack
+                 push I into stack
+
+-add             pop I and temp2 from stack   temp3
+                 execute: temp3=temp2+I
+                 push temp3 into stack
+
+-invert         pop temp3 from stack          result
+                execute: result = temp3^(-1)
+                push result into stack.
+
+at the end, the final result matrix is poped from the stack and writtend into output Y.matrix.
+
+\end{verbatim}
+\end{flushleft}
+
+\item {\bf synopsis:} 
+%
+% Insert usage message here:
+%
+\begin{flushleft}{\tt
+sddsmatrixop [inputmatrix] [outputmatrix] [-pipe=[in|out]] [-verbose]
+   [-push=<matrix>] [-multiply]|[-add]|[-substract]|[-invert]...       
+}\end{flushleft}
+
+\item {\bf switches:}
+%
+% Describe the switches that are available
+%
+    \begin{itemize}
+    \item {\tt  -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt  inputmatrix}    --- SDDS file which contains the input matrix -- the first element
+                                     in the stack.
+    \item {\tt  outputmatrix}   --- The result matrix is written into SDDS file named by outputmatrix.
+    \item {\tt  -push=<matrix>}  --- The matrix that is going to be pushed into stack.
+    \item {\tt  -verbose}        --- Write diagnostic messages to stderr.
+    \item {\tt  -identity[=<number>]} --- push a unit matrix into stack. If {<number>} is provided, the unit matrix has the dimension provided by {<number>}, otherwise, the dimenstion of unit matrix is the same as
+the top matrix in the stack.
+    \end{itemize}
+The available operations are as following:      
+    \begin{itemize}
+    \item {\tt  -add}       --- addition operator.
+    \item {\tt  -substract}  --- substract operator.
+    \item {\tt  -multiply[=hadamard]} --- matrix multiplication operator. if =hadamard is specified, the
+                matrix multiplication is done element-by-element, similar to addition.
+    \item {\tt  -divide=hadamard} --- element-by-element division.
+    \item {\tt  -swap}   --- swap the top two elements in the stack.
+    \item {\tt  -scalarmultiply=<value>}  --- multiply the matrix by a constant value.
+    \item {\tt  -scalardivide=<value>}    --- divide the matrix by a constact value.
+    \item {\tt  -transpose} --- matrix transpose operator.
+    \item {\tt  -invert}    --- matrix inversion operator.
+    \end{itemize}
+the -push and operators can be repeated many times as needed.
+%\item {\bf see also:}
+%    \begin{itemize}
+%
+% Insert references to other programs by duplicating this line and 
+% replacing {\em prog} with the program to be referenced:
+%
+%    \item \progref{<prog>}
+%    \end{itemize}
+%
+% Insert your name and affiliation after the '}'
+%
+\item {\bf author: H. Shang } ANL
+\end{itemize}
+
+
+

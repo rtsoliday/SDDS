@@ -1,0 +1,75 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddssyncflux}
+\label{sddssyncflux}
+
+\begin{itemize}
+\item {\bf description:} \verb|sddssyncflux| calculates synchroton radiation photon flux of bend, wigger and undulator magnet. The calculation for undulator has not been implemented yet.
+
+\item {\bf examples:} 
+%
+% Insert text of examples in this section.  Examples should be simple and
+% should be preceeded by a brief description.  Wrap the commands for each
+% example in the following construct:
+% 
+%
+{\tt }
+\begin{flushleft}{\tt
+\bf sddssyncflux bend.test -source=bend -mode=energy,linear,start=1,end=3,step=0.1
+\bf sddssyncflux wiggler.test -source=wiggler,period=5,numberOfPeriods=7,field=1 -mode=energy,linear,start=100,end=200,step=2 
+}\end{flushleft}
+
+\item {\bf synopsis:} 
+%
+% Insert usage message here:
+%
+\begin{flushleft}{\tt
+sddssyncflux <outputFile> -verbose [-pipe]
+   [-fileValues=<filename>[,energy=<columnName or wavelength=columnName>] 
+   [-mode=energy(wavelength),linear(logarithmic),start=<value>,end=<value>,step(factor)=<value>] 
+   [-source=bendMagnet[,field=xx[,radius=yy][,criticalEnergy=ZZ]] 
+     [-source=wiggler(undulator),period=xx[,field=yy][,K=zz],numberOfPerions=<n>]
+   [-eBeamEnergy=<value> [-eBeamCurrent=<value>] [-eBeamGamma=<value>]   
+}\end{flushleft}
+
+\item {\bf files:}
+{\em outputFile} the results are written to an SDDS file.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe} --- output result to the pipe.
+    \item {\tt -fileValues=<filename>[,energy=<columnName or wavelength=columnName>] } --- get the energy or waveformlengt of filename instead of by -mode option.
+    \item {\tt -mode=energy,linear,start=<value>,end=<value>,step=<value>} --- Generate photon energy column in eV linearly, from start to end in steps.
+    \item {\tt -mode=energy,logarithmic,start=<value>,end=<value>,factor=<value>} --- Generate photon energy column logarithmically, from start to end by multiplying
+                   factor from point to point.
+    \item {\tt -mode=wavelength,linear,start=<value>,end=<value>,step=<value>} --- Generate photon wavelength column in nm linearly, from start to end in steps.
+    \item {\tt -mode=wavelength,logarithmic,start=<value>,end=<value>,factor=<value} ---
+        Generate photon wavelength column in nm logarithmically, from start 
+        to end by multiplying factor from point to point.
+    \item {\tt -source=bendMagnet[,field=xx][,radius=yy][,critialEnergy=zz]} --- bend 
+        magnet source, magnetic filed=xx Tesla (default=0.6 Teslas). 
+        bend radius= yy meter (no default value), criticalEnergy=zz eV 
+        (no default value). only one of field, radius and K is needed to be provided. 
+    \item {\tt -source=wiggler,period=xx[,field=yy][,K=zz],numberOfPeriods=n} ---
+        Wiggler source, period=xx cm (default=5 cm).  
+        Peak magnetic field=yy Tesla (default=1 Teslas). 
+        Undulator parameter, K=zz (no default values) 
+        only two of period, field and K is needed to be provided.  
+        numberOfPeriods needs to be provided.  
+    \item {\tt -source=undulator,period=xx[,field=yy][,K=zz],numberOfPerios=n} ---
+        undulator source, period=xx cm (default=5 cm). 
+        Peak magnetic field=yy Tesla (default=1 Teslas).
+        Undulator parameter, K=zz (no default values) 
+        only two of period, field and K is needed to be provided.
+        numberOfPeriods needs to be provided. 
+{\bf Note that only one source is accepted at one time. }
+    \item {\tt -eBeamEnergy} --- Electron beam energy in Gev, default 7Gev.
+    \item {\tt -eBeamGamma} --- Electron beam gamma.
+    \item {\tt -eBeamCurrent} --- Electron beam current in A.
+    \item {\tt -g1ValueFile} --- give the file which contains the values of y and yGy,
+      where yGy=y*intergration of (bessel funtion) K5/3 from y to infinity.
+    \end{itemize}
+\item {\bf author:}H. Shang ANL/APS.
+\end{itemize}
+
+

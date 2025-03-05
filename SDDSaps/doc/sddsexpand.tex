@@ -1,0 +1,49 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsexpand}
+\label{sddsexpand}
+
+\begin{itemize}
+\item {\bf description:}
+
+\verb|sddsexpand| reads data pages from an SDDS file and writes a new
+SDDS file containing a separate data page for every row in the input
+file.  All column definitions from the input file are turned into
+parameter definitions in the output file.  In addition all parameter
+definitions from the input file are copied to the output file.  Each
+output data page contains the values of the columns from a single row
+of the input file, along with the values of the parameters from the
+same page.  The output file contains no column or array definitions.
+
+\verb|sddsexpand| is essentially the inverse of \verb|sddscollapse|
+(except that the column data thrown out in collapsing a file is not
+recoverable).
+
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsexpand [{\em inputFile}] [{\em outputFile}] [-pipe[=input][,output]]
+}\end{flushleft}
+
+\item {\bf files:} {\em inputFile} is the name of an SDDS data set to
+be expanded.  {\em outputFile} is the result.  Note that {\em
+outputFile} will not contain any information from any arrays that are
+in {\em inputFile}.
+
+\item {\bf switches:} 
+\begin{itemize}
+        \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+        \item {\tt -noWarnings} --- Suppresses warnings about name clashes between
+        parameters and columns.  If such a clash occurs, the parameter data is ignored.
+\end{itemize}
+
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddscollapse}
+    \item \progref{sddsbreak}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+
+

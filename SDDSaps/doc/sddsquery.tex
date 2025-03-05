@@ -1,0 +1,105 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsquery}
+\label{sddsquery}
+
+\begin{itemize}
+\item {\bf description:}
+
+\verb|sddsquery| prints a summary of the SDDS header for a data set.  It also prints 
+bare lists of names of defined entities, suitable to use with shell
+scripts that need to detect the existence of entities in the data set.
+Finally, it will create an SDDS file containing information about what is in the
+header.
+
+\item {\bf examples:} 
+Get information on the contents of a file:
+\begin{flushleft}{\tt
+sddsquery APS.twi
+}\end{flushleft}
+Get a list of the column names only:
+\begin{flushleft}{\tt
+sddsquery APS.twi -columnList
+}\end{flushleft}
+Get a list of the column names into a shell variable
+\begin{flushleft}{\tt
+set names = `sddsquery APS.twi -columnList -delimiter=" "`
+}\end{flushleft}
+Get a list of the column names into an SDDS file
+\begin{flushleft}{\tt
+sddsquery APS.twi -columnList -sddsOutput=APS.twi.names
+}\end{flushleft}
+
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsquery {\em SDDSfilename} [{\em SDDSfilename}...] 
+[-sddsOutput[={\em filename}]]
+[\{-arrayList | -columnList | -parameterList | -version\}]
+[-delimiter={\em delimitingString}] [-appendUnits[=bare]] [-readAll]
+}\end{flushleft}
+
+\item {\bf files:} 
+The input filenames may name arbitrary SDDS files.  
+
+If {\tt -sddsOutput} is given, the output normally contains one page for each data
+class (i.e., array, parameter, and column).  The following
+elements are defined:
+        \begin{itemize}
+        \item Columns (all string type):
+                \begin{itemize}
+                \item \verb|Name| --- The name of the element.
+                \item \verb|Units| --- The units of the data.
+                \item \verb|Symbol| --- The symbol for the element.
+                \item \verb|Format| --- The format string for the element (e.g., ``\%f'').
+                \item \verb|Type| --- The SDDS data type name (e.g., double, float, etc.).
+                \item \verb|Description| --- The description for the element.
+                \item \verb|Group| --- The group name (for array elements only).
+                \end{itemize}
+        \item Parameters:
+                \begin{itemize}
+                \item \verb|Class| --- The SDDS class for the present page.
+                \item \verb|Filename| --- The filename being described by the present page.
+                \end{itemize}
+        \end{itemize}
+
+\item {\bf switches:}
+
+Normal operation of \verb|sddsquery| results in a printout summarizing
+the header of each file.  If one of the options is given, however,
+this printout will not appear.  Instead, the selected list of names
+appears for each file.
+
+    \begin{itemize}
+    \item \verb|sddsOutput[={\em filename}]]| --- Requests that output be delivered in SDDS protocol.
+        If no {\em filename} is given, the output is delivered to the standard output.
+    \item \verb|arrayList| --- In non-SDDS output mode, 
+        requests that a list of array names be printed to the standard output,
+        one name per line.  In SDDS output mode, requests that only array information be 
+        provided.
+    \item \verb|columnList| --- In non-SDDS output mode, 
+        requests that a list of column names be printed to the standard output,
+        one name per line.  In SDDS output mode, requests that only column information be 
+        provided.
+    \item \verb|parameterList| --- In non-SDDS output mode, 
+        requests that a list of parameter names be printed to the standard output,
+        one name per line.  In SDDS output mode, requests that only parameter information be 
+        provided.
+    \item {\tt -version} --- Requests that the SDDS version number of the file be printed to the
+        standard output.  Valid in non-SDDS output mode only.
+    \item {\tt -delimiter={\em delimitingString}} --- Requests that listed items be separated by the
+        given string.  By default, the delimiter is a newline.  Valid in non-SDDS output mode only.
+    \item {\tt -appendunits[=bare]} --- Requests that the units of each item be printed directly following the
+        item name.  Valid in non-SDDS output mode only.  If the {\tt bare} qualifier is not given,
+        then the units are enclosed in parentheses.
+    \item {\tt -readAll} --- Forces {\tt sddsquery} to read the entire file.  On some operating systems
+        this is necessary when querying compressed files to prevent ``Broken Pipe'' errors.   For large
+        files, use of this option will make {\tt sddsquery} slower.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

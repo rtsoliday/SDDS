@@ -1,0 +1,251 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddscontour}
+\label{sddscontour}
+
+\begin{itemize}
+\item {\bf description:} 
+\verb|sddscontour| makes contour and color-map plots from an SDDS data set column, or from a \verb|rpn| expression
+in terms of the values in the columns of a data set.  It supports FFT interpolation and filtering.  If the
+data set contains more than one data page, data from successive pages is plotted on separate pages.
+
+\item {\bf example:}
+This will generate a two-dimensional color-shaded map of the function ${\rm sin(4\pi (x^2 + y^2))}$ on
+the region x:[-1, 1] and y:[-1, 1]:
+\begin{flushleft}{\tt
+sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 \\
+-zEquation="x x * y y * + 4 * pi * sin"\\
+sddscontour example.sdds -shade example.sdds -equalAspect
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddscontour {\em SDDSfilename} {\em switches}
+}\end{flushleft}
+\item {\bf switches:}
+    \begin{itemize}
+    \item Choice of what to plot:
+\begin{flushleft}{\tt
+[{-quantity={\em columnName} | -equation={\em rpnExpression} | 
+ -columnMatch={\em indepColumnName},{\em matchingExpression}} |
+ -waterfall={\em parameter=<parameter>,independentColumn=<xColumn>, 
+             colorColumn=<colorColumn>[,scroll=vertical|horizontal]}]
+ -xyz={\em xColumnName},{\em yColumnName},{\em zColumnName} 
+}\end{flushleft}
+\begin{itemize}
+        \item \verb|quantity| --- Specifies the name of the column to make a contour or color map of.
+        \item \verb|equation| --- Specifies a \verb|rpn| expression to make a contour or color map of.
+        The expression may refer to the values in the columns by the appropriate column name, and may
+        also refer to the variable values by name.
+        \item \verb|columnMatch| --- Specifies plotting of all columns matching {\em matchingExpression}
+        as a function of the column {\em indepColumnName}.  Each matching column is displayed as a horizontal 
+        color bar. 
+        \item \verb|waterfall| --- Specifies plotting of {\em colorColumn} in all pages as a function of the
+        {\em independentColumn}. The {\em parameter} in each page is displayed as horizontal or vertical (provided
+        by the {\em scroll}) bar, the default is horizontal. The {\em independentColumn} should be the same in
+        each page.
+        \item \verb|xyz| --- Specifies the names of two independent columns {\em xColumnName} and {\em yColumnName}, along with 
+          a third dependent column {\em zColumnName} that is plotted as a function of the others.
+          The x and y values must form a grid.
+        \end{itemize}
+
+        In the case of the first two choices, the file must contain
+tabular data with at least one numeric column, which will be organized
+into a 2d array with R rows and C columns.  By default, the values are
+assumed to come in row-major order (i.e., the file should contain a
+series of R sequences each containing the C values of a single row).
+The parameters of the 2d grid over which the plot is to be made are
+communicated to the program in one of two ways:
+
+\begin{enumerate}
+
+\item The string parameters \verb|Variable1Name| and \verb|Variable2Name| contain the names of the 
+x and y axis variables, which I'll represent as {\em x} and {\em y} respectively.  The program expects to find
+six more parameters, with names {\em x}\verb|Minimum|, {\em x}\verb|Interval|, and {\em x}\verb|Dimension|,
+and similarly for {\em y}.  These parameters must be numeric, and contain the minimum value, the interval
+between grid points, and the number of points, respectively, for the dimension in question.
+The data must be arranged so that {\em y} varies fastest as the row in the file increases.  Put another
+way, variable 1 is the row index and variable 2 is the column index.
+\item The numeric parameters \verb|NumberOfRows| and \verb|NumberOfColumns| contain the values of R and
+C, respectively.
+\end{enumerate}
+
+    \item \verb|rpn| control:
+\begin{flushleft}{\tt
+[-rpnDefinitionsFiles={\em filename}[,{\em filename}...]]
+[-rpnExpressions={\em setupExpression}[,{\em setupExpression}...]]
+}\end{flushleft}
+        \begin{itemize}
+        \item \verb|rpnDefinitionsFiles| --- Specifies the names of files containing \verb|rpn| expressions
+        to be executed before any other processing takes place.
+        \item \verb|rpnExpressions| --- Specifies \verb|rpn| expressions to be executed before any other processing
+         takes place, immediately after any definitions files.
+        \end{itemize}
+    \item Shade and contour control:
+\begin{flushleft}{\tt
+\{-shade={\em number}[,{\em min},{\em max},gray] | -contours={\em number}[,{\em min},{\em max}]\}
+[-labelContours={\em interval}[,{\em offset}]]
+}\end{flushleft}
+        \begin{itemize}
+        \item \verb|shade| --- Specifies that a color (or grey-scale) map should be produced, with the
+        indicated {\em number} of shades mapped onto the range from {\em min} to {\em max}.  If {\em min}
+        and {\em max} are not given, they are taken to be equal to the minimum and maximum data values.
+        \item \verb|contours| --- Specifies that contour lines should be drawn, with the 
+        indicated {\em number} of lines for  the range from {\em min} to {\em max}.  If {\em min}
+        and {\em max} are not given, they are taken to be equal to the minimum and maximum data values.
+        \item \verb|labelContours| --- Specifies that every {\em interval}$ {th}$ contour line, starting with
+        the {\em offset}$ {th}$ line, should be labeled with the contour value.
+        \end{itemize}
+    \item Image processing:
+\begin{flushleft}{\tt
+[-interpolate={\em nx},{\em ny}[,{floor | ceiling | antiripple}]] [-filter={\em xcutoff},{\em ycutoff}]
+}\end{flushleft}
+        \begin{itemize}     
+        \item \verb|interpolate| --- Specifies that the 2d map should be interpolated to have {\em nx} times
+        more rows (or x grid points) and {\em ny} times more columns (or y grid points).  Since FFTs are used to
+        do the interpolation, the original number of grid points must be a power of 2, as must the factor.  Giving
+        a factor of 1 disables interpolation for the dimension in question.  \verb|floor|, \verb|ceiling|,
+        and \verb|antiripple| specify image processing of the interpolated map.  \verb|floor| and \verb|ceiling|
+        respectively force values below (above) the minimum (maximum) value of the data to be set equal to that
+        value.  \verb|antiripple| causes the map to be altered so that non-zero values in the new map between
+        zero values on the original map are set to zero; this suppresses ripples that sometimes occur in regions
+        where the data was originally all zero.
+        \item \verb|filter| --- Applies low-pass filters to the data with the specified normalized cutoff 
+        frequencies.  The integer cutoff values give the number of frequencies starting at the Nyquist frequency
+        that are to be eliminated.  
+        \end{itemize}
+    \item Plot labeling:
+\begin{flushleft}{\tt
+[-xLabel={\em string|@<parameter-name>}] [-yLabel={\em string|@<parameter-name>}] 
+[-title={\em string|@<parameter-name>|file[,edit=<string>]}] [-topline={\em string|@<parameter-name>|file[,edit=<string>]}] 
+[-topTitle] [-noLabels] [-noScales] [-dateStamp] 
+}\end{flushleft}
+        \begin{itemize}
+        \item \verb|xLabel|, \verb|yLabel|, \verb|title|, \verb|topline| --- These specify strings to be placed
+                in the various label locations on the plot. If @<parameter-name> is provided, the value of given parameter will be printed; If {\em-topline=file[,edit=<string>]} or {\em-title=file[,edit=<string>]} option is provided, then the input file name or edited file name (if edit command is also provided) will be printed to the topline or title.
+        \item \verb|topTitle| --- Requests that the title label be placed at the top of the plot, rather than
+                at the bottom.
+        \item \verb|noLabels| --- Requests that no labels be placed on the plot.
+        \item \verb|noScales| --- Requests omission of the numeric scales.
+        \item \verb|noBorder| --- Requests omission of the border around the data.  Implies \verb|-no_scales|.
+        \item \verb|dateStamp| --- Requests that the date and time be placed on the pot.
+        \end{itemize}
+    \item Plot tick labeling: (only valid for -columnMatch plot)
+\begin{flushleft}{\tt
+[-xrange=mimum={\em value}|@{\em parameterName},maximum={\em value}|@{\em parameterName}] 
+[-yrange=mimum={\em value}|@{\em parameterName},maximum={\em value}|@{\em parameterName}]
+[-xaxis=scaleValue=<value>|scaleParameter=<name>
+   [,offsetValue=<number>|offsetParameter=<name>] 
+[-yaxis=scaleValue=<value>|scaleParameter=<name>
+   [,offsetValue=<number>|offsetParameter=<name>]
+}\end{flushleft}
+        \begin{itemize} 
+        \item \verb|xrange| --- specifies the minimum and maximum value of x axis, the value can be provided or obtained from parameters. If -xrange is provided, the indepentColumn will be ignored.
+        \item \verb|yrange| --- specifies the minimum and maximum value of y axis, the value can be provided or obtained from parameters. If -yrange is provided, the y tick labels will be numberically labeled with provided range.
+        \item \verb|yaxis| --- specifies the scale and offset value of y axis, the value can be provided or obtained from parameters. Only one of the -yrange and -yaxis can be provided. If -yaxis is provided, the y tick labels will be numberically labeled with provided scale and offset.
+        \end{itemize}
+        {\bf For example}, {\em origin1}, {\em delta1}, {\em max\_ext1}, {\em origin2}, {\em delta2} and {\em max\_ext2} are the parameters in \htmladdnormallink{sddscontour.input1}{http://ops.aps.anl.gov/manuals/example_files/sddscontour.input1} file, {\em origin1}, {\em delta1} and {\em max\_ext1} represent the minimum, delta and maximum values of x coordinate, {\em origin2}, {\em delta2}, and {\em max\_ext2} represents the minimum, delta and maximum values of y coordinate. The {\em Index} column represents the index of x coordinate, i.e. value of {\em x=Index * delta1 + origin1}; The Ex\_{\em n} column represents the Ex field at {\em n}th y value, where {\em y=(n-1)*delta2 + origin2}. If no -xrange and -yrange provided as in following command, the actual value of x and y will not be shown in the plot. (click the show\_plot button will show you the corresponding plot.) 
+       \begin{flushleft}{\tt \bf
+            sddscontour sddscontour.input1 -columnMatch=Index,Ex* -ystring=sparse=10 -ylabel=y -shade
+         \htmladdnormallink{show\_plot}{http://ops.aps.anl.gov/manuals/example_files/sddscontour1_img.html}
+        }\end{flushleft}
+
+        We can use -ystring to remove the string part of y label as following:
+        \begin{flushleft}{\tt \bf
+            sddscontour sddscontour.input1 -columnMatch=Index,Ex* -ystring=sparse=10,edit=\%/Ex\_// -ylabel=y -shade    \htmladdnormallink{show\_plot}{http://ops.aps.anl.gov/manuals/example_files/sddscontour2_img.html}
+        }\end{flushleft}
+
+        The above y tick label still shows the index of y coordinate, not y values. Following command allows us to see the y values:
+        \begin{flushleft}{\tt \bf
+            sddscontour sddscontour.input1 -columnMatch=Index,Ex* -yrange=minimum=@origin2,maximum=@max\_ext2 -ylabel=y -shade          \htmladdnormallink{show\_plot}{http://ops.aps.anl.gov/manuals/example_files/sddscontour3_img.html}
+        }\end{flushleft}
+
+        Now, for the x tick labels, the above plot shows the Index value. Following command will show the values of x coordinate:
+    
+        \begin{flushleft}{\tt \bf
+        sddscontour sddscontour.input1 -column=Index,Ex* -yrange=min=@origin2,max=@max\_ext2 -xrange=min=@origin1,max=@max\_ext1 -xlabel=x -ylabel=y  -shade   \htmladdnormallink{show\_plot}{http://ops.aps.anl.gov/manuals/example_files/sddscontour4_img.html}
+        }\end{flushleft}  
+        
+        The independent column - Index in the above command is useless. Therefore, -xrange provides a way for plotting a set of columns with contour without indepent column. If use sddsprocess to create x column through {\em x=Index * delta1 + origin1}, the above plot can be created using following command, note that the titles in two plots are different because the independent column names are different since the title is automatically generated from input column names if it is not provided.
+
+        \begin{flushleft}{\tt \bf
+        sddscontour sddscontour.input1 -column=x,Ex* -yrange=min=@origin2,max=@max\_ext2 -ylabel=y -shade   \htmladdnormallink{show\_plot}{http://ops.aps.anl.gov/manuals/example_files/sddscontour5_img.html}
+        }\end{flushleft}  
+
+
+       Here shows the examples of providing xrange and yrange from parameters, however, they can be provided by fixed values from commandline also.
+
+    \item Data scaling:
+\begin{flushleft}{\tt
+[-deltas[=\{fractional | normalize\}]] [-logscale[={\em floor}]]
+}\end{flushleft}
+        \begin{itemize}
+        \item \verb|deltas| --- For use with \verb|-columnMatch| and \verb|-waterfall| option.  Specifies plotting 
+        only differential values (relative to the mean of each column).  If the \verb|fractional| 
+        qualifier is given, then the differential values normalized to the individual
+        means are plotted.  If the \verb|normalize| qualifier is given, then all differential values
+        are normalized to the range [-1, 1] before plotting.
+        \item \verb|logscale| --- Specifies plotting the base-10 logarithm of the values.  If a
+        {\em floor} value is given, it is added to each value prior to taking the logarithm; this
+        can help prevent taking the log of zero, for example.
+        \end{itemize}
+    \item Miscellaneous plot control:
+\begin{flushleft}{\tt
+[-scales={\em xl},{\em xh},{\em yl},{\em yh}] 
+[-swapxy] [-equalAspect[={-1,1}]]
+[-noBorder] [-layout={\em nx},{\em ny}]
+[-ticksettings={xy}time] [-nocolorbar] 
+[-drawLine=\{x0value={\em value} | p0value={\em value} | x0parameter={\em name} | p0parameter={\em name}\},
+            \{x1value={\em value} | p1value={\em value} | x1parameter={\em name} | p1parameter={\em name}\},
+            \{y0value={\em value} | q0value={\em value} | y0parameter={\em name} | q0parameter={\em name}\},
+            \{y1value={\em value} | q1value={\em value} | y1parameter={\em name} | q1parameter={\em name}\}]
+}\end{flushleft}
+        \begin{itemize}
+        \item \verb|scales| --- Specifies the extent of the plot region.
+        \item \verb|swapxy| --- Requests that the horizontal and vertical coordinates be interchanged.
+        \item \verb|equalAspect| --- Requests plotting with an aspect ratio of 1.  If the '1' qualifier
+        is given, then the aspect ratio is achieved by changing the size of the plot region within the window;
+        this is the default.
+        If the '-1' qualifier is given, then the aspect ratio is achieved by changing the size of the plot region
+        in user's coordinates.  
+        \item \verb|noBorder| --- Specifies that no border will be placed around the graph.
+        \item \verb|layout| --- Specifies that each page of the plot should have a {\em nx} by {\em ny} grid of contour plots.
+        \item \verb|tickSettings| --- Specify use of time mode for tick settings.
+        \item \verb|nocolorbar| --- Specify suppression of the color bar in \verb|-shade| mode.
+        \item \verb|xaxis|, \verb|yaxis| --- Modifies the labels on the x or y axis, through scaling and offseting.
+          The scale/offset values may be given literally or drawn from parameters in the data file.
+        \item \verb|drawLine| --- Requests drawing of lines on the plot, using any combination of real coordinate values
+          or plot-space values, either specified as literal values or drawn from parameters in the data file.
+          Suitable for multi-page files.
+        \end{itemize}
+    \item Miscellaneous:
+\begin{flushleft}{\tt
+[-device={\em name}[,{\em deviceArguments}]] 
+[-output={\em filename}] [-verbosity[=level]]
+}\end{flushleft}
+        \begin{itemize}
+        \item \verb|device| --- Specifies the device name and optional device-specific arguments. png devices
+        take rootname and template identifiers. {\tt rootname={\em string}} specifies a rootname
+        for automatic filename generation; the resulting filenames are of the form {\em rootname}.DDD, where DDD 
+        is a three-digit integer. {\tt template={\em string}} provides a more general facility; one uses it to
+        specify an sprintf-style format string to use in creating filenames. For example, the behavior obtained
+        using {\tt rootname={\em name}} may be obtained  using {\tt template={\em name}.\%03ld}.
+        \item \verb|output| --- Requests SDDS output of a new file containing the data with any modifications
+                resulting in the processing requested.
+        \item \verb|verbosity| --- Sets the verbosity level of informational printouts. Higher integer values
+                of the \verb|level| parameter result in more output.
+        \end{itemize}
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddscongen}
+    \item \progref{sddshist2d}
+    \item \progref{sddsimageconvert}
+    \item \progref{sddsimageprofiles}
+    \item \progref{sddsplot}
+    \item \progref{sddsspotanalysis}
+    \item \progref{rpn}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

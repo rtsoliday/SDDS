@@ -1,0 +1,80 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+ 
+\subsection{sddscollect} 
+\label{sddscollect} 
+ 
+\begin{itemize} 
+\item {\bf description:} 
+\verb|sddscollect| reorganizes tabular data from the input file 
+to bring data from several groups of similarly named columns together into  
+a single column per group.  In doing so, it creates one page of output 
+for every row on the input file.  It also creates parameters to 
+hold data from columns that are not included in any group. 
+ 
+\item {\bf examples:}  
+Take a data set with several columns of PAR BPM x and y 
+readings (one set of readings per row) and create a new file with one column for x 
+readings and one column for y readings, with each  
+page containing one set of readings.
+\begin{flushleft}{\tt 
+sddscollect par.bpm par.orbits -collect=suffix=x -collect=suffix=y 
+}\end{flushleft} 
+The output file has three columns, called \verb|x|, \verb|y|, and 
+\verb|Rootname|.  The latter column contains the original column 
+names less the ``x'' (or ``y'') suffix.   
+ 
+Do statistics on PAR BPM x and y readbacks, then collect the statistics  
+into columns, one column for each type of statistic: 
+\begin{flushleft}{\tt  
+sddsprocess par.bpm -pipe=out -process=P?P?[xy],spread,\%sSpread  
+-process=P?P?[xy],ave,\%sMean -process=P?P?[xy],stand,\%sStDev  
+| sddscollapse  
+| sddscollect -pipe=in parbpm.stat \ 
+  -collect=suffix=xSpread -collect=suffix=xMean -collect=suffix=xStDev 
+  -collect=suffix=ySpread -collect=suffix=yMean -collect=suffix=yStDev 
+} 
+\end{flushleft} 
+The output file has columns named {\tt xSpread}, {\tt ySpread},  
+{\tt xMean}, {\tt yMean}, {\tt xStDev}, 
+and {\tt yStDev}, plus an additional column named {\tt Rootname}. 
+The latter column contains the remnants of each original column 
+name after the suffix is removed.  Note that in the example, 
+the remnant names are the same for all the collections specified. 
+If this were not true, \verb|sddscollect| would abort and give 
+an error message. 
+ 
+\item {\bf synopsis:}  
+ 
+\begin{flushleft}{\tt 
+sddscollect [{\em input}] [{\em output}] [-pipe[=input][,output]] \\
+-collect=\{suffix | prefix | match\}={\em match}[,column={\em newName}][,editCommand=<string>] 
+}\end{flushleft} 
+ 
+\item {\bf switches:} 
+    \begin{itemize} 
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option. 
+    \item {\tt -collect=\{suffix | prefix | match\}={\em match}[,column={\em newName}][,editCommand=<string>]} 
+                --- Specifies 
+    a string, {\em match}, to look for at the end of (suffix mode),  
+    beginning of (prefix mode), or anywhere in (match mode) column names in the input file. 
+    Data from all matching columns is transferred into a single column 
+    in the output file.  For prefix and suffix modes, the default name of this column is the 
+    suffix or prefix string, while for match mode it is created by applying the edit command
+    to the matching column names. This may be changed with the  {\tt column} qualifier. 
+ 
+    This option may be given any number of times. However, all  
+    collections must produce the same number of matches.  Further 
+    the set of name remainders (i.e., the original 
+    column name less the prefix or suffix, or following editing) must  
+    be the same for each collection. 
+    \end{itemize} 
+\item {\bf see also:} 
+    \begin{itemize} 
+    \item \progref{sddsregroup} 
+    \item \progref{sddstranspose} 
+    \item \progref{sddsEditing}
+    \end{itemize} 
+\item {\bf author:} M. Borland, ANL/APS. 
+\end{itemize} 

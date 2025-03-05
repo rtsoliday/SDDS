@@ -1,0 +1,85 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddssequence}
+\label{sddssequence}
+
+\begin{itemize}
+\item {\bf description:} 
+{\tt sddssequence} generates an SDDS file with a single page and several columns of data
+of arithmetic sequences. An example application is 
+generating values for an independent variable, whose values can be used by 
+{\tt sddsprocess} to produce a mathematical function.
+\item {\bf examples:} 
+Make a file example.sdds with column Index of type long with 100 rows. The value of Index in the first row
+is 1 and is incremented by 1 for each successive row.
+\begin{flushleft}{\tt
+sddssequence example.sdds -define=Index -sequence=begin=1,number=100,delta=1
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddssequence [-pipe=[output]] [<outputfile>]
+-define=<columnName>[,<definitionEntries>] [-repeat=<number>]
+-sequence=begin=<value>[,number=<integer>][,end=<value>]
+    [,delta=<value>][,interval=<integer>]
+[-sequence=[begin=<value>][,number=<integer>][,end=<value>]
+    [,delta=<value>][,interval=<integer> ...]
+}\end{flushleft}
+
+\item {\bf files:}
+{\em outputfile} is the name of the SDDS file containing data generated.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe=[output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -define=<columnName>[,<definitionEntries>]} --- Defines a new column.
+        One or more {\tt -sequence} options should follow. 
+        Definition entries have the form {\tt fieldName=value}
+        where {\tt fieldName} is the name of any namelist
+        command field (except the name field) for a column. The default data type is double.
+        To get a different type, use {\tt type=<typeName>}.
+
+        Multiple {\tt -define} options can be used to create mutliple columns, each with their
+        own set of {\tt -sequence} options.
+    \item {\tt -sequence=begin=<value>[,number=<integer>][,end=<value>]}
+        {\tt[,delta=<value>][,interval=<integer>]}
+        --- Defines the arithmetic sequence for the data column. 
+        More that one {\tt sequence} option can be given for a 
+        column definition, thus allowing arithmetic sequences of different character in one column.
+        The {\tt begin} value must be given in the first {\tt sequence} option.
+        If any {\tt sequence} options follows immediately, a default value
+        equal to the previous {\tt end} value plus the previous {\tt delta} value is used.
+        For the rest of the suboptions, the user must supply 
+        ({\tt end}, {\tt delta}), ({\tt end}, {\tt number}), or ({\tt delta}, {\tt number}).
+        If {\tt number} isn't supplied, then the set of {\tt start}, {\tt end}, {\tt delta}
+        must imply a positive number of rows.
+
+        The {\tt interval} field specifies the number of rows for which the value is frozen
+        within the sequence. For instance, 
+\begin{verbatim}
+sddssequence example.sdds -def=Index,type=long -sequ=beg=1,num=10,end=10,inte=2
+sddsprintout -col=Index example.sdds
+\end{verbatim}
+        produces
+\begin{verbatim}
+Printout for SDDS file example.sdds
+ 
+  Index    
+------------
+          1 
+          1 
+          3 
+          3 
+          5 
+          5 
+          7 
+          7 
+          9 
+          9 
+\end{verbatim}
+    \item {\tt -repeat=<number>} --- Repeats the sequence identically for the given number of times.
+    \end{itemize}
+\item {\bf see also:}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

@@ -1,0 +1,38 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddscheck}
+\label{sddscheck}
+
+\begin{itemize}
+\item {\bf description:} {\tt sddscheck} is a simple tool to allow checking a file to see if
+it is a valid SDDS file, or if it is corrupted.  The primary use is in shell scripts that need
+to detect such conditions.  {\tt sddscheck} issues one of four messages: {\tt ok}, {\tt
+nonexistent}, {\tt badHeader}, or {\tt corrupted}.  (See \progref{sddsconvert} about recovering
+corrupted files.)
+
+\item {\bf examples:} 
+Under UNIX, one could do the following to check a file before plotting it:
+\begin{flushleft}{\tt
+if (`sddscheck APS.twi` == "ok") plotTwissParameters APS.twi
+}\end{flushleft}
+where {\tt plotTwissParameters} is a hypothetical plotting script.
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddscheck {\em filename}
+}\end{flushleft}
+\item {\bf files:}
+{\em filename} is the name of a single file to be checked.
+\item {\bf switches:}
+\begin{itemize}
+\item {\tt -printErrors} --- Causes the SDDS error traceback to be printed if the file is not \verb|ok|.
+        This may be helpful in determining the problem with the file.
+\end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item progref{sddsconvert}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+

@@ -1,0 +1,66 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsenvelope}
+\label{sddsenvelope}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsenvelope} analyzes column data across pages to find minima,
+maxima, averages, standard-deviations, etc., on a row-by-row basis.
+It produces a single-page output file containing one column for each analysis
+requested.  It will also copy through data from the first page into the output file.
+It requires that each page of the input file have the same number of rows.
+\item {\bf examples:}
+Find the minimum and maximum beta functions for a set of APS lattices:
+\begin{flushleft}{\tt
+sddsenvelope APS.twi APS.twi.env -copy=s -minimum=beta? -maximum=beta?
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddsenvelope [-pipe=[input][,output]] [{\em input}] [{\em output}] [-copy={\em columnNames}] 
+[-maximum={\em columnNames}] [-minimum={\em columnNames}] 
+[-mean={\em columnNames}] [-sum={\em power},{\em columnNames}] 
+[-standardDeviation={\em columnNames}] [-rms={\em columnNames}] 
+[-slope={\em independentVariableName},{\em columnNames}]
+[-intercept={\em independentVariableName},{\em columnNames}] 
+[-median={\em columnNames}] [-decileRange={\em columnNames}]
+}\end{flushleft}
+\item {\bf files:}
+      {\em inputFile} is a multipage file containing the data for which row-by-row 
+      statistics are desired.  {\em outputFile} is a single-page file containing the    
+      statistics.  The column names in {\em outputFile} are created from those in the
+      input file by appending the appropriate suffix from the following list:
+      {\tt Max}, {\tt Min}, {\tt Mean}, {\tt StDev}, {\tt RMS}, {\tt Sum}, {\tt Slope}, or
+      {\tt Intercept}.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -copy={\em columnNames}} --- Specifies that the named columns should be transferred
+        to the output file without alteration.  These data come from the first page
+        of the input file.  A comma-separated list of optionally wildcard-containing
+        strings may be given.
+    \item {\tt -maximum={\em columnNames}, -minimum={\em columnNames}}, 
+        {\tt -mean={\em columnNames}}, {\tt -rms={\em columnNames}},
+        {\tt -median={\em columnNames}}, {\tt -decileRange={\em columnNames}} ---
+        Specifies that the named columns should be analysed in the indicated fashion.
+        A comma-separated list of optionally wildcard-containing strings may be given.
+        Decile range is the spread between the 90\% and 10\% points on the distribution.
+    \item {\tt -sum={\em power},{\em columnNames}} ---Specifies that the named columns 
+        should be analysed in the indicated fashion,
+        i.e., that each output row should be the sum of the values to the indicated power.
+        A comma-separated list of optionally wildcard-containing strings may be given.
+    \item {\tt -slope={\em independentVariableName},{\em columnNames},
+         -intercept={\em independentVariableName},{\em columnNames}}--- Specifies that the named columns should be analysed 
+        to get the slope or intercept with respect to the parameter {\em independentVariableName}.
+        A comma-separated list of optionally wildcard-containing strings may be given for
+        the {\em columnNames}.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddschanges}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

@@ -1,0 +1,37 @@
+% $Log: not supported by cvs2svn $
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{hdf2sdds}
+\label{hdf2sdds}
+
+\begin{itemize}
+\item {\bf description:} Converts Hierarchical Data Format (HDF) to SDDS.
+\item {\bf example:} 
+\begin{flushleft}{\tt
+hdf2sdds data.hdf data.sdds -withIndex
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+hdf2sdds [{\em HDFfile}] [{\em SDDSfile}] [-pipe[=out]]
+[-query] [-ascii] [-binary] [-withIndex] [-reduceFactor={\em integer}[,keep={\em interger}]] [-3doutput]
+}\end{flushleft}
+\item {\bf files: }
+
+{\em HDFfile} is the filename of the HDF file.
+
+{\em SDDSfile} is the SDDS output that is created.
+
+\item {\bf switches:}
+\begin{itemize}
+    \item {\tt -pipe[=out]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -query} --- Print out the names of the groups and datasets in the HDF file.
+    \item {\tt -ascii} --- Requests that the output be ASCII.
+    \item {\tt -binary} --- Requests that the output be binary.
+    \item {\tt -withIndex} --- An index column is added to the output file.
+    \item {\tt -reduceFactor={\em integer}[,keep={\em interger}]} --- Write the first {\em keep}th value of every {\em reduceFactor} values in order to reduce the size of ouput file. The attributes are written to the output file by their originial data types.
+    \item {\tt -3doutput} --- Used to convert 3-dimensional HDF data.
+\end{itemize}
+\item {\bf author:} R. Soliday, ANL/APS.
+\end{itemize}

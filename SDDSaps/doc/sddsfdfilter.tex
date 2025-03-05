@@ -1,0 +1,134 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+ 
+\subsection{sddsfdfilter} 
+\label{sddsfdfilter} 
+ 
+\begin{itemize} 
+\item {\bf description:} 
+ 
+%\item {\bf examples:}  
+% 
+%\begin{flushleft}{\tt  
+% 
+%} 
+%\end{flushleft} 
+
+\item {\bf synopsis:}  
+ 
+\begin{flushleft}{\tt 
+sddsfdfilter [-pipe[=input][,output]] [{\em inputfile}] [{\em outputfile}] 
+[-columns={\em indep-variable}[,{\em depen-quantity}][,{\em depen-quantity}...]] 
+[-exclude={\em depen-quantity}[,{\em depen-quantity}]] 
+[-clipFrequencies=[high={\em number}][,low={\em number}]] 
+[-threshold=level={\em value}[,fractional][,start={\em freq}][,end={\em freq}]]  
+[-highpass=start={\em freq},end={\em freq}] [-lowpass=start={\em freq},end={\em freq}] 
+[-notch=center={\em center},flatWidth={\em width1},fullWidth={\em width2}]
+[-bandpass=center={\em center},flatWidth={\em width1},fullWidth={\em width2}] 
+[-filterFile=filename={\em filename},frequency={\em columnName},
+  \{real={\em columnName},imaginary={\em columnName} | magnitude={\em columnName}\}]}
+\\ {\tt
+[-cascade] [-newColumns] [-differenceColumns] 
+}\end{flushleft} 
+
+\item {\bf switches:} 
+    \begin{itemize} 
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option. 
+    \item {\tt -columns={\em indepVariable}[,{\em depenQuantity}][,{\em depenQuantity}...] } ---  
+    Gives the name of the independent variable (typically the time variable) 
+    with respect to which filtering is done.  If no {\em depenQuantity} 
+    qualifiers are given, then all numerical columns are filtered; 
+    otherwise, only the named columns are filtered. 
+   \item {\tt -exclude={\em depenQuantity}[,{\em depenQuantity}] } --- 
+   Specifies the names of columns to exclude from time filtering, 
+   altering whatever selections are made by the {\tt -columns} 
+   option. 
+    \item {\tt -clipFrequencies[=low={\em frequency}][,high={\em frequency}]} 
+    --- Specifies clipping frequencies below a given frequency ({\tt low}  
+    qualifier) and/or above a given frequency ({\tt high} qualifier). 
+    Any frequencies in the signals that are clipped are set to zero. 
+    \item {\tt -threshold=level={\em value}[,fractional][,start={\em freq}][,end={\em freq}]] }  
+    --- Specifies a threshold level below which Fourier components are 
+    set to zero.  If the {\tt fractional} qualifier is given, the level 
+    is interpreted as a fraction of the largest component. 
+    The {\tt start} and {\tt end} qualifiers allow restricting the  
+    frequency range over which the threshold is applied. 
+    \item {\tt -highpass=start={\em freq},end={\em freq}} --- 
+    Specifies a highpass filter.  Frequency components below the {\tt start} 
+    value are set to zero, while those above the {\tt end} value are 
+    unaffected.  Those in between are multiplied by a value that varies 
+    linearly from 0 to 1. 
+    \item {\tt -lowpass=start={\em freq},end={\em freq}} --- 
+    Specifies a lowpass filter.  Frequency components above the {\tt end} 
+    value are set to zero, while those below the {\tt start} value are 
+    unaffected.  Those in between are multiplied by a value that varies 
+    linearly from 0 to 1. 
+    \item {\tt -notch=center={\em center},flatWidth={\em width1},fullWidth={\em width2}} 
+    --- Specifies a notch filter centered on a given frequency,  
+    attenuating completely within a band {\em width1} wide.  
+    Frequencies outside a band {\em width2} are unattenuated. 
+    Frequencies between the two widths are attenuated by values varying 
+    linearing from 0 to 1 as the frequency becomes more distant from 
+    the center frequency. 
+    \item {\tt -bandpass=center={\em center},flatWidth={\em width1},fullWidth={\em width2}} 
+    --- Specifies a bandpass filter centered on a given frequency,  
+    passing a band {\em width1} wide without attenuation. 
+    Frequencies outside a band {\em width2} are completely attenuated. 
+    Frequencies between the two widths are attenuated by values varying 
+    linearing from 1 to 0 as the frequency becomes more distant from 
+    the center frequency. 
+    \item {\tt -filterFile=filename={\em filename},frequency={\em columnName},}
+        {\tt \{real={\em columnName},imaginary={\em columnName} | magnitude={\em columnName}\} }
+        --- Specifies a filter explicitly 
+    as a function of frequency, using either a single value  
+    (simple attenuation) or a real and imaginary value. 
+    The name of the column containing frequency values must be 
+    given with the {\tt frequency} qualifier. 
+    In addition, one must either give the name of the column  
+    containing the {\tt magnitude} (attenuation factor) or else 
+    both the names of the columns containing  
+    the {\tt real} and {\tt imaginary} components.   
+    The function thus specified is interpolated linearly to 
+    obtain values at any required frequencies.  Fourier components 
+    at frequency beyond the range in the file are unaffected. 
+    \item {\tt -cascade} --- By default, if several filters are 
+    specified using the above options, their output is added.
+    When the {\tt cascade} option is given, a 
+    new sequence is started, with the original signal as input. 
+    The output from all cascades is summed to obtain the final 
+    result. For example, if one wants to have the nested effect 
+    F4(F3(F2(F1(I0))))) (i.e. multiplier effect), one needs to give the command as following:
+     \begin{flushleft}{\tt \bf
+    sddsfdfilter <input> <output> -column=Index,... F1 -cascade F2 -cascade F3 -cascade F4 
+     }\end{flushleft}
+
+    If one wants F1(I0) + F2(I0) + F3(I0) + F4(I0) then one needs to write following command:(The illustration of output is shown in \htmladdnormallink{figure}{http://ops.aps.anl.gov/manuals/example_files/sddsfdfilter_img1.html})
+    \begin{flushleft}{\tt \bf
+    sddsfdfilter <input> <output> -column=Index,... F1 F2 F3 F4 
+    }\end{flushleft}
+
+    \item {\tt -newColumns} --- Specifies that new columns be created 
+    in the output file to hold the result of the filtering. 
+    By default, the filtered data is placed in columns with the 
+    same names as those in the input file.  Using this option, 
+    both the filtered and unfiltered data will appear in the output 
+    file.  The filtered data will have names of the form 
+    {\em columnName}{\tt Filtered}, where {\em columnName} is the 
+    name of the source column in the input file. 
+    \item {\tt -differenceColumns} --- Specifies that new columns be 
+    created in the output file that contain the difference between 
+    each original column and the corresponding  
+    filtered column.  The new columns have names of the form 
+    {\em columnName}{\tt Difference}, where {\em columnName} is the 
+    name of the source column in the input file. 
+    \end{itemize} 
+
+\item {\bf see also:} 
+    \begin{itemize} 
+    \item \progref{sddsdigfilter} 
+    \item \progref{sddssmooth} 
+    \end{itemize} 
+\item {\bf author:} M. Borland, ANL/APS. 
+\end{itemize} 
+ 

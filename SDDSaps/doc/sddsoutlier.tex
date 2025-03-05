@@ -1,0 +1,107 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsoutlier}
+\label{sddsoutlier}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsoutlier} does outlier elimination of rows from SDDS tabular
+data.  An ``outlier'' is a data point that is statistically unlikely
+or else invalid.
+\item {\bf example:}
+Eliminate ``bad'' beam-position-monitor readouts from PAR x BPM data, where
+a bad readout is one that is more than three standard deviations from the
+mean:
+\begin{flushleft}{\tt
+sddsoutlier par.bpm par.bpm1 -columns=P?P?x -stDevLimit=3
+}\end{flushleft}
+Fit a line to readout P1P1x vs P1P2x, then eliminate points too far from the line.
+\begin{flushleft}{\tt
+sddspfit par.bpm -pipe=out -columns=P1P2x,P1P1x \\
+| sddsoutlier -pipe=in par.2bpms -column=P1P1xResidual -stDevLimit=2
+}\end{flushleft}
+Same, but refit and redo outlier elimination based on the improved fit:
+\begin{flushleft}{\tt
+sddspfit par.bpm -pipe=out -columns=P1P2x,P1P1x \\
+| sddsoutlier -pipe par.2bpms -column=P1P1xResidual -stDevLimit=2 \\
+| sddspfit -pipe -columns=P1P2x,P1P1x \\
+| sddsoutlier -pipe=in par.2bpms -column=P1P1xResidual -stDevLimit=2 
+}\end{flushleft}
+
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsoutlier [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}]
+[-columns={\em listOfNames}] [-excludeColumns={\em listOfNames}]
+[-stDevLimit={\em value}] [-absLimit={\em value}] [-absDeviationLimit={\em value}]
+[-minimumLimit={\em value}] [-maximumLImit={\em value}] 
+[-chanceLimit={\em value}] [-invert] [-verbose] [-noWarnings] 
+[\{-markOnly | -replaceOnly=\{lastValue | nextValue | interpolatedValue | value={\em number}\}\}]
+}\end{flushleft}
+\item {\bf files:}
+{\em inputFile} contains column data that is to be winnowed using outlier elimination.
+If {\em inputFile} contains multiple pages, the are treated separately.  {\em
+outputFile} contains all of the array and parameter data, but only those rows of the
+tabular data that pass the outlier elimination.  {\em Warning}: if {\em outputFile} is
+not given and {\tt -pipe=output} is not specified, then {\em inputFile} will be
+overwritten.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns={\em listOfNames}} --- Specifies a comma-separated list of
+        optionally wildcard containing column names.  Outlier analysis and elimination
+        will be applied to the data in each of the specified columns independently.
+        No row that is eliminated by outlier analysis of any of these columns will      
+        appear in the output.  If this option is not given, all columns are 
+        included in the analysis.
+    \item {\tt -excludeColumns={\em listOfNames}} --- Specifies a comma-separated list of
+        optionally wildcard containing column names that are to be excluded from 
+        outlier analysis.
+    \item {\tt -stDevLimit={\em value}} --- Specifies the number of standard deviations
+        by which a data point from a column may deviate from the average for the column
+        before being considered an outlier.
+    \item {\tt -absLimit={\em value}} --- Specifies the maximum absolute value that
+        a data point from a column may have before being considered an outlier.
+    \item {\tt -absDeviationLimit={\em value}} --- Specifies the maximum absolute value
+        by which a data point from a column may deviate from the average for the column
+        before being considered an outlier.
+    \item {\tt -minimumLimit={\em value}}, {\tt -minimumLimit={\em value}} --- 
+        Specify minimum or maximum values that data points may have without being considered
+        outliers.
+    \item {\tt -chanceLimit={\em value}} --- Specifies placing a lower limit on the probability
+        of seeing a data point as a means of removing outliers.  Gaussian statistics are
+        used to determine the probability that each point would be seen in sampling a gaussian
+        distribution a given number of times (equal to the number of points in each page).
+        If this probability is less than {\em value}, then the point is considered an outlier.
+        Using a larger {\em value} results in elimination of more points.
+    \item {\tt -invert} --- Specifies that only outlier points should be kept.
+    \item {\tt -markOnly} --- Specifies that instead of deleting outlier points, they
+        should be only marked as outliers.  This is done by creating a new column
+        ({\tt IsOutlier}) in the output file that contains a 1 (0) if the row has (no)
+        outliers.  If {\tt IsOutlier} is in the input file, rows with a value of 1 are
+        treated as outliers and essentially ignored in processing.  Hence, successive
+        invocations of {\tt sddsoutlier} in a data-processing pipeline make use of 
+        results from previous invocations even if {\tt -markOnly} is given.  Note: if {\tt -markOnly}
+        is not given, then the presence of {\tt IsOutlier} in the input file has no effect.
+    \item {-tt -replaceOnly=\{lastValue | nextValue | interpolatedValue | value={\em number}\}} ---
+        Specifies replacing outliers rather than removing them.  {\tt lastValue} ({\tt nextValue})
+        specifies replacing with the previous (next) value in the column.  
+        {\tt interpolatedValue} specifies interpolating a new value from the last and next value
+        (with row number as the independent quantity).  {\tt value={\em number}} specifies 
+        replacing outliers with {\em number}. 
+    \item {\tt -verbose} --- Specifies that informational printouts should be provided.
+    \item {\tt -noWarnings} --- Specifies that warnings should be suppressed.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddspfit}
+    \item \progref{sddsgfit}
+    \item \progref{sddsexpfit}
+    \item \progref{sddscorrelate}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+
+

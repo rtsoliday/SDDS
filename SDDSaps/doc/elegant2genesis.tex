@@ -1,0 +1,77 @@
+%\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|elegant2genesis|}\end{center}
+%\end{latexonly}
+\subsection{elegant2genesis}
+\label{elegant2genesis}
+
+\begin{itemize}
+\item {\bf description:}
+\verb|elegant2genesis| analyzes particle output data from \verb|elegant| and prepares
+a ``beamfile'' for input to GENESIS\cite{GENESIS}, a 3-D time-dependent FEL code by 
+S. Reiche.  The beamfile contains slice analysis of the particle data, and may be
+useful in other applications as well.
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+elegant2genesis {\em inputfile} {\em outputfile} 
+[-pipe=[in][,out]] [-textOutput]
+[-totalCharge={\em coulombs} | -chargeParameter={\em name}]
+[-wavelength={\em meters} | -slices={\em integer}]
+[-steer] [-removePTails=deltaLimit={\em value}[,fit][,beamOutput={\em filename}]]
+[-reverseOrder] [-localFit]
+}\end{flushleft}
+
+\item {\bf files:}
+\begin{itemize}
+\item {\em inputfile} --- A particle output file from \verb|elegant| or any other program that
+uses the same column names and units.  
+\item {\em outputfile} --- Contains the slice analysis, suitable for use with SDDS-compliant GENESIS.  The columns are
+as follows:
+\begin{itemize}
+\item \verb|s|, \verb|t| --- Location of slice in the bunch, in meters or seconds, respectively. \verb|s| is defined
+  so that the head of the bunch is a {\em larger} values, contrary to {\tt elegant}'s convention.
+\item \verb|gamma| --- The average value of $\gamma$ for the slice.
+\item \verb|dgamma| --- The standard deviation of $\gamma$ for the slice.
+\item \verb|xemit|, \verb|yemit| --- The normalized slice emittances in the horizontal and vertical plane, respectively.
+\item \verb|xrms|, \verb|yrms| --- The slice rms beam sizes.
+\item \verb|xavg|, \verb|yavg| --- The slice centroid positions.
+\item \verb|pxavg|, \verb|pyavg| --- The slice centroids for x and y slopes.
+\item \verb|alphax|, \verb|alphay| --- The slice values of the Twiss parameter $\alpha$.
+\item \verb|current| --- The slice current.
+\item \verb|wakez| --- Defined for convenience to be 0.  See GENESIS manual for the meaning.
+\item \verb|N| --- The number of particles in the slice.
+\end{itemize}
+\end{itemize}
+
+\item {\bf switches:}
+\begin{itemize}
+\item \verb|-pipe[in][,out]| --- The standard SDDS toolkit pipe option.
+\item \verb|-textOutput| --- Requests text output instead of SDDS output, which may be
+        useful for input to non-SDDS-complaint versions of GENESIS.
+\item \verb|-totalCharge=|{\em coulombs} --- Gives the total charge of the beam in Coulombs.
+\item \verb|-chargeParameter=|{\em name} --- Gives the name of a parameter in {\em inputfile} where
+        the total charge in the beam is given.
+\item \verb|-wavelength=|{\em meters} --- This option is misnamed.  It is actually the slice length
+        in meters.
+\item \verb|-slices=|{\em integer} --- The number of analysis slices to use.
+\item \verb|-steer| --- If given, then the transverse centroids for the bulk beam are all set to
+        zero.  The relative centroid offsets of the slices are, of course, unchanged.
+\item \verb|-removePTails=deltaLimit=|{\em value}\verb|[,fit][,beamOutput={\em filename}\verb|]| ---
+        Remvoes the momentum tails from the beam.  \verb|deltaLimit| is the maximum absolute value
+        of $(p-\langle p \rangle)/\langle p \rangle$ that will be accepted.  If \verb|fit| is given,
+        then a linear fit to $p$ as a function of $t$ is performed, and removal is based on the
+        residuals from that fit.  If \verb|beamOutput| is given, then the filtered beam data is
+        written to the named file for review.
+\item \verb|-reverseOrder| --- By default, the data for the head of the beam comes first.  This
+        option causes elegant to put the data for the tail of the beam first.
+\item \verb|-localFit| --- If given, then for each slice a local
+ linear fit is used to remove any momentum chirp prior to compute the
+ momentum spread.  This produces a momentum spread that is more
+ independent of the number of slices.  Should not be used if the FEL
+ cooperation length is greater than the slice length.
+\end{itemize}
+
+\item {\bf author:} R. Soliday, M. Borland, ANL/APS.
+\end{itemize}
+

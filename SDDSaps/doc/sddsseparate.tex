@@ -1,0 +1,32 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+\subsection{sddsseparate} 
+\label{sddsseparate} 
+ 
+\begin{itemize} 
+\item {\bf description:} \hspace*{1mm}\\ 
+{\tt sddsseparate} reorganizes the column data so that data from different columns ends up on different pages.
+\item {\bf examples:} 
+\begin{flushleft}
+{\tt sddsseparate <inputfile> <outputfile> ``-group=Values,(Data1,Data2,Data3)'' }
+\end{flushleft} 
+\item {\bf synopsis:}  
+\begin{flushleft}
+{\tt 
+sddsseparate [{\em inputfile}] [{\em outputfile}] [-pipe=[input][,output]] \\ \
+-group={\em newName},({\em listOfOldNames}) \\ \
+[-copy={\em listOfNames}]}
+\end{flushleft} 
+\item {\bf files:} 
+The input file is a multi-column SDDS file. The output file is a single column, mutli-page SDDS file. 
+\item {\bf switches:} 
+    \begin{itemize} 
+    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
+    \item {\tt -group={\em newName},({\em listOfOldNames}[,...])} --- Multiple columns are reorganized into a single column that spans multiple pages.
+    \item {\tt -copy={\em listOfNames}} --- A list of columns that are duplicated on each page.
+\end{itemize} 
+
+\item {\bf author:} M. Borland, R. Soliday, ANL/APS. 
+\end{itemize} 
+ 

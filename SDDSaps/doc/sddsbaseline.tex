@@ -1,0 +1,52 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsbaseline}
+\label{sddsbaseline}
+
+\begin{itemize}
+\item {\bf description:}
+\verb|sddsbaseline| performs baseline removal for SDDS column data.  Several methods of
+determining the baseline are provided.
+\item {\bf examples:}
+Remove baselines from a video image organized with each scan line in a separate column.
+The baseline is determined by looking at 10 points at either end of each line and averaging
+the pixel count for these points.
+\begin{flushleft}{\tt
+sddsbaseline image.sdds image1.sdds -columns=VideoLine* -select=endpoints=10 -method=average 
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsbaseline [{\em input}] [{\em output}] [-pipe=[in][,out]]
+[-columns={\em listOfNames}]
+-select=\{endPoints={\em number} | -outsideFWHA={\em multiplier} | -antiOutlier={\em passes}\}
+-method=\{fit | average\}
+[-nonnegative [-despike=passes={\em number},widthlimit={\em value}] [-repeats={\em count}]]
+}\end{flushleft}
+\item {\bf files:}
+{\em input} is an SDDS file containing one or more pages of data to be processed.
+{\em output} is an SDDS file in which the result is placed.  Columns that are not
+processed are copied from {\em input} to {\em output} without change.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns={\em listOfNames}} --- Specifies an optionally-wildcarded list
+        of names of columns from which to remove baselines.
+    \item {\tt -select=\{endPoints={\em number} | -outsideFWHA={\em multiplier} | -antiOutlier={\em passes\}}} --- Specifies how to select the points from which to determine the baseline.  \verb|endPoints| specifies selecting {\em number} values from the start and end of the column.  \verb|outsideFWHA| specifies selecting all values that are outside {\em multiplier} times the full-width-at-half-amplitude (FWHA) 
+of the pixel count distribution.  \verb|antiOutlier| specifies selecting all values that are {\em not} deemed outliers in the 2-sigma sense in any of {\em passes} inspections.  These last two options implicitly assume that the statistical distribution of the pixel counts is baseline dominated.
+    \item {\tt -method=\{fit | average\}} --- Specifies how to compute the baseline from the selected
+    points.  \verb|fit| specifies fitting a line to the values (as a function of index).  \verb|average|
+    specifies taking a simple average of the values.
+    \item {\tt -nonnegative [-despike=passes={\em number},widthlimit={\em value}] [-repeats={\em count}]} --- Specifies that the resulting function after baseline removal must be nonnegative.  Any 
+    negative values are set to 0.  In addition, despiking (as in \verb|sddssmooth|) may be applied
+    after removal of negative values; this can result in the removal of positive noise spikes.
+    Giving \verb|-repeats| allows applying the baseline removal procedure iteratively to the
+    data.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddssmooth}
+    \item \progref{sddscliptails}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}

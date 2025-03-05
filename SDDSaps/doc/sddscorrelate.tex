@@ -1,0 +1,63 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddscorrelate}
+\label{sddscorrelate}
+
+\begin{itemize}
+\item {\bf description:} 
+{\tt sddscorrelate} computes correlation coefficients and correlation
+significance between column data.  The correlation coefficient between
+columns i and j is defined as
+\[ {\rm C_{ij} = \frac{\langle (x_i-\langle x_i \rangle) (x_j-\langle x_j \rangle)\rangle}
+{\sqrt{\langle (x_i-\langle x_i \rangle)^2\rangle \langle (x_j - \langle x_j \rangle)^2 \rangle}}} \]
+If ${\rm C_{ij}=1}$, then the variables are perfectly correlated, whereas if ${\rm C_{ij}=-1}$, they
+are perfectly anticorrelated.
+The correlation significance is the probability that the observed correlation coefficient could happen
+by chance if the variables were in fact uncorrelated.  Hence, a very small correlation significance
+means that the variables are probably correlated.
+\item {\bf examples:}
+Find the correlations among beam-position-monitor x values in {\tt par.bpm}:
+\begin{flushleft}{\tt
+sddscorrelate par.bpm par.cor -column='*x' 
+}\end{flushleft}
+Find the correlations of these readouts with one specific readout only:
+\begin{flushleft}{\tt
+sddscorrelate par.bpm par.cor -column='*x' -withOnly=P1P1x
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddscorrelate [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}] 
+[-columns={\em columnNames}] [-excludeColumns={\em columnNames}] 
+[-withOnly={\em columnName}] [-rankOrder]
+[-stDevOutlier[=limit={\em factor}][,passes={\em integer}]]
+}\end{flushleft}
+\item {\bf files:}
+        {\em inputFile} is an SDDS file containing two or more columns of data.  For each page of
+        the file, {\em outputFile} contains the correlation coefficients and significance for
+        every possible pairing of variables requested.  {\em outputFile} also contains three string
+        columns: {\tt Correlate1Name}, {\tt Correlate2Name}, and {\tt CorrelatePair}.  These are
+        respectively the name first column in the analysis, the name of the second column in
+        the analysis, and a string of the form {\em Name1}.{\em Name2}.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe=[input][,output] } --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns={\em columnNames}} --- Specifies the names of columns to be included in the analysis.
+        A comma-separated list of optionally wildcard-containing names may be given.
+    \item {\tt -excludeColumns={\em columnNames}} --- Specifies the names of columns to be excluded from the
+        analysis.  A comma-separated list of optionally wildcard-containing names may be given.
+    \item {\tt -withOnly={\em columnName}} --- Specifies that one of the variables for each correlation will be
+        the named column.  
+    \item {\tt -rankOrder} --- Specifies computing rank-order correlations rather than standard correlations.
+        This is considered more robust that standard correlations.
+    \item {\tt -stDevOutlier[=limit={\em factor}][,passes={\em integer}]} --- Specifies standard-deviation-based
+        outlier elimination on each pair of columns prior to computation of the correlation coefficient.
+        Any pair of values is ignored if one or both values are outliers relative to the column from which they come.
+        The {\tt limit} qualifier specifies the allowed deviation from the mean in standard deviations; the
+        default is 1.  The {\tt passes} qualifier specifies how many times the outlier elimination (including
+        recomputation of the mean and standard deviation) is performed; the default is 1.
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+

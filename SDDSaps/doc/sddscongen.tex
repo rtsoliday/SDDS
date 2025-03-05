@@ -1,0 +1,47 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddscongen}
+\label{sddscongen}
+
+\begin{itemize}
+\item {\bf description:}
+Creates an SDDS data set by evaluating an \verb|rpn| expression over a defined 2 dimensional
+grid.  This data set may be plotted using \verb|sddscontour|.
+\item {\bf example:}
+This will generate a two-dimensional color-shaded map of the function ${\rm sin(4\pi (x 2 + y 2))}$ on
+the region x:[-1, 1] and y:[-1, 1]:
+\begin{flushleft}{\tt
+sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101\\
+-zEquation="x x * y y * + 4 * pi * sin" \\
+sddscontour example.sdds -shade example.sdds -equalAspect
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddscongen {\em outputfile} 
+-xRange={\em lower},{\em upper},{\em nPoints} -yrange={\em lower},{\em upper},{\em nPoints}
+-zEquation={\em rpnExpression} [-rpnCommand={\em rpnExpression}] [-rpnDefinitions={\em rpn-defnsFile}]  
+}\end{flushleft}
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt xRange={\em lower},{\em upper},{\em nPoints}}, {\tt yRange={\em lower},{\em upper},{\em nPoints}}
+         ---  Specifies the 2 dimensional grid over which data is generated.
+        x is the horizontal variable and y the vertical.
+    \item {\tt -zEquation={\em rpnExpression} } --- 
+        Specifies the \verb|rpn| expression that is evaluated at each point of the grid.
+    \item {\tt -rpnCommand={\em rpnExpression} } --- 
+        Specifies the name of a file containing \verb|rpn| input.  The named file
+        is read before any other operations are performed.
+    \item {\tt -rpnDefinitions={\em rpn-defnsFile}} --- 
+        Specifies a string to submit to \verb|rpn| prior to beginning evaluation of the
+        equation on the grid.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddscontour}
+    \item \progref{rpn}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+

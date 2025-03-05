@@ -1,0 +1,33 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+\subsection{raw2sdds} 
+\label{raw2sdds} 
+ 
+\begin{itemize} 
+\item {\bf description:} \hspace*{1mm}\\ 
+{\tt raw2sdds} converts a binary data stream into the SDDS format.
+\item {\bf examples:} 
+\begin{flushleft}
+{\tt raw2sdds <inputfile> <outputfile> -definition=Screen1,type=character -size=484,512}
+\end{flushleft} 
+\item {\bf synopsis:}  
+\begin{flushleft}
+{\tt 
+raw2sdds {\em inputfile} {\em outputfile} 
+ -definition=<name>,<definition-entries> 
+ [-size=<horiz-pixels>,<vert-pixels>] 
+ [-majorOrder=row|column]}
+\end{flushleft} 
+\item {\bf files:} 
+The input file contains the binary data for horizontal and vertical pixels of a screen. Only single byte data, per pixel, is currently allowed.
+\item {\bf switches:} 
+    \begin{itemize} 
+    \item {\tt -definition={\em name},{\em definition-entries}} --- The name of the output column. 
+    \item {\tt -size={\em horiz-pixels},{\em vert-pixels}} --- Specifies dimensions of the screen.
+    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout.
+\end{itemize} 
+
+\item {\bf author:} C. Saunders, R. Soliday, ANL/APS. 
+\end{itemize} 
+ 

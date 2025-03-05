@@ -1,0 +1,74 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+
+\subsection{sddshist2d}
+\label{sddshist2d}
+
+\begin{itemize}
+\item {\bf description:}
+
+{\tt sddshist2d} makes two-dimensional histograms of data, producing
+output that is suitable for plotting with {\tt sddscontour}.
+The two-dimensional histogram may include data from two columns, or may
+show the histograms of a single column versus page number.
+
+\item {\bf examples:} 
+Make a two-dimensional histogram of two PAR bpm readouts, then plot the result:
+\begin{flushleft}{\tt 
+sddshist2d par.bpm par.bpm.h2d -column=P1P1x,P1P2x -xparam=50 -yparam=50
+sddscontour -shade=32 par.bpm.h2d -quantity=frequency
+}
+\end{flushleft}
+
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddshist2d [-pipe[=input][,output]] [{\em inputfile}] [{\em outputfile}]
+-columns=\{{\em xName},{\em yName} | {\em yName}\}
+[-weights={\em columnName}[,average]]
+[-xParameters={\em bins}[,{\em lower},{\em upper}]] [-yParameters={\em bins}[,{\em lower},{\em upper}]]
+[-outputName={\em string}] 
+[-sameScale] [-combine] [-normalize[=sum]] [-smooth[={\em passes}]] 
+[-verbose] 
+}\end{flushleft}
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns=\{{\em xName},{\em yName} | {\em yName}\}} --- Specifies the data from
+        the input to histogram.  If both {\em xName} and {\em yName} are given, then {\tt sddshist2d}
+        does a two-dimensional histogram of the values in the named columns.  If only {\tt yName}
+        is given, then {\tt sddshist2d} does a series of one-dimensional histograms of the named
+        column, one for each data pages; these histograms are then assembled as a two-dimensional
+        histogram with one axis being the page number.
+    \item {\tt -weights={\em columnName}[,average]} --- Specifies the name of a column of data with
+        which to proportionally weight the count value of points in the histogram.  If the {\tt average}
+        qualifier is given, then each bin value is normalized to contain the average value of the weight for
+        all points in the bin.
+    \item {\tt -xParameters={\em bins}[,{\em lower},{\em upper}]} --- Specifies the number of bins and
+        optionally the histogrammed region for the x values.  Ignored if only {\em yName} is given.
+        By default, 21 bins are used encompassing all of the data points.
+    \item {\tt -yParameters={\em bins}[,{\em lower},{\em upper}]} --- Specifies the number of bins and
+        optionally the histogrammed region for the y values.  By default, 21 bins are used encompassing
+        all of the data points.
+    \item {\tt -outputName={\em string}} --- Specifies the name of the histogram data.  The default
+        is {\tt frequency}.
+    \item {\tt -sameScale} --- Specifies that for multipage input files, the histogram region should be
+        the same for all pages.  The region is set to encompass all data points from all pages.
+    \item {\tt -combine} --- Specifies that for multipage input files, the data from all pages should be
+        placed in a single histogram.
+    \item {\tt -normalize[=sum]} --- Specifies normalization of the histogram.  If the {\tt sum} qualifier
+        is not given,  the histogram is normalized to unit amplitude; otherwise, it is normalized so that
+        the sum of all frequencies is unity.
+    \item {\tt -smooth[={\em passes}]} --- Specifies smoothing by nearest-neighbor-averaging.  If {\em passes}
+        is omitted, only one pass is performed.
+    \item {\tt -verbose} --- Requests informational output during processing.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddshist}
+    \item \progref{sddscontour}
+    \item \progref{sddscongen}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}

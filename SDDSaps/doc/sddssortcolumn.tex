@@ -1,0 +1,36 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddssortcolumn}
+\label{sddssortcolumn}
+
+\begin{itemize}
+\item {\bf description:} \verb|sddssortcolumn| rearrage the columns of the input file in a specified order. 
+
+\item {\bf synopsis:} 
+%
+% Insert usage message here:
+%
+\begin{flushleft}{\tt
+sddssortcolumn [SDDSinput] [SDDSoutput] [-pipe=[input][,output]
+  [-sortList=<list of columns in order>] [-decreasing] 
+  [-bpmOrder] [-sortWith=<filename>,column=<string>]
+}\end{flushleft} 
+
+\item {\bf files:}
+{\em inputFile} is an SDDS file whose columns will be rearranges.  The {\em outputFile} argument is
+optional.  If it is not given, and if an output pipe is not selected, then the input file will be
+replaced.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -sortList=<column1>,<column2>,....} ---
+          specifiy the order of column names in a list. 
+    \item {\tt -pipe=[input][,output]} --pipe flages.
+    \item {\tt -sortWith=<filename>,column=<string>} --- sort the columns of input by the order in the column of <filename> provided by sortWith option. It overwrites other sorting order. 
+    \item {\tt -bpmOrder} --- sort the columns by the assumed bpm position in storage ring.
+    \item {\tt -decreasing} --- sort the columns in decreasing order, default is increasing.
+    \end{itemize}
+\item {\bf author:}H. Shang ANL/APS.
+\end{itemize}
+
+

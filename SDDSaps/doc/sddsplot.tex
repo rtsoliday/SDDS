@@ -1,0 +1,942 @@
+% $Log: not supported by cvs2svn $
+% Revision 1.18  2010/06/03 16:37:27  borland
+% Added documentation for -graph fixForFile, fixForName, and fixForRequest.
+%
+% Revision 1.17  2009/07/16 17:42:24  borland
+% Added documentation of the fractionalDeviation qualifer to -mode.
+% Added documentation of -replicate.
+%
+% Revision 1.16  2009/03/03 17:45:46  borland
+% Updated to include autolog mode.
+%
+% Revision 1.15  2006/05/22 22:20:48  jiaox
+% Added usage for user defined linetype and dashed lines.
+%
+% Revision 1.14  2005/08/23 13:36:11  borland
+% Added documentation for the fill qualifier of the -graphic option.
+%
+% Revision 1.13  2005/03/16 16:52:04  shang
+% update the document for plotting with logscale
+%
+% Revision 1.12  2004/03/26 21:10:34  shang
+% added documentation of -xExclude, -yExclude, -toPage and -fromPage options
+%
+% Revision 1.11  2003/11/14 16:10:41  soliday
+% Fixed a font problem.
+%
+% Revision 1.10  2003/04/08 22:11:04  shang
+% added missing curly bracket for timeFilter option doc
+%
+% Revision 1.9  2003/04/07 16:04:12  shang
+% added document for -timeFilter option
+%
+% Revision 1.8  2002/07/17 14:49:13  soliday
+% Added coffset documentation.
+%
+% Revision 1.7  2000/03/14 19:38:57  soliday
+% Changes made by Borland.
+%
+% Revision 1.6  2000/01/10 19:04:54  borland
+% Updated documentation.
+%
+% Revision 1.5  1998/04/29 23:14:05  emery
+% Changed \PSFigure command to use the graphicx package.
+%
+% Revision 1.4  1998/04/17 22:12:39  emery
+% Using \newcommand{\PSFigure} command again now
+% that epsf.sty is found again.
+%
+% Revision 1.3  1996/05/31  21:04:35  emery
+% Added \PSFigure command for charSet figure
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+
+\subsection{sddsplot}
+\label{sddsplot}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsplot} is a general purpose device-independent graphics program for displaying parameter and column data
+from SDDS files.  The program is equally capable of quick-and-dirty plots and publication quality graphics.  It
+allows organization of large amounts of data from multiple files into useful plots with minimal effort.  It
+provides line, point, symbol, impulse, error-bar, and arrow plotting, with automatic variation of color, linetype,
+etc.  It can do data winnowing using the data to be graphed or other data in the file.  Parameters from a file can
+be designated for use as plot labels, legends, or for placement on the plot in specified locations.  Data pages may
+be tagged and sorted by multiple criteria.
+
+{\tt sddsplot} supports various flavors of Postscript, various windows options, and numerous graphics terminals.  For
+X-windows, a GUI interface is generated that supports zoom/pan, cursor readout, movie mode, and much more.
+
+\item {\bf examples:} 
+Plot the horizontal beta function for the APS design:
+\begin{flushleft}{\tt 
+sddsplot -columnNames=s,betax APS0.twi
+}
+\end{flushleft}
+Plot the Twiss functions for the APS design, using different line types for
+each quantity:
+\begin{flushleft}{\tt 
+sddsplot -columnNames=s,'(beta?,etax)' APS0.twi -graph=line,vary 
+}
+\end{flushleft}
+Plot the Twiss functions for APS lattices, one plotting page per lattice (i.e., per
+data page), with different linetypes and a legend:
+\begin{flushleft}{\tt 
+sddsplot -columnNames=s,'(beta?,etax)' APS.twi -graphic=line,vary -legend
+        -split=page -separate=page
+}\end{flushleft}
+Plot the Twiss functions for APS lattices, one plotting page per function, with each 
+data page shown with a different line type:
+\begin{flushleft}{\tt 
+sddsplot -columnNames=s,'(beta?,etax)' APS.twi -graphic=line,vary
+        -split=page -groupby=nameIndex -separate=nameIndex
+}
+\end{flushleft}
+Plot the Twiss functions for the APS design, using a common scale for the beta functions
+and another for eta:
+\begin{flushleft}{\tt
+sddsplot -graphic=line,vary APS0.twi -columnNames=s,beta? -yScalesGroup=id=beta 
+-columnNames=s,etax -yScalesGroup=id=eta
+}
+
+\end{flushleft}
+
+\item {\bf sddsplot concepts:}\\
+
+{\tt sddsplot} has a very large number of options and is very flexible.   In most cases, only a very few
+of these options are employed.  In order to make best use of {\tt sddsplot}, it helps to be familiar with
+certain concepts. 
+
+{\tt sddsplot} supports multiple ``plot pages'' and multiple ``panels'' per page.  In this context, a
+``plot page'' is a separate sheet of paper for hardcopy devices, and the equivalent for interactive
+devices.  For example, when using the X-windows interface just described, separate plot pages are held in
+memory so that the user may go back and forth between them rapidly, or run them as a movie.  A plot page
+may contain several nonoverlapping panels, each displaying essentially independent graphics.  Presently,
+{\tt sddsplot} divides the plot page into an array of plot panels, each of equal size.  The default is one
+plot panel per plot page.
+
+Within each plot panel, {\tt sddsplot} may display data from any number of ``plot requests''.  A plot
+request is a specification to {\tt sddsplot} of what data to plot from what files, and how to do it.  A plot
+request must contain or indicate a list of names of columns and parameters to display, as well as the names
+of one or more files from which to extract the data.  The data from plot requests are organized into plot
+panels and plot pages according to certain defaults or explicit instructions.  One frequent choice is to
+move to a new panel for each plot request.  However, one may also regroup data to display data from
+different plot requests together.
+
+For each request, the names of columns and parameters are grouped to form sets of sets of data
+element names.  For example, {\tt -columnNames=s,(betax,betay,etax)} results in formation of three
+sets of pairs: {\tt (s, betax)}, {\tt (s, betay)}, and {\tt (s, etax)}.  In a more complicated
+example, the sets of dataname sets might include names of error-bar data (e.g., {\tt (x, y, ySigma)})
+or vector components (e.g., {\tt (x, y, Ex, Ey)}).  To avoid confusion, a set of datanames like those
+just listed will be referred to as a ``name group''.  Each name group for a request is given a
+sequential ``name index'', which can be used as shown in the last example above.
+
+Each panel is divided into two regions, a ``plot space'' (or ``pspace'') and a ``label space''.  The
+pspace is the region where data is displayed.  Outside the pspace is the label space, where labels
+and legends normally appear.
+
+Any point on any plot panel can be referenced by unit coordinates that start at zero in the lower
+left corner of the panel and end at unity in the upper right corner.  The extent of the pspace is
+given in these coordinates.  By default, the region the pspace occupies in these coordinates is
+[0.15, 0.90]x[0.15, 0.90].  The extent of the pspace may be changed explicitly, or it
+may be altered implicitly by certain switches (e.g., to make room for legends).  The data or user's
+coordinates, referred to as (x, y), are mapped onto this space, as are the ``pspace coordinates'',
+(p, q).  The latter are [0, 1]x[0, 1] coordinates.
+
+When {\tt sddsplot} reads data in from files, it collects it into internal data sets. By default,
+each of these internal data sets contains the all of the data for one name group from one file.  That
+is, an internal data set normally contains all of the data for a name group from an SDDS data set.
+The phrase ``internal data set'' is used to maintain the distinction between the SDDS data set and
+the representation of data from an SDDS data set within {\tt sddsplot}.  Associated with each
+internal data set is the request number, the filename, the file number within the request, the y
+dataname, the name group index within the request, the starting page number from the file, and an
+optional user-specified tag value (from the commandline or a parameter in the file).  These values
+may be used to sort and group the data in order to place on individual panels sets of similar data
+from multiple sources.  An instance of this is shown in the last example above.
+
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsplot [{\em X11Switches}] [{\em commonSwitches}]
+{\em plotRequestSwitch} {\em fileNames} {\em localSwitches}
+[{\em plotRequestSwitch} {\em fileNames} {\em localSwitches} \ldots]
+}\end{flushleft}
+
+The {\tt sddsplot} command line is organized into three categories.  First, one may issue any of the standard X11
+switches (e.g., -geometry).  Second, one may give a set of switches, indicated by {\em commonSwitches}, that will
+apply to all subsequest plot requests.
+
+Third, one gives a series of ``plot requests''.  A plot request starts with one of several switches that give the
+names of data elements to be plotted.  It continues with the names of one or more files from which this data is to
+be extracted.  In addition, one may include various switches that apply only to current plot request.  These may,
+for example, override any common switches that were set prior to the first plot request.  In general, any switch
+may be given as a common switch (so that it applies to all plot requests unless overridden) or as a local switch.
+
+In the examples above, only a single plot request is exhibited.  There are no X11 switches and no common switches
+set.  The plot request is initiated by the {\tt -columnNames} switch.  The {-graphic} and {-legend} switches are
+local switches.
+
+\item {\bf switches:}
+\begin{itemize}
+\item Initiating a plot request:\\
+  \begin{itemize}
+  \item {\tt -columnNames={\em xName},{\em yNameList}[,\{{\em y1NameList} | {\em x1Name},{\em y1NameList}\}] }---
+        Specifies the names of columns to be plotted.  {\em xName} may be the name of a numeric or string column,
+        which is normally plotted against the horizontal or x axis.
+        {\em yNameList} gives the comma-separated, optionally wildcarded names of one or more columns of numeric
+        data.  Data for each item in {\em yNameList} will be paired with the x data for plotting.
+
+        Some types of plotting require additional data, such as error bars or vector components.  These are
+        specified with the {\em x1Name} and {\em y1NameList}.  Each item in {\em y1NameList} is paired with the
+        corresponding item in {\em yNameList}; the lists must have the same length.  The interpretation of the
+        additional data is specified with the {\tt -graphic=error} or {\tt -arrow} switches. For error bar
+        plotting, one may give error bars for both x and y by giving {\em x1Name} and {\em y1NameList}, or for y
+        only by giving {\em y1NameList}.  For arrow plotting, giving {\em y1NameList} only is allowable for
+        vectors perpendicular to the page. Giving both {\em x1Name} and {\em y1NameList} is required for vectors
+        in the plane of the page.
+
+        One may give several {\tt -columnNames} switches in a row in order to specify additional ``datanames'' for
+        the request.  This may be convenient if, for example, one wants several different x variables.
+  \item {\tt -xExclude={\em xNameList}}---
+        specifies the names of x columns to be excluded from the plot. 
+        {\em xNameList} gives the comma-separated, optionally wildcarded names of one or more columns.
+  \item {\tt -yExclude={\em yNameList}}---
+        specifies the names of y columns to be excluded from the plot. 
+        {\em yNameList} gives the comma-separated, optionally wildcarded names of one or more columns.
+  \item {\tt -toPage={\em pagenumber}}---
+        specifies the page number to which sddsplot plots.
+  \item {\tt -fromPage={\em pagenumber}}---
+        specifies the page number from which sddsplot plots.      
+  \item {\tt -parameterNames={\em xName},{\em yNameList}[,\{{\em y1NameList} | {\em x1Name},{\em y1NameList}\}]}---
+        Identical to {\tt -columnNames}, except it specifies parameter data to be plotted.  As with {\tt -columnNames},
+        several such options may be given in a row in order to add datanames.
+  \item {\tt -arrayNames={\em xName},{\em yNameList}[,\{{\em y1NameList} | {\em x1Name},{\em y1NameList}\}]}---
+        Identical to {\tt -columnNames}, except it specifies array data to be plotted.  As with {\tt -columnNames},
+        several such options may be given in a row in order to add datanames.
+
+  \item {\tt -keep[=\{names | files\}]} ---
+        Rarely used.
+        Specifies starting a new plot request, but retaining certain information from the previous request.
+        If given without qualifiers, the datanames (as specified by {\tt -columnNames} or {\tt -parameterNames})
+        and filenames from the previous request are kept; this allows plotting the same data again in a different
+        way.  If the {\tt names} qualifier is given, the datanames from the previous request are retained.
+        If the {\tt files} qualifier is given, the filenames from the previous request are retained.
+
+  \item {\tt -mplfiles[=noTitle][,noTopline]} ---
+        Provided for compatibility with an older type of data file and rarely used.
+        Allows plotting of {\tt mpl} data files with {\tt sddsplot}.  The x and y columns of the {\tt mpl} file
+        are used.  The qualifiers may be employed to inhibit use of the {\tt mpl} plot title and topline.
+
+  \item {\tt -namescan=\{all | first\}} --- Specifies whether {\tt sddsplot} should scan all input files when searching
+        for matches to wildcard datanames, or only the first.  The default is to scan all files, which may be slow
+        for many files with large numbers of columns or parameters.
+  \end{itemize}
+   
+\item Controlling output type:
+  \begin{itemize}
+  \item {\tt -listDevices}---Lists the names of available graphics devices to the standard error output.
+  \item {\tt -device={\em deviceName}[,{\em deviceArguments}]}---Specifies the name of the graphics
+        device, plus optional device-specific arguments.  The default device is ``motif'', unless the
+        {\tt SDDS\_DEVICE} environment variable if defined, in which case the default device is the one
+        named.
+        Some commonly-used devices that have device-specific arguments are:
+        \begin{itemize} 
+        \item {\tt motif} --- The device arguments are a single string of space-separated entries of the
+        form {\tt -{\em resourceName} {\em value}}.  These are passed directly to the MOTIF ``outboard-driver''
+        without any interpretation.For example,{\tt "-dashes {\em 1}"} qualifier sets the line types with 
+        built-in dash styles; {\tt "-linetype {\em linetypeFileName }"} forces MOTIF "outboard-driver" to use
+        the user-defined line types (color,dash,thickness)  in a SDDS file intead of the default line types. 
+        Other resource names may be found in the help for the driver. 
+        \item {\tt postscript},{\tt cpostscript} --- Four qualifiers are presently accepted. {\tt dash} sets
+        the cpostscript device to use built-in dash styles for the line drawing. 
+        {\tt linetypetable={\em linetypeFileName}} replaces the default line types with the customized line types
+        defined in a SDDS file. {\tt onblack} and {\tt onwhite} set the background of the plot.
+        \item {\tt png} --- PNG devices accept {\tt rootname}, {\tt template}, {\tt onwhite}, {\tt onblack}, 
+        {\tt dash} and {\tt linetypetable}  device arguments. {\tt rootname={\em string}} specifies a rootname
+        for automatic filename generation; the resulting filenames are of the form {\em rootname}.DDD, where DDD 
+        is a three-digit integer. {\tt template={\em string}} provides a more general facility; one uses it to
+        specify an sprintf-style format string to use in creating filenames. For example, the behavior obtained
+        using {\tt rootname={\em name}} may be obtained  using {\tt template={\em name}.\%03ld}.
+        \item {\tt mif} --- Three qualifiers are presently accepted.  {\tt linesizeDefault={\em size}} sets the
+        default line thickness (normally 0.25).  {\tt dashsizeDefault={\em size}} sets the default dash size
+        (normally 1.0).  {\tt lineIncrement={\em value}} sets the line thickness increment between different
+        line types.
+        \item {\tt gif}, {\tt tgif}, {\tt sgif}, {\tt mgif}, {\tt lgif} --- No longer supported, use {\tt png}, 
+        {\tt tpng}, {\tt spng}, {\tt mpng}, {\tt lpng} instead.
+        \end{itemize}
+  \item {\tt -output={\em filename}}---Specifies the name of a file to which graphics output will be sent.
+        Used primarily for hardcopy devices (e.g., Postscript) where the data will be sent to a printer.
+        By default, the data for such devices is printed to the standard output.
+  \end{itemize}
+\item Controlling type of plotting:
+  \begin{itemize}
+
+  \item {\tt -graphic={\em element}[,type={\em integer}][,fill][,subtype=\{{\em integer} | type\}]}
+        {\tt [,connect[=\{{\em linetype} | type | subtype\}]][,vary[=\{type | subtype\}]][,modulus={\em integer}]}
+        {\tt [,scale={\em factor}][,\{eachFile | eachPage | eachRequest | fixForName | ]}
+	{\tt fixForFile | fixForRequest\}]} ---
+        Specifies the type of graphic element to use for data in the present plot request.  
+
+{\em element} may be one of {\tt line}, {\tt symbol}, {\tt errorBar}, {\tt impulse}, {\tt yimpulse}, {\tt
+bar}, {\tt ybar}, {\tt dot}, or {\tt continue}.  These are largely self-explanatory.  {\tt continue}
+specifies continuing whatever was done in the previous request.  {\tt impulse} is a line extending from
+y=0 to the data value, while {\tt bar} is a line extending from the bottom of the plot region to the data
+value.  {\tt yimpulse} and {\tt ybar} are analogous except that the line extends from x=0 or from the
+left-hand vertical border of the plot.
+
+The {\tt type} field for the graphic element has different meanings for different elements.  For
+lines, impulses, bars, and dots, the type is the color or line style used, depending on the device.
+For most devices, values between 0 and 15 inclusive given unique lines.  For symbols and error bars,
+the type specifies the style of symbol or error bar to use; the value is between 0 and 8 inclusive
+for symbols and between 0 and 1 inclusive for error bars.  For symbols, one may give the {\tt fill}
+qualifier to get filled-in symbols.
+
+The {\tt subtype} field is meaningful only for symbols, error bars, and dots.  It specifies the line style
+or color to be used in making a symbol or error bar, and the size for a dot.  As for the type field for
+line plotting, the value may be between 0 and 15 inclusive.  The {\tt connect} qualifier is also valid for
+symbols and error bars only.  It specifies that the symbols and error bars should be connected by lines.
+By default, the line type used is 0.
+
+If one desires automatic variation of the line color, symbol type, and
+so on, one may obtain this using the \verb|vary| qualifier.  By
+default, the type is varied.  The \verb|eachFile|, \verb|eachPage|,
+\verb|eachRequest|, \verb|fixForName|, \verb|fixForFile|, and \verb|fixForRequest|
+qualifiers may be given to specify how to
+assign type or subtype.  For \verb|eachFile|, variation is done
+separately for data from different files.  For \verb|eachPage|,
+variation is done separately for data from different pages (hence,
+items from different pages would have the same line or symbol).  For
+\verb|eachRequest|, variation is done separately for each request.
+The \verb|fixForName| qualifier in constrast assigns fixed graphic
+attributes to items according to the y name.  The \verb|fixForFile|
+qualifier assigns fixed graphic attributes for items according to which
+data file they are from.  The \verb|fixForRequest| qualifier assigns fixed
+graphic attributes according to the request in which the data originates.
+
+  \item {\tt -arrowSettings=[,autoScale][scale={\em factor}][,linetype={\em integer}]}
+{\tt [,centered][,singleBarb][,barbLength={\em value}][,barbAngle={\em value}]}
+{\tt [,\{cartesianData | polarData | scalarData\}]}
+---Specifies parameters for plotting vectors using arrows.
+
+{\tt autoScale} specifies that the scale factor for the length of arrows should be chosen
+automatically; if several data pages are being plotted separately, the same scale is used for all of
+them.  {\tt scale} may be used instead of {\tt autoScale} to set the factor manually; if both are
+given, then the factor given with {\tt scale} multiplies that computed by {\tt autoScale}.
+
+{\tt linetype} specifies the line type to use for the arrows, using the same mechanism as for lines
+in the {\tt -graphic} switch.  The default is 0.
+
+{\tt cartesianData}, {\tt polarData}, and {\tt scalarData} specify the type of data being provided.
+For the first two, one must have specified both {\em x1Name} and {\em y1NameList} in the plot
+request; for {\tt cartesianData}, x1 and y1 are the x and y vector components, while for {\tt
+polarData} x1 is the length and y1 is the angle in radians from the positive x direction.
+
+{\tt centered} specifies that arrows should be centered on the corresponding (x, y) point; by
+default, the arrow starts at the (x, y) point.  {\tt singleBarb} specifies that arrows should have
+only a single barb, rather than the default two barbs; this can be significantly faster for large
+amounts of data.  {\tt barbLength} and {\tt barbAngle} specify the length and angle of arrow barbs;
+the barb length is a specified as a fraction of the arrow length, which the barb angle is specified
+in degrees.
+
+  \item {\tt -linetypeDefault={\em integer}[,thickness={\em value}]}--- Specifies the default line type for borders, legend
+        text, labels, axes, and so on.  If not given, 0 is used.
+
+\end{itemize}
+
+\item Controlling the plotting region:
+  \begin{itemize} 
+
+   \item {\tt -scales={\em xmin},{\em xmax},{\em ymin},{\em ymax}}---Specifies the region of the plot in user's
+coordinates.  If {\em xmin} and {\em xmax} are equal, then autoscaling is used in x, and similarly for y. Note
+that data outside the specified region is still plotted, so that proper clipping of lines occurs.
+ 
+ \item {\tt -range=[\{x|y\}Minimum={\em value}][,\{x|y\}Maximum={\em value}][,\{x|y\}Center={\em value}]}
+        --- Constrains the extent
+        and center of the plot in user's coordinates.  {\tt xminimum} specifies the minimum allowable
+        horizontal extent of the plot; if the autoscaled (or user-specified) range is less than this, the
+        range is increased symmetrically to this value.  Similarly, {\tt xmaximum} specifies the maximum
+        allowable horizontal extent of the plot.  {\tt xcenter} specifies the center of the horizontal
+        range without affecting the extent.  The {\tt y} options are the same, but for the vertical
+        coordinates.
+  \item {\tt -unsuppressZero[=x][,y]}---Specifies that x=0 and/or y=0 should be within the region of
+the plot.  If given without qualifiers, both x and y are ``unsuppressed''.
+
+  \item {\tt -sameScale[=x][,y][,global]}---Specifies that separate panels of data shall be displayed
+on the same scales.  In other words, any autoscaling is done based on all of the data from a request,
+rather than simply the data on a particular plot panel.  If given without these qualifiers, both x
+and y are affected.  {\tt global} forces {\tt sddsplot} to impose the desired condition across all
+plot requests.
+
+  \item {\tt -zoom=[\{x|y\}Factor={\em value}][,\{x|p\}Center={\em value}][,\{y|q\}Center={\em
+value}]} --- Specifies zoom and pan starting from the scales set by autoscaling or by {\tt -scales}.
+A factor less than (greater than) unity zooms out (in).  For each dimension, one may specify the
+center of the plot using either the
+
+  \item {\tt -aspectRatio={\em value}} --- Specifies the y/x aspect ratio of the plot.  The value
+must be nonzero.  If it is positive, then the desired aspect ratio is obtained by altering the
+pspace.  If it is negative, the desired aspect ratio (the absolute value of the value given) is
+obtained by altering the data coordinate range.
+
+  \item {\tt -pSpace={\em hMin}{,\em hMax}{,\em vMin}{,\em vMax}}---This option is seldom used, but allows
+control of the region of the panel that is mapped to data coordinates, said region being the ``plot space''
+or ``pspace''.  The first two coordinates give the horizontal extent, while the second two give the 
+vertical extent.  The coordinate values are between 0 and 1.  The defaults are [0.15, 0.9]x[0.15, 0.9].
+  \end{itemize}
+\item Controlling axes, numeric labels, ticks, and grids:
+  \begin{itemize}
+  \item {\tt -axes[=x][,y][,linetype={\em integer}]}---Specifies that axes will be placed on the plot,
+if they are visible.  By default, both x and y axes are created, with the same linetype as the labels,
+scales, and plot border.  One may select a given axis by supply the {\tt x} or {\tt y} qualifier.
+One may specify the line type to use for the axes using the {\tt linetype} qualifier.
+
+  \item {\tt -tickSettings=[,[\{x|y\}]grid][[\{x|y\}]spacing={\em value}]} {\tt
+[,[\{x|y\}]factor={\em value}][,[\{x|y\}]modulus={\em value}]} {\tt [,[\{x|y\}]size={\em
+fraction}][,[\{x|y\}]linetype={\em integer}]} {\tt [,[\{x|y\}]logarithmic]} --- Specifies how to make
+ticks and numeric labels for the x and y dimensions. All of the qualifiers have an {\em x} and {\em
+y} variant, e.g., {\tt xgrid} and {\tt ygrid}.  Some have a variant that includes both x and y (e.g.,
+{\tt grid}).  In the case of the grid option, {\tt xgrid} specifies grid lines rather than ticks for
+the x dimension, {\tt ygrid} is similar for the y dimension, and {\tt grid} specifies grid lines in
+both dimensions.
+
+The {\tt factor} qualifiers specify factors to apply to the data values in producing the labels.  For example, one
+might want to muliply small values by a power of ten in order to get labels that are of order units.  The {\tt
+spacing} values give the spacing of the ticks and labels with any factor included.  I.e., to keep the same number
+of ticks, {\tt factor} and {\tt spacing} values must be increased together.  Usually, giving the {\tt spacing}
+qualifiers is unnecessary, since {\tt sddsplot} chooses appropriate values.
+
+The {\tt modulus} qualifiers allow printing the modulus of the label value rather than the value itself; for
+example, one might use {\tt xmodulus=24} if x was the time in hours over many days.  The {\tt size} qualifiers
+permit specification of the size of the ticks as a fraction of the range in the opposing dimension; the default is
+0.02.  The {\em linetype} qualifiers specify the linetype to be used for ticks and grid lines, using integer values
+as for the {\tt -graph=line} switch.  The {\tt logarithmic} qualifiers specify log-style ticks and labels; the
+implication is that the data being plotted is the base-ten logarithm of something.
+
+  \item {\tt -subTickSettings=[[\{x|y\}]divisions={\em integer}][,[\{x|y\}]grid]} {\tt [,[\{x|y\}]linetype={\em
+integer}][,[\{x|y\}]size={\em fraction}][,xNoLogLabel][,yNoLogLabel]}---Specifies whether and how to make subticks or subgrid lines for the
+x and y dimensions.  All of the qualifiers have two or more variants, one that applies to x, one that applies
+to y, and (in some cases) one that applies to both.  For example, {\tt xgrid} requests grid lines for x, {\tt
+ygrid} requests grid lines for y, and {\tt grid} requests grid lines for both x and y.  The {\tt divisions}
+qualifiers specify the number of subdivisions of the major tick intervals; the default is none.  The {\tt linetype}
+qualifiers specify the line type to use for subticks or subgrid lines.  The {\tt fraction} qualifiers specify
+the size of the subticks as a fraction of the plotting region; the default is 0.01. {\em xNoLogLabel} and {\em yNoLogLabel} specify whether plot subtick labels for log scale axis, they are only valid if the axis uses log scale.
+
+  \item {\tt -yScalesGroup=\{ID={\em string} | fileIndex | nameIndex | nameString | page | request | tag | subpage | iNameString\}} --- 
+        Specifies multiple vertical scales.  The most common form is {\tt -yscalesGroup=namestring}, which
+        uses a separate scale for every separately-named quantity.  Otherwise, one specifies a separate
+        scale for items from different files (by file index), with different name index, different page,
+        and so on.  The \verb|tag| is a quality of a dataset specified with the \verb|-tag| option.
+        \verb|iNameString| is the name string in inverse order (i.e., so that one compares namestrings
+        starting at the end rather than the beginning).  These qualifiers are shared with the
+        \verb|groupBy| and \verb|separate| options.
+        
+  \item {\tt -xScalesGroup} --- Identical to \verb|yScalesGroup| but for x axis scales.
+
+  \item {\tt alignZero[=\{xcenter|xfactor|pPin={\em value}\}][,\{ycenter|yfactor|qPin={\em value}\}]} ---
+  This option is provides a facility for lining up zeros on plots with multiple axes.  You must give
+at least one of the qualifiers.  The {\tt xfactor} and {\tt yfactor} qualifiers request multiplication
+of the upper and lower limits for each scale by the smallest factors that will line up the zeros.
+The {\tt xcenter} and {\tt ycenter} qualifiers position the zeros at the center of the plot space,
+which may result in empty regions on the plot.  The {\tt pPin} and {\tt qPin} allow specifying the
+point at which to ``pin'' the zeros, in plot-space coordinates (0 to 1).
+
+  \item {\tt -grid[=x][,y]}---This option is superseeded by the {\tt -tickSettings} option.  It permits specification
+that grids (rather than ticks) will be used for major divisions.
+
+  \item {\tt -noScales}---Specifies that no scales (i.e., no ticks, subticks, or numeric labels) will be plotted.
+
+  \item {\tt -noBorder}---Specifies that no border will be made around the plot region.  Implies {\tt -noScales}.
+
+  \end{itemize}
+\item Controlling text labels:
+  \begin{itemize}
+
+  \item {\tt -xLabel=[\{@{\em parameterName} | {\em string}\} | use=\{name | symbol |
+description\}][,units][,offset={\em value}][,scale={\em value}][,edit={\em string}]}---Controls size,
+placement, and content of the x dimension label, which appears directly under the scale labels.  The
+default text is of the form {\tt {\em symbol} ({\em units})}, where the symbol and units are taken from
+the column or parameter definition fields in the SDDS header for the x data.  If the symbol is blank, then
+the element name is used.  Alternatively, the text may be taken from a named string parameter, or from a
+string that is given explicitly, or the user may specify with the {\tt use} qualifier that the
+element name, symbol, or descrpition be used.  The user may also force the appearance of the units on the
+label using the {\tt units} qualifier.   The label text may be edited using Toolkit editing commands
+(\progref{SDDS editing}).
+
+The {\tt offset} and {\tt scale} qualifiers allow changing the position and size of the label.  The {\tt
+offset} is specified as a fraction of the vertical dimension of the plot region.  The {\tt scale} is
+simply a multiplicative factor.
+
+Note that if the value of the parameter {\em parameterName} changes from page to page in a file, and if separate pages are
+plotted in different panels, then the label for each panel will be different.  If the pages are plotted together, the value
+of the parameter from the first page will be used.
+
+  \item {\tt -yLabel}---This switch has identical usage to {\tt -xLabel}.  {\tt -yLabel} controls the y dimension label.  The
+default text contains the y data names of all the columns and parameters being displayed.  If the data all have the same
+units, the units are displayed as well.  This information is taken from the appropriate entries in the SDDS header.
+The {\tt offset} qualifier gives the label offset as a fraction of the horizontal dimension of the plot region.
+
+  \item {\tt -verticalPrint=\{up | down\}}---Specifies the direction of print for the y dimension label.
+The default is {\tt up}.
+
+  \item {\tt -title}---This switch has identical usage to {\tt -xLabel}.  The default text is from the {\tt contents}
+field of the {\tt description} command in the first file from which data is displayed.  
+  \item {\tt -topTitle}---Normally, the title goes below the x dimension label.  This switch directs that it be placed
+at the top of the plot, above the ``topline label''.
+  \item {\tt -topline}---This switch has identical usage to {\tt -xLabel}.  It is blank by default.
+  \item {\tt -filenamesOnTopline}---Directs that the topline text contain the names of the files from which data
+is displayed.
+  \item {\tt -labelSize={\em fraction}} --- {\bf Obsolete}: 
+Specifies a common size for all labels, including numeric labels.  
+In the original version of {\tt sddsplot}, the {\em fraction} was the horizontal size of the characters as a 
+fraction of the horizontal size of the plot region.  This meaning is no longer precisely true because the
+new version doesn't used fixed character sizes.  However, this option may still be used to scale character
+sizes up and down.  The previous nominal value for {\em fraction} was 0.03, which is now used as the reference
+point for scaling.  Hence, if you specify 0.06, the character sizes would be doubled.  
+  \item {\tt -noLabels}---Specifies that no labels (i.e., x and y dimension labels, title, and topline label) will be
+made.  
+
+  \item {\tt -string=\{@{\em parameterName} | {\em string}\},\{x|p\}Coordinate={\em value}}
+{\tt \{y|q\}Coordinate={\em value}[,scale={\em factor}][,angle={\em degrees}]}
+{\tt [,justifyMode={\em mode}][,linetype={\em integer}][,edit={\em string}]} ---
+Specifies display of string data on the plot.  The string may either
+be extracted from a named string parameter or given explicitly.  If the value of the parameter {\em parameterName} changes
+from page to page in a file, and if separate pages are plotted in different panels, then the label for each panel will be
+different.  If the pages are plotted together, the value of the parameter from the first page will be used.
+
+The coordinates of the string may be specified either in users coordinates (i.e., x and y), or unit coordinates (i.e., p and
+q); the unit coordinates are (0,0) at the lower left of the plot region and (1,1) at the upper right.  {\tt scale} permits
+changing the size of the letters by a specified factor. {\tt angle} permits changing the angle of the string; a value of 90
+gives upward vertical print.  
+
+Normally, text is ``left bottom'' justified, which means that the coordinates given are those of the left bottom corner of
+the first letter of the string.  Justification may be changed with the {\tt justifyMode} qualifier, which accepts a mode string
+of the form {\tt \{ l | r | c\}\{t | b | c\}}.  The letters stand for Left, Right, Center, Top, and Bottom, respectively.
+The default justification would thus be specified as {\tt justify=lb}.
+
+The text is normally creating using line type 0.  This may be changed with the {\tt linetype} option.  As with the other
+labels, the text may be edited using Toolkit editing commands (\progref{SDDS editing}).
+
+  \item {\tt -dateStamp}---Directs that a time and date stamp be placed on the plot.  It appears in the upper left corner
+of the plot.
+
+  \end{itemize}
+\item Altering or rearranging data prior to plotting:
+  \begin{itemize}
+
+  \item {\tt -swap}---Specifies that the x data will be plotted as y and vice-versa.  
+
+  \item {\tt -transpose}---Specifies that the data matrix be transposed prior to plotting.  This
+means, for example, that if the plot request specified N columns of y data and if the table contained
+M rows, one would get a plot of M quantities as a function of the index of the column.  The implicit
+assumption is that the N columns contain comparable quantities.  This would allow one to display, for
+example, how the quantities changed from row to row in the data.  Each row of data thus organized is
+marked as a separate ``subpage'' (see the {\tt -groupBy} and {\tt -separate} switches), so that one
+can for example split rows onto separate panels.
+
+  \item {\tt -factor=[\{x|y\}Multiplier={\em value}]} --- Specifies that the x
+and/or y data for the present request will be multiplied by the given values.  Note that it is the
+users responsibility to ensure that the units that are displayed are corrected, if required.
+
+  \item {\tt -offset=[\{x|y\}Change={\em value}][,\{x|y\}Parameter={\em
+value}][,\{x|y\}Invert]} --- Specifies that the x and/or the y data be
+offset by either specified values, qor by values in named numerical
+parameters.  Normally, the offset is of the form $x \rightarrow
+x+x_o$.  The {\tt invert} qualifiers cause the offset to be subtracted
+rather than added.
+
+If {\tt -factor} is given together with {\tt -offset}, then the offset is applied first.
+
+  \item {\tt -mode=\{x | y\}=\{linear | logarithmic | autolog | normalize | offset | coffset | center | meanCenter | fractionalDeviation | specialScales\}[,...]} ---
+
+Invokes one or more standard transformations of data, independently
+for x and y values.  The {\tt linear} mode is the default.  {\tt
+normalize} mode directs that data be displayed after independent
+normalization to the interval [-1, 1]; to do this, the data is divided
+by the maximum absolute value in the data.  The {\tt offset}, {\tt
+coffset}, {\tt center}, and {\tt meanCenter} qualifiers result in 
+shifting of the data: {\tt offset} directs that data be shifted so 
+that the first value plotted is zero; {\tt coffset} directs the data 
+to use a common offset from the first plot; {\tt center} directs that 
+data be shifted the center of the range is zero; {\tt meanCenter} 
+directs that the data be shifted so that the average plotted value 
+is zero.
+
+{\tt logarithmic} mode implies that the base-ten logarithmic of the
+appropriate values is taken prior to plotting.  Normally, this does
+not produce log-type scales; use of the {\tt specialScales} keyword
+together with the {\tt logarithmic} keyword will obtain this. One can
+also use the {\tt -tickSettings} option for this, which is the preferred
+method.  {\tt autolog} mode results in choice of linear or log-scale plotting
+based on the range of the data.  If the range of the data is more than a factor
+of 15, then log mode is used (with log scales).  Otherwise, linear mode is used.
+
+{\tt fractionalDeviation} plots the data after subtracting and then dividing by the mean value.
+
+\item {\tt -stagger=[xIncrement={\em value}][,yIncrement={\em value}][,files][,datanames]} ---
+Directs that data displayed on the same panel will be incrementally offset for display.  This is
+useful in order to make mountain range plots, or to offset similar data for clarity.  {\tt
+xIncrement} and {\tt yIncrement} are used to specify the increments for each dimension; zero is the
+default.  Normally, only data from the same column or parameter is staggered, with the stagger amount
+increasing with each page in the file.  The {\tt files} qualifier directs incrementing the offset
+when plotting proceeds to a new file on the same panel.  The {\tt datanames} qualifier directs
+incrementing the offset when plotting proceeds to a new dataname (i.e., column or parameter name)
+within the same file on the same panel.
+
+  \item {\tt -enumeratedScales=[interval={\em integer}][,limit={\em integer}][,scale={\em
+factor}]} {\tt [,allTicks][,rotate][,editCommand={\em string}]} --- Allows control of the display of
+enumerated value strings when the x data is of string type.  {\tt interval={\em N}} specifies
+displaying and making a tick for every $N {th}$ enumerated value; the default is 1.  Also, {\tt
+limit={\em M}} specifies displaying and making a tick for only $M$ enumerated values at equal
+spacing; the default is unlimited.  If one of these options is employed but one desires to see all
+the ticks (even those without labels), the {\tt allTicks} qualifier may be given.  {\tt scale}
+specifies a factor by which to increase the size of the text.  {\tt rotate} specifies rotation of the
+printed text from the normal orientation to the optional orientation; if enumerated data is displayed
+along the x dimension, the normal (optional) orientation is vertical (horizontal) printing.  These
+are reversed if the enumerated data is displayed along the y dimension.
+
+  \end{itemize}
+\item Creating legends and data labels:
+  \begin{itemize}
+
+  \item {\tt -legend[=\{ \{x|y\}Symbol | \{x|y\}Description | \{x|y\}Name | filename | 
+ specified={\em string} | parameter={\em name}\}] [,editCommand={\em string}]
+  [,firstFileOnly][,scale={\em factor}]} \rm
+--- Specifies creation of a legend for the datanames in the current request.  By default, the
+legend text is the symbol field for the y data; if the symbol is blank, the dataname is used.  {\tt
+xSymbol} and {\tt ySymbol} specify use of the x or y data symbols, or the datanames if the requested
+symbol is blank.  {\tt xDescription} and {\tt yDescription} specify use of the indicated description
+fields.  {\tt xName} and {\tt yName} specify use of the indicated datanames.  {\tt filename}
+specifies use of the name of the file from which the data comes.  {\tt specified={\em string}}
+specifies use of the given string.  {\tt parameter={\em name}} specifies use of the contents of the
+named string parameter.  Any legend text may be editing using SDDS editing commands\progref{SDDS
+Editing} via the {\tt editCommand} qualifier.  If {\tt firstFileOnly} is given, only the first file
+in the request will have legends generated.  If {\tt scale={\em factor}} is given, the legend text
+size is scaled by the given factor.
+
+  \item {\tt -lSpace={\em qmin},{\em qmax},{\em pmin},{\em pmax}}---Specifies the region in which
+legends will be placed.  The coordinates are pspace coordinates.  Since the legends are typically
+outside the pspace, the coordinates may be greater than unity.  For example, the default values are
+[1.02, 1.18]x[0.0, 1.0].  This option is usually used to place the legend inside the pspace, or to
+extend the size of the lspace to accomodate long legend text.
+
+  \item {\tt -pointLabel={\em name}[,edit={\em editCommand}][,scale={\em number}]
+        [,justifyMode=\{rcl\}\{bct\}]} --- Specifies labeling of individual data points using
+        data from column or parameter {\em name}.  The labels may be edited by specifying an
+        {\em editCommand} with the {\tt edit} qualifier.  The {\tt scale} qualifier may be
+        used to scale the label size.  The {\tt justifyMode} qualifer is used to change the
+        location of the label relative to the point; the first letter gives the horizontal
+        justification (right, center, or left) and the second gives the vertical
+        justification (bottom, center, or top). The justification mode may also be embedded  in
+        the string; if the string ends with \$j{\em XY}, then {\em X} and {\em Y} are the
+        horizontal and vertical justification, respectively, for that string.
+        
+  \end{itemize}
+
+\item Creating overlays:
+
+The overlay feature allows displaying data that has different scales
+on the same plot.  In most cases, it is superseded by the {\tt
+-yScalesGroup} and {\tt -xScalesGroup} options.  The only exception is
+when one wants to overlay data without having scales shown for the
+data.  (An example is plotting magnet layouts for Twiss parameter
+plots using the {\tt magnets} output from {\tt elegant}.)
+
+{\tt -overlay=[\{x|y\}mode={\em mode}][,\{x|y\}factor={\em value}]} {\tt [,\{x|y\}offset={\em
+value}]} {\tt [,\{x|y\}center]}---Normally, {\tt sddsplot} displays all data on a single panel on the same
+scale.  In some cases, one wants to overlay data that is on a different scale from other data on the
+panel.  One way to do this is with the {\tt -overlay} switch, which gives convenient control of how
+overlayed data is displayed.  Any data in a plot request for which this switch is given will be
+overlayed as specified.
+
+The {\tt xmode} and {\tt ymode} options allow two types of scaling for x and y independently.  A mode
+of {\tt normal} means that the indicated data is treated normally.  The default mode is {\tt unit},
+which means that the data is scaled so that its full range is equal to the full coordinate range of
+the plot in the appropriate (x or y) dimension.
+
+The data is further adjusted according to any additional qualifiers given.  The {\tt center}
+qualifiers offset the data so that the data is centered in the plot space; normally, zero in the data
+is mapped to zero in the user's coordinates.  The {\tt factor} qualifiers scale the data by the given
+factor about the center value.  The {\tt offset} qualifiers offset the data by specified amounts; if
+{\tt mode=normal}, the offset is in user's coordinates, otherwise it is in pspace coordinates.
+
+Users needing only the {\tt factor} facility should consider the {\tt -factor} switch, since it is
+easier to use.
+
+\item Controlling plot panels:
+  \begin{itemize}
+  \item {\tt -newPanel}---Specifies that the current plot request will start a new plot panel.
+  \item {\tt -endPanel}---Specifies that the current plot request will end the current plot panel.
+
+  \item {\tt -layout={\em hNumber},{\em vNumber}[,limitPerPage={\em integer}]}---Specifies the layout
+of panels on each plot page.  The maximum number of panels on any page is the product of {\em
+hNumber} and {\em vNumber}, which are the number of panels horizontally and vertically, respectively.
+The default is {\em hNumber}=1 and {\em vNumber=1}.  If {\tt limitPerPage} is given, then only the
+specified number of panels will appear on any page; for example, {\tt -layout=2,2,limit=3} would
+imply three panel spaces per page, with one left blank.
+
+  \end{itemize}
+
+\item Grouping, sorting, and separating data:
+
+  \begin{itemize} \item {\tt -sever[=xGap={\em value}][,yGap={\em value}]}---For line plotting, {\tt
+sddsplot} will normally connect points sequentially without regard for gaps in the data.  The {\tt
+-sever} switch specifies various means of locating gaps in data and directs lifting the ``pen''
+whenever a gap occurs.  If {\tt -sever} is given without qualifiers, the pen is lifted whenever the x
+value decreases; this is useful for plotting data where the x value is expected to increase
+monotonically for each group of points.
+
+The {\tt xgap} and {\tt ygap} qualifiers invoke a more sophisticated and more generally applicable form of
+severing.  For each dimension for which severing is requested, the pen is lifted whenever the absolute
+difference of two successive values exceeds a defined limit.  This limit is specified either in absolute
+or fractional terms using the {\em value} entry.  If {\em value} is positive, the gap threshold is equal
+to {\em value}.  If {\em value} is negative, the gap threshold is {\em -value} times the mean spacing
+between successive points; a value of -1.5 has been found to work well for data that is roughly equispaced
+with occasional missing points.
+
+  \item {\tt -tagRequest=\{{\em number} | @{\em parameterName}\}}---Specifies that data from the
+current requested will be tagged with either the given (generally floating-point) {\em number}, or
+with the values from the numeric parameter {\em parameterName}.  Using the {\tt -groupBy} and {\tt
+-separate} options permits grouping and sorting of data by tag values.  If a data set has multiple
+pages in the file, and if pages are split (see {\tt -split} below), then parameter-tagged data will
+have the parameter value from the first page in each group of pages.
+
+  \item {\tt
+ -groupBy[=request][,tag][,fileIndex][,nameIndex][,page][,subpage]} {\tt [,fileString][,nameString][,iNameString]} ---
+ Specifies how internal data sets will be ordered.  {\tt -sortBy} might have been a more appropriate
+ name for this switch.  The qualifiers that appear in the list are shown in the order that
+ corresponds to the default sorting.  The file index is the sequential number within the request of
+ the file from which the internal data set is taken; the file string is the name of the file.  The
+ name index is the sequential index within the request of the dataname group for the internal data
+ set, while the name string is the name of the y data.  The page is the sequential number in the file
+ of the first SDDS data page from which data appears in the internal data set.  The subpage is a
+ sequential number within each internal data set, which allows subdivision of the internal data set.
+ The request is the sequential number of the plot request that resulted in generation of the internal
+ data set.  The tag is a single user-supplied value or a value read from a parameter that is
+ associated with each internal data set; by default, all data sets are tagged with the value 0.  If a
+ file is split into several internal data sets, each may have a different tag value if the tag is
+ read from a parameter; in this case, the data sets are eached tagged with the value for the first
+ included data page.
+
+The order in which the qualifiers to {\tt -groupBy} are given determines the priority of sorting by
+the various criteria.  In the default ordering, data sets are sorted by request number, subsorted by
+tag (usually a null operation unless data is tagged by the user), subsubsorted by file index,
+subsubsubsorted by dataname index, etc.  Each successive qualifier results in moving the indicated
+sort criterion to the next highest priority.  Any qualifiers not given are retained in the default
+order.
+
+If one wanted to bring together, for example, internal data sets with the same data name, one would
+give {\tt -groupby=nameString}.  In this case, the new sorting priority would be {\tt nameString},
+{\tt request}, {\tt tag}, etc.
+
+  \item {\tt -separate[=\{{\em numberToGroup} | groupsOf={\em number} | fileIndex | fileString |
+nameIndex | nameString | page | subpage | request | tag | iNameString\}]} --- Specifies how to separate internal data
+sets onto panels.  If given with no qualifiers, each internal data set is placed on a separate panel.
+If given with a single integer argument, or with the {\tt groupsOf} qualifier, then the specified
+number of data sets appear on each panel; the data sets are assign to panels in the order determined
+by {\tt -groupBy} or the default thereof.
+
+If one of the other qualifiers is given, then panel separation occurs when the indicated criterion
+changes as the data sets are accessed in sorted order.  Most commonly, one uses {\tt -groupby={\em
+criterion}} {\tt -separate={\em criterion}}.  For example, one might want to group by filename and
+separate by filename.
+ 
+  \item {\tt -split=\{pages[,interval={\em integer}] | parameterChange={\em name}[,width={\em
+value}][,offset={\em value}] | columnBin={\em name},width={\em name}[,start={\em
+value}][,completely]\}}---As discussed in the introductory sections, when {\tt sddsplot} reads data
+for one dataname group from a file, it normally concatenates data from successive pages to form a
+single internal data set.  This would mean, for example, that all of the data from the file would be
+displayed with the same linetype or symbol.  The {\tt -split} switch overrides this behavior,
+splitting the data into multiple internal data sets.
+
+The simplest and most commonly-used way of doing this is to split the data page boundaries; this is
+done using the {\tt -split=pages} mode.  The optional {\tt interval} specifies spliting after a
+specified number of page boundaries.  Splitting data does not imply that the data will appear on
+separate plot panels, but allows this and other possibilities.  (To separate page-split data onto
+panels, one uses {\tt -separate=pages}, as discussed above.)
+
+One can also page-split based on the value of a parameter, using {\tt -split=parameterChange}.  This
+directs that a new internal data set will be started wheneven the named parameter changes.  For
+numeric parameters, the {\tt width} and {\tt start} qualifiers may be used.  If {\tt width} is
+specified, the change must exceed the given value before a split occurs.  If {\tt start} is
+specified, the reference value for changes is set to the given value; otherwise, the first parameter
+value is used.  (For example, one might wish to split when a parameter changed by 5 units referenced
+from 2.5 units, giving boundaries of 7.5, 12.5, etc.; this would be obtained with {\tt
+width=5,start=2.5}.)
+
+The {\tt columnBin} mode is different from the other two modes.  Rather than splitting data into internal
+data sets at page boundaries, it groups or bins data into subpages according to the value in a specified
+numeric column.  (It is appropriate only for plotting column data.)  {\tt columnBin} mode may be used with
+{\tt pages} mode to split and subsplit data into pages and subpages.  For example, one might have a data
+file with many pages of time-series data.  One might want to plot each page separately, but within
+each page one might want to color-code the points according to some value in the table (e.g., a valid-data
+indicator). This would be accomplished using {\tt -split=pages,columnBin={\em name},width={\em value}} {\tt
+-separate=pages} {\tt -graph=dot,vary,eachPage}.
+
+  \item {\tt -omniPresent}---Specifies that the data sets from the current request will appear on all
+plot panels.
+
+  \item {\tt -replicate=\{number={\em integer} | match=\{names | pages | requests| files\}\}\{,scroll\}} --- Specifies replication of a dataset so that it can be plotted several times. This is similar to -{\tt omniPresent}, but more flexible.  When a dataset is replicated,
+ each replicant appears to have come from a different page of the original file.  The number of replications is controlled by
+ the first option: a specific number of replications can be requested, or it can be asked to replicate a number of times 
+ equal to the maximum number of pages in any file, data names in any request, plot requests, or files in any request.  
+ If the {\tt scroll} qualifier is given, then the replicants do not have the same number of data points.  Instead, successive
+ copies are more and more complete until the final replicant has the full dataset.
+
+  \end{itemize}
+\item Winnowing data:
+  \begin{itemize}
+  \item {\tt -limit=[\{x|y\}Minimum={\em value}][,\{x|y\}Maximum={\em value}][,autoscaling]}---
+Specifies limits to be placed on x and y values prior to plotting.  Points beyond the indicated limits are 
+eliminated from the data prior to plotting.  This complements the facility available from {\tt -filter} and
+{\tt -match} in that one need not specify the name of the data one is winnowing with.  This permits easier
+filtering of data from many columns or parameters.
+
+The {\tt autoscaling} qualifier specifies that {\tt sddsplot} will not remove data outside the
+defined limits, but rather that it will ignore it for purposes of autoscaling.  If lines are used to
+connect data points, this could result in lines being drawn to the boundary of the plot region, thus
+showing the presence of extreme points.
+
+  \item {\tt -sparse={\em interval}[,{\em offset}]}---Specifies that only every {\em interval}${
+{th}}$ point will be used.  If {\em offset} is not given, the first point in the internal data set is
+the first taken; otherwise, the {\em offset}${ {th}}$ point is the first taken.
+
+  \item {\tt -sample={\em fraction}}---Specifies random sampling of data to retain only the indicated
+fraction of the points.  {\em fraction} gives the probability that any point will be used.  Hence,
+the data actually used may vary from run to run since the random number generator is seeded with the
+system clock.
+
+  \item {\tt -clip={\em head},{\em tail}[,invert]}---Specifies removal of {\em head} points from the
+beginning and {\em tail} points from the end of each internal data set.  If {\tt invert} is given,
+the points that would have been removed are instead the only ones used.
+
+  \item {\tt -presparse={\em interval}[,{\em offset}]}---Similar to {\tt -sparse}, except that
+sparsing is done at the time the data page is read and only once for all requests and
+datanames that draw data from the data page.  This is faster, and is usually what is desired.
+However, if one wants to plot sparsed and unsparsed data from the same file at the same time,
+{\tt -presparse} cannot be used.  If both {\tt presparse} and {\tt sparse} are given, both
+are applied.
+
+   \item {\tt -filter=\{column | parameter\},{\em rangeSpec}[,{\em rangeSpec},{\em logicOp}...] }
+--- Specifies winnowing each internal data set based on numerical data in parameters or columns.  A
+{\em range-spec} is of the form {\tt {\em name},{\em lower-value},{\em upper-value}[,!] }, where
+\verb|!| signifies logical negation.  A point passes a {\tt column}-based filter if the value in the
+named column is inside (or outside, if negation is given) the specified range, where the endpoints
+are considered inside.  {\tt parameter}-based filters are similar, except that the point passes only
+if the value of the named parameter for the page from which it comes is acceptable.  One or more
+range specifications may be combined to give a accept/reject status by employing the {\em
+logic-operations}, \verb|&| (logical and) and \verb&|& (logical or).
+     \item {\tt -timeFilter=\{column | parameter\},[before=YYYY/MM/DD@HH:MM:SS] [,after=YYYY/MM/DD@HH:MM:SS][,invert]} 
+--- Specifies date range in YYYY/MM/DD@HH:MM:SS format in time parameters or columns. The invert option cause the
+filter to be inverted, so that the data that would otherwise be kept is removed and vice-versa. For example,
+if one want to keep data between 8:30AM on Januaray 2, 2003 and 9:20PM on February 6,2003, the option woould be
+     -timeFilter=column,Time,before=2003/2/6@21:20,after=2003/1/2@8:30
+assume that the time data is in the column Time.
+   \item {\tt -match=\{column | parameter\},{\em matchTest}[,{\em matchTest},{\em logicOp}]} ---
+Specifies winnowing based on data in string parameters or columns.  A {\em matchTest} is of the form
+{\tt {\em name}={\em matchingString}[,!]}, where the matching string may include wildcards.
+If the first character of {\em matchingString} is '@', then the remainder of the string is taken to
+be the name of a parameter or column.  In this case, the match is performed to the data in the named
+entity.
+
+The use of several match tests and logic is done just as for {\tt -filter}.  For example, to match
+all the rows for which the column {\tt Name} starts with 'A' or 'B', one could use
+{\tt -match=column,Name=A*,Name=B*,|}.  (This could also be done with {\tt -match=column,Name=[AB]*}.)
+  \end{itemize}
+\item {Miscellaneous:}
+\begin{itemize}
+        \item {\tt -repeat[=checkSeconds={\em number}][,timeOut={\em seconds}]} ---
+Specifies repeated plotting of data from the files, with replotting occuring when any
+file is modified.  By default, {\tt sddsplot} checks the files every second and times out
+after 900s of no change.  This is available on UNIX systems only.  It is best used with
+the \verb|motif| device type and the following device argument:
+\verb|-device=motif,''-movie true -keep 1''|.
+        \item {\tt -drawLine=}
+        {\tt \{x0Value={\em value}|p0Value={\em value}|x0parameter={\em name}|p0parameter={\em name}\}}
+        {\tt \{x1Value={\em value}|p1Value={\em value}|x1parameter={\em name}|p1parameter={\em name}\}}
+        {\tt \{y0Value={\em value}|q0Value={\em value}|y0parameter={\em name}|q0parameter={\em name}\}}
+        {\tt \{y1Value={\em value}|q1Value={\em value}|y1parameter={\em name}|q1parameter={\em name}\}} ---
+        Specifies drawing of lines on the plot by giving the two endpoints of the line.
+        For each endpoint (labeled '0' and '1'), one must specify the x or p coordinate (for horizontal) and
+        the y or q coordinate (for vertical).  Each coordinate name be specified explicitly (e.g.,
+        \verb|x0Value=1.7|) or via a parameter (e.g., \verb|x0parameter=alpha|).  If a parameter is
+        given, the coordinate can change as the parameter value changes in the file.
+        
+\end{itemize}
+
+\end{itemize}
+
+\item {\bf special characters:}
+{\tt sddsplot} supports Greek and mathematical characters in labels and strings through special sequences embedded in
+text strings.  A similar mechanism is used to allow character-by-character control over size and positioning.
+The special sequences are of the form \verb|$|{\em character}, where {\em character} may be one of the following:
+\begin{itemize}
+
+\item {\tt a}, {\tt b}, {\tt n}: provide subscript and superscript control.  {\tt a} puts the character Above the
+normal position (superscript), {\tt b} puts the character Below the normal position (subscript), and {\tt n}
+returns to Normal.
+
+\item {\tt g}, {\tt r}: provide for switching between Greek and Roman
+character sets. \verb|$g| switches into Greek mode, while \verb|$r|
+switches back to Roman mode.  The correspondance between Greek
+characters and the alphabet is shown in Figure \ref{CharSet}.  For
+example, to make a lower-case alpha, one would use \verb|$ga$r|.
+
+\item {\tt s}, {\tt e}: provide for switching between Special and
+normal characters.  \verb|$s| switches to special character mode,
+which provides mathematical and other symbols.  Figure \ref{CharSet}
+shows the correspondance between special characters and keyboard
+characters.  For example, to make a ${\rm \pm}$ symbol, one would
+employ \verb|$sa$e|, while a right-pointing arrow would be obtained
+with \verb|$s5$e|.
+
+\newcommand{\PSFigure}[4]{\begin{figure}[htb]
+  \vspace{-0.38in}
+  \includegraphics[width=\columnwidth,height=#1]{#4}
+  \vspace{-0.57in}
+  \caption[#2]{#2}\label{#3}
+  \end{figure}}
+
+\PSFigure{15cm}{Special character set}{CharSet}{charSet.eps}
+
+\item {\tt i}, {\tt d}: provide for Increasing and Decreasing the
+character size.  The two sequences \verb|$i| and \verb|$d| are
+inverses of each other.  \verb|$i| increases the size of subsequent
+characters by 50\%, while \verb|$d| decreases the size of subsequent
+characters by ${\rm 33 \frac{1}{3}}$\%.  These are seldom used, since
+{\tt sddsplot} provides other means of controlling the size of
+characters in labels and strings.
+
+\item {\tt u}, {\tt v}: provide for motion of the baseline Up and down by one half character height.  
+
+\item {\tt t}, {\tt f}: provide for making Taller and Fatter characters.  \verb|$t| makes characters twice as
+tall while maintaining width, while \verb|$f| makes characters half as tall while maintaining width.  
+
+\item {\tt h}: specifies moving back one half space.
+\end{itemize}
+
+
+\item {\bf environment variables:}
+        \begin{itemize}
+        \item {\tt SDDS\_DEVICE} --- Gives the name of the device type to use as the default.
+        \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{SDDS editing}
+    \item \progref{SDDS Wildcard Conventions}
+    \end{itemize}
+\item {\bf author:} M. Borland, H. Shang and R. Soliday ANL/APS.
+
+\item {\bf acknowledgements}: {\tt sddsplot} uses device driver code from the program {\tt GNUPLOT}, 
+with modifications and enhancements made at Argonne.  The GNUPLOT code is covered by a separate
+copyright, and is used by permission of the authors.  See the {\tt GNUPLOT\_README} file included
+with the distribution for restrictions associated with this code.
+
+The GUI X-windows program ({\tt mpl\_motif}) was written by K. Evans of ANL/APS.
+
+The GIF drivers use the {\tt gd 1.2} library by Thomas Boutell.  The latter is copyrighted by the
+Quest Protein Database Center, Cold Spring Harbor Labs.
+
+\end{itemize}
+
+

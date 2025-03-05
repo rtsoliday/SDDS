@@ -1,0 +1,41 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{SDDS Wildcard Conventions}
+\label{SDDS Wildcard Conventions}
+
+This manual page does not describe a program, but rather a facility that is common to several
+programs.  In particular, several SDDS programs use a common convention for wildcards in
+element names.
+
+The characters \verb|*|, \verb|?|, \verb|[|, \verb|]|, and \verb| | are used for wildcard operations.
+
+\item [] \verb|*| matches any zero or more characters.  A sequence like \verb|*a| matches zero or more
+characters up to the first occurence of \verb|a|.
+
+\item [] \verb|?| matches any one character.
+\item [] \verb|[|{\em rangeSpec}\verb|]| matches any one character in {\em rangeSpec}.  {\em rangeSpec} is
+ composed on any number of explicit characters, plus character ranges specified as {\em firstChar}\verb|-|{\em lastChar},
+ which matches any character between  {\em firstChar} and {\em lastChar} inclusive in the ASCII character set.
+ For example, \verb|[a-z]| would match a lower case alphabetic character, while \verb|[a-z][A-Z][0-9]| would
+ match any alphanumeric character.
+
+\item [] \verb|[ |{\em rangeSpec}\verb|]| matches any one character not in {\em rangeSpec}.
+
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddschanges}
+    \item \progref{sddsconvert}
+    \item \progref{sddscorrelate}
+    \item \progref{sddsenvelope}
+    \item \progref{sddsfft}
+    \item \progref{sddsoutlier}
+    \item \progref{sddsplot}
+    \item \progref{sddsprintout}
+    \item \progref{sddsprocess}
+    \item \progref{sddssmooth}
+    \item \progref{sddsxref}
+    \item \progref{sddszerofind}
+    \end{itemize}
+\end{itemize}
+

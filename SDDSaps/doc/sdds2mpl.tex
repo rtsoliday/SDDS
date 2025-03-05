@@ -1,0 +1,55 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sdds2mpl}
+\label{sdds2mpl}
+
+\begin{itemize}
+\item {\bf description:} 
+\verb|sdds2mpl| extracts data columns or parameters from an SDDS data set and creates \verb|mpl| data files.  The 
+program allows creation of \verb|mpl| labels from SDDS parameters.  This tool is primarily of interest to APS
+users, some of whom still use the older {\tt mpl} Toolkit.  It may be of interest to others who are interested in
+a simple format for use with programs that don't need the full power of SDDS protocol.  Such applications can use
+{\tt sdds2mpl} and {\tt mpl2sdds} to mediate between themselves and SDDS-compliant programs.
+
+\item {\bf example:} 
+\begin{flushleft}{\tt
+sdds2mpl APS.twi -rootname=APS -output=column,z,betax -output=column,z,betay
+}\end{flushleft}
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sdds2mpl [{\em SDDSfile}] [-pipe[=input]] [-rootName={\em string}] [-separatePages] 
+-output=\{column | parameter\},{\em xName},{\em yName}[,\{{\em syName} | {\em sxName},{\em syName}\}]
+[-announceOpenings] [-labelParameters={\em name}[={\em format}]][...]
+}\end{flushleft}
+\item {\bf files:}
+{\em SDDSfile} is the name of an SDDS file from which {\tt mpl}-format files will be made.  Each 
+{\tt mpl} file contains two to four columns of data.
+\item {\bf switches:}
+   \begin{itemize}
+   \item \verb|-pipe[=input]| --- The standard SDDS Toolkit pipe option.
+   \item \verb|-announceOpenings| --- Requests that an informational message be printed whenever a new
+   output file is opened.
+   \item  {\tt -rootName={\em string}} --- Gives the rootname for constructing output filenames.
+   \item \verb|-separatePages| --- Requests that tabular-data column output from separate pages in the SDDS
+   data set go to separate files.
+   \item {\tt -labelParameters={\em name}[={\em format}]][...]} --- 
+        Gives the names and optional \verb|printf| format specifications for
+   parameters that will be printed on the title line of the \verb|mpl| files.
+   \item {\tt -output\{column | parameter\},{\em xName},{\em yName}[,\{{\em syName} | {\em sxName},{\em syName}\}]} 
+        --- Requests that the named columns or parameters be put into a \verb|mpl| file or set
+        of files.  If \verb|-separate| is not given or if the data is for parameters, the name of the file is 
+       {\tt {\em rootname}\_{xName}\_{yName}.out}.  For column output, if \verb|-separate| is given, the names of the
+       files are {\tt {\em rootname}\_{\em N}\_{xName}\_{yName}.out}, where {\em N} is the page number.  This 
+        option may be given any number of times.
+   \end{itemize}
+
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{mpl2sdds}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

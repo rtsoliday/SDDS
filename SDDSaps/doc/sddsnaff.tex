@@ -1,0 +1,95 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsnaff}
+\label{sddsnaff}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsnaff} is an implementation of Laskar's Numerical Analysis of Fundamental
+Frequencies (NAFF) algorithm.  This algorithm provides a way of determining the frequency
+components of a signal that is more accurate than Fast Fourier Transforms (FFT). 
+FFTs are used as part of the analysis, so if an FFT is sufficient for an application,
+{\tt sddsfft} should be used as it will be much faster.
+
+The algorithm starts by removing the average value of the signal and
+applying a Hanning window.  Next, the signal is FFT'd and the
+frequency at which the maximum FFT amplitude occurs is found.  This is
+taken as the starting frequency for a numerical optimization of the
+``overlap'' between the signal and $e^{i\omega t}$, which allows
+determining $\omega$ to resolution greater than the frequency spacing
+of the FFT.  Once $\omega$ is determined, the overlap is subtracted
+from the original signal and the process is repeated, if desired.
+
+\item {\bf examples:} 
+Find the first fundamental frequency for each of the BPM signals in {\tt par.bpm}.
+\begin{flushleft}{\tt
+sddsnaff par.bpm par.naff -column=Time,'P?P?x' -terminateSearch=frequencies=1
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsnaff [{\em inputfile}] [{\em outputfile}]
+[-pipe=[input][,output]]
+[-columns={\em indep-variable}[,{\em depen-quantity}[,...]]] 
+[-pair={\em<column1>,<column2>}]
+[-exclude={\em depen-quantity}[,...]]
+[-terminateSearch={changeLimit={\em fraction}[,maxFrequencies={\em number}] | frequencies={\em number}}]
+[-iterateFrequency=[cycleLimit={\em number}][,accuracyLimit={\em fraction}]]
+[-truncate] [-noWarnings]
+}\end{flushleft}
+\item {\bf files:}
+
+{\em inputFile} contains the data to be NAFF'd.  One column from this
+file must be chosen as the independent variable.  If {\em inputFile}
+contains multiple pages, each is treated separately and is delivered
+to a separate page of {\em outputFile}.
+
+{\em outputFile} contains two columns for each selected column in {\em
+inputFile}.  These columns have names like {\em origColumn}{\tt
+Frequency} and {\em origColumn}{\tt Amplitude}, giving the frequency
+and amplitude for {\em origColumn}.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item \verb|pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns={\em indepVariable}[,{\em depenQuantityList}]} --- Specifies the name of the
+        independent variable column.  Optionally if no -pair options given, specifies a list of comma-separated, optionally
+        wildcard-containing names of dependent quantities to be NAFF'd as a function of the 
+        independent variable. 
+        By default, all numerical columns except the independent column are NAFF'd.
+     \item {\tt -pair={\em <column1>,<column2>}]} --- Specifies the names of the conjugate pairs to
+        give double the frequency range. {\em<column1>} is used to obtain the basic frequency, 
+        {\em<column2>} is used to obtain the phase at the frequency of the first column. 
+        The relative phase between them will expand the resulting frequency from 0 - Fn to 0 - 2*Fn.
+        Multiple -pair options may be provided. The indepentdent 
+        column is provided by -columns option. The dependent columns may be provided by either -columns
+        or -pair option. 
+    \item {\tt -exclude={\em depenQuantity},...} --- Specifies optionally wildcarded names of columns
+        to exclude from analysis.
+    \item {\tt -terminateSearch=\{changeLimit={\em fraction}[maxFrequencies={\em number}] | }
+        {\tt frequencies={\em number}\}} --- Specifies when to stop searching for frequency 
+        components.  If {\tt changeLimit} is given, then the program stops when the RMS change
+        in the signal is less than the specified {\em fraction} of the original RMS value of
+        the signal.  The maximum number of frequencies that will be returned in this mode
+        is specified with {\tt maxFrequencies} (default is 4).  If {\tt frequencies} is given,
+        then the program finds the given number of frequencies, if possible.
+        By default, the program finds one frequency for each signal.
+    \item {\tt -iterateFrequency=[cycleLimit={\em number}][,accuracyLimit={\em fraction}]} ---
+        This option controls the optimization procedure that searches for the best frequency.
+        By default, the procedure executes 100 passes and attempts to determine the frequency
+        to a precision of 0.00001 of the Nyquist frequency.  
+        {\tt cycleLimit} is used to change the number of passes, while {\tt accuracyLimit} is used
+        to specify the desired precision.
+    \item \verb|-truncate| --- Specifies that the data should be truncated so that the number of points is 
+        the largest product of primes from 2 to 19 not greater than the original number of points.  
+        In some cases, this will result in significantly greater speed, by making the FFTs faster.
+    \item \verb|-noWarnings| --- Suppresses warning messages.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddsfft}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

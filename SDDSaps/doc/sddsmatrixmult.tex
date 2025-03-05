@@ -1,0 +1,82 @@
+% $Log: not supported by cvs2svn $
+%
+% Template for making SDDS Toolkit manual entries.
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+
+%
+% Substitute the program name for <programName>
+%
+\subsection{sddsmatrixmult}
+\label{sddsmatrixmult}
+
+\begin{itemize}
+\item {\bf description:}
+%
+% Insert text of description (typicall a paragraph) here.
+%
+\verb+sddsmatrixmult+ multiplies the matrices represented in the
+two input files and puts the results in the output file.
+
+String columns are ignored and not copied to the output file.
+
+\item {\bf examples:} 
+%
+% Insert text of examples in this section.  Examples should be simple and
+% should be preceeded by a brief description.  Wrap the commands for each
+% example in the following construct:
+% 
+%
+In an accelerator beamline a linear relationship exists between the
+corrector dipole setpoints and the beam position monitor (BPM) readbacks.
+The matrix data in file response is multiplied with the columns of 
+file corrector to produce a new file containing values of expected bpm change:
+\begin{flushleft}{\tt
+sddsmatrixmult response correctorChange bpmExpectedChange
+}\end{flushleft}
+\item {\bf synopsis:} 
+%
+% Insert usage message here:
+%
+\begin{flushleft}{\tt
+sddsmatrixmult [-pipe=[input][,output]] [{\em file1}] {\em file2} [{\em output}]
+          [-commute] [-reuse] [-verbose] [-ascii]
+}\end{flushleft}
+\item {\bf files:}
+% Describe the files that are used and produced
+The first file ({\em file1}) is the SDDS file for left-hand matrix of product.
+The second file ({\em file2}) is the SDDS file for right-hand matrix of product.
+The third file contains the product matrix data.
+
+\item {\bf switches:}
+%
+% Describe the switches that are available
+%
+    \begin{itemize}
+    \item {\tt  -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt  -commute} --- Use {\em file1} for right-hand matrix and 
+      {\em file2} for 
+      left-hand matrix.  Useful with -pipe option
+    \item {\tt  -reuse} --- If one file runs out of data pages, 
+         then reuse the last one.
+    \item {\tt  -ascii}  --- Produces an output in ascii mode. Default is binary.
+    \item {\tt  -verbose} --- Write diagnostic messages to stderr.
+    \end{itemize}
+%\item {\bf see also:}
+%    \begin{itemize}
+%
+% Insert references to other programs by duplicating this line and 
+% replacing {\em prog} with the program to be referenced:
+%
+%    \item \progref{<prog>}
+%    \end{itemize}
+%
+% Insert your name and affiliation after the '}'
+%
+\item {\bf author: L. Emery } ANL
+\end{itemize}
+
+
+

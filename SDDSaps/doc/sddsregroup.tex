@@ -1,0 +1,79 @@
+% $:Log:$
+%
+% Template for making SDDS Toolkit manual entries.
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+
+%
+% Substitute the program name for <programName>
+%
+\subsection{sddsregroup}
+\label{sddsregroup}
+
+\begin{itemize}
+\item {\bf description:}
+%
+% Insert text of description (typicall a paragraph) here.
+%
+\verb|sddsregroup| swaps the row indexing and page indexing of data
+in an SDDS file. That is, the ${\rm i {th}}$ row of all data pages in the input file are collected
+and made into the ${\rm i {th}}$ data page of the output file.
+\item {\bf examples:}
+%
+% Insert text of examples in this section.  Examples should be simple and
+% should be preceeded by a brief description.  Wrap the commands for each
+% example in the following construct:
+% 
+%
+The file bpm.sdds contain the beam position monitor (bpm) readback as a function of time for a series
+of consecutive bpms in a beamline. The defined columns are Time and x. The parameters
+are bpmIndex. The file bpm.sdds is regrouped to produce data sets of x vs bpmIndex
+for each time value. The output is suitable to plot as a movie with \verb|sddsplot|.
+\begin{flushleft}{\tt
+sddsregroup bpm.sdds bpm.movie -newParameters=Time -newColumns=bpmIndex
+}\end{flushleft}
+\item {\bf synopsis:} 
+%
+% Insert usage message here:
+%
+\begin{flushleft}{\tt
+sddsregroup [-pipe=[input][,output]] {\em inputFile} {\em outputFile}
+     [-newParameters={\em oldColumnName},...]
+     [-newColumns={\em oldParameterName},...] [-warning] [-verbose]
+}\end{flushleft}
+\item {\bf files:}
+% Describe the files that are used and produced
+The input file contains the data sets to be regrouped. The output file
+contains the regrouped data.  If only one file is specified,
+then the input file is overwritten by the output.
+\item {\bf switches:}
+%
+% Describe the switches that are available
+%
+    \begin{itemize}
+    \item {\tt  -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+        \item {\tt -newParameters} --- specifies which columns of the input file will become
+                    parameters in the output file. By default no new parameters
+                    are created, and all columns of the input file are transfered
+                    to the output file.
+        \item {\tt -newColumns} --- specifies which parameters of the input file will become
+                    columns in the output file. The columns will necessarily be
+                    duplicated in all pages. By default all parameters
+                    values are lost.
+    \end{itemize}
+%\item {\bf see also:}
+%    \begin{itemize}
+%
+% Insert references to other programs by duplicating this line and 
+% replacing {\em prog} with the program to be referenced:
+%
+%    \item \progref{<prog>}
+%    \end{itemize}
+%
+% Insert your name and affiliation after the '}'
+%
+\item {\bf author: L. Emery } ANL
+\end{itemize}
+

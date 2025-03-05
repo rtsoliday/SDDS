@@ -1,0 +1,48 @@
+% $Log: not supported by cvs2svn $
+% 
+% Template for making SDDS Toolkit manual entries.
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+
+%
+% Substitute the program name for <programName>
+%
+\subsection{sddsdiff}
+\label{sddsdiff}
+
+\begin{itemize}
+\item {\bf description:}
+%
+% Insert text of description (typicall a paragraph) here.
+%
+\verb+sddsdiff + compares two SDDS files and print out message of comparison results.
+\item {\bf examples:} 
+%
+% Insert text of examples in this section.  Examples should be simple and
+% should be preceeded by a brief description.  Wrap the commands for each
+% example in the following construct:
+% 
+%
+{\tt }
+\begin{flushleft}{\tt
+\bf sddsdiff file1 file2
+}\end{flushleft}
+{\tt}If two files are the same, message {``file1 and file2 are identical''} will be printed to the standard output:
+file1 and file2 are identical.
+If two files are different, the differences will be printed to the standard error output.
+
+\item {\bf synopsis:} 
+%
+% Insert usage message here:
+%
+\begin{flushleft}{\tt
+sddsdiff <file1> <file2>        
+}\end{flushleft}
+
+\item {\bf author: H. Shang } ANL
+\end{itemize}
+
+
+

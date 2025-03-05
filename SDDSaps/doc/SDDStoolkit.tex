@@ -1,0 +1,1364 @@
+\documentclass[11pt]{article}
+\usepackage[latex2html]{hyperref}
+\usepackage[dvips]{graphicx}
+%%% PROGREF
+% created by M. Borland
+% inserted here 11/29/95 11:33:04: 
+% latex2html perl script can't recognize this when this
+% definition is in the style file.
+%
+% $Log: not supported by cvs2svn $
+% Revision 1.31  2005/04/13 19:42:23  soliday
+% Update the SDDS Toolkit version number.
+%
+% Revision 1.30  2005/03/16 16:53:12  shang
+% added sddsdiff
+%
+% Revision 1.29  2004/03/26 20:53:36  shang
+% added sddssyncflux
+%
+% Revision 1.28  2004/01/15 16:38:05  borland
+% Updated the author's list.
+%
+% Revision 1.27  2003/10/17 20:14:59  soliday
+% Added sddsimageconvert, sddsimageprofiles, and sddsspotanalysis.
+%
+% Revision 1.26  2003/07/03 14:46:10  soliday
+% Updated some of the version numbers.
+%
+% Revision 1.25  2003/06/20 21:09:59  shang
+% added sddsmakedataset
+%
+% Revision 1.24  2003/06/20 19:35:24  shang
+% added sddsmatrixop
+%
+% Revision 1.23  2002/06/14 18:40:22  borland
+% Added description of binary format.  Added sddssampledist.
+%
+% Revision 1.22  2002/05/07 16:05:12  borland
+% Added elegant2genesis.tex
+%
+% Revision 1.21  2002/05/07 15:52:04  shang
+% added sddscast
+%
+% Revision 1.20  2001/10/19 22:05:27  borland
+% Added sddsnaff.
+%
+% Revision 1.19  2001/05/21 14:40:45  borland
+% Added sddsbaseline, sddscliptails, and sddsgenericfit.
+%
+% Revision 1.18  2000/10/24 01:45:42  borland
+% Added comments warning users not to use sddsconvert to make ASCII files
+% for input to non-SDDS programs.
+%
+% Revision 1.17  2000/09/16 00:45:15  emery
+% Added sddsmatrixmult entry.
+%
+% Revision 1.16  2000/08/11 19:41:13  soliday
+% Added hdf2sdds
+%
+% Revision 1.15  2000/03/14 19:36:18  soliday
+% Added sdds2plaindata and plaindata2sdds
+%
+% Revision 1.14  1999/11/23 19:51:38  borland
+% Added documentation for new programs.  Updated documentation for existing
+% programs.
+%
+% Revision 1.13  1999/01/06 19:49:45  borland
+% Added references to sddsendian and sddsexpand.
+%
+% Revision 1.12  1998/08/13 20:10:25  emery
+% Removed \cite{mpl} and \cite{col} commands.
+%
+% Revision 1.11  1998/08/13 16:00:58  borland
+% Added sddsrunstats
+%
+% Revision 1.10  1998/04/29 23:16:33  emery
+% Utilizing graphicx package for eps file importation.
+%
+% Revision 1.9  1996/11/07 20:51:44  borland
+% Added csv2sdds.
+%
+% Revision 1.8  1996/06/16  23:26:17  emery
+% Added sddssequence.tex
+%
+% Revision 1.7  1996/05/31  21:03:56  emery
+% Added epsf.sty file specification in documentstyle command.
+%
+%
+%\newcommand{\progref}[1]{\hyperref{#1}{{\tt #1} (}{)}{#1}}
+\newcommand{\progref}[1]{\hyperref[#1]{#1}}
+%\newcommand{\progref}[1]{\hyperref[#1]{{#1}}}
+
+\pagestyle{plain}
+\tolerance=10000
+\newenvironment{req}{\begin{equation} \rm}{\end{equation}}
+\setlength{\topmargin}{0.15 in}
+\setlength{\oddsidemargin}{0 in}
+\setlength{\evensidemargin}{0 in} % not applicable anyway
+\setlength{\textwidth}{6.5 in}
+\setlength{\headheight}{-0.5 in} % for 11pt font size
+%\setlength{\footheight}{0 in}
+\setlength{\textheight}{9 in}
+\begin{document}
+
+\title{User's Guide for SDDS Toolkit Version 5.0}
+\author{M. Borland, L. Emery, H. Shang, R. Soliday\\Advanced Photon Source\\ \date{\today}}
+\maketitle
+
+The Self Describing Data Sets (SDDS) file protocol is the basis for a
+powerful and expanding toolkit of generic programs. These
+programs are used for simulation postprocessing, graphics, data
+preparation, program interfacing, and experimental data analysis.
+
+This document describes Version 5.0 of the SDDS commandline toolkit.
+Those wishing to write programs using SDDS should consult the {\em
+Application Programmer's Guide for SDDS Version 1.5}\cite{SDDS_AP1.5}.
+The first section of the present document is shared with this
+reference.
+
+This document does not describe SDDS-compliant EPICS applications, of
+which they are many. Some of these will be covered in a separate
+manual.
+
+\section{Why Use Self-Describing Files?}
+
+Before answering the question posed by the title of this section, it
+is necessary to define what a self-describing file is.  As used here,
+data in self-describing files has the following attributes:
+\begin{itemize}
+\item The data is accessed by name and by class.  For example, one
+ might ask for ``the column of data called X'', or ``the array of data
+ called Y''.  Self-describing data is {\em not} accessed by position
+ in a file; e.g., one would not ask for ``the third column of data''.
+\item Various attributes of the data that may be necessary to using it
+ are available.  For example, one can ask ``what are the units of
+ column X?'', ``what is the data-type of array Y?'', or ``how many
+ dimensions does array Y have?'' .
+\end{itemize}
+
+The primary advantage of accessing data and its attributes by name
+rather than the traditional position method is that one can then
+construct generic tools to manipulate data. Self-describing data
+contains the information that tools need to manipulate various types
+of data correctly.  For example, one can plot data with a generic tool
+that accepts the names of the quantities to plot; such a tool will be
+able to plot data of different types (e.g., integer or
+floating-point), and display relevant information (e.g., units) on the
+plot.
+
+Another advantage of self-describing data is that it makes the
+interface between programs more robust and flexible.  Since programs
+only look for data by name, insertion of additional data into a file
+is irrelevant.  Multiple programs may interface to a single program
+even in the face of differences in what data each places in its output
+files.  E.g., program A may create data in single-precision, with
+columns called X, Y, and Z.  Program B may create data in
+double-precision, with columns called X, Y, and W.  If all programs
+employ self-describing files, then a properly-written program C could
+access X and Y from the output of either program A or B.  It could
+also determine that the output of program B didn't contain data called
+Z, and warn the user of this.
+
+The SDDS file protocol incorporates these aspects of self-describing
+data.  It has been found extremely valuable for storing data from
+simulation, experiment, and accelerator operation at the Advanced
+Photon Source (APS).  SDDS is made more valuable by the existence of a
+growing ``toolkit'' of over 40 generic commandline programs that
+perform many varied operations using SDDS files.  Indeed, while there
+are more general self-describing protocols than SDDS, to the author's
+knowledge only SDDS has a powerful, generic program toolkit built
+around it.  In the author's opinion, this is possible because SDDS
+protocol is general but not {\em too} general.  The SDDS Toolkit is
+used to postprocess simulation output, to analyze experimental and
+archival data, to prepare data for input to other programs, to provide
+a bridge between separate simulation codes, to display data
+graphically, to collate and section accelerator save/restore files,
+and much more.
+
+While it is very flexible, SDDS is also fairly simple.  Because SDDS
+features interchangeable binary and ASCII formats, it is an easy
+matter to create an SDDS data set ``by hand'', when necessary.  It is
+also easy to modify existing programs to print in SDDS protocol, and
+to create headers to convert existing text data to SDDS.  At the same
+time, data archivers, large-scale simulations, and similar
+applications can store data in binary for quick access and disk
+economy.  These and other features contribute to the widespread use of
+SDDS at APS.
+
+\section{Definition of SDDS Protocol}
+
+\subsection{Introduction}
+
+An SDDS file is referred to as a ``data set''.  Each data set consists
+of an ASCII header describing the data that is stored in the file,
+followed by zero or more ``data pages'' or ``data tables'' (the former
+term is preferred, though the latter is used in many places).  The
+data may be in ASCII or unformatted (i.e., ``binary'').  Each data
+page is an instance of the structure defined by the header.  That is,
+while the specific data may vary from page to page, the structure of
+the data may not.
+
+Three types of entities may be present in each page: parameters,
+arrays, and columns.  Each of these may contain data of a single data
+type, with the choices being long and short integer, single and double
+precision floating point, single character, and character string.  The
+names, units, data types, and so forth of these entities are defined
+in the header.
+
+Parameters are scalar entities.  That is, each parameter defined in
+the header has a single value for each page.  Each such value may be a
+single number or a single character string, for example.
+
+Arrays are multidimensional entities with potentially varying numbers
+of elements.  While there is no restriction on the number of
+dimensions an array may contain, this quantity is fixed throughout the
+file for each array.  However, the size of the array may vary from
+page to page.  Thus, a given two-dimensional array might be 2x2 in one
+page, 3x5 in the next, etc.
+
+Columns are vector entities.  All columns in a data set are organized
+into a single table, called the ``tabular data section''.  Thus, all
+columns must contain the same number of entries, that number being the
+number of rows in the table.  There is no restriction on how many rows
+the tabular data may contain, nor on the mixing of data types in the
+tabular data.
+
+It is possible to design more sophisticated data protocols than SDDS,
+and this has in fact been done.  However, the more flexible a protocol
+is, the more difficult it becomes to write generic programs that
+operate on data.  Experience with SDDS has shown that there is very
+little data that cannot be {\em conveniently} stored in one or more
+SDDS files.  In fact, most applications need only the parameter and
+tabular data facilities.  Frequently, complex data is separated into
+several parallel files; the SDDS toolkit provides support for
+multifile operations that make this convenient.
+
+The following is an example of a very simple SDDS file.  Users who
+would prefer not to read the detailed description of the protocol in
+the next section may profit from using this example as a guide.
+\begin{flushleft}
+\begin{verbatim}
+SDDS1
+! This is a comment line.  The previous line is required and identifies 
+! the file as SDDS.
+! Define parameters: 
+&parameter name=Description, type=string &end
+&parameter name=xTune, type=double &end
+&parameter name=yTune, type=double &end
+! Define columns:
+&column name=s, type=double, units=m, description="longitudinal distance" &end
+&column name=betax, type=double, units=m, description="horizontal beta function" &end
+&column name=betay, type=double, units=m, description="vertical beta function" &end
+&column name=ElementName, type=string &end
+! Declare ASCII data and end the header:
+&data mode=ascii &end
+! First come the parameter values for this page, in the order defined:
+Twiss parameters for the APS
+35.215
+14.296
+! Second comes the tabular data section for this page, which has
+! 50 rows in this example:
+50
+   0.000000   14.461726    9.476181        _BEG_ 
+   3.030000   15.096567   10.445020          L01 
+   3.360000   15.242380   10.667547          L02 
+   3.860000   17.308605    9.854735           Q1 
+   3.975000   18.254680    9.419835          L11 
+   4.190000   20.094943    8.640450          L12 
+   4.520000   23.100813    7.529584          L13 
+   5.320000   21.435972    7.949178           Q2 
+   5.410000   20.278542    8.350441          L21 
+   5.620000   17.705808    9.332877          L22 
+   5.920000   14.341175   10.848446          L30 
+   6.420000   10.719036   12.405601           Q3 
+   7.120000    7.920453   12.969811          L41 
+\end{verbatim}
+\vdots
+\begin{verbatim}
+  27.600000   14.461726    9.476181          L01 
+! The file may end at this point, or a new page may follow.
+\end{verbatim}
+\end{flushleft}
+
+At this point, those who are new to SDDS may wish to skip to the \hyperref[ManualPagesOverview]{Manual Pages Overview} in order to get a feel for the capabilities of the Toolkit.  The details of SDDS protocol,
+the subject of the next section, are less important than what can be done with data once it is in SDDS protocol.
+
+\subsection{Structure of the SDDS Header}
+\label{sect:header}
+
+The first line of a data set must be of the form ``SDDS{\em n}'', where {\em n} is the integer SDDS version number.
+This document describes version 1.
+
+The SDDS header consists of a series of namelist-like constructs, called namelist commands.  These constructs
+differ from FORTRAN namelists in that the SDDS routines scan each construct, determine which it is, and use the
+data appropriately. There are six namelist commands recognized under Version 1.  Each is listed below along with
+the data type and default values.
+
+For each command, an example of usage is given.  Several styles of entering the namelist commands are exhibited.  I
+suggest that the user choose a style that makes it easy to pick out the beginning of each command.  Note that while
+each namelist command may occupy one or more lines, no two commands may occupy portions of the same line.
+
+Any field value containing an ampersand must be enclosed in double quotes, as must string values containing
+whitespace characters.
+
+Another character with special meaning is the exclamation point, which introduces a comment.  An exclamation point
+anywhere in a line indicates that the remainder of the line is a comment and should be ignored.  A literal
+exclamation point is obtained with the sequence \verb|\!|, or by enclosing the exclamation point in double quotes.
+
+The commands are briefly described in the following list, and described in detail in the following subsections:
+\begin{itemize}
+\item {\bf description} --- Specifies a data set description, consisting of informal and formal
+        text descriptions of the data set.
+\item {\bf column} --- Defines an additional column for the tabular-data section of the data pages.
+\item {\bf parameter} -- Defines an additional parameter data element for the data pages.
+\item {\bf array} --- Defines an additional array data element for the data pages.
+\item {\bf include} --- Directs that header lines be read from a named file.  Rarely used.
+\item {\bf data} --- Defines the data mode (ASCII or binary) along with layout parameters, and is
+        always the last command in the header.
+\end{itemize}
+
+The {\tt column}, {\tt parameter}, and {\tt array} commands have a {\tt name} field that is used to identify the
+data being defined.  Each type of data has a separate ``name-space'', so that one may, for example, use the same
+name for a column and a parameter in the same file.  This is discouraged, however, because it may produce
+unexpected results with some programs.  Names may contain any alphanumeric character, as well as any of the
+following: {\tt @ : \# + - \% . \_ \$ \& / }.  The first letter of a name may not be a digit.
+
+
+\subsubsection{Data Set Description}
+\begin{verbatim}
+&description 
+    STRING text = NULL
+    STRING contents = NULL
+&end
+\end{verbatim}
+
+This optional command describes the data set in terms of two strings.  The first, {\tt text}, is an informal
+description that is intended principly for human consumption.  The second, {\tt contents}, is intended to formally
+specify the type of data stored in a data set.  Most frequently, the {\tt contents} field is used to record the
+name of the program that created or most recently modified the file.
+
+Example:
+\begin{verbatim}
+&description
+        text = "Twiss parameters for APS lattice",
+        contents = "Twiss parameters"
+&end
+\end{verbatim}
+
+{\em Note:} In many cases it is best to use a string parameter for descriptive text instead of the {\tt description}
+command.  The reason is that the Toolkit programs will allow manipulation of a string parameter.
+
+\subsubsection{Tabular-Data Column Definition}
+\begin{verbatim}
+&column
+    STRING name = NULL
+    STRING symbol = NULL
+    STRING units = NULL
+    STRING description = NULL
+    STRING format_string = NULL
+    STRING type = NULL
+    long field_length = 0
+&end
+\end{verbatim}
+
+This optional command defines a column that will appear in the tabular data section of each data page.  The {\tt name}
+field must be supplied, as must the {\tt type} field.  The type must be one of {\tt short}, {\tt long}, {\tt float},
+{\tt double}, {\tt character}, or {\tt string}, indicating the corresponding C data types.  The {\tt string} type
+refers to a NULL-terminated character string.
+
+The optional {\tt symbol} field allows specification of a symbol to represent the column; it may contain escape
+sequences, for example, to produce Greek or mathematical characters.  The optional {\tt units} field allows
+specification of the units of the column.  The optional {\tt description} field provides for an informal description of
+the column, that may be used as a plot label, for example.  The optional {\tt format\_string} field allows specification
+of the {\tt printf} format string to be used to print the data (e.g., for ASCII in SDDS or other formats).
+
+For ASCII data, the optional {\tt field\_length} field specifies the number of characters occupied by
+the data for the column.  If zero, the data is assumed to be bounded by whitespace characters.  If negative,
+the absolute value is taken as the field length, but leading and trailing whitespace characters will be
+deleted from {\tt string} data.  This feature permits reading fixed-field-length FORTRAN output without
+modification of the data to include separators.
+
+The order in which successive {\tt column} commands appear is the order in which the columns are assumed to
+come in each row of the tabular data.
+
+Example (using {\tt sddsplot} conventions for Greek and subscript operations):
+\begin{verbatim}
+&column name=element, type=string, description="element name" &end
+&column 
+    name=z, symbol=z, units=m, type=double, 
+    description="Longitudinal Position" &end
+&column 
+    name=alphax, symbol="$ga$r$bx$n", units=m, 
+    type=double, description="Horizontal Alpha Function" &end
+&column 
+    name=betax, symbol="$gb$r$bx$n", units=m, 
+    type=double, description="Horizontal Beta Function" &end
+&column 
+    name=etax, symbol="$gc$r$bx$n", units=m, 
+    type=double, description="Horizontal Dispersion" &end
+.
+.
+.
+\end{verbatim}
+
+\subsubsection{Parameter Definition}
+\begin{verbatim}
+&parameter
+    STRING name = NULL
+    STRING symbol = NULL
+    STRING units = NULL
+    STRING description = NULL
+    STRING format_string = NULL
+    STRING type = NULL
+    STRING fixed_value = NULL
+&end
+\end{verbatim}
+
+This optional command defines a parameter that will appear along with the tabular data section of each data page.  The
+{\tt name} field must be supplied, as must the {\em type} field.  The type must be one of {\tt short}, {\tt long}, {\tt
+float}, {\tt double}, {\tt character}, or {\tt string}, indicating the corresponding C data types.  The {\tt string}
+type refers to a NULL-terminated character string.
+
+The optional {\tt symbol} field allows specification of a symbol to represent the parameter; it may contain escape
+sequences, for example, to produce Greek or mathematical characters.  The optional {\tt units} field allows
+specification of the units of the parameter.  The optional {\tt description} field provides for an informal
+description of the parameter.  The optional {\tt format} field allows specification of the {\tt printf} format
+string to be used to print the data (e.g., for ASCII in SDDS or other formats).
+
+The optional {\tt fixed\_value} field allows specification of a constant value for a given parameter.  This
+value will not change from data page to data page, and is not specified along with non-fixed parameters or
+tabular data.  This feature is for convenience  only; the parameter thus defined is treated like any other.
+
+The order in which successive {\tt parameter} commands appear is the order in which the parameters are assumed to
+come in the data.  For ASCII data, each parameter that does not have a {\tt fixed\_value} will occupy a separate
+line in the input file ahead of the tabular data.
+
+Example:
+\begin{verbatim}
+&parameter name=NUx, symbol="$gn$r$bx$n", 
+  description="Horizontal Betatron Tune", type=double &end
+&parameter name=NUy, symbol="$gn$r$by$n", 
+  description="Vertical Betatron Tune", type=double &end
+&parameter name=L, symbol=L, description="Ring Circumference", 
+  type=double, fixed_value=30.6667 &end
+.
+.
+.
+\end{verbatim}
+
+\subsubsection{Array Data Definition}
+
+\begin{verbatim}
+&array 
+    STRING name = NULL
+    STRING symbol = NULL
+    STRING units = NULL
+    STRING description = NULL
+    STRING format_string = NULL
+    STRING type = NULL
+    STRING group_name = NULL
+    long field_length = 0
+    long dimensions = 1
+&end
+\end{verbatim}
+
+This optional command defines an array that will appear along with the tabular data section of each data page.  The
+{\tt name} field must be supplied, as must the {\tt type} field.  The type must be one of {\tt short}, {\tt long}, {\tt
+float}, {\tt double}, {\tt character}, or {\tt string}, indicating the corresponding C data types.  The {\tt string}
+type refers to a NULL-terminated character string.
+
+The optional {\tt symbol} field allows specification of a symbol to represent the array; it may contain escape
+sequences, for example, to produce Greek or mathematical characters.  The optional {\tt units} field allows
+specification of the units of the array.  The optional {\tt description} field provides for an informal description
+of the array.  The optional {\tt format\_string} field allows specification of the {\tt printf} format string to be used to
+print the data (e.g., for ASCII in SDDS or other formats).  The optional {\tt group\_name} field allows
+specification of a string giving the name of the array group to which the array belongs; such strings may be defined
+by the user to indicate that different arrays are related (e.g., have the same dimensions, or parallel elements).
+The optional {\tt dimensions} field gives the number of dimensions in the array.
+
+The order in which successive {\tt array} commands appear is the order in which the arrays are assumed to come in
+the data.  For ASCII data, each array will occupy at least one line in the input file ahead of the tabular data;
+data for different arrays may not occupy portions of the same line.  This is discussed in more detail below.
+
+Example:
+\begin{verbatim}
+&array name=Rx, units=R-standard-units, type=double, dimensions=2,
+        description="Horizontal transport matrix in standard units",
+        group_name="2x2 transport matrices" &end
+&array name=R-standard-units, type=string, dimensions=2, 
+        description="Standard units of 2x2 transport matrices",
+        group_name="2x2 transport matrices" &end
+&array name=P, units=P-standard-units, type=double, dimensions=1, 
+        description="Particle coordinate vector in standard units" &end
+&array name=P-standard-units, type=string, dimensions=1, 
+        description="Standard units of particle coordinate vectors" &end
+.
+.
+.
+\end{verbatim}
+
+
+\subsubsection{Header File Include Specification}
+\begin{verbatim}
+&include
+    STRING filename = NULL
+&end
+\end{verbatim}
+
+This optional command directs that SDDS header lines be read from the file named by the {\tt filename} field.  These
+commands may be nested.
+
+Example of a minimal header:
+\begin{verbatim}
+SDDS1
+&include filename="SDDS.twiss-parameter-header" &end
+! data follows:
+.
+.
+.
+\end{verbatim}
+
+\subsubsection{Data Mode and Arrangement Defintion}
+\begin{verbatim}
+&data
+    STRING mode = "binary"
+    long lines_per_row = 1
+    long no_row_counts = 0
+    long additional_header_lines = 0
+&end
+\end{verbatim}
+
+This command is optional unless {\tt parameter} commands without {\tt fixed\_value} fields, {\tt array} commands, or
+{\tt column} commands have been given.
+
+The {\tt mode} field is required, and may have one of the values ``ascii'' or ``binary''.  If binary mode is
+specified, the other entries of the command are irrelevant and are ignored.  In ASCII mode, these entries are
+optional.
+
+In ASCII mode, each row of the tabular data occupies {\tt lines\_per\_row} rows in the file.  If {\tt lines\_per\_row}
+is zero, however, the data is assumed to be in ``stream'' format, which means that line breaks are irrelevant.
+Each line is processed until it is consumed, at which point the next line is read and processed.
+
+Normally, each data page includes an integer specifying the number of rows in the tabular data section.  This allows
+for preallocation of arrays for data storage, and obviates the need for an end-of-page indicator.  However, if {\tt
+no\_row\_counts} is set to a non-zero value, the number of rows will be determined by looking for the occurence of an
+empty line.  A comment line does {\em not} qualify as an empty line in this sense.
+
+If {\tt additional\_header\_lines} is set to a non-zero value, it gives the number of non-SDDS data lines that
+follow the {\tt data} command.  Such lines are treated as comments.
+
+\subsection{Structure of SDDS ASCII Data Pages}
+
+Since the user may wish to create SDDS data sets without using the SDDS function library, a more detailed
+description of the structure of ASCII data pages is provided.  Comment lines (beginning with an exclamation point)
+may be placed anywhere within a data page.  Since they essentially do not exist as far as the SDDS routines are
+concern, I omit mention of them in what follows.
+
+The first SDDS data page begins immediately following the {\tt data} command and the optional additional header
+lines, the number of which is specified by the \verb|additional_header_lines| parameter of the {\tt data} command.
+
+If parameters have been defined, then the next ${\rm N_p-N_{fp}}$ lines each contains the value of a single {\tt
+parameter}, where ${\rm N_p}$ is the total number of parameters and ${\rm N_{fp}}$ is the number of parameters for
+which the \verb|fixed_value| field was specified.  These will be assigned to the parameters in the order that the
+\verb|parameter| commands occur in the header.  Multi-token string parameters need not be enclosed in quotation marks.
+
+If arrays have been defined, then the data for these arrays comes next.  There must be at least one ASCII
+line for each array.  This line must contain a list of whitespace-separated integer values giving the
+size of the array in each dimension.  The number of values must be that given by the {\tt dimensions}
+field of the {\tt array} definition.  If the number of elements in the array (given by the product of
+these integers) is nonzero, then additional ASCII lines are read until the required number of elements
+has been scanned.  It is an error for a blank line or end-of-file to appear before the required elements
+have been scanned.
+
+If tabular-data columns have been defined, the data for these elements follows. If the \verb|no_row_counts|
+parameter of the {\tt data} command is zero, the first line of this section is expected to contain an integer giving
+the number of rows in the upcoming data page.  If \verb|no_row_counts| is non-zero, no such line is expected.  The
+remainder of the tabular data section has various forms depending on the parameters of the ${\rm data}$ command, as
+discussed above.  The default format is that each line contains the whitespace-separated values for a single row of
+the tabular data.  
+
+For column and array data, string data containing whitespace characters must be enclosed in double-quotes.  For column,
+array, and parameter data, nonprintable character data should be ``escaped'' using C-style octal sequences.
+
+More than one data page may appear in the data set.  Subsequent data pages have the same structure as just described.
+If \verb|no_row_counts=1| is given in the {\tt data} command, then a blank line is taken to end each data set.  An invalid
+line (e.g., too few rows or invalid data) is treated as an error, and the rest of the file is ignored.
+
+\subsection{Structure of SDDS Binary Data Pages}
+
+Since the user may wish to read or write SDDS data sets without using the SDDS function library, a more detailed
+description of the structure of the data pages is provided. 
+
+The first SDDS data page begins immediately following the {\tt data}
+command and the optional additional header lines, the number of which
+is specified by the \verb|additional_header_lines| parameter of the
+{\tt data} command.
+
+All binary data is stored in the machine representation, except for
+strings.  Strings are stored in a variable-record format that consists
+of a long signed integers followed by a sequence of characters.  The number
+of characters is equal to the value in the signed integer.  Note that
+the SDDS library has features that allow recognition and interpretation
+of big- and little-endian data representations, which are not described here.
+
+The first element in the data page is the row count, which is a long
+signed integer.  This exists even in files that do not contain any
+columns.
+
+If parameters have been defined, then their values follow in the order
+that the {\tt parameter} definitions appear in the header.  Note that
+if a parameter is define as ``fixed-value'' in the {\tt parameter}
+definition, then its value will not appear.
+
+If arrays have been defined, then they follow next, in the order that
+the {\tt array} definitions appear in the header.  For each array, a
+series of long signed integers is first given, one for each dimension
+of the array.  For example, a two-dimensional array would have two
+integers, specifying the size of the array in the first and second
+dimension.  If the two integers are, say, {\tt n} and {\tt m} in that
+order, then the declaration of the array in a C program would be, for
+example, {\tt a[n][m]}.  Elements of the array are put in the file in
+C storage order, which means that the outermost index varies fastest
+as the data is accessed in storage order.
+
+If tabular-data columns have been defined, then the table data follows.
+Data is stored as rows, so that data for columns is intermixed.  The
+order of the columns is the same as the order of the {\tt column} definitions
+in the header.
+
+\begin{thebibliography}{9}
+
+\bibitem{SDDS_AP1.5}
+    M. Borland and R. Soliday, ``Application Programmer's Guide for SDDS Version
+1.5'', APS LS Note. Available \href{https://ops.aps.anl.gov/manuals/sdds/SDDS.html}{https://ops.aps.anl.gov/manuals/sdds/SDDS.html}
+
+\bibitem{elegant}
+        M. Borland, ``User's Manual for {\tt elegant}'', 
+        APS Light Source Note, LS-287, September 2001.
+
+\bibitem{SDDS_PAC95}
+        M. Borland, ``A Self-Describing File Protocol for Simulation Integration and Shared Postprocessors'',
+        to appear in {\em Proceedings of the 1995 Particle Accelerator Conference}, May 1995, Dallas.
+
+\bibitem{thesis}
+        M. Borland, ``A High-Brightness Thermionic Microwave Gun'', Stanford Ph.D. Thesis, 1991, Appendix A.
+
+\bibitem{SDDSEPICS_PAC95}
+        L. Emery, ``Commissioning Software Tools at the Advanced Photon Source'', 
+        to appear in {\em Proceedings of the 1995 Particle Accelerator Conference}, May 1995, Dallas.
+
+\bibitem{shower_PAC95}
+        L. Emery, ``Beam Simulation and Radiation Dose Calculation at the Advanced Photon Source with
+        {\tt shower}, an EGS4 Interface'',
+         to appear in {\em Proceedings of the 1995 Particle Accelerator Conference}, May 1995, Dallas.
+
+\bibitem{Abramowitz}
+        M. Abramowitz and I. A. Stegun, eds., {\em Handbook of Mathematical Functions}, Dover Publications,
+        New York, 1965.
+
+\bibitem{GENESIS} S. Reiche, {\em NIM} A 429 (1999) 242.
+
+\end{thebibliography}
+
+\newpage
+\section{Manual Pages Overview}
+
+\label{ManualPagesOverview}
+
+The intention is of this section is to provide a means by which the
+reader can select programs that might suit a given need.  For each
+program, a brief (and usually incomplete) description is given, along
+with example applications.  The example applications provided for each
+tool are drawn from experience at APS; it is hoped that most will make
+sense to most readers.
+
+This section is followed by manual pages that give detailed
+descriptions of each program.  Many of the programs have a large
+number of switches, most of which are optional.  In order to help the
+new user, actual commandline examples are provided for simple use of
+each program.  After understanding these, the user is in a good
+position to explore the additional capabilities provided by the
+options.
+
+Note that many of the Toolkit programs process tabular data only
+(i.e., columns).  To use these programs with parameter data, one can
+use {\tt sddscollapse} to convert parameter data into tabular data.
+Using pipes will make this more convenient.
+
+Support for SDDS array elements is presently rather sparse in the
+Toolkit.  This reflects the fact that almost all data can be
+conveniently stored using parameter and column elements.  Hence, work
+has concentrated on providing tools that manipulate such data.  Future
+versions of the Toolkit will provide more array support.
+
+Most of the Toolkit programs process data pages sequentially.  That
+is, in many cases the requested processing is performed on each
+successive page of the input file and delivered to successive pages of
+the output file.
+
+\subsection{SDDS Toolkit Programs by Category}
+
+\subsubsection{ Mathematical Operations Tools}
+
+\begin{itemize}
+
+\item \progref{sddsbaseline} --- Remove baselines from column data.  Example
+application: determining the noise level in a video signal and subtracting
+it from the signal.
+
+\item \progref{sddschanges} --- Analyzes changes in column data from
+page to page in a file, relative to a reference file or the first
+page.  Example application: finding changes in a waveform that is
+acquired repeatedly, where successive waveforms are on successive
+pages.
+
+\item \progref{sddscliptails} --- Remove tails from column data, where a 
+tail is dubious data on either side of a peak.  Example application: 
+removing halo or noise tails from video images of beam spots.
+
+\item \progref{sddsderiv} --- Does numerical differentiation of multiple data columns
+versus a single column, with optional error propogation.
+
+\item \progref{sddsinsideboundaries} --- Determines whether points in a two-dimensional space (x, y) are inside any of a
+series of closed boundaries (or contours).
+
+\item \progref{sddsinteg} --- Does numerical integration of multiple data columns versus a single column, with
+optional error propogation.  Example application: finding the field integral an accelerator magnet from a
+longitudinal field scan.
+
+\item \progref{sddsinterp} --- Does interpolation of multiple data columns as a function of a single column.
+Example application: finding the required current to obtain a desired excitation in a magnet, or interpolating a
+curve at positions given in a second file.
+
+\item \progref{sddslocaldensity} --- Computes the local density of points in n-dimensional space.
+
+\item \progref{sddsnormalize} --- Normalizes data in multiple columns using various types of
+normalization factors, determined from the data.  
+
+\item \progref{sddspeakfind} --- Finds values of columns at locations of peaks in a single column.  Example
+application: finding the position and height of peaks in a power spectrum obtained from a FFT.
+
+\item \progref{sddsprocess} --- Probably the most-used toolkit program, excepting \verb|sddsplot|.  Allows
+creating new parameters and columns with user-specified equations; filtering and matching operations; printing,
+editing, scanning, and subprocess operations; statistical and waveform analysis of column data to produce new
+parameters; and much more.
+
+\item \progref{sddssmooth} --- Smooths columns of data using multipass nearest-neighbor averaging.  Example
+application: reducing noise in a frequency spectrum prior to finding peaks.
+
+\item \progref{sddszerofind} --- Finds values of columns at locations of interpolated zeroes in a single column.
+Example application: finding zeros of a tabulated function that isn't known analytically.
+
+\end{itemize}
+
+\subsubsection{Statistics Tools}
+
+\begin{itemize}
+
+\item \progref{sddscorrelate} --- Computes correlation coefficients and
+correlation significance between column data.  Example application: finding correlations among time series data
+collected from process variables, and evaluating their signficance to find possible cause-and-effect relationships.
+
+\item \progref{sddsdistest} --- Performs statistical tests on data to
+determine whether the data is drawn from any of various distributions.
+Example application: determining if a component failure rate matches a
+Poisson distribution.
+
+\item \progref{sddsenvelope} --- Analyzes column data across pages to find
+minima, maxima, averages, standard-deviations, etc., on a row-by-row basis.   Example application: finding 
+the envelope and average of a set of waveforms.
+
+\item \progref{sddseventhist} --- Analyzes labeled events in a dataset
+to provide histograms of the occurences of each type of event.  Can
+also histogram the overlap off all types of events with a single type
+of event.  Example application: correlating the occurence times of
+alarm signals to determine which alarms usually occur together.
+
+\item \progref{sddshist} --- Does histograms of column data.  Example application: finding the distribution of a
+readback that is sampled many times, or of particle coordinates from an accelerator tracking simulation.
+
+\item \progref{sddshist2d} --- Does two-dimensional histograms of column data.  Example applications: finding the
+two-dimensional distribution of a pair of readbacks that are sampled many times, or of two particle coordinates
+(e.g., x and y position) from an accelerator tracking simulation.
+
+\item \progref{sddsmultihist} --- Does histograms of multiple columns
+of data.  Example application: finding the distribution of a set of
+similar readbacks that are sampled many times.
+
+\item \progref{sddsoutlier} --- Eliminates statistical outliers from data.  Example application: eliminating bad
+or nonrepresentative data points prior to searching for correlations with \verb|sddscorrelate|, or computing
+statistics with \verb|sddsprocess|.
+
+\item \progref{sddsprocess} --- Probably the most-used toolkit program, excepting \verb|sddsplot|.  Allows
+creating new parameters and columns with user-specified equations; filtering and matching operations; printing,
+editing, scanning, and subprocess operations; statistical and waveform analysis of column data to produce new
+parameters; and much more.
+
+\item \progref{sddsrowstats} --- Computes row-by-row statistics across multiple columns of data, creating
+new columns to contain the statistics.  Example application: finding the mean value of a set of readout
+values from time-series data collection, where each readout is in a separate column.
+
+\item \progref{sddsrunstats} --- Computes running or blocked statistics of multiple columns.  Example
+applications: smoothing noisy data; finding running averages and error bars for time-series data.
+
+\item \progref{sddsshiftcor} --- Computes correlation coefficients
+between column data as a function of shift position of a reference
+column.  Example application: finding correlations among time series
+data collected from process variables, including the possibility of
+time-lags between the process variables due to physical or data
+collection effects.
+
+\end{itemize}
+
+\subsubsection{Digital Signal Processing Tools}
+
+\begin{itemize}
+
+\item \progref{sddsconvolve} --- Does FFT convolution, deconvolution, and correlation. Example
+application: computing the ideal impulse response of a system after you've measured the response to
+a pulse.
+
+\item \progref{sddsdigfilter} --- Performs time-domain digital filtering of column data.  Example applications:
+low pass, high pass, band pass, or notch filtering of data to eliminate unwanted frequencies.
+
+\item \progref{sddsfdfilter} --- Performs frequency-domain filtering of column data.  Example application:
+applying a filter that is specified as a table of attenuation and phase as a function of frequency.
+
+\item \progref{sddsfft} --- Does Fast Fourier Transforms of column data.  Example application: finding signficant
+frequency components in time-varying data, or finding the integer tune of an accelerator from a difference orbit.
+
+\item \progref{sddsnaff} --- Does Numerical Analysis of Fundamental Frequencies, a more accurate
+method of determining principle frequencies in signals than the FFT.
+
+\end{itemize}
+
+\subsubsection{Data Fitting Tools}
+
+\begin{itemize}
+
+\item \progref{sddsexpfit} --- Does an exponential fit to column data.  Example
+application: finding the exponential lifetime of a beam in a storage ring, or the half-life a radioactive
+sample.
+
+\item \progref{sddsgenericfit} --- Does generic fits to column data.  Example application:
+fitting the sum of two gaussians.
+
+\item \progref{sddsgfit} --- Does gaussian fits to column data.  Example application:
+finding the width of a resonance, or the rms size of a beam profile.
+
+
+\item \progref{sddsmpfit} --- Does polynomial fits to multiple columns
+data, including error analysis.  Will do fits to specified orders,
+fits of specified symmetry, and adaptive fitting.  Use {\tt sddspfit}
+as a simpler and somewhat more capable alternative for fitting a
+single column of data. Use {\tt sdds2dpfit} for two-dimensional fits.
+
+\item \progref{sddspfit} --- Does polynomial fits to column data,
+including error analysis.  Will do fits to specified orders, fits of
+specified symmetry, and adaptive fitting.
+
+\item \progref{sdds2dpfit} --- Does two-dimensional polynomial fits to column data.
+
+\item \progref{sddssplinefit} --- Fits splines to column data. Useful for displaying a smooth curve in plots, or for feedforward based on experimental data. One can specify the order and the number of breakpoints on the command line, and create an evaluations file.
+
+\end{itemize}
+
+\subsubsection{ Data Manipulation Tools}
+\begin{itemize}
+
+\item \progref{sddsbreak} --- Breaks data pages into new, separate pages based on changes in column data and other
+criterion.  Example applications: reorganizing a file to have a limited number of rows in each page, or to have a
+new page started when a gap is seen in the data.
+
+\item \progref{sddscast} --- change the data type of the elements in an SDDS file.
+
+\item \progref{sddscollapse} --- Collapses a data set into a single data page by deleting the tabular data and
+turning the parameters into columns.  Example application: abstraction of summary properties of data set following
+analysis with \verb|sddsprocess|.
+
+\item \progref{sddscollect} --- Reorganizes tabular data from the
+input file to bring data from several groups of similarly named
+columns together into a single column per group.  Example application:
+collecting several statistical analyses of many columns into a single
+column per analysis type.
+
+\item \progref{sddscombine} --- Combines any number of data sets into a single data set by adding data from each
+successive data set to a newly-created data set.  Example application: bringing together comparable but distinct
+data for analysis with \verb|sddsprocess|.  Using \verb|sddsprocess|, \verb|sddscombine|, and \verb|sddscollapse|
+in sequence repeatedly is a powerful way to analyze and collate large amounts of data.
+
+\item \progref{sddsconvert} --- Allows conversion of a data set between binary and ASCII, with optional deletion
+and renaming of columns, arrays, and parameters .  Example application: conversion to binary of an ASCII data set
+created by a simple program, or by a text editor.  N.B.: it is {\em not} recommended to use \verb|sddsconvert| to
+convert a binary SDDS file to ASCII, then strip the header off and read the ASCII file.  This completely
+bypasses the self-describing aspects of the SDDS file and is not robust.  If the program that creates the SDDS
+file is changed so that the columns are created in a different order, the program that reads the ASCII file
+will produce unexpected results. Use \progref{sdds2plaindata}, \progref{sddsprintout}, or \progref{sdds2stream}
+for conversion to non-self-describing files.  In this way, you can assure the order of the data is fixed.
+
+\item \progref{sddsderef} --- Allows dereferencing (i.e., de-indexing) of array and column data.  Example
+application: converting a column of integer indexes into a column of equivalent text messages, where the text
+messages are stored once each in an array in the input file (for space-savings).
+\item \progref{sddsdiff} --- Compares two SDDS files.
+
+\item \progref{sddsendian} --- Converts from little-endian to
+big-endian and vice-versa.  Example application: converting binary
+data from the native format to a format used on another type of
+computer prior to transferring the data to the other computer.
+
+\item \progref{sddsexpand} --- Expands a data set into one page for each row, with column data promoted
+to parameter data.  Essentially the inverse of \progref{sddscollapse}. 
+
+\item \progref{sddsregroup} --- Swaps the row indexing and page
+indexing of data in an SDDS file. That is, the ${\rm i {th}}$ row of
+the ${\rm j {th}}$ data page in the input file becomes the ${\rm
+j{th}}$ row of the ${\rm i {th}}$ data page of the output file.
+Example application: viewing the long-term evolution of a
+repeatedly-sampled waveform at each point in the waveform.
+
+\item \progref{sddstranspose} --- Transposes the tabular data in the
+input file, so that the output file contains one column for each row
+in the input.  Example usage: tranpose an orbit response matrix as
+part of preparing to use it for feedback.
+
+\item \progref{sddsmakedataset} --- writes the input data into a file or 
+pipe in SDDS format. It can be used to make add SDDS file consisting of
+a small amount of data from the script. It is more convenient than {sdds save}.
+
+\item \progref{sddsmatrixmult} --- Multiplies the tabular data in the
+two input files to produce a file containing a matrix of the product.
+Example usage: Multiply a vector of errors with a correction matrix to
+obtain a vector of corrections to apply in a step-by-step feedback
+system.
+
+\item \progref{sddsmatrixop} --- performs general matrix operations. 
+The matrices and operations are specified on the command line and 
+the operations will proceed in a rpn-like fashion.
+
+\item \progref{sddsselect} --- Copies rows from one file based on the
+presence or absence of matching data in another file.  Example
+application: finding all of the rows from one file that do not appear
+in a second file.
+
+\item \progref{sddssnap2grid} --- Snaps data that is quasi-uniformly spaced to a uniformly spaced grid.
+
+\item \progref{sddssort} --- Sorts the tabular data section of a data set by the values in named columns.
+Optionally eliminates duplicate rows.
+
+\item \progref{sddssortcolumn} --- rearrange the columns of an SDDS data.
+
+\item \progref{sddssplit} --- Places each page of a file in a separate, new file.  Example application: getting
+selected pages of a file into separate, single-page files for use with a program that only recognizes the first
+page.
+
+\item \progref{sddsxref} --- Creates a new data set by adding selected
+rows from one data set to another data set.  Example application:
+cross-referencing the turn-by-turn coordinates of particles in a
+tracking simulation with the initial coordinates using a particle ID
+number.
+
+\end{itemize}
+
+\subsubsection{Graphics Tools}
+
+\begin{itemize}
+
+\item \progref{sddscontour} --- Makes contour and color-map plots from an SDDS data set column, or from a
+\verb|rpn| expression of the values in the columns of a data set.  Supports FFT interpolation and filtering.
+Example application: displaying data from a two-dimensional magnetic field scan.
+
+\item \progref{sddsplot} --- A highly flexible, device-independent graphics program, equally capable of
+``quick-and-dirty'' or publication quality graphics.  Example application: making an X-windows movie of several
+columns of data that change from page to page in a file.
+
+\end{itemize}
+
+\subsubsection{Image Processing Tools}
+
+\begin{itemize}
+
+\item \progref{sddsimageconvert} --- Converts a single-column SDDS image file into a multi-column SDDS image file and vice versa.
+
+\item \progref{sddsimageprofiles} --- Extracts the profile from a multi-column SDDS image file.
+
+\item \progref{sddsspotanalysis} --- Used to locate and give details about spots in multi-column SDDS image files.
+
+\end{itemize}
+
+\subsubsection{Miscellaneous Tools}
+
+\begin{itemize}
+
+\item \progref{elegant2genesis} --- Processes particle output from the particle tracking code
+        \verb|elegant|\cite{elegant}
+        and makes a file suitable for use as the BEAMFILE with the FEL code GENESIS\cite{GENESIS}.
+
+\item \progref{sddssampledist} --- Draws samples from one or more probability distributions.
+        Suitable for making input particle distributions for tracking codes, for example, 
+        using user-defined probability distributions.
+
+\item \progref{sddssequence} --- Creates an SDDS data set of arithmetic sequences. 
+Example application: generating values for an independent variable, whose values can be used by
+{\tt sddsprocess} to produce a mathematical function.
+
+\item \progref{sddscongen} --- Creates an SDDS data set by evaluating an \verb|rpn| expression over a defined 2
+dimensional grid.  Example application: generating values of a function of two variables on a grid for plotting
+with {\tt sddscontour}.
+
+\item \progref{sddstimeconvert} --- Converts time data between seconds-since-epoch and calendar breakdown formats.
+Example application: finding the year, month, and day corresponding to a system time value.
+
+\end{itemize}
+
+\subsubsection{File Protocol Conversion Tools}
+
+\begin{itemize}
+\item \progref{csv2sdds} --- Converts CSV (Comma-Separated-Values) data to SDDS.
+
+\item \progref{citi2sdds} --- Converts Hewlett-Packard CITI files to SDDS.
+
+\item \progref{hpif2sdds} --- Converts Hewlett-Packard HP54542 scope internal format to SDDS.
+
+\item \progref{hpwf2sdds} --- Converts Hewlett-Packard HP54542 scope text format to SDDS.
+
+\item \progref{hdf2sdds} --- Converts Hierarchical Data Format (HDF) to SDDS.
+
+\item \progref{lba2sdds} --- Converts Spiricon Laser Beam Analyzer files to SDDS.
+
+\item \progref{plaindata2sdds} --- Converts plain data file with simple formatting to SDDS.
+
+\item \progref{sdds2math} --- Converts SDDS data to a format accepted by Mathematica.
+
+\item \progref{sdds2mpl} --- Extracts data columns or parameters from an SDDS data set and creates \verb|mpl| data
+files\cite{thesis}.
+
+\item \progref{sdds2plaindata} --- Converts SDDS data to a plain data file with simple formatting.  This is
+one of the recommended ways to convert SDDS data to plain ASCII or binary data for input to non-compliant
+programs.  The advantage of using \verb|sdds2plaindata| is that you can guarantee that the data is 
+emitted in a fixed order.
+
+\item \progref{sdds2spreadsheet} --- Converts SDDS data to a format accepted by the Excel and Wingz spreadsheets.
+Obsolete.  Use \progref{sddsprintout} instead.
+
+\item \progref{TFS2sdds} --- Converts MAD/LEP TFS files to SDDS.
+
+\end{itemize}
+
+
+\subsubsection{Text-based Data-review Tools}
+
+\begin{itemize}
+\item \progref{sdds2stream} --- Takes column or parameter data from a list of SDDS data sets and delivers it to
+the standard output as a stream of values.  Example application: getting data into a shell variable for use in a
+script.  \verb|sdds2stream| may be used to convert SDDS data to plain ASCII text.
+
+\item \progref{sddsprintout} --- Makes customized printouts from
+column, parameter, and array data in an SDDS data set.  Also makes
+spreadsheet-compatible data and plain ASCII text.  Example
+application: making a nicely-formatted printout of data that needs to
+be reviewed manually.
+
+\item \progref{sddsquery} --- Prints a summary of the SDDS header for a data set.  Also prints bare lists of names
+of defined entities, suitable to use with shell scripts that need to detect the existence of entities in the data
+set.
+
+\end{itemize}
+
+
+\subsection{Toolkit Program Usage Conventions}
+
+In order to make the multitude of Toolkit programs easier to use, the developers have attempted to use consistent
+commandline argument styles.  The Toolkit programs all require at least one commandline argument.  Therefore, if a
+program is executed without commandline arguments, it is assumed that the user is asking for help.  In this case, a
+help message is printed that shows syntax and (usually) describes the meaning of the switches.  In general, program
+usage is of the following form:\\
+\hspace*{5mm}{\tt programName} {\em fileNames} {\em switches}.\\
+Probably the simplest example would be \\ 
+\hspace*{5mm}{\tt sddsquery } {\em fileName},\\
+which would invoke {\tt sddsquery} to describe the contents of an SDDS file.
+A slightly more complicated example would be\\
+\hspace*{5mm}{\tt sddsquery } {\em fileName} {\tt -columnList},\\
+which invokes {\tt sddsquery} to list just names of columns in a file.
+
+Programs assume that any commandline argument beginning with a minus sign ('-') is an option; all others are
+assumed to be filenames.  Note that case is ignored in commandline switches.  The specific meaning of a
+filename is dictated by its order on the commandline.  For example, if two filenames are given, the first
+would commonly be an input file while the second would commonly be an output file.  
+
+In some cases, a command with a single filename implies replacement of the existing file.  For example,\\
+\hspace*{5mm}{\tt sddsconvert} {\em fileName} {\tt -binary}\\
+would replace the named file with a binary version of the same data.   This command is completely equivalent to\\
+\hspace*{5mm}{\tt sddsconvert} {\tt -binary} {\em fileName} \\
+That is, unlike many UNIX commands, the position of filenames relative to options is irrelevant.
+
+One might also wish to make a new file, rather than replacing the existing file.  This could be done by\\
+\hspace*{5mm}{\tt sddsconvert} {\tt -binary} {\em fileName} {\em fileName2} \\
+Note that while the option may appear anywhere on the commandline, the order of the filenames is crucial to
+telling the program what to do.
+
+In following manual pages and in the program-generated help text, program usage is described using the following
+conventions:
+\begin{itemize}
+\item The first token on the commandline  is the name of the program.
+\item Items in square-brackets ({\tt []}) are optional.  Items not in square brackets are required.
+\item Items in curly-brackets ({\tt \{\}}) represent a list of choices.  The choices are separated by
+a \verb.|. character, as in\\
+{\tt \{ {\em choice1} | {\em choice2} | {\em choice3} \}}
+\item Items in italics are descriptions of arguments or data that must be supplied by the user.  These items are not typed 
+literally as shown.
+\item Items in normal print are typed as shown, with optional abbreviation.  These are
+usually switch keywords or qualifiers.  Any unique abbreviation is acceptable.
+\end{itemize}
+
+In addition to using files, most toolkit programs also take input from pipes, which obviates the need for temporary
+files in many cases.  For those programs that support pipes, one can employ the {\tt -pipe} option.  This option
+provides a good example of what options look like.  For example, one could do the following to test binary-ascii
+conversion:\\
+\hspace*{5mm}{\tt sddsconvert -binary -pipe=out {\em fileName} \verb.|. sddsconvert -ascii -pipe=in {\em fileName1} }\\
+The {\tt -pipe=out} option to {\tt sddsconvert} tells it to deliver its output to a pipe; it still
+expects a filename for input.  Similarly, the {\tt -pipe=in} option to {\tt sddsquery} tells it to
+accept input from a pipe.  
+
+The {\tt -pipe} switch may be given in one of five forms: {\tt -pipe}, {\tt -pipe=input,output}, {\tt
+-pipe=output,input}, {\tt -pipe=input}, {\tt -pipe=output} .  The first three forms are equivalent.  In a usage
+message, these forms would be summarized as {\tt -pipe[=input][,output]}.  One could also use abbreviations like
+{\tt -pipe=i}, {\tt -pipe=i,o}, etc.  For convenience in the manual, the data stream from or to a pipe will 
+often be referred to by the name of the file for which it substitutes.  Note that you may not deliver more
+than one file on the same pipe.
+
+\subsection{Data for Examples}
+\label{exampleData}
+
+In order to make examples simpler to present, it helps to have hypothetical data files to refer to.  I will assume the
+existence of several data files that I hope will be familiar to many readers.  An ASCII version of each file is
+provided in the SDDS distribution package.  This gives new users some data to ``play with'' in getting familiar with
+SDDS.  These files are also used in several demonstration scripts provided in the package.  
+
+For each file, I've listed the names of the columns and parameters, and described each.  I've given the data types in
+detail, even though only the distinction between numerical and nonnumerical data is relevant, just to emphasize that
+data types can be freely mixed.  I've tried to include as little data as is necessary to make useful demonstrations,
+without simplifying so much as to be trivial.
+
+\subsubsection{Twiss Parameters}
+
+The example of Twiss parameters for an accelerator is a familiar one.  Throughout these pages, it is assumed that two
+files, {\t APS0.twi} and {\tt APS.twi}, exist containing the following data (a simplification of the Twiss output from the
+accelerator simulation code \verb|elegant|):
+\begin{itemize}
+\item Parameters: 
+        \begin{itemize} 
+        \item {\tt nux}, {\tt nuy} -- Double-precision values of the x and y tunes.
+        \item {\tt alphac} --- Double-precision values of the momentum compaction factor.
+        \end{itemize}
+\item Columns:
+        \begin{itemize}
+        \item {\tt s} -- A double precision column of element positions.  For simplicity, it is assumed to increase
+                monotonically through the file.
+        \item {\tt ElementName} -- A string column of element names.
+        \item {\tt ElementType} -- A string column of element type identifiers.
+        \item {\tt betax}, {\tt betay} --- Double-precision columns of the beta functions for the
+        horizontal and vertical planes, respectively.
+        \item {\tt psix}, {\tt psiy} --- Double-precision columns of the betatron phase advance.
+        \item {\tt etax}, {\tt etay} --- Double-precision columns of the dispersion functions.
+        \end{itemize}
+\end{itemize}
+To make it more interesting, {\tt APS0.twi} is a single-page file containing the APS design lattice, while {\tt
+APS.twi} is a multi-page file with each page corresponding to a different configuration.
+
+In passing, it is appropriate to mention the style of the names used.  It has been found helpful to use capitalization
+at word boundaries to make long names more readable.  (In some cases, like {\tt betax}, a certain case is used because
+it is significant.)  When doing so will not create confusion, we also tend to capitalize the first letter of a name,
+which helps the name to stand out on the command line.  Abiding by these conventions tends to result in readable names
+being created by Toolkit programs that have automatic name generation.  Underscores in names are avoided because they
+increase the length of a name while adding less readability than capitalization.
+
+\subsubsection{Data Logging Over Time}
+
+One of the most common applications of SDDS for APS commissioning and
+operation is logging of measured data values at intervals.  A set of
+generic EPICS monitoring programs {\tt sddsmonitor}, {\tt sddsvmonitor}
+(vector monitoring), and {\tt sddswmonitor} (waveform monitoring) are used
+for this.  One example is the vacuum pressure in the APS ring, which is
+logged continuously by {\tt sddsvmonitor}; this data consists of readings
+from ion gauges around the ring.  Another example is logging of
+beam-position-monitor readouts in the Positron Accumulator Ring (PAR) and
+its input and output beam transport lines using the program {\tt
+sddsmonitor}.
+
+For use in examples, I'll assume the existence of two files called {\tt
+SR.vac} and {\tt par.bpm}.  These are simplified from actual files
+collected with the programs just mentioned.
+ 
+{\tt SR.vac} is a file containing an arbitrary series of data pages, each
+consisting of a snapshot of the vacuum gauge readings around the ring.
+There are 40 such readings, one for each sector of the accelerator.
+Typically, one set of readings is taken every 15 minutes.
+\begin{itemize}
+\item Parameters:
+        \begin{itemize}
+        \item {\tt TimeStamp} --- A string parameter containing the time at which the snapshot was taken.
+        \item {\tt TimeOfDay} --- A double-precision parameter containing the time of day in hours since midnight.
+        \end{itemize}
+\item Columns:
+        \begin{itemize}
+        \item {\tt Index} --- A long-integer column containing the row index.
+        \item {\tt SectorName} --- A string column containing the name of the sector each row corresponds to.
+        \item {\tt Pressure} --- A double-precision column containing the pressure readout from the gauges at
+                the time given by {\tt TimeStamp}.
+        \end{itemize}
+\end{itemize}
+
+{\tt par.bpm} is a file containing a single page of data with any arbitrary
+number of rows.  The PAR has 16 beam-position-monitors (BPMs), each
+providing a horizontal (x) and vertical (y) readout.  In addition, the beam
+transport line downstream of PAR (known as the PTB line), contains five
+BPMs for x and five for y.  The data included in the distribution contains
+only the x values, since these are more interesting:
+\begin{itemize}
+\item Parameters: 
+        \begin{itemize}
+        \item {\tt TimeStamp} --- A string parameter giving the starting time of the data collection.
+        \end{itemize}
+\item Columns:
+        \begin{itemize}
+        \item \verb|Time| --- A double-precision column giving the elapsed number of seconds since monitoring
+        begain. The values are approximately equispaced.
+        \item \verb|TimeOfDay| --- A double-precision column giving the time of day in hours since midnight.
+        \item \verb|P|{\em quadrant}\verb|P|{\em number}\verb|x| --- 16 single-precision 
+        readouts of the horizontal beam orbit just prior
+        to beam extraction.  {\em quadrant} ranges from 1 to 4, as does {\em number}.
+        \item \verb|P|{\em quadrant}\verb|P|{\em number}\verb|y| --- 16 single-precision 
+        readouts of the vertical beam orbit just prior
+        to beam extraction.  {\em quadrant} ranges from 1 to 4, as does {\em number}.
+        \item \verb|PTB:PH|{\em number}\verb|x| --- four single-precision readouts of the
+        horizontal beam trajectory as the beam passes
+        through the PTB transfer line.  {\em number} ranges from 2 to 5.
+        \end{itemize}
+\end{itemize}
+
+\newpage
+\section{Manual Pages}
+\begin{center}
+{\em Manual pages are written by the program author unless otherwise noted.}
+\end{center}
+
+\label{ManualPages}
+
+\input{csv2sdds.tex}
+\input{elegant2genesis.tex}
+\input{hpif2sdds.tex}
+\input{hdf2sdds.tex}
+\input{lba2sdds.tex}
+\input{plaindata2sdds.tex}
+\input{raw2sdds.tex}
+\input{sdds2dpfit.tex}
+\input{sdds2math.tex}
+\input{sdds2plaindata.tex}
+\input{sdds2spreadsheet.tex}
+\input{sdds2stream.tex}
+\input{sddsbaseline.tex}
+\input{sddsbreak.tex}
+\input{sddscast.tex}
+\input{sddschanges.tex}
+\input{sddscheck.tex}
+\input{sddscliptails.tex}
+\input{sddscollapse.tex}
+\input{sddscollect.tex}
+\input{sddscombine.tex}
+\input{sddscongen.tex}
+\input{sddscontour.tex}
+\input{sddsconvert.tex}
+\input{sddsconvolve.tex}
+\input{sddscorrelate.tex}
+\input{sddsderiv.tex}
+\input{sddsderef.tex}
+\input{sddsdigfilter.tex}
+\input{sddsdiff.tex}
+\input{sddsdistest.tex}
+\input{sddsendian.tex}
+\input{sddsenvelope.tex}
+\input{sddseventhist.tex}
+\input{sddsexpand.tex}
+\input{sddsexpfit.tex}
+\input{sddsfdfilter.tex}
+\input{sddsfft.tex}
+\input{sddsgenericfit.tex}
+\input{sddsgfit.tex}
+\input{sddshist.tex}
+\input{sddshist2d.tex}
+\input{sddsimageconvert.tex}
+\input{sddsimageprofiles.tex}
+\input{sddsinsideboundaries.tex}
+\input{sddsinteg.tex}
+\input{sddsinterp.tex}
+\input{sddsinterpset.tex}
+\input{sddslocaldensity.tex}
+\input{sddsmakedataset.tex}
+\input{sddsmatrixmult.tex}
+\input{sddsmatrixop.tex}
+\input{sddsmatrix2column.tex}
+\input{sddsminterp.tex}
+\input{sddsmpfit.tex}
+\input{sddsmselect.tex}
+\input{sddsmultihist.tex}
+\input{sddsmxref.tex}
+\input{sddsnaff.tex}
+\input{sddsnormalize.tex}
+\input{sddsoutlier.tex}
+\input{sddspeakfind.tex}
+\input{sddspfit.tex}
+\input{sddsplot.tex}
+\input{sddspoly.tex}
+\input{sddsprintout.tex}
+\input{sddsprocess.tex}
+\input{sddspseudoinverse.tex}
+\input{sddsquery.tex}
+\input{sddsregroup.tex}
+\input{sddsremoveoffsets.tex}
+\input{sddsrowstats.tex}
+\input{sddsrunstats.tex}
+\input{sddssampledist.tex}
+\input{sddsselect.tex}
+\input{sddsseparate.tex}
+\input{sddssequence.tex}
+\input{sddsshift.tex}
+\input{sddsshiftcor.tex}
+\input{sddssinefit.tex}
+\input{sddsslopes.tex}
+\input{sddssmooth.tex}
+\input{sddssnap2grid.tex}
+\input{sddssort.tex}
+\input{sddssortcolumn.tex}
+\input{sddssplinefit.tex}
+\input{sddssplit.tex}
+\input{sddsspotanalysis.tex}
+\input{sddstdrpeeling.tex}
+\input{sddstimeconvert.tex}
+\input{sddstranspose.tex}
+\input{sddsunwrap.tex}
+\input{sddsvslopes.tex}
+\input{sddsxra.tex}
+\input{sddsxref.tex}
+\input{sddszerofind.tex}
+\input{sddsEditing.tex}
+\input{rpn.tex}
+\input{sddswildcards.tex}
+
+\newpage
+\section{Manual Pages for APS-Specific Programs}
+\label{APSManualPages}
+
+\input{awe2sdds.tex}
+\input{col2sdds.tex}
+\input{sdds2mpl.tex}
+\input{mpl2sdds.tex}
+
+\newpage
+\section{Manual Pages for Synchrotron Radiation Programs}
+\label{SyncManualPages}
+
+\input{sddssyncflux.tex}
+
+\tableofcontents
+\end{document}

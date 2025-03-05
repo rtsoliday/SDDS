@@ -1,0 +1,119 @@
+% $Log: not supported by cvs2svn $
+% Revision 1.5  1996/04/28  23:05:52  emery
+% Spelling mistake in an switch explanation.
+%
+% Revision 1.4  1996/04/28  22:58:13  emery
+% Corrected the font of the option or file specification.
+%
+%
+% Template for making SDDS Toolkit manual entries.
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+
+%
+% Substitute the program name for <programName>
+%
+\subsection{sddsslopes}
+\label{sddsslopes}
+
+\begin{itemize}
+\item {\bf description:}
+%
+% Insert text of description (typicall a paragraph) here.
+%
+\verb+sddsslopes+ makes straight line fits of column data
+of the input file with respect to a selected column used as independent variable.
+The output file contains a one-row data set of slopes and intercepts
+for each data set of the input file.
+Errors on the slope and intercept may be
+calculated as an option.
+
+\item {\bf examples:} 
+%
+% Insert text of examples in this section.  Examples should be simple and
+% should be preceeded by a brief description.  Wrap the commands for each
+% example in the following construct:
+% 
+%
+The file corrector.sdds below contains beam position monitors (bpms) readbacks as a 
+function of corrector
+setting. The defined columns are {\tt CorrectorSetpoint} and the series
+{\tt bpm1}, {\tt bpm2}, etc.
+The bpm response to the corrector setpoints are calculated with the use of \verb+sddsslopes+:
+\begin{flushleft}{\tt
+sddsslopes corrector.sdds corrector.slopes -independentVariable=CorrectorSetpoint
+   -columns='bpm*'
+}\end{flushleft}
+where all columns that match with the wildcard expression \verb+bpm*+ is selected
+for fitting.
+\item {\bf synopsis:} 
+%
+% Insert usage message here:
+%
+\begin{flushleft}{\tt
+sddsslopes [-pipe=[input][,output]] {\em inputFile} {\em outputFile}
+      -independentVariable={\em parameterName} [-range={\em lower},{\em upper}]
+      [-columns={\em listOfNames}] [-excludeColumns={\em listOfNames}] 
+      [-sigma[=generate]] [-residual={\em file}] [-ascii] [-verbose]
+}\end{flushleft}
+\item {\bf files:}
+% Describe the files that are used and produced
+The input file contains the tabular data for fitting. Multiple
+data sets are processed one at a time. 
+For optional error processing, additional columns of sigma values
+associated with the data to be fitted must be present. These sigma column 
+must be named {\tt {\em name}Sigma} or {\tt Sigma{\em name}},
+the former one being searched first.
+
+The output file contains a one-row data set for each data set in the 
+input file. The columns defined have names
+such as {\tt {\em name}Slope}, and {\tt {\em name}Intercept} where {\tt {\em name}} is the name of
+the fitted data.  If only one file is specified, then the input file is 
+overwritten by the output.
+A string column called \verb+IndenpendentVariable+ is defined containing the name of the indepedent variable.
+
+\item {\bf switches:}
+%
+% Describe the switches that are available
+%
+    \begin{itemize}
+    \item {\tt  -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt  -independentVariable={\em parametername} }
+        --- name of independent variable (default is the first valid column).
+    \item {\tt  -range={\em lower},{\em upper}} --- The range of the independent
+        variable where the fit is calculated. By default, all data points are used.
+    \item {\tt  -columns={\em listOfNames}}   
+        ---  columns to be individually paired with independentVariable 
+        for straight line fitting.
+    \item {\tt  -excludeColumns={\em listOfNames}}  ---  columns to exclude from fitting.
+    \item {\tt  -sigma[=generate]}  
+        ---   calculates errors by interpreting column names 
+        {\tt {\em name}Sigma} or {\tt Sigma{\em name}} as
+        sigma of column {\tt {\em name}}. If these columns don't exist
+        then the program generates a common sigma from the residual of a first fit,
+        and refits with these sigmas. If option {\tt -sigma=generate} is given,
+        then sigmas are generated from the residual of a first fit for all columns,
+        irrespective of the presence of columns {\tt {\em name}Sigma} or {\tt Sigma{\em name}}.
+    \item {\tt -residual={\em file}} --- Specifies an output file into which the
+        residual of the fits are written. The column names in the residual file
+         are the same as they appear in the input file.
+    \item {\tt  -ascii }    ---  make output file in ascii mode (binary is the default).
+    \item {\tt  -verbose }  ---  prints some output to stderr.
+
+    \end{itemize}
+%\item {\bf see also:}
+%    \begin{itemize}
+%
+% Insert references to other programs by duplicating this line and 
+% replacing <prog> with the program to be referenced:
+%
+%    \item \progref{<prog>}
+%    \end{itemize}
+%
+% Insert your name and affiliation after the '}'
+%
+\item {\bf author: L. Emery } ANL
+\end{itemize}
+

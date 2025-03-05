@@ -1,0 +1,67 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sdds2dpfit}
+\label{sdds2dpfit}
+
+\begin{itemize}
+\item {\bf description:} 
+{\tt sdds2dpfit} does ordinary 2-dimensional polynomial fits to column data.
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sdds2dpfit [{\em inputfile}] [{\em outputfile}] [-pipe=[input][,output]]
+  -independent={\em x1ColumnName},{\em x2ColumnName} -dependent={\em yColumnName}[,sigma={\em columnName}]
+  {-maximumOrder={\em value} |  [-addOrders={\em xOrder},{\em yOrder} [-addOrders=...]]}
+  [-coefficients={\em filename}] [-evaluate={\em locationsFilename},{\em x1Name},{\em x2Name},{\em outputFilename}]
+  [-copyParameters]
+}\end{flushleft}
+\item {\bf files:}
+{\em inputFile} is an SDDS file containing columns of data to be fit.  If it contains multiple pages, they are processed
+separately.  {\em outputFile} is an SDDS file containing one page for each page of {\em inputFile}.  It contains columns of
+the independent and dependent variable data, plus columns for the fit and residuals.   The values of the fit
+and of the residuals are in a columns named {\em yName}{\tt Fit} and {\em yName}{\tt Residual}.  {\em outputFile} also contains the
+following parameters:
+\begin{itemize}
+\item {\tt RmsResidual} --- Rms residual of the fit.
+\item {\tt ReducedChiSquared}: the reduced chi-squared of the fit:
+  $$ \chi^2_\nu = \frac{\chi^2}{\nu} = \frac{1}{N-T}\sum_{i=0}^{N-1} \left(\frac{z_i - z(x_i, y_i)}{\sigma_i}\right)^2 $$,
+  where $\nu = N-T$ is the number of degrees of freedom for a fit of N points with T terms.
+\item {\tt ConditionNumber} --- Condition number from SVD inversion of the matrix used in obtaining the fit.
+\item {\tt FitIsValid } --- If non-zero, the fit is valid.
+\item {\tt Terms} --- Number of terms in the fit.
+\item {\tt Coefficient\_{\em mm}\_{\em nn}} --- Coefficient $C_{mn}$ of the fit. E.g., if fitting $z$ as a function of $x$ and
+  $y$, then
+  \begin{equation}
+    z = \sum_m \sum_n C_{mn} x^m y^n.
+  \end{equation}
+\end{itemize}
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -independent={\em x1Name},{\em x2Name}} --- Gives the names of the columns containing values of
+      the independent quantities.
+    \item {\tt -dependent={\em yName}[,sigma={\em sigmaName}]} --- Gives the name of the column containing value sof
+      the dependent quantities, and optionally the name of the column containing error bars.
+    \item {\tt -maximumOrder={\em p}} --- Request inclusion of all terms up to $x^m y^n$ such that $(n+m)\leq p$.
+    \item {\tt -addOrders={\em m},{\em n}} --- Request inclusion of $x^m y^n$. May be repeated to request inclusion of
+      additional terms.
+    \item {\tt -coefficients={\em filename}} --- Request that fit coefficients be written to the named file.
+    \item {\tt -evaluate={\em locationsFilename},{\em x1Name},{\em x2Name},{\em outputFilename}} --- Request evaluation
+      of the fit for a set of $x$ and $y$ values given in {\em locationsFilename}, with results written to 
+      {\em outputFilename}.
+    \item {\tt -copyParameters} --- If given, program copies all parameters from the input file
+      into the main output file.  By default, no parameters are copied.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddspfit}
+    \item \progref{sddsmpfit}
+    \item \progref{sddsgfit}
+    \item \progref{sddsplot}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+
+
+\end{itemize}

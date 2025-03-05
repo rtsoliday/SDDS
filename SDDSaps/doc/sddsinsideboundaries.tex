@@ -1,0 +1,48 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+\subsection{sddsinsideboundaries} 
+\label{sddsinsideboundaries} 
+ 
+\begin{itemize} 
+\item {\bf description:} \hspace*{1mm}\\ 
+{\tt sddsinsideboundaries} determines whether points in a two-dimensional space (x, y) are inside any of a
+series of closed boundaries (or contours).
+\item {\bf examples:} 
+\begin{flushleft}{\tt
+   sddsinsideboundaries <inputFile> <outputFile> -columns=Z,X -boundary=exclusionRegions.sdds,Z,X -keep=outside
+}\end{flushleft} 
+\item {\bf synopsis:}  
+\begin{flushleft}{\tt 
+sddsinsideboundaries [<inputfile>] [<outputfile>] [-pipe=[input][,output]]
+-columns=<x-name>,<y-name>
+-boundary=<filename>,<x-name>,<y-name>
+[-insideColumn=<columnName>]
+[-keep={inside|outside}] [-threads=<number>]
+}\end{flushleft} 
+\item {\bf files:} 
+The input file contains the columns defining the test points. By default, the output file will contain the same columns,
+but also an additional column indicating if each test point is inside any of the boundaries.
+The boundary file provides a series of closed boundaries, each on a separate page.
+\item {\bf switches:} 
+  \begin{itemize} 
+  \item {\tt -pipe[=input]} --- The standard SDDS Toolkit pipe option. 
+  \item {\tt -columns={\em xName},{\em yName}} ---
+    Specifies the columns containing the x and y coordinates of the probe points.
+  \item {\tt -boundary={\em filename},{\em xName},{\em yName}} --- Specifies the name of the file containing the
+    x and y coordinates of the boundaries. Each boundary should form a closed curve (first and last point the same).
+    Each boundary is on a separate page.
+  \item {\tt -insideColumn={\em columnName}} --- By default, the output file contains all the input data, plus a new
+    column called {\tt InsideSum}, which gives the number of boundaries that enclose the point in question.
+    This option allows changing the name of the column giving this sum.
+  \item {\tt -keep={inside|outside}} --- By default, all input rows appear in the output file. If this option is given,
+    the user may elect to keep only those rows that are inside at least one boundary, or only those rows that are outside
+    all boundaries.
+  \item {\tt -threads={\em number}} --- Specify the number of threads to use for computations. Defaults to 1.
+    Using more threads tends to help more when there are many complex boundary contours and when the number of
+    output points is a small fraction of the number of input points.
+  \end{itemize} 
+
+\item {\bf author:} M. Borland, ANL/APS. 
+\end{itemize} 
+ 

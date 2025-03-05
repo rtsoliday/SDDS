@@ -1,0 +1,80 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsrunstats}
+\label{sddsrunstats}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsrunstats} computes running or blocked statistics on SDDS
+tabular data.
+\item {\bf examples:}
+Smooth PAR x beam-position-monitor data by using a sliding window 32
+points long:
+\begin{flushleft}{\tt
+sddsrunstats par.bpm par.bpm.rs -mean=Time,P?P?x 
+}\end{flushleft}
+Same, but use nonoverlapping window for averages:
+\begin{flushleft}{\tt
+sddsrunstats par.bpm par.bpm.rs -mean=Time,P?P?x  -noOverlap
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddsrunstats [-pipe[=input][,output]] [{\em input}] [{\em output}]
+[{-points={\em integer} | -window=column={\em column},width={\em value}}] [-noOverlap]
+[-partialOk] 
+[-mean=[{\em limitOps}],{\em columnNameList}]
+[-minimum=[{\em limitOps}],{\em columnNameList}]
+[-maximum=[{\em limitOps}],{\em columnNameList}]
+[-standardDeviation=[{\em limitOps}],{\em columnNameList}]
+[-sigma=[{\em limitOps}],{\em columnNameList}]
+[-sum=[{\em limitOps}][,power={\em integer}],{\em columnNameList}] 
+[-sample=[{\em limitOps}],{\em columnNameList}]
+}\end{flushleft}
+where {\em columnNameList} is a comma-separated list of one or more optionally wildcarded names and
+{\em limitOps} is of the form \verb|[topLimit={\em value},][bottomLimit={\em value}]|.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt points={\em integer}} --- The number of points in the statistics window for each
+        output row.  If non-overlapping statistics are used, the last output row
+        will be computed from fewer than the specified number of points if the
+        input file number of rows is not a multiple of the specified number of 
+        points.
+    \item {\tt window=column={\em column},width={\em value}} 
+        --- Specifies a column to use for determining statistics row
+        boundaries.  For example, one might want statistics for 60 second blocks of
+        data when the data is not uniformly sampled in time.  In this case,
+        the column would be ``Time'' (say) and the width 60.
+        \item {\tt partialOk} --- Specifies that {\tt sddsrunstats} should do computations
+        even if the number of available rows is less than specified.  By default, such data
+        is simply ignored.
+    \item {\tt -noOverlap} --- Specifies non-overlapping statistics.   The default
+        is to compute running statistics with a sliding window.
+    \item {\tt -mean=[{\em limitOps}],{\em columnNameList}}\\
+        {\tt -minimum=[{\em limitOps}],{\em columnNameList}}\\
+        {\tt -maximum=[{\em limitOps}],{\em columnNameList}}\\
+        {\tt -standardDeviation=[{\em limitOps}],{\em columnNameList}}\\
+        {\tt -sigma=[{\em limitOps}],{\em columnNameList}} --- Specifies computation of the
+        indicated statistic for the columns matching {\em columnNameList} (see above).  
+        The standard deviation is N-1 weighted.  Sigma is the standard deviation of the
+        sample mean.
+        {\em limitOps} (see above for syntax) 
+        allows filtering the points in each window to exclude values
+        above the \verb|topLimit| or below the \verb|bottomLimit|.
+    \item {\tt -sum=[{\em limitOps}][,power={\em integer}],{\em columnNameList}} ---
+        Specifies computation of a general sum of powers of values.  For example,
+        to get the sum of squares you'd use \verb|power=2|.  {\em columnNameList}
+        and {\em limitOps} are as for the last item.
+    \item {\tt -sample=[{\em limitOps}],{\em columnNameList}} --- 
+        Results in extraction of a single set of values per group, namely, the first
+        value in the group that passes the {\em limitOps} criteria.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddssmooth}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

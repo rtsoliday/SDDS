@@ -1,0 +1,68 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddssampledist}
+\label{sddssampledist}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddssampledist} provides for psuedo-random sampling of probability
+distributions.  It also provides nonrandom sampling, using Halton sequences.
+
+\item {\bf example:} 
+Draw some random samples from a normal (gaussian) distribution, G(z), shifted to have
+a sigma of 10 and centroid of 5.
+\begin{flushleft}{\tt
+sddssampledist gaussian.sdds samples.sdds -samples=100 -columns=indep=z,df=G,output=zSample,factor=10,offset=5
+}\end{flushleft}
+
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddssampledist [{\em input}] [{\em output}] [-pipe=[in][,out]]
+-columns=independentVariable={\em name},{cdf={\em CDFName} | df={\em DFName}}
+   [,output={\em name}][,units={\em string}][,factor={\em value}]
+   [,offset={\em value}][,datafile={\em filename}]
+   [,haltonRadix={\em primeNumber}[,randomize[,group={\em groupID}]]]
+[-columns=...] [-samples={\em integer}] [-seed={\em integer}]
+}\end{flushleft}
+
+\item {\bf files:}
+
+{\em input} is the default input file for distribution functions (DFs)
+and cumulative distribution functions (CDFs).  {\em input} need not be
+given if all {\tt -column} options give the {\tt datafile} qualifier.
+
+{\em output} contains the samples.  The names of the sampled data are
+by default the same as the names of the independent variable from the
+{\tt -column} options.  These names may be changed by the {\tt output}
+qualifier of that option.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item \verb|pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+    \item {\tt columns=independentVariable={\em name},\{cdf={\em CDFName} | df={\em DFName}\}
+[,output={\em name}][,units={\em string}][,factor={\em value}][,offset={\em value}]
+[,datafile={\em filename}][,haltonRadix={\em primeNumber}[,randomize[,group={\em groupID}]]]} ---
+   Any number this option may be given.
+   Specifies the CDF or DF from which to draw samples ({\tt cdf} or {\tt df} qualifier), 
+   as well as the variable that the CDF or
+   DF depends on ({\tt independentVariable} qualifier).  The samples are values of this variable.
+   {\tt output} allows specifying the name of the column for the samples, while {\tt units}
+   allows specifying the units.  {\tt factor} and {\tt offset} may be used to perform a simple
+   transformation of the sample values, according to $x \rightarrow x*f+o $.
+   {\tt datafile} allows specifying an alternate file as the source for the distribution function
+   data.  By default, the data is drawn from the main input file.
+   {\tt haltonRadix} allows specifying the radix for generation of a non-random Halton sequence,
+   which provides a much smoother sampling of the distribution than does a pseudo-random sequence.
+   The radix should be a small prime number.  If you generate multiple sequences from the
+   same radix, they will be correlated.  Hence, the {\tt randomize} qualifier should be used
+   to remove the correlations.  If there are multiple {\tt column} options that should be
+   randomized together (i.e., randomized relative to other data but not each other), the 
+   {\tt group} qualifier can be used to assign these options to a specific *integer) group ID.
+   \item \verb|samples| --- Specifies the number of samples to generate.
+   \item \verb|seed| --- Specifies the seed for the random number generation.  Should be a large,
+        odd integer.  If not given, the system clock is used to generate a seed.
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

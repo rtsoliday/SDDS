@@ -1,0 +1,35 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+\subsection{sddsminterp} 
+\label{sddsminterp} 
+ 
+\begin{itemize} 
+\item {\bf description:} \hspace*{1mm}\\ 
+{\tt sddsminterp} performs multiplicative renormalized model interpolation of a data set using another data set as a model function.
+\item {\bf synopsis:}  
+\begin{flushleft}
+{\tt 
+sddsminterp [{\em input-file}] [{\em output-file}] [-pipe=[input],[output]] \\ \
+-columns={\em independent-quantity},{\em name} \\ \
+[-interpOrder={\em order}] \\ \
+-model={\em modelFile},abscissa={\em column},ordinate={\em column}[,interp={\em order}] \\ \
+-fileValues={\em valuesFile}[,abscissa={\em column}] \\ \
+[-majorOrder=row|column] \\ \
+-verbose \\ \
+-ascii}
+\end{flushleft} 
+\item {\bf switches:} 
+    \begin{itemize} 
+    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
+    \item {\tt -columns} --- Specifies the data in the input file to be interpolated.
+    \item {\tt -interpOrder} --- Interpolation order of the multiplicative factor.
+    \item {\tt -model} --- Data representing the model function.
+    \item {\tt -fileValues} --- Specifies abscissa at which interpolated values are calculated. If not present, then the abscissa values of the model file are used.
+    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout.
+    \item {\tt -verbose} --- Print verbose messages to stdout.
+    \item {\tt -ascii} --- Save output in ASCII SDDS format.
+\end{itemize} 
+
+\item {\bf author:} L. Emery, C. Saunders, M. Borland, R. Soliday, H. Shang, ANL/APS. 
+\end{itemize} 

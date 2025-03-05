@@ -1,0 +1,387 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsprocess}
+\label{sddsprocess}
+
+\begin{itemize}
+\item {\bf description:} \hspace*{1mm}\\
+\verb|sddsprocess| operates on the data columns and parameters of an existing SDDS data set and creates a new
+data set.  The program supports filtering and matching operations on both tabular data and parameter
+data, definition of new parameters and columns in terms of existing ones, units conversions, scanning of 
+string data to produce numeric data, composition of string data from other data types, 
+statistical and waveform analyses, and other operations.
+\item {\bf examples:}
+Compute the square-roots of the beta-functions, which are the beam-size envelopes:
+\begin{flushleft}{\tt
+sddsprocess APS.twi -define=column,sqrtBetax,"betax sqrt"  -define=column,sqrtBetay,"betay sqrt" 
+}\end{flushleft}
+Compute the horizontal beam-size, given by the equation
+\[ \sigma_x = \sqrt{ \epsilon_x \beta_x + (\eta_x \sigma_\delta)^2} \]
+\begin{flushleft}{\tt
+sddsprocess APS.twi -define=parameter,epsx,8.2e-9,units=nm -define=parameter,sigmaDelta,1e-3 
+  -define=column,sigmax,"epsx betax *  sigmaDelta etax * sqr + sqrt",units=m
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsprocess [-pipe[=input][,output]] [{\em inputFile}] [{\em outputFile}] {\em options}
+}\end{flushleft}
+\item {\bf files:}
+{\em inputFile} is an SDDS file containing data to be processed.  If no options are given, it is copied to {\em
+outputFile} without change.  {\em Warning:} if no output filename is given, and if an output pipe is not selected,
+then the input file will be replaced.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item Data winnowing: Any number of the following may be used.  They are applied in the order
+given.  Note that {\tt -match} and {\tt -test} are the most time intensive; thus, if several types
+of winnowing are to be applied, these should be used last if possible.
+
+   \begin{itemize}
+
+   \item {\tt -filter=\{column | parameter\},{\em rangeSpec}[,{\em rangeSpec}[,{\em logicOp}...]] } ---
+Specifies winnowing {\em inputFile} based on numerical data in parameters or columns.  A {\em range-spec} is of the
+form {\tt {\em name},{\em lower-value},{\em upper-value}[,!] }, where \verb|!| signifies logical negation. A page
+passes a given filter by having the named parameter inside (or outside, if negation is given) the specified range,
+where the endpoints are considered inside.  A tabular data row passes a given filter in the analogous fashion, except
+that the value from the named column is used.  
+
+One or more range specifications may be combined to give a accept/reject status by employing the {\em
+logic-operations}, \verb|&| (logical and) and \verb&|& (logical or).  For example, to select rows for
+which A is on [0, 1] and B is on [10, 20], one would use
+{\tt -filter=column,A,0,1,B,10,20,\&}.
+        \item {\tt -timeFilter=\{column | parameter\},[before=YYYY/MM/DD@HH:MM:SS] [,after=YYYY/MM/DD@HH:MM:SS][,invert]} 
+--- Specifies date range in YYY/MM/DD@HH:MM:SS format in time parameters or columns. The invert option cause the
+filter to be inverted, so that the data that would otherwise be kept is removed and vice-versa. For example,
+if one want to keep data between 8:30AM on Januaray 2, 2003 and 9:20PM on February 6,2003, the option woould be
+     -timeFilter=column,Time,before=2003/2/6@21:20,after=2003/1/2@8:30
+assume that the time data is in the column Time.
+
+        \item {\tt -match=\{column | parameter\},{\em matchTest}[,{\em matchTest},{\em logicOp}]} --- Specifies
+winnowing {\em inputFile} based on data in string parameters or columns.  A {\em match-test} is of the form {\tt {\em
+name}={\em matchingString}[,!]}, where the matching string may include the wildcards \verb|*| (matches zero of more
+characters) and \verb|?| (matches any one character). 
+
+If the first character of {\em matchingString} is '@', then the remainder of the string is taken to be the name of a
+parameter or column.  In this case, the match is performed to the data in the named entity.  For column-based matching,
+this is done row-by-row.  For parameter-based matching, it is done page-by-page.
+
+In addition, if instead of \verb|=| one uses \verb|=+|, then matching is case-insensitive.  The plus sign is intended
+to be mnemonic, as the case-insensitive matching results in additional matches.
+
+The use of several match tests and logic is done just as for {\tt -filter}.  For example, to match
+all the rows for which the column {\tt Name} starts with 'A' or 'B', one could use
+{\tt -match=column,Name=A*,Name=B*,|}.  (This could also be done with {\tt -match=column,Name=[AB]*}.)
+
+\item {\tt -numberTest=\{column | parameter\},{\em name}[,invert]} --- 
+Specifies testing the values of in a
+string column (parameter) to see if they can be (or cannot be, if {\tt
+invert} is given) converted to numbers.  If not, the corresponding row
+(page) is deleted.  
+
+\item {\tt -test=\{column | parameter\},{\em test}[,autostop][,algebraic]} --- Specifies
+winnowing of {\em inputFile} based on a test embodied in an {\tt rpn} expression.  The expression, {\em test}, may use
+the names of any parameters or columns.  If {\tt autostop} is specified, the processing of the data set (or data page)
+terminates when the parameter-based (or column-based) expression is false.
+
+        \item {\tt -clip={\em head},{\em tail}[,invert]} --- Specifies the number of data points to clip from the head
+and tail of each page.  If {\tt invert} is given, the clipping retains rather than deletes the indicated points.
+         \item {\tt -fclip={\em head},{\em tail}[,invert]} --- Specifies the fraction of data points to clip from the head
+and tail of each page.  If {\tt invert} is given, the clipping retains rather than deletes the indicated points.
+        \item {\tt -sparse={\em interval}[,{\em offset}]} --- Specifies sparsing of each page with the indicated
+interval.  That is, only every {\em interval}$ {th}$ row starting with row {\em offset} is copied to the
+output.  The default value of {\em offset} is 0.
+
+        \item {\tt -sample={\em fraction}} --- Specifies random sampling of rows such that approximately the indicated
+fraction is kept.  Since a random number generator is used that is seeded with the system clock, this will usually
+never be the same twice.
+
+        \end{itemize}
+    \item \verb|rpn| calculator initialization:\\
+
+        \begin{itemize} \item {\tt -rpnDefinitionsFiles={\em filename}...} --- Specifies a list of comma-separated
+filenames to be read in as \verb|rpn| definitions files.  By default, the file named in the {\tt RPN\_DEFNS}
+environment variable is read.
+
+        \item {\tt -rpnExpression={\em expression}[,repeat][,algebraic]} --- Specifies an \verb|rpn| expression to be executed.  If
+{\tt repeat} is not specified, then the expression is executed before processing begins.  If {\tt repeat} is specified,
+the expression is executed just after each page is read; it may use values of any of the numerical parameters for that
+page. This option may be given any number of times.
+
+        \end{itemize}
+  \item Scanning from, editing, printing to, and executing string columns and parameters: \\
+
+         \begin{itemize}
+ 
+         \item {\tt -scan=\{column | parameter\},{\em newName},{\em sourceName},{\em sscanfString}}\\ {\tt [,{\em
+ definitionEntries}]} --- Specifies creation of a new numeric column (parameter) by scanning an existing string column
+ (parameter) using a \verb|sscanf| format string.  The default type of the new data is double; this may be changed by
+ including a {\em definitionEntry} of the form {\tt type=}{\em typeName}.  With the exception of the {\tt name} field,
+ any valid namelist command field and value may be given as part of the {\em definitionEntries}.
+
+        If {\em sourceName} contains wildcards, then {\em newName} must contain at least one occurrence of the string
+``\%s''.  In this case, for each name that matches {\em sourceName}, an additional element is created, with a
+name created by substituting the name for ``\%s'' in {\em newName}.
+ 
+         \item {\tt -edit=\{column | parameter\},{\em newName},{\em sourceName},{\em edit-command}} --- Specifies
+creation of a new string column (parameter) called {\em newName} by editing an existing string column (parameter) {\em
+sourceName} using an emacs-like editing string.  For details on editing commands, see \hyperref[SDDSediting]{SDDS editing}.
+         
+        If {\em sourceName} contains wildcards, then {\em newName} must contain at least one occurrence of the string
+``\%s''.  In this case, for each name that matches {\em sourceName}, an additional element is created, with a
+name created by substituting the name for ``\%s'' in {\em newName}.
+
+         \item {\tt -reedit=\{column | parameter\},{\em name},{\em edit-command}} --- Like {\tt -edit},
+except that the element {\em name} must already exist.  Each value is replaced by the value obtained from
+applying {\em edit-command}.
+         
+        \item {\tt -print=\{column | parameter\},{\em newName},{\em sprintfString},{\em sourceName}}\\ {\tt [,{\em
+sourceName}...][,{\em definitionEntries}]} --- Specifies creation of a new string column (parameter) by formatted
+printing of one or more elements from other columns (parameters).  The {\em sprintfString} is a C-style format string
+such as might be given to the routine {\tt sprintf}.  With the exception of the {\tt name} field, any valid namelist
+command field and value may be given as part of the {\em definitionEntries}.
+
+        \item {\tt -reprint} --- Identical in syntax and function to {\tt -print}, except that if {\em newName} 
+already exists, it is overwritten.  No error or warning is issued.
+
+        \item {\tt -format=\{column | parameter\},{\em newName},{\em
+sourceName}} \\ {\tt [,stringFormat={\em sprintfString}][,doubleFormat={\em
+sprintfString}]} \\ {\tt [,longFormat={\em sprintfString}]} --- Reformats string
+data in different ways depending on the type of data the string
+contains.  Each string is separated into tokens at space boundaries.
+Each token is separately formatted, either as a long integer, a
+double-precision floating point number, or a string, depending on what
+the token appears to be.  The formatting is done using the specified
+format strings; the default format strings are \%ld for longs,
+\%21.15e for doubles, and \%s for strings.
+
+         \item {\tt -system=\{column | parameter\},{\em newName},{\em commandName},}\\ {\tt [{\em
+definitionEntries}]} --- Specifies creation of a new string column (parameter) by executing an existing string
+column (parameter) using a subprocess.  The first line of output from the subprocess is acquired and placed in the
+new column (parameter).
+
+        If {\em commandName} contains wildcards, then {\em newName} must contain at least one occurrence of
+``\%s''.   In this case, for each name that matches {\em commandName}, an additional element is created, with a
+name created by substituting the name for ``\%s'' in {\em newName}.
+
+ 
+         \end{itemize}
+ 
+    \item Creation and modification of numeric columns and parameters: \\
+
+        \begin{itemize}
+
+        \item {\tt -convertUnits=\{column | parameter\},{\em
+name},{\em newUnits},}{\tt {\em oldUnits},{\em factor}}\\ ---
+Specifies units conversion for the column or parameter {\em name}
+(which may contain wildcards).  The {\em factor} entry the factor by
+which the values must be multiplied to convert them to the desired
+units.  It is an error if {\em oldUnits} does not match the original
+units of the column or parameter.  Eventually, the {\em factor} entry
+will be made optional by inclusion of conversion information in the
+program.  This option may be given any number of times.
+
+        \item {\tt -define=\{column | parameter\},{\em name},{\em
+equation}[,select={\em matchString}][,exclude={\em matchString}]} 
+{\tt [,editSelection={\em editCommand}][,{\em definitionEntries}][,algebraic] }\\ --- Specifies
+creation of a new column or parameter using an {\tt rpn} expression to
+obtain the values.  For parameters, any parameter value may be
+obtained by giving the parameter name in the expression.  For columns,
+one may additionally get the value of any column by giving its name in
+the expression; the expression given for {\tt -define=column} is
+essentially specifying a vector operation on columns with parameters
+as scalars.  By default, the type of the new data is \verb|double|.
+This and other properties of the new column or parameter may be
+altered by giving {\em definitionEntries}, which have the form {\em
+fieldName}={\em value}; {\em fieldName} is the name of any namelist
+command field (except the name field) for a column or parameter, as
+appropriate.  This option may be given any number of times.
+
+        Using the {\tt select} qualifier, it is possible to use a
+single {\tt -define} option to specify many instances of new column
+definitions.  If {\tt select} is given, the input is searched for all
+the column names matching {\em matchString}.  These are then
+optionally editted using the {\em editCommand} specified with {\tt
+editSelection}.  The resulting strings are then substituted one at a
+time into {\em name} and {\em equation}, replacing all occurances of
+``\%s''.  For example, suppose a file contained a number of
+column-pairs of the form {\em Prefix}V1 and {\em Prefix}V2; to take
+the difference of each pair, one could use\\ {\tt
+-define=column,\%sDiff,\%sV1 \%sV2 -,select=*V1,edit=\%/V1//} \\[12pt]
+{\tt sddsprocess} permits read access to individual elements of a
+column of data using the {\tt rpn} array feature.  For each column, an
+array of name \verb|&|{\em ColumnName} is created; the ampersand is to
+remind the user that the variable \verb|&|{\em ColumnName} is the
+address of the start of the array.  To get the first element of a
+column named \verb|Data|, one would use {\tt 0 \&Data [}.  This will
+function only within or following a {\tt -define=column} or {\tt
+-redefine=column} operation.  It is an error to attempt to access data
+beyond the bounds of an array.
+
+   The number of columns, and the current page and row number are 
+pre-loaded into the rpn calculator memory according to the following table.
+\begin{center}
+\begin{tabular}{|l|l|} \hline
+Quantity    & rpn memory   \\ \hline
+Page number & {\tt i\_page}       \\ \hline
+Page number & {\tt table\_number} \\ \hline
+Row number  & {\tt i\_row}        \\ \hline
+Number of rows & {\tt n\_rows}    \\ \hline
+\end{tabular}
+\end{center}
+For example, to generate a column of index number to a file, add the option {\tt
+-define=col,Index,i\_row,type=long}.
+
+        \item {\tt -redefine} --- This option is identical to {\tt
+-define} except that the column or parameter already exists in the
+input.  The equation may use the previous values of the entity being
+redefined by including the column name in the expression.
+
+        \item {\tt -evaluate=\{column | parameter\},{\em name},{\em
+source}[,{\em definitionEntries}]}\\ --- Specifies creation of a new column or parameter {\em name}
+containing values from evaluation of the equation stored in a string column or parameter {\em source}.
+The source string is an rpn expression in terms of the other column and parameter values.
+
+        \item {\tt -cast=\{column | parameter\},{\em newName},{\em oldName},{\em newType}} --- This option allows
+casting data from one numerical data type to another.  It is much faster than trying to do the same operation using
+{\tt -define}.  The string {\em newType} may be any of {\tt double}, {\tt float}, {\tt long}, {\tt short}, or
+{\tt character}.
+
+        \item {\tt -process={\em mainColumnName},{\em analysisName},{\em resultName}[,default={\em value}]}
+\\{\tt [,description={\em string}][,symbol={\em string}][,weightBy={\em columnName}]}
+\\{\tt [,functionOf={\em columnName}[,lowerLimit={\em value}][,upperLimit={\em value}]]}
+\\{\tt [,head={\em number}][,tail={\em number}][,fhead={\em fraction}][,ftail={\em fraction}]}
+\\{\tt [,topLimit={\em value}][,bottomLimit={\em value}]} 
+\\{\tt [,position][,offset={\em value}][,factor={\em value}]}
+\\{\tt [,match={\em columnName},value={\em match-value}]} --- This option may be given
+any number of times.  It specifies creation of a new parameter {\em resultName} by processing
+column {\em mainColumnName} using analysis mode {\em analysisName}.  The column must contain
+numeric data, in general, except for a few analysis modes that take any type of data (see below). {\em
+mainColumnName} may contain wildcards, in which case the processing is applied to all matching
+columns containing numeric data.  {\em resultName} may have a single occurence of the string
+``\%s'' embedded in it; if so, {\em mainColumnName} is substituted.  If wildcards are given in
+{\em mainColumnName}, then ``\%s'' must appear in {\em resultName}; in this case, the name of
+each selected column is substituted.  Similarly, if the {\tt description} field is supplied,
+it may contain an embedded ``\%s'' for which the column name will be substituted.
+If the processing fails for any reason, the value given by the {\tt default} parameter is subsituted;
+if no value is specified, the value is equal to the maximum double-precision value on the system.
+
+Recognized values for {\em analysisName} are:
+\begin{itemize}
+\item {\tt average}, {\tt rms}, {\tt sum}, {\tt standardDeviation}, {\tt mad} --- The arithmetic average, 
+the rms average, the arithmetic sum, the standard deviation, and the mean absolute deviation.  All may be possibly
+weighted.
+\item {\tt median}, {\tt drange}, {\tt qrange} --- The median value, i.e., the value which is both above and below
+50\% of the data points; the decile-range, which is the range excluding the smallest and largest 10\% of the values;
+the quartile-range, which is the range excluding the smallest and largest 25\% of the values.
+\item {\tt percentile}, {\tt prange} --- These compute percentiles and percentile ranges, as defined by the 
+  {\tt percentlevel} qualifier.  For {\tt percentile}, the value returned is the value of the column corresponding
+  to the given {\tt percentlevel}.  For {\tt prange}, the value return is the span of the values in the column
+  encompassing the given central percentage of the data; for example {\tt percentile=50} would give the quartile range.
+
+\item {\tt minimum}, {\tt maximum}, {\tt spread}, {\tt smallest}, {\tt largest} --- 
+The minimum value, maximum value, spread in values, smallest value (minimum absolute value), and largest value
+(maximum absolute value).  For all except {\tt spread}, the {\tt position} and {\tt functionOf} qualifiers may be
+given to obtain the value in another column when {\em mainColumnName} has the extremal value; the {\tt functionOf} qualifer may name a string column.
+
+\item {\tt first}, {\tt last} --- The values in the first and last rows of the page.  Will accept non-numeric
+data.
+\item {\tt pick} --- The first value within the filter.  Will accept non-numeric data.
+\item {\tt count} ---  The number of values in the page.
+\item {\tt baselevel}, {\tt toplevel}, {\tt amplitude} --- Waveform analysis parameters from histogramming
+the signal amplitude.  {\tt baselevel} is the baseline, {\tt toplevel} is the height, and {\tt amplitude}
+is height above baseline.
+
+\item {\tt risetime}, {\tt falltime}, {\tt center} --- The rise and fall times from the 10\%-90\% and
+90\%-10\% transitions.  {\tt center} is the midpoint between the first 50\% rising edge and the first following 50\%
+falling edge after rising above 90\% amplitude.  Requires specifying a independent variable column with {\tt
+functionOf}.
+
+\item {\tt fwhm}, {\tt fwtm}, {\tt fwha}, {\tt fwta} --- Full-widths of the named column as a function
+of the independent variable column specified with {\tt functionOf}.  The letters 'h' and 't' specify Half and Tenth
+amplitude widths, while 'm' and 'a' specify Maximum value or Amplitude over baseline.
+
+\item {\tt zerocrossing} --- Zero-crossing point of the column named with {\tt functionOf} of the
+column {\em mainColumnName}.
+
+\item {\tt sigma} --- The standard deviation over the square-root of the number of points.  This is an
+estimate of the uncertainty in the mean value.
+
+\item {\tt slope}, {\tt intercept}, {\tt lfsd} --- The slope and intercept of a linear fit.  The {\tt functionOf}
+qualifier must be given to specify the quantity to fit against.  {\tt lfsd} is the Linear-Fit-Standard-Deviation,
+which is the standard deviation of the fit residuals.
+
+\item {\tt gmintegral} --- The integral of the quantity with respect to the quantity named with the {\tt functionOf} qualifier.
+  The integral is performed using the Gill-Miller method, which works well for non-equispaced values of the independent
+  variable.
+
+\item {\tt correlation} --- The Pearson's correlation coefficient of the quantity and the column of which it is 
+  (nominally) a function (as declared with the {\tt functionOf} qualifier).
+
+\end{itemize}
+
+Qualifiers for this switch are:
+\begin{itemize}
+\item {\tt description={\em string}}, {\tt symbol={\em string}} --- Specify the description and symbol
+fields for the new column.
+\item {\tt weightBy={\em columnName}} --- Specifies the name of a column to weight values from 
+column {\em mainColumnName} by before computing statistics.
+\item {\tt functionOf={\em columnName}} --- Specifies the name of a column that {\em mainColumnName}
+is to be considered a function of for computing widths, zero-crossings, etc.
+\item {\tt topLimit={\em value}}, {\tt bottomLimit={\em value}} --- Specifies winnowing of rows
+so that only those with {\em mainColumn} values above the {\tt topLimit} or below the {\tt bottomLimit} are 
+included in the computations.
+\item {\tt lowerLimit={\em value}}, {\tt upperLimit={\em value}} --- If {\tt functionOf} is given,
+specifies winnowing of rows so that only rows for which the independent column data is above
+the {\tt lowerLimit} and/or below the {\tt upperLimit} are included in computations.
+\item {\tt head={\em number}}, {\tt fhead={\em fraction}} --- Specifies taking the head 
+of the data prior to processing.  {\tt head} gives the number of points keep, while {\tt fhead}
+gives the fraction of the points to keep.  If {\em number} or {\em fraction} is less than 0, thenthe head points are deleted and the other points are kepts. If head and tail are both used, head  is
+performed first.
+gives the fraction of the points to clip.
+\item {\tt tail={\em number}}, {\tt ftail={\em fraction}} --- Specifies taking the tail 
+of the data prior to processing.  {\tt tail} gives the number of points keep, while {\tt ftail}
+gives the fraction of the points to keep.  If {\em number} or {\em fraction} is less than 0, thenthe tail points are deleted and the other points are kepts. If head and tail are both used, head  is
+performed first.
+\item {\tt position} --- For {\tt minimum}, {\tt maximum}, {\tt smallest}, and {\tt largest} analysis modes,
+specifies that the results should be the position at which the indicated value occurs.  This position is
+the corresponding value of in column named with {\tt functionOf}.
+\item {\tt offset={\em value}}, {\tt factor={\em value}} --- Specify an offset and factor for modifying
+data prior to processing.  By default, the offset is zero and the factor is 1.  The equation is
+$x \rightarrow f*(x+o) $.
+\item {\tt match={\em controlName}}, {\tt value={\em match-value}} --- Specify the match column and the
+match value (may contain wildcard).
+\end{itemize}
+
+
+\end{itemize}
+
+
+    \item Miscellaneous:
+        \begin{itemize}
+        \item {\tt -ifis=\{column | parameter | array\},{\em name}[,{\em name}...]}\\ {\tt -ifnot=\{column | parameter |
+array\},{\em name}[,{\em name}...]} \\ --- These options allow conditional execution.  If any column that is named under a
+\verb|ifis| option is not present, execution aborts.  If any column that is named under a \verb|ifnot| option is
+present, execution aborts.
+        \item {\tt -description=[text={\em string}][,contents={\em string}]} --- Specifies the
+        description fields for the SDDS dataset.  Use of this feature is disparaged as these fields
+        are not manipulated by any tools.  Use of string parameters is suggested.
+        \item {\tt -summarize} --- Specifies that a summary of the processing be printed to the screen.
+        \item {\tt -verbose} --- Specifies that informational printouts be provided during processing.
+        \item {\tt -noWarnings} --- Specifies suppression of warning messages.
+    \item {\tt -delete=\{columns | parameters | arrays\},{\em matchingString}[,...]},\\
+        {\tt -retain=\{columns | parameters | arrays\},{\em matchingString}[,...]}
+         --- These options specify wildcard strings to be used to select entities
+        (i.e., columns, parameters, or arrays) that will respectively be deleted or retained (i.e., that will not or
+        will appear in the output).   
+        The selection is performed by determining which input entities have names matching any of the strings.
+        If \verb|retain| is given but \verb|delete| is not, only those entities matching one of the
+        strings given with \verb|retain| are retained.  If both \verb|delete| and \verb|retain|
+        are given, then all entities are retained except those that match a \verb|delete| string without
+        matching any of the \verb|retain| strings.
+        \end{itemize}
+    \end{itemize}
+
+\item {\bf author:} M. Borland, H. Shang, R. Soliday ANL/APS.
+\end{itemize}
+

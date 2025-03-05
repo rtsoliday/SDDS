@@ -1,0 +1,66 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddscombine}
+\label{sddscombine}
+
+\begin{itemize}
+\item {\bf description:}
+\verb|sddscombine| combines data from a series of SDDS files into a single SDDS file with one page for each page in each file.  
+Data is added from files in the order that they are listed on the command line.
+All of the data files must contain the columns and parameters contained by the first; the program ignores
+any columns or parameters in a subsequent data file that are not in the first data file.
+\item {\bf example:}
+Combine several Twiss parameter files into one file, keeping page boundaries separate.
+\begin{flushleft}{\tt
+sddscombine APS1.twi APS2.twi APS3.twi APSall.twi 
+}\end{flushleft}
+
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddscombine [{\em inputFileList}] [{\em outputFile}] [-pipe[=input][,output]]
+[-merge[={\em parameterName}]] [-overWrite] [-sparse={\em integer}] 
+[-collapse]
+[-delete=\{columns | parameters | arrays\},{\em matchingString}[,...]]
+[-retain=\{columns | parameters | arrays\},{\em matchingString}[,...]]
+}\end{flushleft}
+
+\item {\bf files:}
+{\tt {\em inputFileList}} is a list of space-seperated filenames to be combined.  {\tt {\em outputFile}} is a filename
+into which the combined data is placed.  If no {\tt -pipe} options are given, the {\em outputFile} is taken as the last
+filename on the commandline.  To specify an output file with input from a pipe, one uses {\tt sddscombine }{\tt
+-pipe=input }{\em outputFile}.  Similarly to specify output to a pipe with many input files, use {\tt sddscombine } {\tt
+-pipe=output} {\em inputFileList}.  Since accidentally leaving off the {\tt -pipe=output} option for the last command
+might result in replacement of an intended input file, the program refuses to overwrite an existing file unless the {\tt
+-overWrite} option is given.  A string parameter ({\tt Filename}) is included in {\tt outputFile} to show the source of
+each page.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -merge[={\em parameterName}]} --- 
+        Specifies that all pages of all files are to be merged into a single page
+        of the output file.  If a {\tt {\em parameterName}} is given, successive pages are merged only if the
+        value of the named parameter is the same.
+    \item \verb|overWrite| --- Forces {\tt sddscombine} to overwrite {\tt {\em outputfile}} if it exists.
+    \item \verb|sparse={\em integer}| --- Specifies sparsing the tabular data in the input to retain
+        only every {\em integer}-th row.
+    \item \verb|collapse| --- Specifies collapsing the data, as done by \verb|sddscollapse|.
+    \item {\tt -delete=\{columns | parameters | arrays\},{\em matchingString}[,{\em matchingString}...]},\\
+        {\tt -retain=\{columns | parameters | arrays\},{\em matchingString}[,{\em matchingString}...]}
+         --- These options specify wildcard strings to be used to select entities
+        (i.e., columns, parameters, or arrays) that will respectively be deleted or retained (i.e., that will not or
+        will appear in the output).   
+        The selection is performed by determining which input entities have names matching any of the strings.
+        If \verb|retain| is given but \verb|delete| is not, only those entities matching one of the
+        strings given with \verb|retain| are retained.  If both \verb|delete| and \verb|retain|
+        are given, then all entities are retained except those that match a \verb|delete| string without
+        matching any of the \verb|retain| strings.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddscollapse}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

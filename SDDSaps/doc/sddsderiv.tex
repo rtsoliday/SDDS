@@ -1,0 +1,74 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsderiv}
+\label{sddsderiv}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsderiv} differentiates one or more columns of data as a function of a common
+column.  The program will perform error propagation if error bars are provided in 
+the data set.
+\item {\bf examples:} 
+Find the derivatives of columns {\tt J0} and {\tt J1} as a function of {\tt z}:
+\begin{flushleft}{\tt
+sddsderiv bessel.sdds bessel.deriv -differentiate=J0,J1 -versus=z
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsderiv [-pipe=[input][,output]] [{\em input}] [{\em output}]
+-differentiate={\em columnName}[,{\em sigmaName}] ...
+-versus={\em columnName}[,{\em sigmaName}] [-interval={\em integer}]
+[-SavitzkyGolay={\em left},{\em right},{\em fitOrder}[,{\em derivOrder}]]
+[-mainTemplates={\em item}={\em string}[,...]] 
+[-errorTemplates={\em item}={\em string}[,...]] 
+}\end{flushleft}
+\item {\bf files:}
+{\em input} is an SDDS file containing columns of data to be
+differentiated.  If it contains multiple data pages, each is treated
+separately. The independent quantity along with the requested derivatives
+are placed in columns in {\em output}.  By default, the
+derivative column name is constructed by appending {\tt Deriv} to the
+variable column name.  If applicable, the column name for the
+derivative error is constructed by appending {\tt DerivSigma}.  The data with
+respect to which the derivative is taken should be monotonically ordered.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -differentiate={\em columnName}[,{\em sigmaName}} --- Specifies the name
+        of a column to differentiate, and optionally the name of the column containing
+        the error in the differentiated quantity.  May be given any number of times.
+    \item {\tt -versus={\em columnName}[,{\em sigmaName}} --- Specifies the name
+        of the independent variable column, and optionally the name of the column
+        containing its error.
+    \item {\tt -interval={\em integer}} --- Specifies the spacing of the data points
+        used to approximate the derivative.  The default value of 2 specifies that
+        the derivative for each point will be obtained from values 1 row above and
+        1 row below the point.  In general (ignoring end points, which require
+        special treatment):
+        \[
+        \frac{d y}{d x}[i] \approx \frac{y[i+Interval/2] - y[i-Interval/2]}{x[i+Interval/2] - x[i-Interval/2]}
+        \]
+    \item {\tt [-SavitzkyGolay={\em left},{\em right},{\em fitOrder}[,{\em derivOrder}]]} --- 
+        Specifies using a Savitzky-Golay smoothing filter to perform the derivative,
+        which involves fitting a polynomial of {\em fitOrder} through {\em left}+{\em right}+1
+        points and then giving the derivative of the fitted curve.  {\em derivOrder} is 1
+        by default and gives the order of derivative to take.
+    \item {\tt -mainTemplates={\em item}={\em string}[,...]} --- Specifies template
+        strings for  names and definition entries for the derivative columns
+         in the output file.  {\em item} may be one of {\tt name}, {\tt description},
+        {\tt symbol}.  The symbols ``\%x'' and ``\%y'' are used to represent
+        the independent variable name and the name of the differentiated quantity, respectively.
+    \item {\tt -errorTemplates={\em item}={\em string}[,...]} --- Specifies template
+        strings for  names and definition entries for the derivative error columns
+        in the output file.  {\em item} may be one of {\tt name}, {\tt description},
+        the independent variable name and the name of the differentiated quantity, respectively.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddsinteg}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

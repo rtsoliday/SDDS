@@ -1,0 +1,29 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsendian}
+\label{sddsendian}
+
+\begin{itemize}
+\item {\bf description:}
+
+\verb|sddsendian| converts numerical data in an SDDS file from
+big-endian to little-endian or vice versa.  This is needed prior to
+transferring binary data from one computer to another if the two
+computers have different endianess.
+
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsendian [{\em inputFile}] [{\em outputFile}] [-pipe[=input][,output]]
+}\end{flushleft}
+
+\item {\bf switches:} 
+\begin{itemize}
+        \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+\end{itemize}
+
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+
+

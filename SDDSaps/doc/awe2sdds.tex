@@ -1,0 +1,33 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{awe2sdds}
+\label{awe2sdds}
+
+\begin{itemize}
+\item {\bf description:} 
+Converts a file in \verb|awe| self-describing format to SDDS.  This is of interest to
+only a few users at APS, as \verb|awe| format has been superseeded by SDDS and is rarely used.
+\item {\bf example:} 
+To convert {\tt awe} format Twiss parameter data from an old version of \verb|elegant|:
+\begin{flushleft}{\tt 
+awe2sdds APS.awe APS.sdds -labelColumnName=ElementName
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt 
+awe2sdds {\em inputFile} {\em outputFile} [-labelColumnName={\em string}] [-asciiOutput]
+}\end{flushleft}
+\item {\bf files:} 
+{\em inputFile} is an {\tt awe}-format file, the SDDS equivalent of which is written to {\em outputFile}.
+The ``auxiliary values'' of the {\tt awe} file are converted into SDDS parameters.  The {\tt awe} tables
+are converted into SDDS tabular data, all columns being double precision except the ``row label'', which
+becomes a string column.
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -labelColumnName={\em string}} --- Requests that the {\tt awe} row label be given the name {\em string}.
+        By default, the row label is placed in a column named ``row-label''.
+    \item \verb|-asciiOutput| --- Requests that output be in ASCII.  By default, the output is binary.
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

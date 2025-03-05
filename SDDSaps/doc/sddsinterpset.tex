@@ -1,0 +1,48 @@
+%\begin{latexonly} 
+\newpage 
+%\end{latexonly} 
+\subsection{sddsinterpset} 
+\label{sddsinterpset} 
+ 
+\begin{itemize} 
+\item {\bf description:} \hspace*{1mm}\\ 
+{\tt sddsinterpset} is used to perform multiple interpolations.
+
+\item {\bf synopsis:}  
+\begin{flushleft}
+{\tt 
+sddsinterpset [{\em input}] [{\em output}] [-pipe=[input],[output]] \\ \
+[-order={\em number}] \\ \
+[-data=fileColumn={\em colName},interpolate={\em colName}, \\ \
+ functionOf={\em colName},[column={\em colName}|atValue={\em value}]] \\ \
+[-belowRange={value={\em value}|skip|saturate|extrapolate|wrap}[,{abort|warn}]] \\ \
+[-aboveRange={value={\em value}|skip|saturate|extrapolate|wrap}[,{abort|warn}]] \\ \
+[-verbose] \\ \
+[-majorOrder=row|column]}
+\end{flushleft} 
+
+\item {\bf files:}
+    \begin{itemize} 
+    \item {\em input} Each row contains the name of an SDDS file used as the source of an interpolation table.
+    \end{itemize} 
+
+\item {\bf switches:} 
+    \begin{itemize} 
+    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
+    \item {\tt -order} --- The order of the polynomials to use for interpolation. The default is 1, indicating linear interpolation.
+    \item {\tt -data} --- 
+      \begin{itemize} 
+        \item {\tt fileColumn} --- Gives the name of a column in {\em input} that contains the names of files with tables of data.
+        \item {\tt interpolate} --- Gives the name of a column that must exist in all the files named in fileColumn.  This column will exist in the output file.
+        \item {\tt functionOf} --- Gives the name of a column that must exist in all the files named in fileColumn.  The 'interpolate' column is viewed as a function of this column:  I(F).
+        \item {\tt column} --- Gives the name of a column in {\em input}.  The primary output is I(C).
+        \item {\tt atValue} --- Gives a number at which to perform the interpolations.
+      \end{itemize} 
+    \item {\tt -belowRange}
+    \item {\tt -aboveRange} --- They have the same options, which specify the behavior in the event that an interpolation point is, respectively, below or above the range of the independent data. If such an out-of-range point occurs, the default behavior is to assign the value at the nearest endpoint of the data; this is identical to specifying saturate. One may specify use of a specific value with value=value. skip specifies that offending points should be discarded. extrapolate specifies extrapolation beyond the limits of the data. wrap specifies that the data should be treated as periodic. abort specifies that the program should terminate. warn requests warnings for out-of-bounds points.
+    \item {\tt -verbose} --- Errors are printed to stdout.
+    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout.
+    \end{itemize} 
+
+\item {\bf author:} H. Shang, R. Soliday, X. Jiao, ANL/APS. 
+\end{itemize} 

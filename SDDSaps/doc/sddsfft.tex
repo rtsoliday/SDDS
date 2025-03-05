@@ -1,0 +1,139 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsfft}
+\label{sddsfft}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsfft} takes Fast Fourier Transforms of real data in columns.  It will transform any number of columns
+simultaneously as a function of a single independent variable.  
+Strictly speaking, the independent variable values should be equispaced; if they are not, {\tt sddsfft} uses
+the average spacing.  The number of data points need not be a power of two.  Output of the magnitude only is the 
+default, but phase and complex values are available.
+\item {\bf examples:} 
+Take the FFT of time series samples of PAR x beam-position-monitor readouts:
+\begin{flushleft}{\tt
+sddsfft par.bpm par.fft -column=Time,'P?P?x'
+}\end{flushleft}
+\item {\bf synopsis:} 
+\begin{flushleft}{\tt
+sddsfft [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}]
+-columns={\em indepVariable}[,{\em depenQuantityList}]
+[-padWithZeroes | -truncate] [-sparse={\em integer}] 
+[-window[=\{hanning | welch | parzen\}]] [-complexInput[=folded|unfolded]]
+[-normalize] [-suppressAverage] [-fullOutput[=folded|unfolded]] [-psdOutput] [-inverse]
+}\end{flushleft}
+\item {\bf files:}
+{\em inputFile} contains the data to be FFT'd.  One column from this file must be chosen as the independent
+variable.   By default, all other columns are taken as dependent variables.  If {\em inputFile} contains multiple
+pages, each is treated separately and is delivered to a separate page of {\em outputFile}.
+
+{\em outputFile} contains a column {\tt f} for the frequency, along with one or more columns for each independent
+variable.  By default, {\em outputFile} has one column named {\tt FFT}{\em indepName} containing the magnitude of the
+FFT for each independent variable. If {\tt -fullOutput} is specified, {\em outputFile} contains additional
+columns for, respectively, the phase (or argument), real part, and imaginary part of the FFT: {\tt Arg}{\em indepName},
+{\tt Real}{\em indepName}, and {\tt Imag}{\em indepName}.  If power-spectral-density output is requested, then
+a column {\tt PSD}{\em indepName} is also created.  
+
+{\em outputFile} also contains two parameters, {\tt fftFrequencies} and {\tt fftFrequencySpacing}, giving
+the number of frequencies and the frequency spacing, respectively.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item \verb|pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns={\em indepVariable}[,{\em depenQuantityList}]} --- Specifies the name of the
+        independent variable column.  Optionally, specifies a list of comma-separated, optionally
+        wildcard-containing names of dependent quantities to be FFT'd as a function of the independent variable. 
+        By default, all numerical columns except the independent column are FFT'd.
+    \item {\tt -exclude={\em depenQuantity},...} --- Specifies optionally wildcarded names of columns
+        to exclude from analysis.
+    \item \verb|-padWithZeros| --- Specifies that the independent data should be padded with zeros to
+        make the number of points equal to the nearest power of two.  In some cases, this will result in
+        significantly greater speed.
+    \item \verb|-truncate| --- Specifies that the data should be truncated so that the number of points is 
+        the largest product of primes from 2 to 19 not greater than the original number of points.  
+        In some cases, this will result in significantly greater speed.
+    \item {\tt sparse={\em integer}} --- Specifies that the data should be uniformly sampled at the
+        given integer interval.  While this reduces frequency span of the FFT, it may result in greater
+        speed.
+    \item {\tt window[=\{hanning | welch | parzen\}} --- Specifies that data windowing should be performed
+        prior to taking FFT's, and optionally specifies the type of window.  The default is {\tt hanning}.
+        Usually used to improve visibility of small features or accuracy of amplitudes for data that is
+        not periodic in the total sampling time or a submultiple thereof.
+    \item \verb|normalize| --- Specifies that FFT's will be normalized to give a maximum magnitude of 1.
+    \item \verb|suppressAverage| --- Specifies that the average value of the data will be subtracted from
+        every point prior to taking the FFT.  This may improve accuracy and visibility of small components.
+    \item \verb|complexInput| --- Specifies that the names of the input columns are of the form Real<rootname>
+        and Imag<rootname>, giving the real and imaginary part of a function to be analyzed. In this case, 
+        the <depen-quantity> entries in the -columns option give the rootname, not the full quantity name.
+        It has options folded and unfolded, unfolded means the input frequency space input is unfolded and
+        it must have negative frequency. default is "folded", If no option is given, and if the input file
+        has "SpectrumFolded" parameter, then it will be defined by this parameter.
+    \item \verb|fullOutput| --- Specifies that in addition to the magnitude, the phase, real part, and imaginary
+        part of each FFT will be included in the output. It also has folded and unfolded options, while the unfold
+        option outputs the unfolded frequency-space (full FFT spectrum), but the folded option outputs the folded
+        spectrum (half FFT).
+    \item \verb|inverse| --- produce inverse fourier transform. when it is given, the output is always unfolded spectrum and
+        it only works with complexInput that has imaginary data.
+    \item \verb|psdOutput| --- Specifies that in in addition to ordinary FFT data, the power-spectral-densities
+        will also be included in the output.  The units of the PSD are of the form ${\rm x^2/t}$, where
+        x (t) represents the units of the independent (dependent) variable.  These units are conventional with
+        PSDs, which are normalized to the frequency spacing so that integrating the PSD gives the signal power.
+    \end{itemize}
+\item {\bf How to use the folded and unfolded options} There are three cases as listed in the following:
+    \begin{itemize}
+    \item real input without inverse option
+        \begin{table}[hbt]
+        \caption{real input without inverse option}
+        \begin{tabular}{|c|c|c|c|}  
+        Input & \multicolumn{3}{|c|}{Output} \\ 
+        Real Number & Real Number & Imaginary Number & output option \\ \hline
+        N & N/2 & N/2  &folded \\ \hline
+        N & N   & N  &unfolded \\ \hline
+        \end{tabular}
+        \label{table1}
+        \end{table}
+    \item complexInput without inverse option
+        \begin{table}[hbt]
+        \caption{complexInput without inverse option}
+        \begin{tabular}{|c|c|c|c|c|c|c|}  
+        \multicolumn{4}{|c|}{ComplexInput}  &\multicolumn{3}{|c|}{Output} \\ 
+        Real Number & Imaginary Number & Condition & Input option & Real Number & Imaginary Number & output option \\ \hline
+        N & N & & folded N & N & N & folded \\ \hline
+        N & N & last imag=0 & folded & 2*(N-1) & 2*(N-1) &unfolded \\ \hline
+        N & N & last imag!=0 & folded & 2*(N-1)+1) & 2*(N-1)+1 & unfolded \\ \hline
+        N & N & & unfolded & N/2 & N/2 & folded \\ \hline
+        N & N & & unfolded & N & N & unfolded \\ \hline
+        \end{tabular}
+        \label{table2}
+        \end{table}
+     \item with inverse option, since inverse only works with complexInptut, and inverse spectrum is always unfolded, so -fullOutput=folded will be changed to -fullOutput=unfolded with -inverse option.
+        \begin{table}[hbt]
+        \caption{complexInput with inverse option}
+        \begin{tabular}{|c|c|c|c|c|c|} 
+        \multicolumn{4}{|c|}{ComplexInput}  &\multicolumn{2}{|c|}{Inverse Output} \\
+        Real Number & Imaginary Number & Condition & Input option & Real Number & Imaginary Number  \\ \hline
+        N & N & last imag=0 & folded & 2*(N-1) & 2*(N-1) \\ \hline
+        N & N & last imag!=0 & folded & 2*(N-1)+1) & 2*(N-1)+1\\ \hline
+        N & N & & unfolded & N & N\\ \hline
+        \end{tabular}
+        \label{table3}
+        \end{table}
+     \end{itemize}
+\item {\bf Simple FFT and inverse FFT pairs} If you want to take the FFT of real data, manipulate the result (e.g.,
+  to apply a custom filter), then invert the FFT, use the following options
+  \begin{itemize}
+  \item For forward FFT: \verb|-fullOutput=folded|.
+  \item For inverse FFT: \verb|-complexInput=folded -fullOutput|. The quantity of interest is the real part of the inverse
+    FFT, presumably.
+  \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \hyperref[exampleData]{Data for Examples}
+    \item \progref{sddsdigfilter}
+    \item \progref{sddsnaff}
+    \end{itemize}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+

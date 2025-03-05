@@ -1,0 +1,311 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{rpn Calculator Module}
+\label{rpn}
+\label{rpn Calculator Module}
+
+\begin{itemize}
+\item {\bf description:} \hspace*{1mm}\\
+
+Many of the SDDS toolkit programs employ a common Reverse Polish Notation (RPN) calculator module for equation evaluation.
+This module is based on the {\tt rpn} programmable calculator program.  It is also available in a commandline
+version called {\tt rpnl} for use in shell scripts.  This manual page discusses the programs {\tt rpn} and 
+{\tt rpnl},  and indicates how the {\tt rpn} expression evaluator is used in SDDS tools.
+\item {\bf examples:} \\
+Do some floating-point math using shell variables:
+(Note that the asterisk (for multiplication) is escaped in order to protect it from interpretation by the shell.)
+\begin{flushleft}{\tt
+set pi = 3.141592\\
+set radius = 0.15\\
+set area = `rpnl \$pi \$radius 2 pow \verb|\|*`\\
+}\end{flushleft}
+Use {\tt rpn} to do the same calculation:
+\begin{flushleft}{\tt
+% rpn\\
+rpn> 3.141592 sto pi\\
+rpn> 0.15 sto radius\\
+rpn> radius 2 pow pi *\\
+	      0.070685820000000\\
+rpn> quit\\
+% \\
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+rpn [{\em filenames}]\\
+rpnl {\em rpnExpression}
+}\end{flushleft}
+\item {\bf Overview of {\tt rpn} and {\tt rpnl}}:
+
+{\tt rpn} is a program that places the user in a Reverse Polish Notation calculator shell.  Commands to {\tt rpn} consist
+of generally of expressions in terms of built-in functions, user-defined variables, and user-defined functions.  Built-in
+functions include mathematical operations, logic operations, string operations, and file operations.  User-defined
+functions and variables may be defined ``on the fly'' or via files containing {\tt rpn} commands. 
+
+The command {\tt rpn} {\em filename} invokes the {\tt rpn} shell with {\em filename} as a initial command file.
+Typically, this file would contain instructions for a computation.  Prior to execution of any files named the
+commandline, {\tt rpn} first executes the instructions in the file named by the environment variable {\tt RPN\_DEFNS}, if
+it is defined.  This file can be used to store commonly-used variable and function definitions in order to customize the
+{\tt rpn} shell.  This same file is read by {\tt rpnl} and all of the SDDS toolkit programs that use the {\tt rpn}
+calculator module.  An example of such a file is included with the code.
+
+As with any RPN system, {\tt rpn} uses stacks. Separate stacks are maintained for numerical, logical, string data, and
+command files.
+
+{\tt rpnl} is essentially equivalent to executing {\tt rpn}, typing a single command, then exiting.  However, {\tt rpnl}
+has the advantage that it evaluates the command and prints the result to the screen without any need for user input.
+Thus, it can be used to provide floating point arithmetic in shell scripts.  Because of the wide variety of operations
+supported by the {\tt rpn} module and the availability of user-defined functions, this is a very powerful feature even for
+command shells that include floating point arithmetic.
+
+Built-in commands may be divided into four broad categories: mathematical operations, logical operations, string
+operations, and file operations.  (There are also a few specialized commands such as creating and listing user-defined
+functions and variables; these will be addressed in the next section).  Any of these commands may be characterized
+by the number of items it uses from and places on the various stacks.
+
+\begin{itemize}
+\item Mathematical operations:
+\begin{itemize}
+\item Using {\tt rpn} variables:\\
+The {\tt sto} (store) function allows both the creation of {\tt rpn} variables and modification of their
+contents.  {\tt rpn} variables hold double-precision values.  The variable name may be any string starting
+with an alphabetic character and containing no whitespace.  The name may not be one used for a built-in
+or user-defined function.   There is no limit to the number of variables that may be defined.
+
+For example, {\tt 1 sto one} would create a variable called {\tt one} and store the value 1 in it.  To recall the
+value, one simply uses the variable name.  E.g., one could enter {\tt 3.1415925 sto pi} and later enter
+{\tt pi } to retrieve the value of $\pi$.
+
+\item Basic arithmetic: {\tt + - * / sum}\\
+
+With the exception of {\tt sum}, these operations all take two values
+from the numeric stack and push one result onto the numeric stack.
+For example, {\tt 5 2 -} would push 5 onto the stack, push 2 onto the
+stack, then push the result (3) onto the stack.  
+
+{\tt sum} is used to sum the top {\tt n} items on the stack, exclusive
+of the top of the stack, which gives the number of items to sum.  For
+example, {\tt 2 4 6 8 4 sum} would put the value {\tt 20} on the stack.
+
+\item Basic scientific functions: {\tt sin cos acos asin atan atan2 sqrt sqr pow exp ln}\\
+
+With the exception of {\tt atan2} and {\tt pow}, these operations all take one item from the numeric stack and push one
+result onto that stack.
+
+{\tt sin} and {\tt cos} are the sine and cosine functions, while {\tt asin}, {\tt acos}, and {\tt atan} are inverse
+trigonometic functins.  {\tt atan2} is the two-argument inverse tangent: {\tt x y atan2} pushes the value ${\rm atan(y/x)}$
+with the result being in the interval ${\rm [-\pi, \pi]}$.
+
+{\tt sqrt} returns the positive square-root of nonnegative values.  {\tt sqr} returns the square of a value.  {\tt pow}
+returns a general power of a number: {\tt x y pow} pushes ${\rm x t}$ onto the stack.  Note that if {\tt y} is
+nonintegral, then {\tt x} must be nonnegative.
+
+{\tt exp} and {\tt ln} are the base-e exponential and logarithm functions.
+
+\item Special functions: {\tt Jn Yn cei1 cei2 erf erfc gamP gamQ lngam}\\
+{\tt Jn} and {\tt Yn} are the Bessel functions of integer order of the first and second kind\cite{Abramowitz}.  Both take
+two items from the stack and place one result on the stack.  For example, {\tt x i Jn} would push ${\rm J_i(x)}$ onto the
+stack.  Note that ${\rm Y_n(x)}$ is singular at x=0.
+
+{\tt cei1} and {\tt cei2} are the 1st and 2nd complete elliptic integrals.  The argument is the modulus k, as seen in
+the following equations (the functions K and E are those used by Abramowitz\cite{Abramowitz}).
+\[{\rm cei1(k) = K(k^2) = \int_0^{\pi/2} \frac{d\theta}{\sqrt{1 - k^2 sin^2 \theta}}  } \] \\
+\[{\rm cei2(k) = E(k^2) = \int_0^{\pi/2} \sqrt{1 - k^2 sin^2 \theta} d\theta }\]
+
+{\tt erf} and {\tt erfc} are the error function and complementary error function.  By definition, ${\rm erf(x) + erfc(x)}$
+is unity.  However, for large x, {\tt x erf 1 -} will return 0 while {\tt x erfc} will return a small, nonzero value.
+The error function is defined as\cite{Abramowitz}:
+\[ {\rm erf(x) = \frac{2}{\sqrt{\pi}} \int_0 x e^{-t^2} dt} \]
+Note that ${\rm erf(x/\sqrt{2}) }$ is the area under the normal Gaussian curve between ${\rm -x}$ and ${\rm x}$.
+
+{\tt gamP} and {\tt gamQ} are, respectively, the incomplete gamma function and its complement
+\cite{Abramowitz}:
+\[{\rm gamP(a, x) = 1-gamQ(a, x) = \frac{1}{\Gamma(a)} \int_0^x e^{-t} t^{a-1} dt \hspace*{10mm}  a>0} \]
+These functions take two arguments; the 'a' argument is place on the stack first.
+
+{\tt lngam} is the natural log of the gamma function.  For integer arguments, {\tt x lngam} is 
+${\rm ln( (x-1)!) }$.  The gamma function is defined as\cite{Abramowitz}:
+\[ {\rm \Gamma (x) = \int_0^\infty t^{x-1} e^{-t} dt } \]
+
+\item Numeric stack operations: {\tt cle n= pop rdn rup stlv swap view ==}\\
+{\tt cle} clears the entire stack, while {\tt pop} simply removes the top element.  {\tt ==} duplicates the top item on
+the stack, while {\tt x n=} duplicates the top x items of the stack (excluding the top itself).  {\tt swap} swaps the top
+two items on the stack. {\tt rdn} (rotate down) and {\tt rup} (rotate down) are stack rotation commands, and are the
+inverse of one another.  {\tt stlv} pushes the stack level (i.e., the number of items on the stack) onto the stack.
+Finally, {\tt view} prints the entire stack from top to bottom.
+
+\item Random number generators: {\tt rnd grnd}\\
+{\tt rnd} returns a random number from a uniform distribution on ${\rm [0, 1]}$.  {\tt grnd} returns
+a random number from a normal Gaussian distribution.
+
+\item Array operations: {\tt mal [ ]}\\
+{\tt mal} is the Memory ALlocation command; it pops a single value from the numeric stack, and returns a
+``pointer'' to memory sufficient to store the number of double-precision values specified by that value.  This
+pointer is really just an integer, which can be stored in a variable like any other number.  It is used to place
+values in and retrieve values from the allocated memory.  
+
+\verb|]| is the memory store operator. A sequence of the form {\tt {\em value} {\em index} {\em addr} ]} results in
+{\em value} being stored in the {\em index} position of address {\em addr}.  {\em value}, {\em index}, and {\em
+addr} are consumed in this operation.  Indices start from 0.
+
+Similarly, {\tt {\em index} {\em addr} [} value pushes the value in the {\em index} position of address {\em addr}
+onto the stack.  {\em index} and {\em addr} are consumed in this operation.
+
+\item Miscellaneous: {\tt tsci int}\\
+{\tt tsci} allows one to toggle display between scientific and variable-format notation.  In the former, all
+numbers are displayed in scientific notation, whereas in the later, only sufficiently large or small numbers are
+so displayed.  (See also the {\tt format} command below.)
+
+{\tt int} returns the integer part of the top value on the stack by truncating the noninteger part.  
+
+\end{itemize}
+\item {\bf Logical operations}: \verb.! && < == > ? $ vlog ||.\\
+\begin{itemize}
+\item Conditional execution: {\tt ?}
+The question-mark operator functions to allow program branching.  It is meant to remind the user of the C operator for
+conditional evaluation of expressions.  A conditional statement has the form\\
+{\tt ? {\em executeIfTrue} : {\em executeIfFalse} \$}\\
+The colon and dollar sign function as delimiters for the conditionally-executed instructions.  The {\tt ?} operator pops the
+first value from the logic stack.  It branches to the first set of instructions if this value is ``true'', and to the
+second if it is ``false''.
+
+\item Comparisons: {\tt < == > }\\
+These operations compare two values from the numeric stack and push a value onto the logic stack indicating the result.
+Note that the values from the numeric stack are left intact.  That is, these operations push the numeric values back onto the
+stack after the comparison.
+\item Logic operators: \verb. && || !.\\
+These operators consume values from the logic stack and push new results onto that stack.
+\verb|&&| returns the logical and of the top two values, while {\tt ||} returns the logical or.
+{\tt !} is the logical negation operator.
+\item Miscellaneous: {\tt vlog}\\
+This operator allows viewing the logic stack.  It lists the values on the stack starting at the top.
+
+\item Examples:\\
+Suppose that a quantity is tested for its sign.  If the sign is negative, then have the conditional return a -1, if the sign is positive then return a +1.
+
+Suppose we are running in the rpn shell and that the quantity 4 is initially pushed onto the stack.  The command ``\verb.0 < ? -1 : 1 $.\ '' that accomplishes the sign test will be executed as follows.
+\begin{flushleft}
+\begin{verbatim}
+command     stack    logical stack
+0           0        stack empty
+            4
+
+<           0        false  <-- new value
+            4
+
+? 1 : -1 $  1        stack empty
+            0  
+            4
+\end{verbatim}
+\end{flushleft}
+In order to keep the stack small, the command should be written ``\verb.0 < pop pop ? -1 : 1 $.\ '', where the pop commands would eliminate the 0 and 4 from the stack before the conditional is executed.
+
+If the command is executed with rpnl command in a C-shell, then the \$
+character has to be followed by a blank space to prevent the shell
+from interperting the \$ as part of variable:\\
+
+C-shell\verb.>.\ rpnl \verb."4 0 < pop pop ? -1 : 1 $ ".\\
+
+If the command is executed in a C-shell sddsprocess command to create
+a new column, then we write:\\
+\begin{flushleft}
+\begin{verbatim}
+sddsprocess <infile> <outfile> \
+   -def=col,NewColumn,"OldColumn 0 < pop pop ? -1 : 1 $ "
+
+\end{verbatim}
+\end{flushleft}
+which is similar to the rpnl command above.
+
+If the sddsprocess command is run in a tcl/tk shell, the \$ character can be escaped with a backslash as well as with a blank space:\\
+\begin{flushleft}
+\begin{verbatim}
+sddsprocess <infile> <outfile> \
+   "-def=col,NewColumn,OldColumn 0 < pop pop ? -1 : 1 \$"
+
+\end{verbatim}
+\end{flushleft}
+Note that the double quotes enclose the whole command argument, not just the sub-argument.
+
+\end{itemize}
+\item {\bf String operations}: {\tt "" =str cshs format getformat pops scan sprf vstr xstr}\\
+
+\begin{itemize}
+\item Stack operations: {\tt "" =str pops vstr}\\
+To place a string on the string stack, one simply encloses it in double quotation marks.
+{\tt =str} duplicates the top of the string stack.  {\tt pops} pops the top item off
+of the string stack.  {\tt vstr} prints (views) the string stack, starting at the top.
+\item Format operations: {\tt format getformat}\\
+{\tt format} consumes the top item of the string stack, and causes it to be used as
+the default printf-style format string for printing numbers.  {\tt getformat} 
+pushes onto the string stack the default printf-style format string for printing numbers.
+\item Print/scan operations: {\tt scan sprf}\\
+{\tt scan} consumes the top item of the string stack and scans it for a number; it
+pushes the number scanned onto the string stack, pushes the remainder of the string
+onto the string stack, and pushes true/false onto the logic stack to indicate
+success/failure.  {\tt sprf} consumes the top of the string stack to get a sprintf
+format string, which it uses to print the top of the numeric stack; the resulting
+string is pushed onto the string stack.  The numeric stack is left unchanged.
+\item string comparison opertions:
+{\tt streq} compares if two strings are the same.
+{\tt strgt} compares if left string is greater than right string.
+{\tt strlt} compares if left string is less than right string.
+{\tt strmatch} compares if left string matches right string pattern.
+\item Other operations: {\tt cshs xstr}\\
+{\tt cshs} executes the top string of the stack in a C-shell subprocess; note that
+if the command requires terminal input, {\tt rpn} will hang.  {\tt xstr} executes
+the top string of the stack as an rpn command.
+{\tt strlen} returns the lenght of a string.
+\end{itemize}
+
+\item {\bf File operations}: {\tt @ clos fprf gets open puts}\\
+\begin{itemize}
+\item Command file input: {\tt @}\\
+The {\tt @} operator consumes the top item of the string stack,
+pushing it onto the command file stack.  The command file is executed
+following completion of processing of the current input line.  Command
+file execution may be nested, since the files are on a stack.  The
+name of the command file may have options appended to it in the format
+{\tt {\em filename},{\em option}}.  Presently, the only option
+recognized is 's', for silent execution.  If not present, the command file
+is echoed to the screen as it is executed.  
+
+Example: {\tt "commands.rpn,s" @} would silently execute the {\tt rpn}
+commands in the file {\tt commands.rpn}.
+
+\item Opening and closing files: {\tt clos open}\\
+{\tt open} consumes the top of the string stack, and opens a file with
+the name given in that element.  The string is of the format {\tt {\em
+filename},{\em option}}, where {\em option} is either 'w' or 'r' for
+write or read.  {\tt open} pushes a file number onto the numeric
+stack.  This should be stored in a variable for use with other file IO
+commands.  The file numbers 0 and 1 are predefined, respectively, as
+the standard input and standard output.
+
+{\tt clos} consumes the top of the numeric stack, and uses it as the
+number of a file to close.  
+
+\item Input/output commands: {\tt fprf gets puts}\\
+These commands are like the C routines with similar names.
+{\tt fprf} is like fprintf; it consumes the top of the string stack
+to get a fprintf format string for printing a number.  It consumes
+the top of the numeric stack to get the file number, and uses the
+next item on the numeric stack as the number to print.  This number
+is left on the stack.
+
+{\tt gets} consumes the top of the numeric stack to get a file
+number from which to read.  It reads a line of input from the
+given file, and pushes it onto the string stack.  The trailing
+newline is removed.  If successful, {\tt gets} pushes true onto
+the logic stack, otherwise it pushes false.
+
+{\tt puts} consumes the top of the string stack to get a string to
+output, and the top of the numeric stack to get a file number.  Unlike
+the C routine of the same name, a newline is {\em not} generated.
+Both {\tt puts} and {\tt fprf} accept C-style escape sequences for
+including newlines and other such characters.
+
+\end{itemize}
+
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}

@@ -1,0 +1,59 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{SDDS Editing}
+\label{SDDSediting}
+
+This manual page does not describe a program, but rather a facility that is common to several
+programs.  In particular, several SDDS programs use a common syntax for specifying editing of
+string data.  The editing commands for these programs are composed of a series of subcommands of
+the form
+[{\em count}]{\tt commandLetter}[{\em commandSpecificData}]
+As indicated, the {\em count} and {\em commandSpecificData} are optional.
+
+The commands are as follows:
+\begin{itemize}
+\item [] [{\em n}]{\tt f} --- move forward 1 or {\em n} characters.
+\item [] [{\em n}]{\tt b} --- move backward 1 or {\em n} characters.
+\item [] [{\em n}]{\tt d} --- delete the next character or {\em n} characters.
+\item [] [{\em n}]{\tt F} --- move forward 1 or {\em n} words.
+\item [] [{\em n}]{\tt B} --- move backward 1 or {\em n} words.
+\item [] [{\em n}]{\tt D} --- delete the next word or {\em n} words.
+\item [] {\tt a} --- Go to the beginning of the string.
+\item [] {\tt e} --- Go to the end of the string.
+\item [] [{\em n}]{\tt i}{\em -delim-}{\em text}{\em -delim-} --- Insert {\em text}, delimited
+        by the character {\em -delim-} 1 or {\em n} times.  For example, ``i/thisString/'' would insert
+        ``thisString'' once.
+\item [] [{\em n}]s{\em -delim-}{\em text}{\em -delim-} --- Search for {\em text},  delimited
+        by the character {\em -delim-} 1 or {\em n} times.  The position is left at the end
+        of the search string.  {\em -delim-} may be any character except a question mark.
+\item [] S{\em -delim-}{\em text}{\em -delim-} --- Search for {\em text},  delimited
+        by the character {\em -delim-}, leaving the position at the start of the
+        search string. {\em -delim-} may be any nonspace character except a question mark.
+\item [] [{\em n}]s?{\em -delim-}{\em text}{\em -delim-} --- Search for {\em text},  delimited
+         by the character {\em -delim-} 1 or {\em n} times.   Abort all subsequent editing
+        if the search fails.  If the search suceeds, leave the position at the end of the
+        search string. {\em -delim-} may be any nonspace character except a question mark.
+\item [] S?{\em -delim-}{\em text}{\em -delim-} --- Search for {\em text},  delimited
+         by the character {\em -delim-}.   Abort all subsequent editing
+        if the search fails.  If the search suceeds, leave the position at the start of the
+        search string. {\em -delim-} may be any nonspace character except a question mark.
+\item [] [{\em n}]k --- Delete forward from the present position 1 or {\em n} characters, placing them in the kill buffer.
+\item [] [{\em n}]K --- Delete forward from the present position 1 or {\em n} words, placing them in the kill buffer.
+\item [] z{\em char} --- Delete forward from the present position up to the first occurence of the character {\em char},
+        placing the deleted text in the kill buffer.
+\item [] [{\em n}]Z{\em char} --- Delete 1 or {\em n} times up to and including the
+        character {\em char}, placing the deleted text in the kill buffer.
+\item [] [{\em n}]y --- Yank the kill buffer into the string 1 or {\em n} times.
+\item [] [{\em n}]\%{\em -delim-}{\em text1}{\em -delim-}{\em text2}{\em -delim-} ---
+        Replace {\em text1} with {\em text2} 1 or {\em n} times starting at the
+        present position.  {\em -delim-} may be any nonspace character.  For example,
+        ``10\%/c/C/'' would capitalize the next 10 occurences of the character 'c'.
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddsprocess}
+    \item \progref{sddsplot}
+    \item \progref{sddsconvert}
+    \end{itemize}
+\end{itemize}
+

@@ -1,0 +1,52 @@
+% $Log: not supported by cvs2svn $
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sdds2plaindata}
+\label{sdds2plaindata}
+
+\begin{itemize}
+\item {\bf description:} Converts SDDS data to a plain data file with simple formatting.
+\item {\bf example:} 
+\begin{flushleft}{\tt
+sdds2plaindata data.input data.output -outputMode=binary "-separator= " -parameter=time -column=x -column=y
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sdds2plaindata [{\em Inputfile}] [{\em Outputfile}] [-pipe[=in][,out]] 
+[-outputMode=<ascii|binary>]
+[-separator={\em string}]
+[-noRowCount]
+[-order=<rowMajor|columnMajor>]
+[-parameter={\em name},[,format={\em string}] ...]
+[-column={\em name},[,format={\em string}] ...]
+[-nowarnings]
+}\end{flushleft}
+\item {\bf files: }
+{\em Inputfile} is the SDDS input file.
+
+{\em Outputfile} is a file that is similar to SDDS files in that it contains parameter and column data. However this file does not contain SDDS header information. The column data does not need to be preceded by a row count but it is recommended. Also the column data can be separated by a user supplied string. Binary plaindata files are also allowed.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=in][,out]} --- The standard SDDS Toolkit pipe option.
+    \item {\tt -outputMode=<ascii|binary>} --- The plain data file can be written in ascii or binary format.
+    \item {\tt -separator={\em string}} --- In ascii mode the columns can be separated by the given string.
+    \item {\tt -noRowCount} --- The number of rows will not be included in the plain data file. 
+	If binary mode is used the number of rows will always be written to the file.
+    \item {\tt -order=<rowMajor|columnMajor>} --- Row major order is the default. 
+	Here each row consists of one element from each column. 
+	In column major order each column is written entirely on one row.
+    \item {\tt -parameter={\em name},[,format={\em string}]} --- 
+	Add this option for each parameter to add to the plain data file.
+    \item {\tt -column={\em name},[,format={\em string}]} --- 
+	Add this option for each column to add to the plain data file.
+    \end{itemize}
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{plaindata2sdds}
+    \end{itemize}
+\item {\bf author:} R. Soliday, ANL/APS.
+\end{itemize}
+
