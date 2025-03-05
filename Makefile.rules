@@ -8,8 +8,7 @@ endif
 OBJ_DIR = O.$(OS)-$(ARCH)
 BIN_DIR = $(DD)../bin/$(OS)-$(ARCH)
 LIB_DIR = $(DD)../lib/$(OS)-$(ARCH)
-
-ifneq ($(wildcard $(DD)../.svn),)
+ifneq ($(wildcard $(DD)../.svn $(DD)../../../../.svn),)
  USE_EPICS_DIRS = 1
  EPICS_HOST := $(shell uname -s | tr '[:upper:]' '[:lower:]')
  EPICS_ARCH = $(ARCH)
@@ -163,7 +162,7 @@ endif
 
 ifeq ($(OS), Windows)
   EXTRA_INC_DIRS = -I$(DD)../tiff -I$(DD)../gd -I$(DD)../png -I$(DD)../zlib -I$(DD)../lzma -I$(DD)../../gsl
-  EXTRA_INC_DIRS = 
+  EXTRA_INC_DIRS =
 else
   EXTRA_INC_DIRS = $(sort $(dir $(filter-out ,$(Z_LIB) $(LZMA_LIB) $(HDF5_LIB) $(FFTW3_LIB) $(SZ_LIB) $(GSL_LIB) $(GSLCBLAS_LIB))))
   EXTRA_INC_DIRS := $(patsubst %/lib64/,%/include, $(EXTRA_INC_DIRS))
@@ -331,7 +330,7 @@ ifeq ($(OS), Windows)
   PYTHON_INCLUDE_DIRS = -I$(PYTHON_PREFIX)/include
 
 
-  
+
   #-nologo       Suppresses the display of the startup banner and version information.
   #-FC           Displays the full path of source code files in diagnostic messages.
   #-D__STDC__=0  Defines the preprocessor macro __STDC__ with a value of 0. This can be useful when dealing with code that checks for standard compliance.
