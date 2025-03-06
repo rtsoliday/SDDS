@@ -113,9 +113,10 @@ PROD = agilentArb2sdds \
         tiff2sdds \
         wfm2sdds
 
+# sddssplinefit
 ifneq ($(OS), Windows)
   PROD += sddslogserver sddslogclient
-  PROD += sddskde sddskde2d sddslocaldensity sddssplinefit
+  PROD += sddskde sddskde2d sddslocaldensity
   #PROD += agilentwaveform2sdds agilentcomm 
 endif
 

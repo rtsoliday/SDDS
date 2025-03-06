@@ -55,12 +55,12 @@ SZ_LIB = $(firstword $(wildcard \
            $(addsuffix /libsz.a, $(LIB_DIRS))))
 GSL_LIB = $(firstword $(wildcard \
            $(addsuffix /libgsl.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libgsl.so, $(LIB_DIRS)) \
-           $(addsuffix /libgsl.a, $(LIB_DIRS))))
+           $(addsuffix /libgsl.a, $(LIB_DIRS)) \
+           $(addsuffix /libgsl.so, $(LIB_DIRS))))
 GSLCBLAS_LIB = $(firstword $(wildcard \
               $(addsuffix /libgslcblas.dylib, $(LIB_DIRS)) \
-              $(addsuffix /libgslcblas.so, $(LIB_DIRS)) \
-              $(addsuffix /libgslcblas.a, $(LIB_DIRS))))
+              $(addsuffix /libgslcblas.a, $(LIB_DIRS)) \
+              $(addsuffix /libgslcblas.so, $(LIB_DIRS))))
 PNG_LIB = $(firstword $(wildcard \
            $(addsuffix /libpng.dylib, $(LIB_DIRS)) \
            $(addsuffix /libpng.so, $(LIB_DIRS)) \

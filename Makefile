@@ -22,10 +22,14 @@ ifeq ($(OS), Windows)
     $(error exiting)
   endif
 endif
+ifeq ($(OS), Linux)
+  GSL_LOCAL = $(wildcard gsl)
+endif
 
 include Makefile.rules
 
 DIRS = $(GSL_REPO)
+DIRS += $(GSL_LOCAL)
 DIRS += include
 DIRS += meschach
 DIRS += xlslib
@@ -67,6 +71,11 @@ ifneq ($(GSL_REPO),)
   $(GSL_REPO):
 	$(MAKE) -C $@ -f Makefile.MSVC all
 endif
+ifneq ($(GSL_LOCAL),)
+  GSL_CLEAN = $(MAKE) -C $(GSL_LOCAL) clean
+  $(GSL_LOCAL):
+	$(MAKE) -C $@ all
+endif
 include:
 	$(MAKE) -C $@
 meschach: include
@@ -81,7 +90,7 @@ mdblib: lzma
 	$(MAKE) -C $@
 mdbmth: mdblib
 	$(MAKE) -C $@
-rpns/code: mdbmth $(GSL_REPO)
+rpns/code: mdbmth $(GSL_REPO) $(GSL_LOCAL)
 	$(MAKE) -C $@
 namelist: rpns/code
 	$(MAKE) -C $@
@@ -168,5 +177,6 @@ ifneq ($(MPI_CC),)
 endif
 
 distclean: clean
+	$(GSL_CLEAN)
 	rm -rf bin/$(OS)-$(ARCH)
 	rm -rf lib/$(OS)-$(ARCH)
