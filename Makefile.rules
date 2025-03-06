@@ -47,8 +47,8 @@ LZMA_LIB = $(firstword $(wildcard \
            $(addsuffix /lzma.lib, $(LIB_DIR))))
 HDF5_LIB = $(firstword $(wildcard \
            $(addsuffix /libhdf5.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libhdf5.so, $(LIB_DIRS)) \
-           $(addsuffix /libhdf5.a, $(LIB_DIRS))))
+           $(addsuffix /libhdf5.a, $(LIB_DIRS)) \
+           $(addsuffix /libhdf5.so, $(LIB_DIRS))))
 SZ_LIB = $(firstword $(wildcard \
            $(addsuffix /libsz.dylib, $(LIB_DIRS)) \
            $(addsuffix /libsz.so, $(LIB_DIRS)) \

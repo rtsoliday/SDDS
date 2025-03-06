@@ -24,12 +24,14 @@ ifeq ($(OS), Windows)
 endif
 ifeq ($(OS), Linux)
   GSL_LOCAL = $(wildcard gsl)
+  HDF5_LOCAL = $(wildcard hdf5)
 endif
 
 include Makefile.rules
 
 DIRS = $(GSL_REPO)
 DIRS += $(GSL_LOCAL)
+DIRS += $(HDF5_LOCAL)
 DIRS += include
 DIRS += meschach
 DIRS += xlslib
@@ -76,6 +78,11 @@ ifneq ($(GSL_LOCAL),)
   $(GSL_LOCAL):
 	$(MAKE) -C $@ all
 endif
+ifneq ($(HDF5_LOCAL),)
+  HDF5_CLEAN = $(MAKE) -C $(HDF5_LOCAL) clean
+  $(HDF5_LOCAL):
+	$(MAKE) -C $@ all
+endif
 include:
 	$(MAKE) -C $@
 meschach: include
@@ -110,7 +117,7 @@ matlib: fftpack
 	$(MAKE) -C $@
 mdbcommon: matlib
 	$(MAKE) -C $@
-utils: mdbcommon
+utils: mdbcommon $(HDF5_LOCAL)
 	$(MAKE) -C $@
 2d_interpolate/nn: utils
 	$(MAKE) -C $@
@@ -178,5 +185,6 @@ endif
 
 distclean: clean
 	$(GSL_CLEAN)
+	$(HDF5_CLEAN)
 	rm -rf bin/$(OS)-$(ARCH)
 	rm -rf lib/$(OS)-$(ARCH)
