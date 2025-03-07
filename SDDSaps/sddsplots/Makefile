@@ -30,6 +30,9 @@ CFLAGS += -DUSE_GD_LIBRARY -DzLib -I../../include
 ifeq ($(OS), Linux)
   CFLAGS += -fopenmp
   CCFLAGS += -fopenmp
+ifeq ($(IMPROV_BUILD),1)
+  CFLAGS += "-DMOTIF_DEVICE=1"
+endif
   LDFLAGS += -fopenmp
   PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lmdbplt -lmdbcommon -lSDDS1 -lrpnlib -lmdbmth -lmdblib

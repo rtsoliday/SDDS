@@ -597,7 +597,11 @@ FILE *outfile;
 extern void shorten_filename(char *s);
 extern void cleanup_label(char *s);
 
+#ifdef MOTIF_DEVICE
+#define DEFAULT_DEVICE "motif"
+#else
 #define DEFAULT_DEVICE "qt"
+#endif
 
 #define DEFAULT_FONT "rowmans"
 
