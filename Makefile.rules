@@ -23,6 +23,8 @@ ifneq ($(wildcard $(DD)../.svn $(DD)../../../../.svn),)
  EPICS_BIN_DIR = $(DD)../../../bin/$(EPICS_HOST)-$(EPICS_ARCH)
  EPICS_INC_DIR = $(DD)../../../include
  EPICS_EXTENSIONS_LIB_DIR = ../../../../../epics/extensions/lib/$(EPICS_HOST)-$(EPICS_ARCH)
+ GSL_INC_LOCAL = -I$(DD)../gsl/
+ EPICS_EXTENSIONS_GSL_INC_LOCAL = -I../../../../../epics/extensions/src/SDDS/gsl/
 endif
 
 # Common library search paths
@@ -135,6 +137,17 @@ ICONV_LIB = $(firstword $(wildcard \
           $(addsuffix /libiconv.so, $(LIB_DIRS)) \
           $(addsuffix /libiconv.a, $(LIB_DIRS))))
 
+ifneq ($(wildcard /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0),)
+  IMPROV_BUILD=1
+  LZMA_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0/xz-5.4.1-gju4bpk/lib/liblzma.so
+  HDF5_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-11.4.0/hdf5-1.14.2-l6qnsjk/lib/libhdf5.so
+  TIFF_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-11.4.0/libtiff-4.5.1-bzputfw/lib64/libtiff.so
+  GD_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libgd-2.3.3-enxppnl/lib/libgd.so
+  JPEG_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-11.4.0/libjpeg-turbo-3.0.0-hbvbijw/lib64/libjpeg.so
+  FFTW3_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0/amdfftw-4.1-dd3vgn3/lib/libfftw3.so.3.6.10
+endif
+
+
 ifeq ($(words $(wildcard /usr/local/oag/3rdParty/intel/oneapi/mkl/latest)),1)
  MKLROOT = /usr/local/oag/3rdParty/intel/oneapi/mkl/latest
 endif
@@ -159,6 +172,10 @@ else
  LAPACK_CFLAG = -DLAPACK
  LAPACK_INCLUDE = -I/usr/include/lapacke
  LAPACK_LIB = -llapack -lblas
+ ifeq ($(IMPROV_BUILD),1)
+  LAPACK_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/nvhpc-24.3-ksebg4i/Linux_x86_64/24.3/compilers/lib/liblapack.so
+  LAPACK_LIB += /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/nvhpc-24.3-ksebg4i/Linux_x86_64/24.3/compilers/lib/libblas.so
+ endif
 endif
 
 ifeq ($(OS), Windows)
@@ -171,6 +188,13 @@ else
   EXTRA_INC_DIRS := $(patsubst %/lib/,%/include, $(EXTRA_INC_DIRS))
   EXTRA_INC_DIRS := $(patsubst %/$(OBJ_DIR)/,%, $(EXTRA_INC_DIRS))
   EXTRA_INC_DIRS := $(patsubst %,-I%, $(EXTRA_INC_DIRS))
+
+  ifeq ($(IMPROV_BUILD),1)
+    EXTRA_INC_DIRS += -I/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0/xz-5.4.1-gju4bpk/include
+    EXTRA_INC_DIRS += -I/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-11.4.0/libtiff-4.5.1-bzputfw/include
+    EXTRA_INC_DIRS += -I/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libgd-2.3.3-enxppnl/include
+  endif
+
 endif
 
 ifeq ($(OS), Windows)
@@ -187,7 +211,8 @@ MPI_CC = $(firstword $(wildcard \
            /usr/lib64/openmpi/bin/mpicc \
            /usr/lib64/mpich-3.2/bin/mpicc \
            /opt/local/bin/mpicc \
-           /opt/homebrew/bin/mpicc ))
+           /opt/homebrew/bin/mpicc \
+	   /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0/openmpi-5.0.1-jk5bu46/bin/mpicc ))
 MPI_CCC = $(firstword $(wildcard \
            /usr/bin/mpic++ \
            /usr/bin/mpicxx \
@@ -201,7 +226,8 @@ MPI_CCC = $(firstword $(wildcard \
            /opt/local/bin/mpic++ \
            /opt/local/bin/mpicxx \
            /opt/homebrew/bin/mpic++ \
-           /opt/homebrew/bin/mpicxx ))
+           /opt/homebrew/bin/mpicxx \
+	   /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0/openmpi-5.0.1-jk5bu46/bin/mpicxx ))
 WIN_MPI = $(firstword $(wildcard \
            C:/Program\ Files/Microsoft\ MPI \
            C:/Program\ Files\ (x86)/Microsoft\ SDKs/MPI \

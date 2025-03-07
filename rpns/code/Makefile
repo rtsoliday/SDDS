@@ -25,8 +25,8 @@ LIBRARY_SRC = array.c \
         stack.c \
         udf.c
 
-CFLAGS += -I../../include -DUSE_GSL
-CCFLAGS += -I../../include -DUSE_GSL
+CFLAGS += -I../../include -DUSE_GSL $(GSL_INC_LOCAL)
+CCFLAGS += -I../../include -DUSE_GSL $(GSL_INC_LOCAL)
 
 ifeq ($(OS), Linux)
   CFLAGS += -fopenmp

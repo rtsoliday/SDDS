@@ -22,12 +22,22 @@ ifeq ($(OS), Windows)
     $(error exiting)
   endif
 endif
-ifeq ($(OS), Linux)
-  GSL_LOCAL = $(wildcard gsl)
-  HDF5_LOCAL = $(wildcard hdf5)
-endif
 
 include Makefile.rules
+
+ifeq ($(OS), Linux)
+  GSL_LOCAL = $(wildcard gsl)
+  ifneq ($(IMPROV_BUILD),1)
+    HDF5_LOCAL = $(wildcard hdf5)
+  endif
+endif
+
+ifeq ($(IMPROV_BUILD),1)
+  PLOT_DRIVER = SDDSaps/sddsplots/motifDriver
+else
+  PLOT_DRIVER = SDDSaps/sddsplots/qtDriver
+endif
+
 
 DIRS = $(GSL_REPO)
 DIRS += $(GSL_LOCAL)
@@ -56,7 +66,7 @@ DIRS += SDDSaps
 DIRS += SDDSaps/sddsplots
 #DIRS += SDDSaps/sddsplots/winMotifDriver
 #DIRS += SDDSaps/sddsplots/motifDriver
-DIRS += SDDSaps/sddsplots/qtDriver
+DIRS += $(PLOT_DRIVER)
 DIRS += SDDSaps/sddscontours
 DIRS += SDDSaps/pseudoInverse
 DIRS += levmar
@@ -83,7 +93,7 @@ ifneq ($(HDF5_LOCAL),)
   $(HDF5_LOCAL):
 	$(MAKE) -C $@ all
 endif
-include:
+include: $(GSL_REPO) $(GSL_LOCAL) $(HDF5_LOCAL)
 	$(MAKE) -C $@
 meschach: include
 	$(MAKE) -C $@
@@ -139,7 +149,7 @@ SDDSaps/sddsplots/motifDriver: SDDSaps/sddsplots/winMotifDriver
 	$(MAKE) -C $@
 SDDSaps/sddsplots/qtDriver: SDDSaps/sddsplots
 	$(MAKE) -C $@
-SDDSaps/sddscontours: SDDSaps/sddsplots/qtDriver
+SDDSaps/sddscontours: $(PLOT_DRIVER) SDDSaps/sddsplots
 	$(MAKE) -C $@
 SDDSaps/pseudoInverse: SDDSaps/sddscontours
 	$(MAKE) -C $@

@@ -33,7 +33,9 @@ CFLAGS += -DWL=32 -DFORTRANUNDERSCORE -DOPTIMIZE -I. -I../include
 
 ifeq ($(OS), Linux)
   CC = $(MPI_CC)
-  CFLAGS += -Wno-maybe-uninitialized
+  ifneq ($(IMPROV_BUILD),1)
+    CFLAGS += -Wno-maybe-uninitialized
+  endif
 endif
 
 ifeq ($(OS), Darwin)

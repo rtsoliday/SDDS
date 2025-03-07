@@ -161,8 +161,8 @@ CFLAGS += -DRPN_SUPPORT -DzLib -DSVN_VERSION=\"$(SVN_VERSION)\" -I../include -I.
 CCFLAGS += -DRPN_SUPPORT -DzLib -DSVN_VERSION=\"$(SVN_VERSION)\" -I../include -I../2d_interpolate/nn -I../2d_interpolate/csa -I../xlslib -DUSE_XLS
 
 ifeq ($(OS), Linux)
-  CFLAGS += -fopenmp
-  CCFLAGS += -fopenmp
+  CFLAGS += -fopenmp $(GSL_INC_LOCAL)
+  CCFLAGS += -fopenmp $(GSL_INC_LOCAL)
   LDFLAGS += -fopenmp
   PROD_SYS_LIBS := $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lcsa -lnnetwork -lmdbcommon -lmatlib -lfftpack -lSDDS1 -lrpnlib -lmdbmth -lmdblib -lxls
