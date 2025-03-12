@@ -152,7 +152,7 @@ int main(int argc, char **argv) {
   long mode = -1, matchCode, tmpfile_used;
   int64_t i, j, rows, rowLimit, pagesPerPage=0;
   long breakNext;
-  double gapAmount = 0, gapFactor = 0, changeAmount, changeBase, *columnData = NULL;
+  double gapAmount = 0, gapFactor = 0, changeAmount=0, changeBase, *columnData = NULL;
   char *matchPattern = NULL;
   long matchPatternAfter = 0;
   double increaseOfAmount = -1, decreaseOfAmount = -1;
