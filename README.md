@@ -13,12 +13,12 @@ The **SDDS (Self Describing Data Sets) Library** is a C/C++ library designed for
 ## Prerequisites
 To compile and use the SDDS library, ensure you have installed the following dependencies on your system:
 
-### RHEL
+### RHEL, Fedora, CentOS, Rocky
 ```bash
 sudo yum install gcc gcc-c++ make zlib-devel zstd-devel xz-devel hdf5-devel libaec-devel gsl-devel libpng-devel gd-devel lerc-devel libdeflate-devel libtiff-devel qt5-qtbase-devel blas-devel lapack-devel mpich mpich-devel
 ```
 
-### Ubuntu
+### Ubuntu, Debian
 ```bash
 sudo apt install --ignore-missing gcc g++ make zlib1g-dev libzstd-dev liblzma-dev libhdf5-dev libaec-dev libgsl-dev libpng-dev libgd-dev liblerc-dev libdeflate-dev libtiff-dev qtbase5-dev libblas-dev liblapack-dev mpich libmpich-dev
 ```
