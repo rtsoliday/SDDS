@@ -34,16 +34,16 @@ sudo port install zlib zstd xz hdf5 libaec gsl libpng gd2 lerc libdeflate tiff q
 ```
 
 ### Windows with Cygwin and MSVC
-Install [Microsoft MPI](https://learn.microsoft.com/en-us/message-passing-interface/microsoft-mpi)
-Install [Qt6](https://doc.qt.io/qt-6/qt-online-installation.html)
-Install and build GNU Scientific Library
+- Install [Microsoft MPI](https://learn.microsoft.com/en-us/message-passing-interface/microsoft-mpi)
+- Install [Qt6](https://doc.qt.io/qt-6/qt-online-installation.html)
+- Install and build GNU Scientific Library
 ```bash
 git clone https://github.com/rtsoliday/gsl.git
 cd gsl
 make -f Makefile.MSVC all
 cd ..
 ```
-Download the HDF5 libraries
+- Download the HDF5 libraries
 ```bash
 wget https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6-win-vs2022_cl.zip
 unzip hdf5-1.14.6-win-vs2022_cl.zip
