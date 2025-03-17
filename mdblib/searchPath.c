@@ -58,14 +58,8 @@ char *findFileInSearchPath(const char *filename) {
     char *sddsTags = NULL;
     /* Look for '=' in the copy */
     if ((sddsTags = strchr(localFilename, '='))) {
-        /* Check for SDDS tag format "<filename>=<x>+<y>" */
-        if (!strchr(sddsTags + 1, '+'))
-            sddsTags = NULL;
-        else {
-            /* Split the string without modifying the original */
-            *sddsTags = '\0';
-            sddsTags++;
-        }
+        *sddsTags = '\0';
+        sddsTags++;
     }
 
     char *result = NULL;
