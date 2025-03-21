@@ -89,7 +89,7 @@ char *findFileInSearchPath(const char *filename) {
         free(pathList);
     }
     if (fexists(localFilename)) {
-        cp_str(&result, localFilename);
+        result = strdup(filename);
         free(localFilename);
         return result;
     }

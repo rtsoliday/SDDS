@@ -290,6 +290,10 @@ ifeq ($(OS), Linux)
   ifneq ($(wildcard $(CUSTOM_GCC_PATH)),)
     CC = $(CUSTOM_GCC_PATH)/bin/gcc
     CCC = $(CUSTOM_GCC_PATH)/bin/g++
+    ifeq ($(MPI_CC),/usr/lib64/mpich-3.2/bin/mpicc)
+      MPI_CC :=MPICH_CC=$(CUSTOM_GCC_PATH)/bin/gcc $(MPI_CC)
+      MPI_CCC :=MPICH_CXX=$(CUSTOM_GCC_PATH)/bin/g++ $(MPI_CCC)
+    endif
     AR = $(CUSTOM_GCC_PATH)/bin/gcc-ar -rc
     RANLIB = $(CUSTOM_GCC_PATH)/bin/gcc-ranlib
     F77 = $(CUSTOM_GCC_PATH)/bin/gfortran -m64 -ffixed-line-length-132
