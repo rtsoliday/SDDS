@@ -2,19 +2,19 @@ include ../Makefile.rules
 
 LIBRARY = SDDS1mpi
 
-LIBRARY_SRC = SDDS_ascii.c \
-          SDDS_copy.c \
-          SDDS_data.c \
-          SDDS_dataprep.c \
-          SDDS_extract.c \
-          SDDS_info.c \
-          SDDS_lzma.c \
-          SDDS_mplsupport.c \
-          SDDS_process.c \
-          SDDS_rpn.c \
-          SDDS_transfer.c \
-          SDDS_utils.c \
-          SDDS_write.c \
+LIBRARY_SRC = SDDS_ascii.mpi.c \
+          SDDS_copy.mpi.c \
+          SDDS_data.mpi.c \
+          SDDS_dataprep.mpi.c \
+          SDDS_extract.mpi.c \
+          SDDS_info.mpi.c \
+          SDDS_lzma.mpi.c \
+          SDDS_mplsupport.mpi.c \
+          SDDS_process.mpi.c \
+          SDDS_rpn.mpi.c \
+          SDDS_transfer.mpi.c \
+          SDDS_utils.mpi.c \
+          SDDS_write.mpi.c \
           SDDS_MPI_binary.c \
           SDDSmpi_input.c \
           SDDSmpi_output.c \
@@ -40,9 +40,5 @@ endif
 
 include ../Makefile.build
 
-$(OBJ_DIR)/SDDS_binary.mpi.$(OBJEXT): SDDS_binary.c
-	$(CC) $(CFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)
-$(OBJ_DIR)/SDDS_input.mpi.$(OBJEXT): SDDS_input.c
-	$(CC) $(CFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)
-$(OBJ_DIR)/SDDS_output.mpi.$(OBJEXT): SDDS_output.c
+$(OBJ_DIR)/%.mpi.$(OBJEXT): %.c
 	$(CC) $(CFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)
