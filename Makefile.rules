@@ -215,6 +215,7 @@ MPI_CC = $(firstword $(wildcard \
            /usr/lib64/mpich-3.2/bin/mpicc \
            /opt/local/bin/mpicc \
            /opt/homebrew/bin/mpicc \
+           /lustre/3rdPartySoftware/mpich-4.1.1/bin/mpicc \
 	   /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0/openmpi-5.0.1-jk5bu46/bin/mpicc ))
 MPI_CCC = $(firstword $(wildcard \
            /usr/bin/mpic++ \
@@ -230,6 +231,7 @@ MPI_CCC = $(firstword $(wildcard \
            /opt/local/bin/mpicxx \
            /opt/homebrew/bin/mpic++ \
            /opt/homebrew/bin/mpicxx \
+           /lustre/3rdPartySoftware/mpich-4.1.1/bin/mpicxx \
 	   /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0/openmpi-5.0.1-jk5bu46/bin/mpicxx ))
 WIN_MPI = $(firstword $(wildcard \
            C:/Program\ Files/Microsoft\ MPI \
@@ -287,6 +289,7 @@ ifeq ($(OS), Linux)
   #-fPIC        Generates position-independent code, which is essential for creating shared libraries.
 
   CUSTOM_GCC_PATH = /usr/local/oag/3rdParty/gcc-11.3.0
+$(info $(MPI_CC))
   ifneq ($(wildcard $(CUSTOM_GCC_PATH)),)
     CC = $(CUSTOM_GCC_PATH)/bin/gcc
     CCC = $(CUSTOM_GCC_PATH)/bin/g++
