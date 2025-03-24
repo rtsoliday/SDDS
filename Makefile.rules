@@ -321,7 +321,7 @@ ifeq ($(OS), Darwin)
   EXEEXT =
   LINKEXE = $(CCC)
 
-  F77 = gfortran -m64 -ffixed-line-length-132
+  F77 = gfortran-mp-14 -m64 -ffixed-line-length-132
 
   #-Wno-deprecated-non-prototype  Suppresses warnings about deprecated non-prototype function declarations.
   #-m64         Generates code for a 64-bit environment.
