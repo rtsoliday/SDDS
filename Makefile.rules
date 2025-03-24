@@ -289,7 +289,6 @@ ifeq ($(OS), Linux)
   #-fPIC        Generates position-independent code, which is essential for creating shared libraries.
 
   CUSTOM_GCC_PATH = /usr/local/oag/3rdParty/gcc-11.3.0
-$(info $(MPI_CC))
   ifneq ($(wildcard $(CUSTOM_GCC_PATH)),)
     CC = $(CUSTOM_GCC_PATH)/bin/gcc
     CCC = $(CUSTOM_GCC_PATH)/bin/g++
