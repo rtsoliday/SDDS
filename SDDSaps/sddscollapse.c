@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
   }
 
   /* Process each data page in the input file. */
-  while ((page_number = SDDS_ReadPageSparse(&SDDS_input, 0, INT32_MAX - 1, 0, 0)) > 0) {
+  while ((page_number = SDDS_ReadPageSparse(&SDDS_input, 0, SDDS_input.layout.data_mode.column_major ? 1 : INT32_MAX - 1, 0, 0)) > 0) {
     /* Expand memory if necessary. */
     if (page_number > allocated_rows) {
       if (!SDDS_LengthenTable(&SDDS_output, ROW_INCREMENT)) {
