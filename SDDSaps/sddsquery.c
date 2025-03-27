@@ -336,7 +336,7 @@ int main(int argc, char **argv) {
         break;
       }
       if (readAll) {
-        while (SDDS_ReadPageSparse(&SDDS_dataset, 0, 1000, 0, 0) > 0)
+        while (SDDS_ReadPageSparse(&SDDS_dataset, 0, SDDS_dataset.layout.data_mode.column_major ? 1 : 1000, 0, 0) > 0)
           ;
       }
 #ifdef SOLARIS
@@ -438,7 +438,7 @@ int main(int argc, char **argv) {
     }
     fflush(stdout);
     if (readAll) {
-      while (SDDS_ReadPageSparse(&SDDS_dataset, 0, 1000, 0, 0) > 0)
+      while (SDDS_ReadPageSparse(&SDDS_dataset, 0, SDDS_dataset.layout.data_mode.column_major ? 1 : 1000, 0, 0) > 0)
         ;
     }
     if (!SDDS_Terminate(&SDDS_dataset)) {
