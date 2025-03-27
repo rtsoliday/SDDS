@@ -123,10 +123,10 @@ typedef struct
  * @sa SDDS_CheckDataset, SDDS_SetError, SDDS_MPI_ReadBinaryPage
  */
 int32_t SDDS_MPI_ReadPage(SDDS_DATASET *SDDS_dataset) {
-  if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_ReadPageSparse"))
+  if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_MPI_ReadPage"))
     return (0);
   if (SDDS_dataset->layout.disconnected) {
-    SDDS_SetError("Can't read page--file is disconnected (SDDS_ReadPageSparse)");
+    SDDS_SetError("Can't read page--file is disconnected (SDDS_MPI_ReadPage)");
     return 0;
   }
   if (SDDS_dataset->original_layout.data_mode.mode == SDDS_ASCII) {
@@ -135,7 +135,7 @@ int32_t SDDS_MPI_ReadPage(SDDS_DATASET *SDDS_dataset) {
   } else if (SDDS_dataset->original_layout.data_mode.mode == SDDS_BINARY) {
     return SDDS_MPI_ReadBinaryPage(SDDS_dataset);
   } else {
-    SDDS_SetError("Unable to read page--unrecognized data mode (SDDS_ReadPageSparse)");
+    SDDS_SetError("Unable to read page--unrecognized data mode (SDDS_MPI_ReadPage)");
     return (0);
   }
 }
