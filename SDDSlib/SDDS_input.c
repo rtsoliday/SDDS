@@ -1310,7 +1310,7 @@ int32_t SDDS_GotoPage(SDDS_DATASET *SDDS_dataset, int32_t page_number) {
     fseek(SDDS_dataset->layout.fp, offset, 1);
     SDDS_dataset->page_number = SDDS_dataset->pages_read;
     while (SDDS_dataset->pages_read < page_number) {
-      if (SDDS_ReadPageSparse(SDDS_dataset, 0, 10000, 0, 0) <= 0) {
+      if (SDDS_ReadPageSparse(SDDS_dataset, 0, SDDS_dataset->layout.data_mode.column_major ? 1 : 10000, 0, 0) <= 0) {
         SDDS_SetError("The page_number is greater than the total pages (SDDS_GotoPage)");
         return (0);
       }
