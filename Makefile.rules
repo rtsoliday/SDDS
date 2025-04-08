@@ -19,6 +19,9 @@ ifneq ($(wildcard $(DD)../.svn $(DD)../../../../.svn),)
  ifeq ($(ARCH),arm64)
     EPICS_ARCH := aarch64
  endif
+ ifeq ($(EPICS_HOST)-$(EPICS_ARCH),darwin-x86_64)
+    EPICS_ARCH := x86
+ endif
  EPICS_LIB_DIR = $(DD)../../../lib/$(EPICS_HOST)-$(EPICS_ARCH)
  EPICS_BIN_DIR = $(DD)../../../bin/$(EPICS_HOST)-$(EPICS_ARCH)
  EPICS_INC_DIR = $(DD)../../../include
@@ -51,7 +54,9 @@ LZMA_LIB = $(firstword $(wildcard \
 HDF5_LIB = $(firstword $(wildcard \
            $(addsuffix /libhdf5.dylib, $(LIB_DIRS)) \
            $(addsuffix /libhdf5.a, $(LIB_DIRS)) \
-           $(addsuffix /libhdf5.so, $(LIB_DIRS))))
+           $(addsuffix /libhdf5_serial.a, $(LIB_DIRS)) \
+           $(addsuffix /libhdf5.so, $(LIB_DIRS)) \
+           $(addsuffix /libhdf5_serial.so, $(LIB_DIRS))))
 SZ_LIB = $(firstword $(wildcard \
            $(addsuffix /libsz.dylib, $(LIB_DIRS)) \
            $(addsuffix /libsz.so, $(LIB_DIRS)) \
