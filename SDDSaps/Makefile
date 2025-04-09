@@ -153,6 +153,9 @@ tiff2sdds_SRC = tiff2sdds.c
 
 ifneq ($(wildcard $(DD)../.svn),)
   SVN_VERSION=$(shell svnversion .)
+  ifeq ($(SVN_VERSION),)
+    SVN_VERSION=unknown
+  endif
 else
   SVN_VERSION=GIT_$(shell git log --oneline | wc -l | sed 's/^[[:space:]]*//')
 endif
