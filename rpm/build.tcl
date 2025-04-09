@@ -2,6 +2,8 @@
 # \
 exec tclsh "$0" "$@"
 
+set dir [pwd]
+
 set version 5.8
 set name SDDSToolKit-$version
 puts "Building $name RPM"
@@ -27,10 +29,11 @@ if {[catch {exec rpmbuild -bb --quiet --clean --target x86_64 \
 exec rm -f ../SOURCES/${name}.tar.gz
 puts $results
 
+
+cd $dir
 set name SDDSToolKit-devel-$version
 puts "Building $name RPM"
 
-exec ./rpmdev-setuptree
 exec cp -f SDDSToolKit-devel.spec $env(HOME)/rpmbuild/SPECS/
 exec rm -rf $env(HOME)/rpmbuild/BUILD/$name
 exec mkdir $env(HOME)/rpmbuild/BUILD/$name
