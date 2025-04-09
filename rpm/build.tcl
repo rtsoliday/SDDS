@@ -34,7 +34,11 @@ cd $dir
 set name SDDSToolKit-devel-$version
 puts "Building $name RPM"
 
-exec cp -f SDDSToolKit-devel.spec $env(HOME)/rpmbuild/SPECS/
+if {[file exists /usr/lib/x86_64-linux-gnu]} {
+    exec ../bin/Linux-x86_64/replaceText SDDSToolKit-devel.spec $env(HOME)/rpmbuild/SPECS/SDDSToolKit-devel.spec -original=/usr/lib64 -replacement=/usr/lib/x86_64-linux-gnu
+} else {
+    exec cp -f SDDSToolKit-devel.spec $env(HOME)/rpmbuild/SPECS/
+}
 exec rm -rf $env(HOME)/rpmbuild/BUILD/$name
 exec mkdir $env(HOME)/rpmbuild/BUILD/$name
 set libFiles [glob ../lib/Linux-x86_64/*]
