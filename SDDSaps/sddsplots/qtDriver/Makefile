@@ -5,11 +5,14 @@ PROD = mpl_qt
 mpl_qt_SRC = mpl_qt.cc mpl_qt_utils.cc mpl_qt_zoom.cc mpl_qt_print_save.cc mpl_qt_readdata.cc
 
 ifeq ($(OS), Linux)
-  CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt5Widgets)
-  LDFLAGS += $(shell pkg-config --libs Qt5Widgets Qt5PrintSupport)
+  MOC = $(firstword $(wildcard \
+          /bin/moc-qt5 \
+          /usr/lib64/qt6/libexec/moc))
+  MOC_VER_DIGIT := $(shell $(MOC) -v | cut -d' ' -f2 | cut -c1)
+  CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets)
+  LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport)
   PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
   PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
-  MOC = moc-qt5
 endif
 
 ifeq ($(OS), Darwin)
