@@ -26,7 +26,6 @@ install -m 644 libmdbcommon.a %{buildroot}/usr/lib64/SDDS/libmdbcommon.a
 install -m 644 libmdblib.a %{buildroot}/usr/lib64/SDDS/libmdblib.a
 install -m 644 libmdbmth.a %{buildroot}/usr/lib64/SDDS/libmdbmth.a
 install -m 644 libSDDS1.a %{buildroot}/usr/lib64/SDDS/libSDDS1.a
-install -m 644 liblzma.a %{buildroot}/usr/lib64/SDDS/liblzma.a
 install -m 644 librpnlib.a %{buildroot}/usr/lib64/SDDS/librpnlib.a
 install -m 644 libfftpack.a %{buildroot}/usr/lib64/SDDS/libfftpack.a
 install -m 644 libmatlib.a %{buildroot}/usr/lib64/SDDS/libmatlib.a
@@ -45,7 +44,6 @@ install -m 644 fftpackC.h %{buildroot}%{_includedir}/SDDS/fftpackC.h
 /usr/lib64/SDDS/libmdblib.a
 /usr/lib64/SDDS/libmdbmth.a
 /usr/lib64/SDDS/libSDDS1.a
-/usr/lib64/SDDS/liblzma.a
 /usr/lib64/SDDS/librpnlib.a
 /usr/lib64/SDDS/libfftpack.a
 /usr/lib64/SDDS/libmatlib.a

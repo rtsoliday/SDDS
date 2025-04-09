@@ -43,8 +43,8 @@ exec rm -rf $env(HOME)/rpmbuild/BUILD/$name
 exec mkdir $env(HOME)/rpmbuild/BUILD/$name
 set libFiles [glob ../lib/Linux-x86_64/*]
 foreach f $libFiles {
-  exec chmod a+rx $f
-  exec chmod a-w $f
+  exec chmod a+r $f
+  exec chmod a-wx $f
   exec cp -f $f $env(HOME)/rpmbuild/BUILD/${name}/
 }
 set incFiles [glob ../include/*.h]
