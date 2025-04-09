@@ -6,7 +6,10 @@ mpl_qt_SRC = mpl_qt.cc mpl_qt_utils.cc mpl_qt_zoom.cc mpl_qt_print_save.cc mpl_q
 
 ifeq ($(OS), Linux)
   MOC = $(firstword $(wildcard \
+          /bin/moc \
           /bin/moc-qt5 \
+          /usr/bin/moc \
+          /usr/bin/moc-qt5 \
           /usr/lib64/qt6/libexec/moc))
   MOC_VER_DIGIT := $(shell $(MOC) -v | cut -d' ' -f2 | cut -c1)
   CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets)
