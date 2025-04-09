@@ -20,7 +20,7 @@ Binary package for the Self Describing Data Sets database software.
 
 %build
 %install
-mkdir -p %{buildroot}/usr/lib64
+mkdir -p %{buildroot}/usr/lib64/SDDS
 mkdir -p %{buildroot}%{_includedir}/SDDS
 install -m 644 libmdbcommon.a %{buildroot}/usr/lib64/SDDS/libmdbcommon.a
 install -m 644 libmdblib.a %{buildroot}/usr/lib64/SDDS/libmdblib.a
