@@ -1,0 +1,100 @@
+#!/bin/sh
+#
+#	RPM-build-tree.txt (a.k.a. fedora-buildrpmtree, rpmdev-setuptree)
+#
+#	Set up a 'plain userid' SRPM build environment
+#
+#	Original home locale for this script:
+#	http://www.rpm.org/hintskinks/buildtree/RPM-build-tree.txt
+#	also: ftp://ftp.owlriver.com/pub/local/ORC/rpmbuild/
+#
+#	based on a post:
+#	Date: Tue, 30 Jul 2002 17:00:21 +0200
+#	From: Ralf Ertzinger <ralf@camperquake.de>
+#	Reply-To: rpm-list@freshrpms.net
+#
+#	copyright (c) 2002 Owl River Company - Columbus OH
+#	info@owlriver.com -- GPL v.2 
+#
+[ "x$1" = "x-d" ] && {
+	DEBUG="y"
+	export DEBUG
+	shift 1
+	}
+#
+#IAM=`id -un`
+# 	returns bare username
+#
+PASSWDDIR=`grep ^$IAM: /etc/passwd | awk -F":" '{print $6}'`
+HOMEDIR=${HOME:=$PASSWDDIR}
+[ ! -d $HOMEDIR ] && {
+	echo "ERROR: Home directory for user $IAM not found in /etc/passwd."
+	exit 1
+	}
+#	and home directory
+#
+#
+#
+RPMMACROS="$HOMEDIR/.rpmmacros"
+touch $RPMMACROS
+#
+TOPDIR="%_topdir"
+ISTOP=`grep -c ^$TOPDIR $RPMMACROS`
+[ $ISTOP -lt 1 ] && {
+	cat <<\EOF >> $RPMMACROS
+
+%_topdir %(echo $HOME)/rpmbuild
+EOF
+	}
+#
+#MAKE="%make "
+#ISTOP=`grep -c ^$MAKE $RPMMACROS`
+#[ $ISTOP -lt 1 ] && {
+#	echo "$MAKE  make" >> $RPMMACROS
+#	}
+#
+ISTOP=`grep -c ^%_smp_mflags $RPMMACROS`
+[ $ISTOP -lt 1 ] && {
+	cat <<\EOF >> $RPMMACROS
+
+%_smp_mflags %( \
+    [ -z "$RPM_BUILD_NCPUS" ] \\\
+        && RPM_BUILD_NCPUS="`/usr/bin/nproc 2>/dev/null || \\\
+                             /usr/bin/getconf _NPROCESSORS_ONLN`"; \\\
+    if [ "$RPM_BUILD_NCPUS" -gt 16 ]; then \\\
+        echo "-j16"; \\\
+    elif [ "$RPM_BUILD_NCPUS" -gt 3 ]; then \\\
+        echo "-j$RPM_BUILD_NCPUS"; \\\
+    else \\\
+        echo "-j3"; \\\
+    fi )
+EOF
+	}
+#
+ISTOP=`grep -c ^%__arch_install_post $RPMMACROS`
+[ $ISTOP -lt 1 ] && {
+	cat <<\EOF >> $RPMMACROS
+
+%__arch_install_post \
+    [ "%{buildarch}" = "noarch" ] || QA_CHECK_RPATHS=1 ; \
+    case "${QA_CHECK_RPATHS:-}" in [1yY]*) /usr/lib/rpm/check-rpaths ;; esac \
+    /usr/lib/rpm/check-buildroot
+EOF
+}
+RPMDIR=`rpm --eval "%{_rpmdir}"`
+SRCDIR=`rpm --eval "%{_sourcedir}"`
+SPECDIR=`rpm --eval "%{_specdir}"`
+SRPMDIR=`rpm --eval "%{_srcrpmdir}"`
+BUILDDIR=`rpm --eval "%{_builddir}"`
+[ "x$DEBUG" != "x" ] && {
+	echo "$IAM       $HOMEDIR    $RPMMACROS"
+	echo "$RPMDIR    $SRCDIR     $SPECDIR"
+	echo "$SRPMDIR   $BUILDDIR"
+	}
+#
+for i in $RPMDIR $SRCDIR $SPECDIR $SRPMDIR $BUILDDIR ; do 
+	[ ! -d $i ] && mkdir -p $i 
+done
+#
+exit 0
+#
