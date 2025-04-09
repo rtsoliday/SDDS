@@ -1,6 +1,7 @@
 include ../Makefile.rules
 
 PROD = editstring replaceText isFileLocked hdf2sdds sdds2hdf
+PROD += mecho minpath tmpname token timeconvert tcomp
 
 CFLAGS += -DH5_USE_16_API -I../include
 
