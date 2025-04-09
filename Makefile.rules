@@ -218,6 +218,8 @@ MPI_CC = $(firstword $(wildcard \
            /usr/local/oag/3rdParty/mpich-4.3.0/bin/mpicc \
            /usr/lib64/mpich/bin/mpicc \
            /usr/lib64/openmpi/bin/mpicc \
+           /usr/lib64/mpi/gcc/mpich/bin/mpicc \
+           /usr/lib64/mpi/gcc/openmpi/bin/mpicc \
            /usr/lib64/mpich-3.2/bin/mpicc \
            /opt/local/bin/mpicc \
            /opt/homebrew/bin/mpicc \
@@ -233,6 +235,8 @@ MPI_CCC = $(firstword $(wildcard \
            /usr/lib64/mpich/bin/mpicxx \
            /usr/lib64/openmpi/bin/mpic++ \
            /usr/lib64/openmpi/bin/mpicxx \
+           /usr/lib64/mpi/gcc/mpich/bin/mpic++ \
+           /usr/lib64/mpi/gcc/openmpi/bin/mpic++ \
            /usr/lib64/mpich-3.2/bin/mpicxx \
            /opt/local/bin/mpic++ \
            /opt/local/bin/mpicxx \
