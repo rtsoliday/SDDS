@@ -130,7 +130,6 @@ install -s -m 755 sddssmooth %{buildroot}%{_bindir}/sddssmooth
 install -s -m 755 sddssnap2grid %{buildroot}%{_bindir}/sddssnap2grid
 install -s -m 755 sddssort %{buildroot}%{_bindir}/sddssort
 install -s -m 755 sddssortcolumn %{buildroot}%{_bindir}/sddssortcolumn
-#install -s -m 755 sddssplinefit %{buildroot}%{_bindir}/sddssplinefit
 install -s -m 755 sddssplit %{buildroot}%{_bindir}/sddssplit
 install -s -m 755 sddsspotanalysis %{buildroot}%{_bindir}/sddsspotanalysis
 install -s -m 755 sddstimeconvert %{buildroot}%{_bindir}/sddstimeconvert
@@ -261,7 +260,6 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/sddssnap2grid
 %{_bindir}/sddssort
 %{_bindir}/sddssortcolumn
-#%{_bindir}/sddssplinefit
 %{_bindir}/sddssplit
 %{_bindir}/sddsspotanalysis
 %{_bindir}/sddstimeconvert
