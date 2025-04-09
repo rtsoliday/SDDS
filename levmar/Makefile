@@ -7,9 +7,8 @@ LIBRARY_SRC = lm.c Axb.c misc.c lmlec.c lmbc.c
 CFLAGS += -DHAVE_LAPACK -DUSE_MPI=1 -DSDDS_MPI_IO=1 -DMASTER_READTITLE_ONLY -I../include
 
 ifeq ($(OS), Linux)
-  ifneq ($(IMPROV_BUILD),1)
-    CFLAGS += -Warray-parameter=1
-  endif
+    #Older compilers do not accept this option
+    #CFLAGS += -Warray-parameter=1
 endif
 
 ifeq ($(OS), Windows)
