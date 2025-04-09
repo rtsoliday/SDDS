@@ -15,7 +15,9 @@ To compile and use the SDDS library, ensure you have installed the following dep
 
 ### RHEL, Fedora, CentOS, Rocky
 ```bash
-sudo yum install gcc gcc-c++ make zlib-devel zstd-devel xz-devel hdf5-devel libaec-devel gsl-devel libpng-devel gd-devel lerc-devel libdeflate-devel libtiff-devel qt5-qtbase-devel blas-devel lapack-devel mpich mpich-devel
+sudo yum install epel-release
+sudo yum config-manager --set-enabled crb
+sudo yum install gcc gcc-c++ make zlib-devel libzstd-devel xz-devel hdf5-devel libaec-devel gsl-devel libpng-devel gd-devel liblerc-devel libdeflate-devel libtiff-devel qt5-qtbase-devel blas-devel lapack-devel mpich mpich-devel fftw-devel
 ```
 
 ### Ubuntu, Debian
