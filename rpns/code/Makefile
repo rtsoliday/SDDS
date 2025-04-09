@@ -49,4 +49,4 @@ endif
 
 include ../../Makefile.build
 
-.NOTPARALLEL: $(LIBRARY)
+.NOTPARALLEL:
