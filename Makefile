@@ -32,12 +32,13 @@ ifeq ($(OS), Linux)
   endif
 endif
 
+PLOT_DRIVER = SDDSaps/sddsplots/qtDriver
 ifeq ($(IMPROV_BUILD),1)
   PLOT_DRIVER = SDDSaps/sddsplots/motifDriver
-else
-  PLOT_DRIVER = SDDSaps/sddsplots/qtDriver
 endif
-
+ifeq ($(OS), Windows)
+  PLOT_DRIVER = SDDSaps/sddsplots/winMotifDriver
+endif
 
 DIRS = $(GSL_REPO)
 DIRS += $(GSL_LOCAL)
@@ -145,7 +146,7 @@ SDDSaps/sddsplots: SDDSaps
 	$(MAKE) -C $@
 SDDSaps/sddsplots/winMotifDriver: SDDSaps/sddsplots
 	$(MAKE) -C $@
-SDDSaps/sddsplots/motifDriver: SDDSaps/sddsplots/winMotifDriver
+SDDSaps/sddsplots/motifDriver: SDDSaps/sddsplots
 	$(MAKE) -C $@
 SDDSaps/sddsplots/qtDriver: SDDSaps/sddsplots
 	$(MAKE) -C $@
