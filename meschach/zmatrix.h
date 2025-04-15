@@ -120,8 +120,8 @@ extern ZVEC	*zv_add(ZVEC *vec1,ZVEC *vec2,ZVEC *out);
 extern ZVEC	*zv_mltadd(ZVEC *v1,ZVEC *v2,complex scale,ZVEC *out);
 extern ZVEC	*zv_sub(ZVEC *vec1,ZVEC *vec2,ZVEC *out);
 #ifdef PROTOTYPES_IN_STRUCT
-extern ZVEC	*zv_map(complex (*f)(),ZVEC *x,ZVEC *out);
-extern ZVEC	*_zv_map(complex (*f)(),void *params,ZVEC *x,ZVEC *out);
+extern ZVEC	*zv_map(complex (*f)(complex),ZVEC *x,ZVEC *out);
+extern ZVEC	*_zv_map(complex (*f)(void *,complex),void *params,ZVEC *x,ZVEC *out);
 #else
 extern ZVEC	*zv_map(complex (*f)(complex),ZVEC *x,ZVEC *out);
 extern ZVEC	*_zv_map(complex (*f)(void *,complex),void *params,ZVEC *x,ZVEC *out);

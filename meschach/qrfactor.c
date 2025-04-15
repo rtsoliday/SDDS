@@ -49,7 +49,7 @@
 
 #define		sign(x)	((x) > 0.0 ? 1 : ((x) < 0.0 ? -1 : 0 ))
 
-extern	VEC	*Usolve();	/* See matrix2.h */
+extern	VEC	*Usolve(MAT *A,VEC *b,VEC *x,double diag_val);	/* See matrix2.h */
 
 /* Note: The usual representation of a Householder transformation is taken
    to be:

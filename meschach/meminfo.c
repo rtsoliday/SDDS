@@ -74,20 +74,20 @@ static MEM_ARRAY   mem_info_sum[MEM_NUM_STD_TYPES];
 
 
 /* for freeing various types */
-static int (*mem_free_funcs[MEM_NUM_STD_TYPES])() = {
-   m_free,
-   bd_free,
-   px_free,    
-   v_free,	
-   iv_free
+static int (*mem_free_funcs[MEM_NUM_STD_TYPES])(void *) = {
+   (int (*)(void *))m_free,
+   (int (*)(void *))bd_free,
+   (int (*)(void *))px_free,    
+   (int (*)(void *))v_free,	
+   (int (*)(void *))iv_free
 #ifdef SPARSE
-     ,iter_free,	
-     sprow_free, 
-     sp_free
+     ,(int (*)(void *))iter_free,	
+     (int (*)(void *))sprow_free, 
+     (int (*)(void *))sp_free
 #endif
 #ifdef COMPLEX
-       ,zv_free,	
-       zm_free
+       ,(int (*)(void *))zv_free,	
+       (int (*)(void *))zm_free
 #endif
       };
 
@@ -106,7 +106,7 @@ MEM_CONNECT mem_connect[MEM_CONNECT_MAX_LISTS] = {
 int mem_attach_list(list, ntypes, type_names, free_funcs, info_sum)
 int list,ntypes;         /* number of a list and number of types there */
 char *type_names[];      /* list of names of types */
-int (*free_funcs[])();   /* list of releasing functions */
+int (*free_funcs[])(void*);   /* list of releasing functions */
 MEM_ARRAY info_sum[];    /* local table */
 {
    if (list < 0 || list >= MEM_CONNECT_MAX_LISTS)

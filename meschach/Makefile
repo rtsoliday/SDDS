@@ -61,7 +61,7 @@ LIBRARY_SRC = bdfactor.c \
 	zsolve.c \
 	zvecop.c
 
-CFLAGS += -I../include
+CFLAGS += -I../include -DANSI_C -DPROTOTYPES_IN_STRUCT
 
 ifeq ($(OS), Windows)
   NO_DLL = 1
