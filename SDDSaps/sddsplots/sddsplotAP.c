@@ -2296,7 +2296,7 @@ long swap_AP(PLOT_SPEC *plotspec, char **item, long items)
 
 long showlinkdate_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
-    void put_link_date();
+    void put_link_date(FILE *fp);
     put_link_date(stderr);
     return 0;
     }

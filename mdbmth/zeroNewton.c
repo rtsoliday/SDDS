@@ -31,7 +31,7 @@
  * @return The `x` value where `fn(x)` is approximately equal to `value`, or `DBL_MAX` if no zero is found within the iteration limit.
  */
 double zeroNewton(
-  double (*fn)(), /* pointer to function to be zeroed */
+  double (*fn)(double x), /* pointer to function to be zeroed */
   double value,   /* value of function to find */
   double x_i,     /* initial value for independent variable */
   double dx,      /* increment for taking numerical derivatives */

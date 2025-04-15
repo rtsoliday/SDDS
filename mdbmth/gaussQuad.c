@@ -43,7 +43,7 @@
  * @return The total number of function evaluations performed, or -1 if an error occurs.
  */
 long gaussianQuadrature(
-  double (*fn)(),     /* pointer to function to be integrated */
+  double (*fn)(double x),     /* pointer to function to be integrated */
   double a, double b, /* upper, lower limits of integration */
   long n,             /* number of panels to start with */
   double err,         /* fractional error permissible on any quadrature */

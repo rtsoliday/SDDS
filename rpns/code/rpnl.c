@@ -34,7 +34,7 @@ int main(argc, argv)
 int argc;
 char **argv;
 {
-    double rpn(), result=0;
+    double rpn(char *expression), result=0;
     char *format, *defns;
 
     rpn(defns=getenv("RPN_DEFNS"));

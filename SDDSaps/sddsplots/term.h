@@ -101,7 +101,7 @@ int AED_reset(void);
 /* prototypes for code in file cgi.trm */
 char	*cgidriver;
 #if !defined(_WIN32)
-char *getenv();
+//char *getenv();
 #endif
 int CGI_init(void);
 int HCGI_init(void);

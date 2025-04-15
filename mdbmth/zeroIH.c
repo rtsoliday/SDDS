@@ -34,7 +34,7 @@
  * @return The `x` value where `fn(x)` is approximately equal to `value`, or `x_f + dx` if no zero is found within the interval.
  */
 double zeroIntHalve(
-  double (*fn)(), /* pointer to function to be zeroed */
+  double (*fn)(double x), /* pointer to function to be zeroed */
   double value,   /* solve for fn=value */
   double x_i,     /* initial, final values for independent variable */
   double x_f,

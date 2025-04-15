@@ -1020,7 +1020,7 @@ int sddsplot_main(int commandlineArgc, char **commandlineArgv)
 #ifndef COMPILE_AS_SUBROUTINE
   {
     int n;
-    int X11_args();
+    int X11_args(int argc, char **argv);
     n = X11_args(commandlineArgc, commandlineArgv);
     commandlineArgc -= n;
     commandlineArgv += n;
@@ -1045,7 +1045,7 @@ int sddsplot_main(int commandlineArgc, char **commandlineArgv)
 
   if (commandlineArgc < 2)
     {
-      void put_link_date();
+      void put_link_date(FILE *fp);
       fprintf(stderr, "%s%s%s%s%s", USAGE1, USAGE2, USAGE3, USAGE4, USAGE5);
       put_link_date(stderr);
       /*        list_terms(stderr); */

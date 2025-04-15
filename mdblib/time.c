@@ -94,7 +94,7 @@ char *mtime(void) {
   char *ct, *mt;
   char *month, *day, *t, *ptr;
   time_t i;
-  time_t time();
+  //time_t time();
 
   while ((mt = tmalloc((unsigned)30 * sizeof(*mt))) == NULL)
     puts("allocation failure in mtime()");
@@ -138,7 +138,7 @@ char *mtimes(void) {
   char *ct, *mt;
   char *month, *day, *t;
   time_t i;
-  time_t time();
+  //time_t time();
 
   while ((mt = tmalloc((unsigned)30 * sizeof(*mt))) == NULL)
     puts("allocation failure in mtime()");

@@ -18,7 +18,7 @@ LIBRARY_SRC = delaunay.c \
           version.c \
           nn_2d_interpolate.c
 
-CFLAGS += -I../../include -DTRILIBRARY
+CFLAGS += -I../../include -DTRILIBRARY -DANSI_DECLARATORS
 
 ifeq ($(OS), Windows)
   CFLAGS += -wd4311 -wd4312

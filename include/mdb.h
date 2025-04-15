@@ -905,7 +905,7 @@ epicsShareFuncMDBLIB int makedir (char *newdir);
 #define IS_POSITIVE(x) (SIGN(x)==1)
 
 /* mdbmth routines */
-epicsShareFuncMDBMTH long gaussianQuadrature(double (*fn)(), double a, double b, long n, double err, double *result);
+epicsShareFuncMDBMTH long gaussianQuadrature(double (*fn)(double x), double a, double b, long n, double err, double *result);
 epicsShareFuncMDBCOMMON extern int fixcount(char *filename, long n_points);
 epicsShareFuncMDBMTH extern long factorial(long n);
 epicsShareFuncMDBMTH extern double dfactorial(long n);
@@ -913,13 +913,13 @@ epicsShareFuncMDBMTH long trapazoidIntegration(double *x, double *y, long n, dou
 epicsShareFuncMDBMTH long trapazoidIntegration1(double *x, double *y, long n, double *integral);
 epicsShareFuncMDBMTH int GillMillerIntegration(double *integral, double *error, double *f, double *x, long n);
 epicsShareFuncMDBMTH extern double ipow(const double base, const int64_t power);
-epicsShareFuncMDBMTH extern double zeroInterp(double (*function)(), double value,
+epicsShareFuncMDBMTH extern double zeroInterp(double (*function)(double x), double value,
                                               double x_initial, double x_final,
                                               double x_step, double effective_zero);
-epicsShareFuncMDBMTH extern double zeroIntHalve(double (*function)(), double value,
+epicsShareFuncMDBMTH extern double zeroIntHalve(double (*function)(double x), double value,
                                                 double x_initial, double x_final,
                                                 double x_step, double effective_zero);
-epicsShareFuncMDBMTH extern double zeroNewton(double (*function)(), 
+epicsShareFuncMDBMTH extern double zeroNewton(double (*function)(double x), 
                                               double value, double x_initial, double dx_deriv,
                                               long n_passes, double effective_zero);
 epicsShareFuncMDBMTH extern int pointIsInsideContour(double x0, double y0, double *x, double *y,
@@ -1033,7 +1033,7 @@ epicsShareFuncMDBMTH extern void usleepSystemIndependent(long usec);
 epicsShareFuncMDBMTH extern double k13(double z);
 epicsShareFuncMDBMTH extern double k23(double z);
 epicsShareFuncMDBMTH extern double gy(long n, double y);
-epicsShareFuncMDBMTH extern double qromb(double (*func)(), long maxe,  double a, double b,  double eps);
+epicsShareFuncMDBMTH extern double qromb(double (*func)(double x), long maxe,  double a, double b,  double eps);
 
 #define DIFFEQ_EXIT_COND_FAILED -4
 #define DIFFEQ_ZERO_STEPSIZE -3

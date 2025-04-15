@@ -31,7 +31,7 @@
  * @param eps Desired accuracy (error tolerance) for the integral approximation.
  * @return The estimated value of the integral. Returns 0 if the maximum number of steps is exceeded without achieving the desired accuracy.
  */
-double qromb(double (*func)(), /* pointer to function*/
+double qromb(double (*func)(double x), /* pointer to function*/
              long maxe,
              double a, double b, /* upper, lower limits of integeration*/
              double eps /*error */) {
