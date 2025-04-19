@@ -7,6 +7,7 @@ mpl_qt_SRC = mpl_qt.cc mpl_qt_utils.cc mpl_qt_zoom.cc mpl_qt_print_save.cc mpl_q
 ifeq ($(OS), Linux)
   MOC = $(firstword $(wildcard \
           /usr/lib64/qt6/libexec/moc \
+          /usr/lib/qt6/libexec/moc \
           /bin/moc \
           /usr/bin/moc \
           /bin/moc-qt5 \
