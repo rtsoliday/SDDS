@@ -461,6 +461,7 @@ n - next plot\n\
 p - previous plot\n\
 < - first plot\n\
 > - last plot\n\
+m - play movie\n\
 d - delete plot\n\
 \n\
 Keyboard shortcuts for placement:\n\

@@ -408,6 +408,7 @@ void setup_shortcuts(QMainWindow *mainWindow) {
   QShortcut *shortcut_Plus = new QShortcut(QKeySequence(Qt::Key_Plus), mainWindow);
   QShortcut *shortcut_Minus = new QShortcut(QKeySequence(Qt::Key_Minus), mainWindow);
   QShortcut *shortcut_Period = new QShortcut(QKeySequence(Qt::Key_Period), mainWindow);
+  QShortcut *shortcut_M = new QShortcut(QKeySequence(Qt::Key_M), mainWindow);
   QShortcut *shortcut_LT = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Comma), mainWindow);
   QShortcut *shortcut_GT = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Period), mainWindow);
   QObject::connect(shortcut_B, &QShortcut::activated, [mainWindow](){
@@ -537,6 +538,25 @@ void setup_shortcuts(QMainWindow *mainWindow) {
   });
   QObject::connect(shortcut_Period, &QShortcut::activated, [mainWindow](){
     mouse_tracking(mainWindow);
+  });
+  QObject::connect(shortcut_M, &QShortcut::activated, [mainWindow](){
+    // Play movie: iterate through all plots
+    // go to first plot
+    while (cur->prev)
+        cur = cur->prev;
+    usecoordn = 0;
+    for (;;) {
+        canvas->update();
+        QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
+        mainWindow->setWindowTitle(wtitle);
+        QTime dieTime = QTime::currentTime().addMSecs(100);
+        while (QTime::currentTime() < dieTime)
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+        if (cur->next && cur->next != cur)
+            cur = cur->next;
+        else
+            break;
+    }
   });
   QObject::connect(shortcut_LT, &QShortcut::activated, [mainWindow](){
     while (cur->prev)
