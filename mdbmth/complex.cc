@@ -21,6 +21,7 @@
  *
  * @param z The complex number input.
  * @param flag Pointer to a flag variable to store computation status.
+ *        1 = error, 0 = no error
  * @return The complex error function value of z.
  */
 std::complex<double> complexErf(std::complex<double> z, long *flag) {
