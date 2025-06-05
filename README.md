@@ -129,7 +129,7 @@ The SDDS API provides functions for defining and manipulating SDDS datasets. Som
 For more details, refer to the **[SDDS API documentation](https://ops.aps.anl.gov/manuals/SDDSlib/html/files.html)**.
 
 ## Tests
-Simple regression tests are provided for `sddscheck` and `sddsconvert`. After building the project run:
+Simple regression tests are provided for many of the SDDS command line tools including `sddscheck`, `sddsconvert`, `plaindata2sdds`, `sdds2plaindata`, `sdds2stream`, `sddsbreak`, `sddscollapse`, `sddscollect`, `sddscombine`, `sddsprintout`, `sddsprocess`, `sddsquery`, `sddssort`, `sddssplit`, and `sddsxref`. After building the project run:
 ```bash
 pytest -q
 ```
