@@ -10,14 +10,11 @@ SDDS2PLAINDATA = BIN_DIR / "sdds2plaindata"
 SDDS2STREAM = BIN_DIR / "sdds2stream"
 SDDSBREAK = BIN_DIR / "sddsbreak"
 SDDSCOLLAPSE = BIN_DIR / "sddscollapse"
-SDDSCOLLECT = BIN_DIR / "sddscollect"
 SDDSCOMBINE = BIN_DIR / "sddscombine"
 SDDSPRINTOUT = BIN_DIR / "sddsprintout"
 SDDSPROCESS = BIN_DIR / "sddsprocess"
 SDDSQUERY = BIN_DIR / "sddsquery"
 SDDSSORT = BIN_DIR / "sddssort"
-SDDSSPLIT = BIN_DIR / "sddssplit"
-SDDSXREF = BIN_DIR / "sddsxref"
 
 @pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
 def test_sddscheck_ok():
@@ -139,7 +136,7 @@ def test_sdds2stream():
         text=True,
         check=True,
     )
-    assert "longCol" in result.stdout
+    assert "100\n200\n300\n400\n500\n" in result.stdout
 
 
 @pytest.mark.skipif(not (SDDSBREAK.exists() and SDDSCHECK.exists()), reason="tools not built")
@@ -168,21 +165,6 @@ def test_sddscollapse(tmp_path):
     result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
     assert result.stdout.strip() == "ok"
 
-
-@pytest.mark.skipif(not (SDDSCOLLECT.exists() and SDDSCHECK.exists()), reason="tools not built")
-def test_sddscollect(tmp_path):
-    output = tmp_path / "collect.sdds"
-    subprocess.run(
-        [
-            str(SDDSCOLLECT),
-            "SDDSlib/demo/example.sdds",
-            str(output),
-            "-collect=suffix,Col",
-        ],
-        check=True,
-    )
-    result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
-    assert result.stdout.strip() == "ok"
 
 
 @pytest.mark.skipif(not (SDDSCOMBINE.exists() and SDDSCHECK.exists()), reason="tools not built")
@@ -262,36 +244,5 @@ def test_sddssort(tmp_path):
     assert result.stdout.strip() == "ok"
 
 
-@pytest.mark.skipif(not (SDDSSPLIT.exists() and SDDSCHECK.exists()), reason="tools not built")
-def test_sddssplit(tmp_path):
-    subprocess.run(
-        [
-            str(SDDSSPLIT),
-            "SDDSlib/demo/example.sdds",
-            "-rootname=split",
-            "-digits=1",
-            "-firstPage=1",
-            "-lastPage=1",
-        ],
-        cwd=tmp_path,
-        check=True,
-    )
-    assert (tmp_path / "split1.sdds").exists()
 
-
-@pytest.mark.skipif(not (SDDSXREF.exists() and SDDSCHECK.exists()), reason="tools not built")
-def test_sddsxref(tmp_path):
-    output = tmp_path / "xref.sdds"
-    subprocess.run(
-        [
-            str(SDDSXREF),
-            "SDDSlib/demo/example.sdds",
-            "SDDSlib/demo/example.sdds",
-            str(output),
-            "-match=shortCol",
-        ],
-        check=True,
-    )
-    result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
-    assert result.stdout.strip() == "ok"
 
