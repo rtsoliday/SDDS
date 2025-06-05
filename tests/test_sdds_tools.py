@@ -2,8 +2,22 @@ import subprocess
 from pathlib import Path
 import pytest
 
-SDDSCHECK = Path("bin/Linux-x86_64/sddscheck")
-SDDSCONVERT = Path("bin/Linux-x86_64/sddsconvert")
+BIN_DIR = Path("bin/Linux-x86_64")
+SDDSCHECK = BIN_DIR / "sddscheck"
+SDDSCONVERT = BIN_DIR / "sddsconvert"
+PLAINDATA2SDDS = BIN_DIR / "plaindata2sdds"
+SDDS2PLAINDATA = BIN_DIR / "sdds2plaindata"
+SDDS2STREAM = BIN_DIR / "sdds2stream"
+SDDSBREAK = BIN_DIR / "sddsbreak"
+SDDSCOLLAPSE = BIN_DIR / "sddscollapse"
+SDDSCOLLECT = BIN_DIR / "sddscollect"
+SDDSCOMBINE = BIN_DIR / "sddscombine"
+SDDSPRINTOUT = BIN_DIR / "sddsprintout"
+SDDSPROCESS = BIN_DIR / "sddsprocess"
+SDDSQUERY = BIN_DIR / "sddsquery"
+SDDSSORT = BIN_DIR / "sddssort"
+SDDSSPLIT = BIN_DIR / "sddssplit"
+SDDSXREF = BIN_DIR / "sddsxref"
 
 @pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
 def test_sddscheck_ok():
@@ -70,3 +84,214 @@ def test_sddsconvert_options(tmp_path, option):
         subprocess.run(cmd, check=True)
     result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
     assert result.stdout.strip() == "ok"
+
+
+@pytest.mark.skipif(not (PLAINDATA2SDDS.exists() and SDDSCHECK.exists()), reason="tools not built")
+def test_plaindata2sdds(tmp_path):
+    plain = tmp_path / "input.txt"
+    plain.write_text("1 2\n3 4\n")
+    output = tmp_path / "out.sdds"
+    subprocess.run(
+        [
+            str(PLAINDATA2SDDS),
+            str(plain),
+            str(output),
+            "-column=col1,double",
+            "-column=col2,double",
+            "-inputMode=ascii",
+            "-outputMode=ascii",
+        ],
+        check=True,
+    )
+    result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
+    assert result.stdout.strip() == "ok"
+
+
+@pytest.mark.skipif(not SDDS2PLAINDATA.exists(), reason="sdds2plaindata not built")
+def test_sdds2plaindata(tmp_path):
+    output = tmp_path / "plain.txt"
+    subprocess.run(
+        [
+            str(SDDS2PLAINDATA),
+            "SDDSlib/demo/example.sdds",
+            str(output),
+            "-column=longCol",
+            "-parameter=stringParam",
+            "-outputMode=ascii",
+        ],
+        check=True,
+    )
+    assert output.exists()
+
+
+@pytest.mark.skipif(not SDDS2STREAM.exists(), reason="sdds2stream not built")
+def test_sdds2stream():
+    result = subprocess.run(
+        [
+            str(SDDS2STREAM),
+            "SDDSlib/demo/example.sdds",
+            "-columns=longCol",
+            "-parameters=stringParam",
+            "-page=1",
+            "-delimiter=,",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "longCol" in result.stdout
+
+
+@pytest.mark.skipif(not (SDDSBREAK.exists() and SDDSCHECK.exists()), reason="tools not built")
+def test_sddsbreak(tmp_path):
+    output = tmp_path / "break.sdds"
+    subprocess.run(
+        [
+            str(SDDSBREAK),
+            "SDDSlib/demo/example.sdds",
+            str(output),
+            "-rowlimit=2",
+        ],
+        check=True,
+    )
+    result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
+    assert result.stdout.strip() == "ok"
+
+
+@pytest.mark.skipif(not (SDDSCOLLAPSE.exists() and SDDSCHECK.exists()), reason="tools not built")
+def test_sddscollapse(tmp_path):
+    output = tmp_path / "collapse.sdds"
+    subprocess.run(
+        [str(SDDSCOLLAPSE), "SDDSlib/demo/example.sdds", str(output)],
+        check=True,
+    )
+    result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
+    assert result.stdout.strip() == "ok"
+
+
+@pytest.mark.skipif(not (SDDSCOLLECT.exists() and SDDSCHECK.exists()), reason="tools not built")
+def test_sddscollect(tmp_path):
+    output = tmp_path / "collect.sdds"
+    subprocess.run(
+        [
+            str(SDDSCOLLECT),
+            "SDDSlib/demo/example.sdds",
+            str(output),
+            "-collect=suffix,Col",
+        ],
+        check=True,
+    )
+    result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
+    assert result.stdout.strip() == "ok"
+
+
+@pytest.mark.skipif(not (SDDSCOMBINE.exists() and SDDSCHECK.exists()), reason="tools not built")
+def test_sddscombine(tmp_path):
+    output = tmp_path / "combine.sdds"
+    subprocess.run(
+        [
+            str(SDDSCOMBINE),
+            "SDDSlib/demo/example.sdds",
+            "SDDSlib/demo/example.sdds",
+            str(output),
+            "-overWrite",
+        ],
+        check=True,
+    )
+    result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
+    assert result.stdout.strip() == "ok"
+
+
+@pytest.mark.skipif(not SDDSPRINTOUT.exists(), reason="sddsprintout not built")
+def test_sddsprintout(tmp_path):
+    output = tmp_path / "print.txt"
+    subprocess.run(
+        [
+            str(SDDSPRINTOUT),
+            "SDDSlib/demo/example.sdds",
+            str(output),
+            "-columns=doubleCol",
+            "-parameters=stringParam",
+            "-noTitle",
+        ],
+        check=True,
+    )
+    assert output.exists()
+
+
+@pytest.mark.skipif(not (SDDSPROCESS.exists() and SDDSCHECK.exists()), reason="tools not built")
+def test_sddsprocess(tmp_path):
+    output = tmp_path / "process.sdds"
+    subprocess.run(
+        [
+            str(SDDSPROCESS),
+            "SDDSlib/demo/example.sdds",
+            str(output),
+            "-define=column,Index,i_row,type=long",
+        ],
+        check=True,
+    )
+    result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
+    assert result.stdout.strip() == "ok"
+
+
+@pytest.mark.skipif(not SDDSQUERY.exists(), reason="sddsquery not built")
+def test_sddsquery():
+    result = subprocess.run(
+        [str(SDDSQUERY), "SDDSlib/demo/example.sdds", "-columnlist"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "shortCol" in result.stdout
+
+
+@pytest.mark.skipif(not (SDDSSORT.exists() and SDDSCHECK.exists()), reason="tools not built")
+def test_sddssort(tmp_path):
+    output = tmp_path / "sort.sdds"
+    subprocess.run(
+        [
+            str(SDDSSORT),
+            "SDDSlib/demo/example.sdds",
+            str(output),
+            "-column=longCol",
+        ],
+        check=True,
+    )
+    result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
+    assert result.stdout.strip() == "ok"
+
+
+@pytest.mark.skipif(not (SDDSSPLIT.exists() and SDDSCHECK.exists()), reason="tools not built")
+def test_sddssplit(tmp_path):
+    subprocess.run(
+        [
+            str(SDDSSPLIT),
+            "SDDSlib/demo/example.sdds",
+            "-rootname=split",
+            "-digits=1",
+            "-firstPage=1",
+            "-lastPage=1",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    assert (tmp_path / "split1.sdds").exists()
+
+
+@pytest.mark.skipif(not (SDDSXREF.exists() and SDDSCHECK.exists()), reason="tools not built")
+def test_sddsxref(tmp_path):
+    output = tmp_path / "xref.sdds"
+    subprocess.run(
+        [
+            str(SDDSXREF),
+            "SDDSlib/demo/example.sdds",
+            "SDDSlib/demo/example.sdds",
+            str(output),
+            "-match=shortCol",
+        ],
+        check=True,
+    )
+    result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
+    assert result.stdout.strip() == "ok"
+
