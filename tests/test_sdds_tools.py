@@ -1,12 +1,15 @@
 import subprocess
 from pathlib import Path
+from contextlib import nullcontext
 import pytest
 
 
-def run_prog(cmd, expected_stdout=None, **kwargs):
+def run_prog(cmd, expected_stdout=None, *, capsys=None, **kwargs):
     """Run a command while reporting its status."""
     program = Path(cmd[0]).name
-    print(program, end="", flush=True)
+    out_context = capsys.disabled if capsys is not None else nullcontext
+    with out_context():
+        print(program, end="", flush=True)
 
     # Ensure output is captured when validation is requested
     capture_needed = expected_stdout is not None and "stdout" not in kwargs and "capture_output" not in kwargs
@@ -20,33 +23,35 @@ def run_prog(cmd, expected_stdout=None, **kwargs):
         if expected_stdout is not None:
             assert result.stdout.strip() == expected_stdout
     except Exception:
-        print(" failed")
+        with out_context():
+            print(" failed")
         raise
-    print(" passed")
+    with out_context():
+        print(" passed")
     return result
 
 SDDSCHECK = Path("bin/Linux-x86_64/sddscheck")
 SDDSCONVERT = Path("bin/Linux-x86_64/sddsconvert")
 
 @pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
-def test_sddscheck_ok():
-    run_prog([str(SDDSCHECK), "SDDSlib/demo/example.sdds"], expected_stdout="ok")
+def test_sddscheck_ok(capsys):
+    run_prog([str(SDDSCHECK), "SDDSlib/demo/example.sdds"], expected_stdout="ok", capsys=capsys)
 
 
 @pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
-def test_sddscheck_print_errors():
-    run_prog([str(SDDSCHECK), "SDDSlib/demo/example.sdds", "-printErrors"], expected_stdout="ok")
+def test_sddscheck_print_errors(capsys):
+    run_prog([str(SDDSCHECK), "SDDSlib/demo/example.sdds", "-printErrors"], expected_stdout="ok", capsys=capsys)
 
 @pytest.mark.skipif(not (SDDSCHECK.exists() and SDDSCONVERT.exists()), reason="tools not built")
-def test_sddsconvert(tmp_path):
+def test_sddsconvert(tmp_path, capsys):
     binary_file = tmp_path / "binary.sdds"
     ascii_file = tmp_path / "ascii.sdds"
 
-    run_prog([str(SDDSCONVERT), "SDDSlib/demo/example.sdds", str(binary_file), "-binary"])
-    run_prog([str(SDDSCHECK), str(binary_file)], expected_stdout="ok")
+    run_prog([str(SDDSCONVERT), "SDDSlib/demo/example.sdds", str(binary_file), "-binary"], capsys=capsys)
+    run_prog([str(SDDSCHECK), str(binary_file)], expected_stdout="ok", capsys=capsys)
 
-    run_prog([str(SDDSCONVERT), str(binary_file), str(ascii_file), "-ascii"])
-    run_prog([str(SDDSCHECK), str(ascii_file)], expected_stdout="ok")
+    run_prog([str(SDDSCONVERT), str(binary_file), str(ascii_file), "-ascii"], capsys=capsys)
+    run_prog([str(SDDSCHECK), str(ascii_file)], expected_stdout="ok", capsys=capsys)
 
 
 @pytest.mark.skipif(not (SDDSCHECK.exists() and SDDSCONVERT.exists()), reason="tools not built")
@@ -75,15 +80,15 @@ def test_sddsconvert(tmp_path):
         ["-convertUnits=column,doubleCol,m"],
     ],
 )
-def test_sddsconvert_options(tmp_path, option):
+def test_sddsconvert_options(tmp_path, option, capsys):
     output = tmp_path / "out.sdds"
     cmd = [str(SDDSCONVERT), "SDDSlib/demo/example.sdds"]
     if option[0].startswith("-pipe"):
         cmd.append(option[0])
         with output.open("wb") as f:
-            run_prog(cmd, stdout=f)
+            run_prog(cmd, stdout=f, capsys=capsys)
     else:
         cmd += [str(output)] + option
-        run_prog(cmd)
-    run_prog([str(SDDSCHECK), str(output)], expected_stdout="ok")
+        run_prog(cmd, capsys=capsys)
+    run_prog([str(SDDSCHECK), str(output)], expected_stdout="ok", capsys=capsys)
 
