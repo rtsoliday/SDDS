@@ -128,6 +128,14 @@ The SDDS API provides functions for defining and manipulating SDDS datasets. Som
 
 For more details, refer to the **[SDDS API documentation](https://ops.aps.anl.gov/manuals/SDDSlib/html/files.html)**.
 
+## Tests
+Simple regression tests are provided for `sddscheck` and `sddsconvert`. After building the project run:
+```bash
+pytest -q
+```
+The tests require the binaries in `bin/Linux-x86_64` and use `SDDSlib/demo/example.sdds` as sample data.
+
+
 ## ChatGPT Assistant
 A custom **[ChatGPT SDDS C/C++ Language Assistant](https://chatgpt.com/g/g-67376bce92308190a01b7056cdd3d74a-sdds-c-c-language-assistant)** is available to help write new SDDS software.
 
