@@ -15,11 +15,17 @@ Refer to `README.md` for build prerequisites and usage examples.
 
 ## Coding Conventions
 After reviewing the source in `SDDSlib` and `SDDSaps`, the following conventions are used:
-- **Indentation:** Two spaces are used for each indentation level. Tabs are generally avoided.
-- **Braces:** Opening braces are placed on the same line as function or control statements.
-- **Comments:** Source files begin with Doxygen‑style block comments documenting the file, authorship, and licensing.
-- **Naming:** Functions use camelCase with a lowercase initial letter (e.g., `moveToStringArray`), while macros and constants are uppercase with underscores (e.g., `COLUMN_BASED`).
-- **Headers:** Standard C headers appear after project headers in `#include` lists.
-- **Line Length:** No strict maximum line length is enforced; some lines exceed 200 characters.
+- **Indentation:** Two spaces per level; tabs are avoided.
+- **Brace style:** Opening braces on the same line as function or control statements (K&R style).
+- **Comments:** Each source file begins with a Doxygen-style block comment (`/** ... */`) documenting the file, authorship, and license. Functions also include Doxygen headers.
+- **Naming:**
+  - Public API functions use the `SDDS_` prefix followed by PascalCase (e.g., `SDDS_WriteAsciiPage`).
+  - Internal helper functions and variables use camelCase (e.g., `bigBuffer`, `compute_average`).
+  - Macros and constants are uppercase with underscores (e.g., `SDDS_SHORT`, `INITIAL_BIG_BUFFER_SIZE`).
+- **File organization:**
+  - Core library code is under `SDDSlib/`, utilities and applications under `SDDSaps/`.
+  - C source files use `.c` extension; C++ utilities use `.cc`.
+- **Header inclusion order:** Project headers (`"..."`) first, followed by standard library headers (`<...>`), then third-party headers.
+- **Line length:** No strict maximum; some lines exceed 200 characters.
 
 These guidelines should be followed when contributing new code or documentation to maintain consistency with the existing project.
