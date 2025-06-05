@@ -22,7 +22,7 @@ sudo yum install gcc gcc-c++ make zlib-devel libzstd-devel xz-devel hdf5-devel l
 
 ### Ubuntu, Debian
 ```bash
-sudo apt install --ignore-missing gcc g++ make zlib1g-dev libzstd-dev liblzma-dev libhdf5-dev libaec-dev libgsl-dev libpng-dev libgd-dev liblerc-dev libdeflate-dev libtiff-dev qtbase5-dev libblas-dev liblapack-dev mpich libmpich-dev
+sudo apt install --ignore-missing gcc g++ make zlib1g-dev libzstd-dev liblzma-dev libhdf5-dev libaec-dev libgsl-dev libpng-dev libgd-dev liblerc-dev libdeflate-dev libtiff-dev qtbase5-dev libblas-dev liblapack-dev liblapacke-dev mpich libmpich-dev
 ```
 
 ### OpenSUSE
