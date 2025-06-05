@@ -14,7 +14,6 @@ This repository contains the SDDS (Self Describing Data Sets) C/C++ library, uti
 Refer to `README.md` for build prerequisites and usage examples.
 
 ## Coding Conventions
-After reviewing the source in `SDDSlib` and `SDDSaps`, the following conventions are used:
 - **Indentation:** Two spaces per level; tabs are avoided.
 - **Brace style:** Opening braces on the same line as function or control statements (K&R style).
 - **Comments:** Each source file begins with a Doxygen-style block comment (`/** ... */`) documenting the file, authorship, and license. Functions also include Doxygen headers.
