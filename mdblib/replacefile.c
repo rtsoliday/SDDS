@@ -52,7 +52,10 @@ long renameRobust(char *oldName, char *newName, unsigned long flags)
 #else
   sprintf(buffer, "cp %s %s", oldName, newName);
 #endif
-  system(buffer);
+  {
+    int ret = system(buffer);
+    (void)ret;
+  }
   if (!fexists(newName)) {
     fprintf(stderr, "unable to copy %s to %s\n", oldName, newName);
     return 1;
