@@ -180,7 +180,8 @@ void newzoom() {
   
   strcat(cmd, " -output=");
   strcat(cmd, tempFile.fileName().toUtf8().constData());
-  system(cmd);
+  int sysret = system(cmd);
+  (void)sysret;
   free(cmd);
   do {
     if (fexists(tempFile.fileName().toUtf8().constData()))

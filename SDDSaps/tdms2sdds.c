@@ -876,6 +876,7 @@ void TDMS_ReadMetaData(FILE *fd, TDMS_SEGMENT *segment) {
       }
     }
   }
+  (void)bytesRead;
 }
 
 void TDMS_ReadRawData(FILE *fd, TDMS_FILE *tdms, uint32_t n_segment, long filesize) {
@@ -1151,6 +1152,7 @@ void TDMS_ReadRawData(FILE *fd, TDMS_FILE *tdms, uint32_t n_segment, long filesi
       }
     }
   }
+  (void)bytesRead;
 }
 
 void TDMS_GetValue(FILE *fd, void **value, int32_t datatype) {
@@ -1213,4 +1215,5 @@ void TDMS_GetValue(FILE *fd, void **value, int32_t datatype) {
     fprintf(stderr, "tdms2sdds: unknown data type\n");
     exit(EXIT_FAILURE);
   }
+  (void)bytesRead;
 }
