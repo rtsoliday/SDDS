@@ -138,6 +138,7 @@ int main(int argc, char **argv) {
   double *time, *data;
   short columnMajorOrder = 0;
   unsigned long majorOrderFlag;
+  size_t bytesRead;
 
   xUnits = yUnits = NULL;
 
@@ -327,7 +328,8 @@ int main(int argc, char **argv) {
     }
   } else {
     short sdata;
-    fread(buffer, sizeof(char), 4, fpi);
+    bytesRead = fread(buffer, sizeof(char), 4, fpi);
+    (void)bytesRead;
     for (i = 0; i < points; i++) {
       if (fread(&sdata, sizeof(sdata), 1, fpi) != 1) {
         fprintf(stderr, "file ends unexpectedly\n");

@@ -648,11 +648,25 @@ epicsShareFuncMDBLIB void *trealloc(void *ptr, uint64_t size_of_block);
 /* String-related macro definitions: */
 #define chop_nl(m_s) ( ((m_s)[strlen(m_s)-1]=='\n') ? (m_s)[strlen(m_s)-1]=0 : 0)
 
-#define queryn(s, t, n) ((*(t)=0),fputs(s,stdout),fgets(t,n,stdin),chop_nl(t))
-#define queryn_e(s, t, n) ((*(t)=0),fputs(s,stderr),fgets(t,n,stdin),chop_l(t))
+#define queryn(s, t, n) (queryn_func((s), (t), (n)))
+#define queryn_e(s, t, n) (queryn_e_func((s), (t), (n)))
 
 #define is_yes(c) ((c)=='y' || (c)=='Y')
 #define is_no(c) ((c)=='n' || (c)=='N')
+
+static inline void queryn_func(const char *s, char *t, int n) {
+  *t = 0;
+  fputs(s, stdout);
+  if (fgets(t, n, stdin))
+    chop_nl(t);
+}
+
+static inline void queryn_e_func(const char *s, char *t, int n) {
+  *t = 0;
+  fputs(s, stderr);
+  if (fgets(t, n, stdin))
+    chop_nl(t);
+}
 
 /*   -- Data-scanning routines: */
 epicsShareFuncMDBLIB extern long   query_long(char *prompt, long default_value);

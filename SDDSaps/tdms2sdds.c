@@ -765,15 +765,19 @@ int main(int argc, char **argv) {
 
 void TDMS_ReadLeadIn(FILE *fd, TDMS_SEGMENT *segment) {
   char buffer[50];
+  size_t bytesRead;
 
-  fread(buffer, 1, 4, fd);
+  bytesRead = fread(buffer, 1, 4, fd);
+  (void)bytesRead;
   buffer[4] = '\0';
   if (strcmp(buffer, "TDSm") != 0) {
     fprintf(stderr, "tdms2sdds: Error: File does not start with TDSm\n");
     exit(EXIT_FAILURE);
   }
-  fread(&(segment->lead_in.toc), 1, 4, fd);     /* TOC */
-  fread(&(segment->lead_in.version), 1, 4, fd); /* Version */
+  bytesRead = fread(&(segment->lead_in.toc), 1, 4, fd);     /* TOC */
+  (void)bytesRead;
+  bytesRead = fread(&(segment->lead_in.version), 1, 4, fd); /* Version */
+  (void)bytesRead;
   if (segment->lead_in.version == 4712) {
     fprintf(stderr, "tdms2sdds: Error: TDMS version 1.0 files unsupported\n");
     exit(EXIT_FAILURE);
@@ -782,12 +786,15 @@ void TDMS_ReadLeadIn(FILE *fd, TDMS_SEGMENT *segment) {
     fprintf(stderr, "tdms2sdds: Error: Unknown TDMS version\n");
     exit(EXIT_FAILURE);
   }
-  fread(&(segment->lead_in.next_segment_offset), 1, 8, fd); /* Next segment offset */
-  fread(&(segment->lead_in.raw_data_offset), 1, 8, fd);     /* Raw data offset */
+  bytesRead = fread(&(segment->lead_in.next_segment_offset), 1, 8, fd); /* Next segment offset */
+  (void)bytesRead;
+  bytesRead = fread(&(segment->lead_in.raw_data_offset), 1, 8, fd);     /* Raw data offset */
+  (void)bytesRead;
 }
 
 void TDMS_ReadMetaData(FILE *fd, TDMS_SEGMENT *segment) {
   uint32_t uLong, i, j;
+  size_t bytesRead;
 
   segment->xpart.name = NULL;
   segment->xpart.unit = NULL;
@@ -798,35 +805,49 @@ void TDMS_ReadMetaData(FILE *fd, TDMS_SEGMENT *segment) {
   segment->xpart.time_pref = NULL;
   segment->xpart.range = 0;
 
-  fread(&(segment->meta_data.n_objects), 1, 4, fd);
+  bytesRead = fread(&(segment->meta_data.n_objects), 1, 4, fd);
+  (void)bytesRead;
 
   segment->meta_data.object = malloc(sizeof(TDMS_META_DATA_OBJECT) * segment->meta_data.n_objects);
   for (i = 0; i < segment->meta_data.n_objects; i++) {
-    fread(&uLong, 1, 4, fd);
+    bytesRead = fread(&uLong, 1, 4, fd);
+    (void)bytesRead;
     segment->meta_data.object[i].path = malloc(sizeof(char) * (uLong + 1));
-    fread(segment->meta_data.object[i].path, 1, uLong, fd);
+    bytesRead = fread(segment->meta_data.object[i].path, 1, uLong, fd);
+    (void)bytesRead;
     segment->meta_data.object[i].path[uLong] = '\0';
-    fread(&(segment->meta_data.object[i].raw_data_index), 1, 4, fd);
+    bytesRead = fread(&(segment->meta_data.object[i].raw_data_index), 1, 4, fd);
+    (void)bytesRead;
     if ((segment->meta_data.object[i].raw_data_index != 0xFFFFFFFF) && (segment->meta_data.object[i].raw_data_index != 0x00000000)) {
-      fread(&(segment->meta_data.object[i].raw_data_datatype), 1, 4, fd);
-      fread(&(segment->meta_data.object[i].raw_data_dimensions), 1, 4, fd);
-      fread(&(segment->meta_data.object[i].raw_data_count), 1, 8, fd);
+      bytesRead = fread(&(segment->meta_data.object[i].raw_data_datatype), 1, 4, fd);
+      (void)bytesRead;
+      bytesRead = fread(&(segment->meta_data.object[i].raw_data_dimensions), 1, 4, fd);
+      (void)bytesRead;
+      bytesRead = fread(&(segment->meta_data.object[i].raw_data_count), 1, 8, fd);
+      (void)bytesRead;
       if (segment->meta_data.object[i].raw_data_datatype == tdsTypeString) {
-        fread(&(segment->meta_data.object[i].raw_data_total_size), 1, 8, fd);
+        bytesRead = fread(&(segment->meta_data.object[i].raw_data_total_size), 1, 8, fd);
+        (void)bytesRead;
       }
     }
-    fread(&(segment->meta_data.object[i].n_properties), 1, 4, fd);
+    bytesRead = fread(&(segment->meta_data.object[i].n_properties), 1, 4, fd);
+    (void)bytesRead;
     segment->meta_data.object[i].property = malloc(sizeof(TDMS_META_DATA_OBJECT_PROPERTY) * segment->meta_data.object[i].n_properties);
     for (j = 0; j < segment->meta_data.object[i].n_properties; j++) {
-      fread(&uLong, 1, 4, fd);
+      bytesRead = fread(&uLong, 1, 4, fd);
+      (void)bytesRead;
       segment->meta_data.object[i].property[j].name = malloc(sizeof(char) * (uLong + 1));
-      fread(segment->meta_data.object[i].property[j].name, 1, uLong, fd);
+      bytesRead = fread(segment->meta_data.object[i].property[j].name, 1, uLong, fd);
+      (void)bytesRead;
       segment->meta_data.object[i].property[j].name[uLong] = '\0';
-      fread(&(segment->meta_data.object[i].property[j].datatype), 1, 4, fd);
+      bytesRead = fread(&(segment->meta_data.object[i].property[j].datatype), 1, 4, fd);
+      (void)bytesRead;
       if (segment->meta_data.object[i].property[j].datatype == tdsTypeString) {
-        fread(&uLong, 1, 4, fd);
+        bytesRead = fread(&uLong, 1, 4, fd);
+        (void)bytesRead;
         segment->meta_data.object[i].property[j].value = malloc(sizeof(char) * (uLong + 1));
-        fread(segment->meta_data.object[i].property[j].value, 1, uLong, fd);
+        bytesRead = fread(segment->meta_data.object[i].property[j].value, 1, uLong, fd);
+        (void)bytesRead;
         ((char *)(segment->meta_data.object[i].property[j].value))[uLong] = '\0';
       } else {
         TDMS_GetValue(fd, &(segment->meta_data.object[i].property[j].value), segment->meta_data.object[i].property[j].datatype);
@@ -868,6 +889,7 @@ void TDMS_ReadRawData(FILE *fd, TDMS_FILE *tdms, uint32_t n_segment, long filesi
   uint64_t uLLong;
   int prevFound = 0;
   TDMS_SEGMENT *segment = &((*tdms).segment[n_segment]);
+  size_t bytesRead;
 
   segment->raw_data.n_channels = 0;
   for (i = 0; i < segment->meta_data.n_objects; i++) {
@@ -1054,54 +1076,54 @@ void TDMS_ReadRawData(FILE *fd, TDMS_FILE *tdms, uint32_t n_segment, long filesi
         if (segment->meta_data.object[i].raw_data_index != 0xFFFFFFFF) {
           if (segment->meta_data.object[i].raw_data_datatype == tdsTypeBoolean) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((int8_t *)(segment->raw_data.channel[j].values))[k]), 1, 1, fd);
+              bytesRead = fread(&(((int8_t *)(segment->raw_data.channel[j].values))[k]), 1, 1, fd);
             }
           } else if (segment->meta_data.object[i].raw_data_datatype == tdsTypeI8) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((int8_t *)(segment->raw_data.channel[j].values))[k]), 1, 1, fd);
+              bytesRead = fread(&(((int8_t *)(segment->raw_data.channel[j].values))[k]), 1, 1, fd);
             }
           } else if (segment->meta_data.object[i].raw_data_datatype == tdsTypeU8) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((uint8_t *)(segment->raw_data.channel[j].values))[k]), 1, 1, fd);
+              bytesRead = fread(&(((uint8_t *)(segment->raw_data.channel[j].values))[k]), 1, 1, fd);
             }
           } else if (segment->meta_data.object[i].raw_data_datatype == tdsTypeI16) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((int16_t *)(segment->raw_data.channel[j].values))[k]), 1, 2, fd);
+              bytesRead = fread(&(((int16_t *)(segment->raw_data.channel[j].values))[k]), 1, 2, fd);
             }
           } else if (segment->meta_data.object[i].raw_data_datatype == tdsTypeU16) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((uint16_t *)(segment->raw_data.channel[j].values))[k]), 1, 2, fd);
+              bytesRead = fread(&(((uint16_t *)(segment->raw_data.channel[j].values))[k]), 1, 2, fd);
             }
           } else if (segment->meta_data.object[i].raw_data_datatype == tdsTypeI32) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((int32_t *)(segment->raw_data.channel[j].values))[k]), 1, 4, fd);
+              bytesRead = fread(&(((int32_t *)(segment->raw_data.channel[j].values))[k]), 1, 4, fd);
             }
           } else if (segment->meta_data.object[i].raw_data_datatype == tdsTypeU32) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((uint32_t *)(segment->raw_data.channel[j].values))[k]), 1, 4, fd);
+              bytesRead = fread(&(((uint32_t *)(segment->raw_data.channel[j].values))[k]), 1, 4, fd);
             }
           } else if (segment->meta_data.object[i].raw_data_datatype == tdsTypeI64) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((int64_t *)(segment->raw_data.channel[j].values))[k]), 1, 8, fd);
+              bytesRead = fread(&(((int64_t *)(segment->raw_data.channel[j].values))[k]), 1, 8, fd);
             }
           } else if (segment->meta_data.object[i].raw_data_datatype == tdsTypeU64) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((uint64_t *)(segment->raw_data.channel[j].values))[k]), 1, 8, fd);
+              bytesRead = fread(&(((uint64_t *)(segment->raw_data.channel[j].values))[k]), 1, 8, fd);
             }
           } else if ((segment->meta_data.object[i].raw_data_datatype == tdsTypeSingleFloat) ||
                      (segment->meta_data.object[i].raw_data_datatype == tdsTypeSingleFloatWithUnit)) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((float *)(segment->raw_data.channel[j].values))[k]), 1, 4, fd);
+              bytesRead = fread(&(((float *)(segment->raw_data.channel[j].values))[k]), 1, 4, fd);
             }
           } else if ((segment->meta_data.object[i].raw_data_datatype == tdsTypeDoubleFloat) ||
                      (segment->meta_data.object[i].raw_data_datatype == tdsTypeDoubleFloatWithUnit)) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&(((double *)(segment->raw_data.channel[j].values))[k]), 1, 8, fd);
+              bytesRead = fread(&(((double *)(segment->raw_data.channel[j].values))[k]), 1, 8, fd);
             }
           } else if (segment->meta_data.object[i].raw_data_datatype == tdsTypeTimeStamp) {
             for (k = chunk * segment->meta_data.object[i].raw_data_count; k < (chunk + 1) * segment->meta_data.object[i].raw_data_count; k++) {
-              fread(&uLLong, 1, 8, fd);
-              fread(&LLong, 1, 8, fd);
+              bytesRead = fread(&uLLong, 1, 8, fd);
+              bytesRead = fread(&LLong, 1, 8, fd);
               /*LLong = LLong - 2082844791LL; */ /* Subtract seconds between 1904 and 1970 */
               segment->raw_data.channel[j].values[k] = LLong + (uLLong * 5.42101086242752217e-20);
             }
@@ -1137,41 +1159,41 @@ void TDMS_GetValue(FILE *fd, void **value, int32_t datatype) {
 
   if (datatype == tdsTypeI8) {
     *value = malloc(sizeof(int8_t));
-    fread(((int8_t *)(*value)), 1, 1, fd);
+    bytesRead = fread(((int8_t *)(*value)), 1, 1, fd);
   } else if (datatype == tdsTypeU8) {
     *value = malloc(sizeof(uint8_t));
-    fread(((uint8_t *)(*value)), 1, 1, fd);
+    bytesRead = fread(((uint8_t *)(*value)), 1, 1, fd);
   } else if (datatype == tdsTypeI16) {
     *value = malloc(sizeof(int16_t));
-    fread(((int16_t *)(*value)), 1, 2, fd);
+    bytesRead = fread(((int16_t *)(*value)), 1, 2, fd);
   } else if (datatype == tdsTypeU16) {
     *value = malloc(sizeof(uint16_t));
-    fread(((uint16_t *)(*value)), 1, 2, fd);
+    bytesRead = fread(((uint16_t *)(*value)), 1, 2, fd);
   } else if (datatype == tdsTypeI32) {
     *value = malloc(sizeof(int32_t));
-    fread(((int32_t *)(*value)), 1, 4, fd);
+    bytesRead = fread(((int32_t *)(*value)), 1, 4, fd);
   } else if (datatype == tdsTypeU32) {
     *value = malloc(sizeof(uint32_t));
-    fread(((uint32_t *)(*value)), 1, 4, fd);
+    bytesRead = fread(((uint32_t *)(*value)), 1, 4, fd);
   } else if (datatype == tdsTypeI64) {
     *value = malloc(sizeof(int64_t));
-    fread(((int64_t *)(*value)), 1, 8, fd);
+    bytesRead = fread(((int64_t *)(*value)), 1, 8, fd);
   } else if (datatype == tdsTypeU64) {
     *value = malloc(sizeof(uint64_t));
-    fread(((uint64_t *)(*value)), 1, 8, fd);
+    bytesRead = fread(((uint64_t *)(*value)), 1, 8, fd);
   } else if ((datatype == tdsTypeSingleFloat) || (datatype == tdsTypeSingleFloatWithUnit)) {
     *value = malloc(sizeof(float));
-    fread(((float *)(*value)), 1, 4, fd);
+    bytesRead = fread(((float *)(*value)), 1, 4, fd);
   } else if ((datatype == tdsTypeDoubleFloat) || (datatype == tdsTypeDoubleFloatWithUnit)) {
     *value = malloc(sizeof(double));
-    fread(((double *)(*value)), 1, 8, fd);
+    bytesRead = fread(((double *)(*value)), 1, 8, fd);
   } else if (datatype == tdsTypeBoolean) {
     *value = malloc(sizeof(int8_t));
-    fread(((int8_t *)(*value)), 1, 1, fd);
+    bytesRead = fread(((int8_t *)(*value)), 1, 1, fd);
   } else if (datatype == tdsTypeTimeStamp) {
     *value = malloc(sizeof(double));
-    fread(&uLLong, 1, 8, fd);
-    fread(&LLong, 1, 8, fd);
+    bytesRead = fread(&uLLong, 1, 8, fd);
+    bytesRead = fread(&LLong, 1, 8, fd);
     /*LLong = LLong - 2082844791LL; */ /* Subtract seconds between 1904 and 1970 */
     *((double *)(*value)) = LLong + (uLLong * 5.42101086242752217e-20);
   } else if (datatype == tdsTypeVoid) {

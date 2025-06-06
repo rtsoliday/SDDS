@@ -166,13 +166,16 @@ char    **name;
 	A = m_get((unsigned)(mat.m),(unsigned)(mat.n));
 	for ( i = 0; i < A->m*A->n; i++ )
 	{
-		if ( p_flag == DOUBLE_PREC )
-		    fread(&d_temp,sizeof(double),1,fp);
-		else
-		{
-		    fread(&f_temp,sizeof(float),1,fp);
-		    d_temp = f_temp;
-		}
+                if ( p_flag == DOUBLE_PREC ) {
+                    size_t r = fread(&d_temp, sizeof(double), 1, fp);
+                    (void)r;
+                }
+                else
+                {
+                    size_t r = fread(&f_temp, sizeof(float), 1, fp);
+                    (void)r;
+                    d_temp = f_temp;
+                }
 		if ( o_flag == ROW_ORDER )
 		    A->me[i / A->n][i % A->n] = d_temp;
 		else if ( o_flag == COL_ORDER )
@@ -184,10 +187,13 @@ char    **name;
 	if ( mat.imag )         /* skip imaginary part */
 	for ( i = 0; i < A->m*A->n; i++ )
 	{
-		if ( p_flag == DOUBLE_PREC )
-		    fread(&d_temp,sizeof(double),1,fp);
-		else
-		    fread(&f_temp,sizeof(float),1,fp);
+                if ( p_flag == DOUBLE_PREC ) {
+                    size_t r = fread(&d_temp, sizeof(double), 1, fp);
+                    (void)r;
+                } else {
+                    size_t r = fread(&f_temp, sizeof(float), 1, fp);
+                    (void)r;
+                }
 	}
 
 	return A;

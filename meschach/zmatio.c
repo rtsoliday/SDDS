@@ -137,7 +137,10 @@ ZMAT     *mat;
 #endif	
 				&mat->me[i][j].re,&mat->me[i][j].im)<1 );
 	  fprintf(stderr,"Continue: ");
-	  fscanf(fp,"%c",&c);
+          {
+            int rv = fscanf(fp, "%c", &c);
+            (void)rv;
+          }
 	  if ( c == 'n' || c == 'N' )
 	  {    dynamic = FALSE;                 goto redo;      }
 	  if ( (c == 'b' || c == 'B') /* && i > 0 */ )

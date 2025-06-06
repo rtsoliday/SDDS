@@ -158,7 +158,8 @@ void make_udf(void)
   if (istackptr==1)
     queryn("function name: ", name, 20);
   else {
-    fgets(name, 20, input_stack[istackptr-1].fp);
+    if (!fgets(name, 20, input_stack[istackptr-1].fp))
+      return;
     chop_nl(name);
     if (input_stack[istackptr-1].filemode==ECHO)
       puts(name);

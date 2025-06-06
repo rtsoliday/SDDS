@@ -157,50 +157,83 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  fread(&trigger, sizeof(char), 1, fpi);     /* Read Trigger Flag */
-  fread(&dwell_flag, sizeof(char), 1, fpi);  /* Read dwell flag */
-  fread(&dwell_units, sizeof(char), 1, fpi); /* Read dwell units */
-  fread(&acq_mode, sizeof(char), 1, fpi);
-  fread(&dwell_913, sizeof(long), 1, fpi);
+  bytesRead = fread(&trigger, sizeof(char), 1, fpi);     /* Read Trigger Flag */
+  (void)bytesRead;
+  bytesRead = fread(&dwell_flag, sizeof(char), 1, fpi);  /* Read dwell flag */
+  (void)bytesRead;
+  bytesRead = fread(&dwell_units, sizeof(char), 1, fpi); /* Read dwell units */
+  (void)bytesRead;
+  bytesRead = fread(&acq_mode, sizeof(char), 1, fpi);
+  (void)bytesRead;
+  bytesRead = fread(&dwell_913, sizeof(long), 1, fpi);
+  (void)bytesRead;
   swapulong(&dwell_913);
-  fread(&pass_length, sizeof(short), 1, fpi);
+  bytesRead = fread(&pass_length, sizeof(short), 1, fpi);
+  (void)bytesRead;
   swapushort(&pass_length);
-  fread(&pass_count, sizeof(long), 1, fpi);
+  bytesRead = fread(&pass_count, sizeof(long), 1, fpi);
+  (void)bytesRead;
   swapulong(&pass_count);
-  fread(&pass_count_preset, sizeof(long), 1, fpi);
+  bytesRead = fread(&pass_count_preset, sizeof(long), 1, fpi);
+  (void)bytesRead;
   swapulong(&pass_count_preset);
-  fread(acq_time, sizeof(char), 8, fpi);
-  fread(acq_date, sizeof(char), 8, fpi);
-  fread(&mark_chan, sizeof(short), 1, fpi);
+  bytesRead = fread(acq_time, sizeof(char), 8, fpi);
+  (void)bytesRead;
+  bytesRead = fread(acq_date, sizeof(char), 8, fpi);
+  (void)bytesRead;
+  bytesRead = fread(&mark_chan, sizeof(short), 1, fpi);
+  (void)bytesRead;
   swapushort(&mark_chan);
-  fread(&mcs_num, sizeof(char), 1, fpi);
-  fread(&cal_flag, sizeof(char), 1, fpi);
-  fread(cal_units, sizeof(char), 4, fpi);
-  fread(&cal_zero, sizeof(float), 1, fpi);
+  bytesRead = fread(&mcs_num, sizeof(char), 1, fpi);
+  (void)bytesRead;
+  bytesRead = fread(&cal_flag, sizeof(char), 1, fpi);
+  (void)bytesRead;
+  bytesRead = fread(cal_units, sizeof(char), 4, fpi);
+  (void)bytesRead;
+  bytesRead = fread(&cal_zero, sizeof(float), 1, fpi);
+  (void)bytesRead;
   swapfloat(&cal_zero);
-  fread(&cal_slope, sizeof(float), 1, fpi);
+  bytesRead = fread(&cal_slope, sizeof(float), 1, fpi);
+  (void)bytesRead;
   swapfloat(&cal_slope);
-  fread(reserved, sizeof(char), 10, fpi);
-  fread(&id_byte, sizeof(char), 1, fpi);
-  fread(reserved, sizeof(char), 1, fpi);
-  fread(&detector_len, sizeof(char), 1, fpi);
-  fread(detector, sizeof(char), 63, fpi);
-  fread(&sample_len, sizeof(char), 1, fpi);
-  fread(sample, sizeof(char), 63, fpi);
-  fread(reserved, sizeof(char), 16, fpi); /* skip view info & reserved */
-  fread(&disc_sel, sizeof(char), 1, fpi);
-  fread(&disc_edge, sizeof(char), 1, fpi);
-  fread(&disc, sizeof(float), 1, fpi);
+  bytesRead = fread(reserved, sizeof(char), 10, fpi);
+  (void)bytesRead;
+  bytesRead = fread(&id_byte, sizeof(char), 1, fpi);
+  (void)bytesRead;
+  bytesRead = fread(reserved, sizeof(char), 1, fpi);
+  (void)bytesRead;
+  bytesRead = fread(&detector_len, sizeof(char), 1, fpi);
+  (void)bytesRead;
+  bytesRead = fread(detector, sizeof(char), 63, fpi);
+  (void)bytesRead;
+  bytesRead = fread(&sample_len, sizeof(char), 1, fpi);
+  (void)bytesRead;
+  bytesRead = fread(sample, sizeof(char), 63, fpi);
+  (void)bytesRead;
+  bytesRead = fread(reserved, sizeof(char), 16, fpi); /* skip view info & reserved */
+  (void)bytesRead;
+  bytesRead = fread(&disc_sel, sizeof(char), 1, fpi);
+  (void)bytesRead;
+  bytesRead = fread(&disc_edge, sizeof(char), 1, fpi);
+  (void)bytesRead;
+  bytesRead = fread(&disc, sizeof(float), 1, fpi);
+  (void)bytesRead;
   swapfloat(&disc);
-  fread(&sca_uld, sizeof(float), 1, fpi);
+  bytesRead = fread(&sca_uld, sizeof(float), 1, fpi);
+  (void)bytesRead;
   swapfloat(&sca_uld);
-  fread(&sca_lld, sizeof(float), 1, fpi);
+  bytesRead = fread(&sca_lld, sizeof(float), 1, fpi);
+  (void)bytesRead;
   swapfloat(&sca_lld);
-  fread(&dwell, sizeof(float), 1, fpi);
+  bytesRead = fread(&dwell, sizeof(float), 1, fpi);
+  (void)bytesRead;
   swapfloat(&dwell);
-  fread(&consistent, sizeof(char), 1, fpi);
-  fread(reserved, sizeof(char), 21, fpi);
-  fread(mcs_id, sizeof(char), 8, fpi);
+  bytesRead = fread(&consistent, sizeof(char), 1, fpi);
+  (void)bytesRead;
+  bytesRead = fread(reserved, sizeof(char), 21, fpi);
+  (void)bytesRead;
+  bytesRead = fread(mcs_id, sizeof(char), 8, fpi);
+  (void)bytesRead;
   mcs_id[8] = '\0';
 
   sprintf(ts1, "%d", mcs_num + 1);
