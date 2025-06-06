@@ -677,7 +677,7 @@ void SetInfoData(PARAMETER_INFO **parameter, long parameters, COLUMN_INFO **colu
       fprintf(stderr, "Error: Invalid data type '%s' for parameter '%s'.\n", type, par->name);
       exit(EXIT_FAILURE);
     }
-    par->data = malloc(sizeof(double)); /* Temporary allocation, actual type handled below */
+    par->data = malloc(SDDS_type_size[par->type - 1]);
     if (!par->data) {
       fprintf(stderr, "Error: Memory allocation failed for parameter data.\n");
       exit(EXIT_FAILURE);
