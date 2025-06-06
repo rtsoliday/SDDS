@@ -43,7 +43,9 @@
 
 /* prototypes for this file are in memory.prot */
 /* file    : memory.c
- * contents: store(), rpn_store(), rpn_create_mem(), is_memory(), revmem(), viewmem(), rpn_recall()
+ * contents: rpn_create_mem(), rpn_store(), rpn_quick_store(), rpn_recall(),
+ *           rpn_str_recall(), store_in_mem(), store_in_str_mem(),
+ *           is_memory(), revmem()
  * purpose : RPN memory routines
  *
  * Michael Borland, 1988, 1992
@@ -155,8 +157,8 @@ char *rpn_str_recall(long memory_number)
 }
 
 
-/* routine: store_in_mem()
- * purpose: implements user's 'sto' command
+/* routine: store_in_str_mem()
+ * purpose: implements user's 'ssto' command
  */
 
 void store_in_mem(void)
@@ -184,8 +186,8 @@ void store_in_mem(void)
     memoryData[i_mem] = stack[stackptr-1];
 }
 
-/* routine: store_in_mem()
- * purpose: implements user's 'sto' command
+/* routine: store_in_str_mem()
+ * purpose: implements user's 'ssto' command
  */
 
 void store_in_str_mem(void)
@@ -214,7 +216,7 @@ void store_in_str_mem(void)
 }
 
 /* routine: is_memory()
- * purpose: return the memory numberof a named memory, and put the
+ * purpose: return the memory number of a named memory, and put the
  *          data stored in the memory into a location supplied by the
  *          caller.  Basically an implementation of the memory recall
  *          facility.

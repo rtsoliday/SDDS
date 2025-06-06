@@ -31,7 +31,7 @@
 /* file    : rpn_io.c
  * contents: open_cominp(), open_io(), close_io()
  *           choose_format(), view(), view_top(), tsci(), viewlog(), fprf()
- *           scan(), _gets(), _puts()
+ *           scan(), rpn_gets(), rpn_puts()
  * purpose : user-callable IO routines
  *
  * Michael Borland, 1988
@@ -180,7 +180,7 @@ void close_io(void)
     io_file[unit].mode = -1;
     }
 
-/* routine: _gets()
+/* routine: rpn_gets()
  * purpose: implement the user command 'gets'
  */
 
@@ -366,7 +366,7 @@ void view_str(void)
             sstack[i]);
     }
 
-/* routine: _puts()
+/* routine: rpn_puts()
  * purpose: implement 'puts' command
  */
 

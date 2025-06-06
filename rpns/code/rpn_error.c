@@ -19,7 +19,7 @@
 */
 
 /* file: rpn_error.c
- * purpose: record occurence of errors in rpn routines
+ * purpose: record occurrence of errors in rpn routines
  *
  * Michael Borland, 1994.
  */
