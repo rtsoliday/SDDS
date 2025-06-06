@@ -1,10 +1,11 @@
 /**
  * @file compress.c
- * @brief Provides a string manipulation function.
+ * @brief Implements a simple string compression utility.
  *
- * This file contains functions to create, manage, and manipulate buffers that store
- * lines of text strings. Buffers can be dynamically created, added to, cleared, and
- * printed to files.
+ * This file provides the `compressString` function, which removes consecutive
+ * duplicate characters from a string when those characters appear in a
+ * reference string.  It is typically used to collapse runs of whitespace or
+ * other repeated characters.
  *
  * @copyright 
  *   - (c) 2002 The University of Chicago, as Operator of Argonne National Laboratory.

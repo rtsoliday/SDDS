@@ -1,10 +1,11 @@
 /**
  * @file clean_filename.c
- * @brief Provides functions to manipulate and clean filename strings.
+ * @brief Utility for stripping path and version information from filenames.
  *
- * This file contains functions to create, manage, and manipulate buffers that store
- * lines of text strings. Buffers can be dynamically created, added to, cleared, and
- * printed to files.
+ * The file implements the `clean_filename` function, which removes any path
+ * components enclosed in square brackets and truncates the string at the first
+ * semicolon.  The result is a plain filename without VMS style path or version
+ * suffixes.
  *
  * @copyright 
  *   - (c) 2002 The University of Chicago, as Operator of Argonne National Laboratory.
