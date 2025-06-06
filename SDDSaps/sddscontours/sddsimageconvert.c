@@ -541,12 +541,12 @@ long ConvertSDDSsingleColumnImage(SDDS_DATASET *SDDS_orig, SDDS_DATASET *SDDS_da
         intlength = strlen(buffer);
       }
       for (n = 0; n < yDimension; n++) {
-        lineColumnNames[n] = malloc(sizeof(char) * 40);
+        lineColumnNames[n] = malloc(sizeof(char) * 128);
 
         if (intlength) {
-          snprintf(lineColumnNames[n], 64, "%s%0*ld", prefix, (int)intlength, (long)(n * yInterval + yMinimum));
+          snprintf(lineColumnNames[n], 128, "%s%0*ld", prefix, (int)intlength, (long)(n * yInterval + yMinimum));
         } else {
-          snprintf(lineColumnNames[n], 64, "%s%g", prefix, n * yInterval + yMinimum);
+          snprintf(lineColumnNames[n], 128, "%s%g", prefix, n * yInterval + yMinimum);
         }
         if (SDDS_DefineSimpleColumn(SDDS_dataset, lineColumnNames[n], NULL, SDDS_DOUBLE) == 0) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
