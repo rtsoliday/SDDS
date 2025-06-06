@@ -49,8 +49,8 @@
  *
 */
 
-/* file: rpn_csh.
- * purpose: create and manage a synchronize csh subprocess
+/* file: rpn_csh.c
+ * purpose: create and manage a synchronized csh subprocess
  *
  * M. Borland, 1993
  */

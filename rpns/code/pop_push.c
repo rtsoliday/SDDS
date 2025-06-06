@@ -31,7 +31,7 @@
  *           pop_string(), push_string()
  *           push_code(), pop_code()
  *
- * purpose : stack maintainence subroutines for RPN
+ * purpose : stack maintenance subroutines for RPN
  * Michael Borland, 1988
  */
 #include "rpn_internal.h"

@@ -238,7 +238,7 @@ void quit(void)
   exit(1);
 }
 
-/* routine: help()
+/* routine: rpn_help()
  * purpose: implement user's 'help' command
  */
 

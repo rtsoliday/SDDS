@@ -28,7 +28,7 @@
 /* prototypes for this file are in conditional.prot */
 /* file    : conditional.c
  * contents: conditional(), dissect_conditional()
- * purpose : implemetation of conditionals in RPN
+ * purpose : implementation of conditionals in RPN
  *
  * Michael Borland, 1988
  */
