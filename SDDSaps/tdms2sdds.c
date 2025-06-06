@@ -1156,6 +1156,7 @@ void TDMS_ReadRawData(FILE *fd, TDMS_FILE *tdms, uint32_t n_segment, long filesi
 void TDMS_GetValue(FILE *fd, void **value, int32_t datatype) {
   uint64_t uLLong;
   int64_t LLong;
+  size_t bytesRead;
 
   if (datatype == tdsTypeI8) {
     *value = malloc(sizeof(int8_t));

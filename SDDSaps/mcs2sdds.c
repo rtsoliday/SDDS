@@ -98,6 +98,7 @@ int main(int argc, char **argv) {
   unsigned long *ucount;
   long *count, *channel;
   long ascii;
+  size_t bytesRead;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&scanned, argc, argv);
