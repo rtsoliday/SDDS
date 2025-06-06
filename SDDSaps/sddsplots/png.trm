@@ -412,7 +412,10 @@ int PNG_movie(void)
      snprintf(command, sizeof(command),
              "ffmpeg -y -framerate %d -i %s -c:v libx264 -pix_fmt yuv420p %s",
              fps, pngTemplate, filename);
-     system(command);
+     {
+       int sysret = system(command);
+       (void)sysret;
+     }
      for (i=1; i<pngGeneration; i++) {
        sprintf(filename, pngTemplate, i);
        remove(filename);

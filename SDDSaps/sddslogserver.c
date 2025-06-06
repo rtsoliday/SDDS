@@ -285,7 +285,8 @@ int main(int argc, char *argv[]) {
   }
   if (!fexists(rootDir))
     error("Error: Root directory not found", argv[0]);
-  chdir(rootDir);
+  if (chdir(rootDir) != 0)
+    perror("chdir");
 
   /* Create socket */
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -508,7 +509,10 @@ int createChannel(char *spec)
     return 6;
 
   snprintf(buffer, sizeof(buffer), "sddsquery %s.sdds -sddsOutput=%s.chd -column", chName, chName);
-  system(buffer);
+  {
+    int sysret = system(buffer);
+    (void)sysret;
+  }
   snprintf(buffer, sizeof(buffer), "%s.chd", chName);
   if (!fexists(buffer))
     return 6;
@@ -520,7 +524,10 @@ int createChannel(char *spec)
 
 void updateChannelDescription(void) {
   char *command = "sddscombine *.chd -merge -pipe=out | sddsprocess -pipe=in -match=col,Name=SampleIDNumber,! -match=col,Name=Time,! allChd.sdds";
-  system(command);
+  {
+    int sysret = system(command);
+    (void)sysret;
+  }
 }
 
 int addValue(char *spec)
@@ -718,7 +725,10 @@ int makeDirectoryList(int64_t *returnNumber, char ***returnBuffer) {
   remove("dirList.sdds");
   snprintf(command, sizeof(command),
            "find . -type d -maxdepth 1 | tail -n +2 | plaindata2sdds -pipe=in dirList.sdds -input=ascii -column=DirectoryName,string -norow");
-  system(command);
+  {
+    int sysret = system(command);
+    (void)sysret;
+  }
   if (!SDDS_InitializeInput(&SDDSin, "dirList.sdds")) {
     printf("Problem reading dirList.sdds\n");
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
