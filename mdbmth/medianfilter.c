@@ -156,9 +156,9 @@ double quickSelect(double *arr, int n) {
  */
 void median_filter(double *x, double *m, long n, long W) {
   /* x  -- input signal
-     m  -- output signal buffer 
+     m  -- output signal buffer
      n  -- size of input signal
-     W  -- size of slding window (must be odd number) W = 2*W2 + 1) */
+     W  -- size of sliding window (must be odd number) W = 2*W2 + 1) */
   long i, k, idx, W2;
   double *w;
   if (W % 2 == 0)

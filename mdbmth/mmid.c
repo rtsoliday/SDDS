@@ -3,8 +3,8 @@
  * @brief Modified midpoint method for integrating ordinary differential equations (ODEs).
  *
  * This file implements the modified midpoint method for integrating ODEs,
- * based on the algorithms presented in "Numerical Recipes in C" by
- * Michael Borland (1995).
+ * based on algorithms presented in "Numerical Recipes in C" by
+ * Press et al.
  *
  * @copyright 
  *   - (c) 2002 The University of Chicago, as Operator of Argonne National Laboratory.
