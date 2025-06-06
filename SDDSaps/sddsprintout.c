@@ -1692,7 +1692,7 @@ htab *readTranslationTable(char *TranslationFile) {
     SDDS_Bomb("Problem with translation file");
   } else {
     while (--rows >= 0)
-      hadd(ht, oldName[rows], strlen(oldName[rows]), newName[rows]);
+      hadd(ht, (ub1 *)oldName[rows], (ub4)strlen(oldName[rows]), newName[rows]);
   }
   return ht;
 #endif
@@ -1702,7 +1702,7 @@ char *findTranslation(htab *ht, char *key) {
 #if defined(_WIN32)
   SDDS_Bomb("The latex and html options in sddsprintout are not available on Windows");
 #else
-  if (key && ht && hfind(ht, key, strlen(key)) == TRUE)
+  if (key && ht && hfind(ht, (ub1 *)key, (ub4)strlen(key)) == TRUE)
     return (char *)hstuff(ht);
 #endif
   return key;
