@@ -40,6 +40,8 @@ int lockf(int filedes, int function, off_t size);
  *                     - `SDDS_FLOAT`
  *                     - `SDDS_LONG`
  *                     - `SDDS_ULONG`
+ *                     - `SDDS_LONG64`
+ *                     - `SDDS_ULONG64`
  *                     - `SDDS_SHORT`
  *                     - `SDDS_USHORT`
  *                     - `SDDS_CHARACTER`
@@ -131,6 +133,8 @@ int32_t SDDS_PrintTypedValue(void *data, int64_t index, int32_t type, char *form
  *                     - `SDDS_FLOAT`
  *                     - `SDDS_LONG`
  *                     - `SDDS_ULONG`
+ *                     - `SDDS_LONG64`
+ *                     - `SDDS_ULONG64`
  *                     - `SDDS_SHORT`
  *                     - `SDDS_USHORT`
  *                     - `SDDS_CHARACTER`
