@@ -34,7 +34,8 @@ double query_double(char *prompt, double def) {
   static double val;
 
   printf("%s [%g]: ", prompt, def);
-  fgets(s, 99, stdin);
+  if (!fgets(s, sizeof(s), stdin))
+    return def;
   val = def;
   if (*s)
     sscanf(s, "%lf", &val);
@@ -56,7 +57,8 @@ float query_float(char *prompt, float def) {
   static float val;
 
   printf("%s [%g]: ", prompt, def);
-  fgets(s, 99, stdin);
+  if (!fgets(s, sizeof(s), stdin))
+    return def;
   val = def;
   if (*s)
     sscanf(s, "%f", &val);
@@ -78,7 +80,8 @@ long query_long(char *prompt, long def) {
   static long val;
 
   printf("%s [%ld]: ", prompt, def);
-  fgets(s, 99, stdin);
+  if (!fgets(s, sizeof(s), stdin))
+    return def;
   val = def;
   if (*s)
     sscanf(s, "%ld", &val);
@@ -100,7 +103,8 @@ int query_int(char *prompt, int def) {
   static int val;
 
   printf("%s [%d]: ", prompt, def);
-  fgets(s, 99, stdin);
+  if (!fgets(s, sizeof(s), stdin))
+    return def;
   val = def;
   if (*s)
     sscanf(s, "%d", &val);
@@ -122,7 +126,8 @@ short query_short(char *prompt, short def) {
   static short val;
 
   printf("%s [%d]: ", prompt, def);
-  fgets(s, 99, stdin);
+  if (!fgets(s, sizeof(s), stdin))
+    return def;
   val = def;
   if (*s)
     sscanf(s, "%hd", &val);

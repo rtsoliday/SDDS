@@ -187,14 +187,15 @@ void *trealloc(void *old_ptr, uint64_t size_of_block) {
 
   if (!old_ptr)
     return (tmalloc(size_of_block));
-  if (!(ptr = realloc((void *)old_ptr, (uint64_t)(size_of_block)))) {
+  uint64_t oldaddr = (uint64_t)old_ptr;
+  if (!(ptr = realloc(old_ptr, (uint64_t)(size_of_block)))) {
     printf("error: memory reallocation failure--%"PRIu64" bytes requested.\n",
            size_of_block);
     printf("trealloc() has reallocated %"PRIu64" bytes previously\n", total_bytes);
     abort();
   }
   if (fp_trealloc) {
-    fprintf(fp_trealloc, "d:%"PRIx64"\na:%"PRIx64"  %"PRIu64"\n", (uint64_t)old_ptr,
+    fprintf(fp_trealloc, "d:%"PRIx64"\na:%"PRIx64"  %"PRIu64"\n", oldaddr,
             (uint64_t)ptr, size_of_block);
     fflush(fp_trealloc);
   }

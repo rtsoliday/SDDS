@@ -118,7 +118,8 @@ FILE *UnpackFopen(char *filename, unsigned long mode, short *popenUsed, char **t
     tmpName = tmpname(NULL);
     strcat(command, "> /tmp/");
     strcat(command, tmpName);
-    system(command);
+    int ret = system(command);
+    (void)ret;
 
     sprintf(command, "/tmp/%s", tmpName);
     if (tmpFileUsed)
