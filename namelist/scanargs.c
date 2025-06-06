@@ -305,7 +305,8 @@ void prompt_for_arguments(int *argc, char ***argv)
     tfree(cmd_line_arg);
 
     do {
-        fgets(buffer, 1024, stdin);
+        if (!fgets(buffer, 1024, stdin))
+            return;
         buffer[strlen(buffer)-1] = 0;
         while ((ptr=get_token_tq(buffer, " ", " ", "\"", "\""))) {
             if (*ptr=='&')

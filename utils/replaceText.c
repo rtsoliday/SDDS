@@ -220,14 +220,16 @@ int main(
           fprintf(stderr, "Old : %s", s0);
           fprintf(stderr, "New : %s", t);
           fprintf(stderr, "Keep change? (y=yes/e=edit/<enter>=no) ");
-          fgets(response, 10, stdin);
+          if (!fgets(response, 10, stdin))
+            return 1;
           if (response[0]=='y' || response[0]=='Y') {
             /* Update s to contain newest changes */
             strcpy_ss(s, t);
           } else if (response[0]=='e' || response[0]=='E') {
             /* Give user opportunity to change the string */
             fprintf(stderr, "Please enter new string:");
-            fgets(s, 1024, stdin);
+            if (!fgets(s, 1024, stdin))
+              return 1;
           } else {
             strcpy_ss(s, s0);
           }

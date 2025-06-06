@@ -356,7 +356,8 @@ char *efgets(char *s, long n, FILE *fp)
         return(s);
     while (!has_semicolon(sr)) {
         sr = s + strlen(s);
-        fgets(sr, n, fp);
+        if (!fgets(sr, n, fp))
+            return NULL;
         }
     return(s);
     }

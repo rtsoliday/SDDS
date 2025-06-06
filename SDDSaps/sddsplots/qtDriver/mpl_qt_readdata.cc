@@ -112,7 +112,8 @@ long readdata() {
     bufptr += sizeof(char);
     curwrite->nc++;
     if (numvals) {
-      fread(bufptr, sizeof(VTYPE) * numvals, 1, input);
+      if (fread(bufptr, sizeof(VTYPE) * numvals, 1, input) != 1)
+        return 1;
       bufptr += step;
       curwrite->nc += step;
     }
