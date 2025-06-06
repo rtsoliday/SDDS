@@ -36,7 +36,7 @@
  */
 double zeroInterp(
   double (*fn)(double x), /* pointer to function to be zeroed */
-  double value,   /* sovle for fn=value */
+  double value,   /* solve for fn=value */
   double x_i,     /* initial, final values for independent variable */
   double x_f,
   double dx,    /* size of steps in independent variable */

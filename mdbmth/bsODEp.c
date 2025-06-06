@@ -40,7 +40,7 @@ void bs_qctune(double newStepIncreaseFactor, double newStepDecreaseFactor) {
 #define NUSE 7
 
 /* routine: bs_step
- * purpose: perform a quality-control Burlisch-Stoer step
+ * purpose: perform a quality-control Bulirsch-Stoer step
  * Based on Numerical Recipes in C.
  * M. Borland, 1995
  */
