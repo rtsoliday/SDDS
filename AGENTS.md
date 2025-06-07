@@ -16,7 +16,13 @@ Refer to `README.md` for build prerequisites and usage examples.
 ## Coding Conventions
 - **Indentation:** Two spaces per level; tabs are avoided.
 - **Brace style:** Opening braces on the same line as function or control statements (K&R style).
-- **Comments:** Each source file begins with a Doxygen-style block comment (`/** ... */`) documenting the file, authorship, and license. Functions also include Doxygen headers.
+- **Comments:** Each source file begins with a Doxygen-style block comment (`/** ... */`) documenting the file, authorship, and license. Functions also include Doxygen headers. The file header typically contains:
+  - `@file` and `@brief` declarations with optional `@details` text.
+  - `@section Usage` and `@section Options` tables documenting command behavior.
+  - Optional `@subsection` blocks for incompatibilities or requirements.
+  - Copyright and license information using `@copyright` and `@license`.
+  - Author lists via `@author` or `@authors`.
+  - Functions may include `@brief`, `@param`, and `@return` tags.
 - **Naming:**
   - Public API functions use the `SDDS_` prefix followed by PascalCase (e.g., `SDDS_WriteAsciiPage`).
   - Internal helper functions and variables use camelCase (e.g., `bigBuffer`, `compute_average`).
