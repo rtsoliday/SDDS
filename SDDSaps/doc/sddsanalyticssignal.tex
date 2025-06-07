@@ -1,0 +1,37 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsanalyticsignal}
+\label{sddsanalyticsignal}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sddsanalyticsignal} computes the analytic signal of selected real data columns
+using a Hilbert transform.  It outputs the real and imaginary parts as well as
+the magnitude and phase (both wrapped and unwrapped).
+\item {\bf examples:}
+Compute the analytic signal of column {\tt signal} as a function of {\tt time}:
+\begin{flushleft}{\tt
+sddsanalyticsignal data.sdds result.sdds -columns=time,signal
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddsanalyticsignal [-pipe=[input][,output]] [\em inputfile] [\em outputfile] \\
+  [-columns=\em indep-variable,\em depen-quantity[,...]] \\
+  [-unwrapLimit=\em value] \\
+  [-majorOrder=row|column]
+}\end{flushleft}
+\item {\bf switches:}
+    \begin{itemize}
+    \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+    \item {\tt -columns=\em indep-variable,\em depen-quantity}[{\tt ,...}] ---
+    Specifies the independent variable and one or more dependent columns to
+    analyze.  Wildcards are permitted for the dependent quantity names.
+    \item {\tt -unwrapLimit=\em value} --- Sets the relative magnitude threshold
+    for phase unwrapping.  Unwrapping is applied only when the signal's
+    magnitude exceeds this fraction of its maximum.
+    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout of
+    the output file.
+    \end{itemize}
+\item {\bf author:} H. Shang, R. Soliday, ANL/APS.
+\end{itemize}
