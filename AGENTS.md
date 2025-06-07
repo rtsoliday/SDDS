@@ -37,7 +37,7 @@ These guidelines should be followed when contributing new code or documentation 
 
 ## Rebuilding and Verifying Changes
 
-After making changes to the code, rebuild the repository and verify there are no compiler warnings by running:
+After making changes to the code, beyond just comments and latex files, rebuild the repository and verify there are no compiler warnings by running:
 
 ```bash
 make clean
