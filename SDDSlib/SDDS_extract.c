@@ -1549,6 +1549,7 @@ char **SDDS_GetColumnInString(SDDS_DATASET *SDDS_dataset, char *column_name) {
         SDDS_CopyString(&data[j++], buffer);
       }
     }
+    break;
   case SDDS_STRING:
     for (i = j = 0; i < SDDS_dataset->n_rows; i++) {
       if (SDDS_dataset->row_flag[i]) {
