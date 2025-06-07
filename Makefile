@@ -67,6 +67,7 @@ DIRS += SDDSaps
 DIRS += SDDSaps/sddsplots
 #DIRS += SDDSaps/sddsplots/winMotifDriver
 #DIRS += SDDSaps/sddsplots/motifDriver
+DIRS += SDDSaps/sddseditor
 DIRS += $(PLOT_DRIVER)
 DIRS += SDDSaps/sddscontours
 DIRS += SDDSaps/pseudoInverse
@@ -144,6 +145,8 @@ SDDSaps: tiff
 	$(MAKE) -C $@
 SDDSaps/sddsplots: SDDSaps
 	$(MAKE) -C $@
+SDDSaps/sddseditor: SDDSaps
+	$(MAKE) -C $@
 SDDSaps/sddsplots/winMotifDriver: SDDSaps/sddsplots
 	$(MAKE) -C $@
 SDDSaps/sddsplots/motifDriver: SDDSaps/sddsplots
@@ -184,6 +187,7 @@ clean:
 	$(MAKE) -C tiff clean
 	$(MAKE) -C SDDSaps clean
 	$(MAKE) -C SDDSaps/sddsplots clean
+	$(MAKE) -C SDDSaps/sddseditor clean
 	$(MAKE) -C SDDSaps/sddsplots/winMotifDriver clean
 	$(MAKE) -C SDDSaps/sddsplots/motifDriver clean
 	$(MAKE) -C SDDSaps/sddsplots/qtDriver clean

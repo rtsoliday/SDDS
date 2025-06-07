@@ -39,6 +39,7 @@ private slots:
 private:
   void loadPage(int page);
   void populateModels();
+  void commitModels();
   void clearDataset();
   void changeParameterType(int row);
   void changeColumnType(int column);
