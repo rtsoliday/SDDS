@@ -1,0 +1,55 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sdds2dfft}
+\label{sdds2dfft}
+
+\begin{itemize}
+\item {\bf description:}
+{\tt sdds2dfft} performs two-dimensional fast Fourier transforms of data stored in SDDS tables. One column is taken as the independent variable while the remaining numerical columns are transformed. Options allow complex input, power spectral density output, normalization and more.
+
+\item {\bf example:}
+\begin{flushleft}{\tt
+sdds2dfft image.sdds fft.sdds -columns=t,Image*
+}\end{flushleft}
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sdds2dfft [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}]\\
+  -columns={\em indepVariable}[,{\em depenQuantity}[,...]]\\
+  [-complexInput[=unfolded|folded]]\\
+  [-exclude={\em depenQuantity}[,...]]\\
+  [-sampleInterval={\em number}]\\
+  [-normalize]\\
+  [-fullOutput[=unfolded|folded][,unwrapLimit={\em value}]]\\
+  [-psdOutput[=plain][,{integrated|rintegrated[={\em cutoff}]}]]\\
+  [-inverse]\\
+  [-padwithzeroes[={\em exponent}]]\\
+  [-truncate]\\
+  [-suppressaverage]\\
+  [-noWarnings]\\
+  [-majorOrder=row|column]
+}\end{flushleft}
+
+\item {\bf files:}
+{\em inputFile} supplies the data to be transformed. The independent variable column must exist and the dependent columns may include wildcards. Each page of {\em inputFile} is processed separately. The resulting {\em outputFile} contains a column {\tt f} giving frequency plus FFT results for each selected quantity. Additional columns may appear for phase, real and imaginary parts, and PSD depending on the options.
+
+\item {\bf switches:}
+    \begin{itemize}
+    \item {\tt -pipe[=input][,output]} --- Standard SDDS Toolkit pipe option.
+    \item {\tt -columns={\em indepVariable}[,{\em depenQuantity}[,...]]} --- Specifies the name of the independent variable and a list of dependent columns to transform.
+    \item {\tt -complexInput[=unfolded|folded]} --- Indicates that input columns contain complex data as real and imaginary pairs. The qualifiers control whether the input frequency space is unfolded or folded.
+    \item {\tt -exclude={\em depenQuantity}[,...]} --- Excludes columns from transformation using wildcard patterns.
+    \item {\tt -sampleInterval={\em number}} --- Specifies a sampling interval for selecting input rows.
+    \item {\tt -normalize} --- Normalizes the FFT results to a peak magnitude of~1.
+    \item {\tt -fullOutput[=unfolded|folded][,unwrapLimit={\em value}]} --- Requests output of magnitude, real, imaginary and phase components. The frequency spectrum may be unfolded or folded. When {\tt unwrapLimit} is supplied the phase is unwrapped when the relative magnitude exceeds the limit.
+    \item {\tt -psdOutput[=plain][,{integrated|rintegrated[={\em cutoff}]}]} --- Requests power spectral density output. Qualifiers allow plain PSD, integrated PSD, or reverse-integrated PSD with an optional cutoff frequency.
+    \item {\tt -inverse} --- Performs the inverse Fourier transform. Effective only with complex input.
+    \item {\tt -padwithzeroes[={\em exponent}]} --- Pads data with zeros so the number of points is a power of two or a multiple of small primes. The exponent determines extra powers of two to use.
+    \item {\tt -truncate} --- Truncates the data to the nearest product of small primes when padding is not desired.
+    \item {\tt -suppressaverage} --- Subtracts the average value before transforming.
+    \item {\tt -noWarnings} --- Suppresses warning messages.
+    \item {\tt -majorOrder=row|column} --- Selects row-major or column-major ordering for the output file.
+    \end{itemize}
+\item {\bf author:} H. Shang and R. Soliday, ANL/APS.
+\end{itemize}
