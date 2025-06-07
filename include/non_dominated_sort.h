@@ -10,16 +10,6 @@
 /* file: non_dominated_sort.h
  * purpose: definitions for non-dominated sort routines
  * Hairong Shang, May 2005
- $Log: not supported by cvs2svn $
- Revision 1.4  2005/11/04 22:47:00  soliday
- Updated code to be compiled by a 64 bit processor.
-
- Revision 1.3  2005/05/18 19:09:04  soliday
- Updated to work with Windows.
-
- Revision 1.2  2005/05/09 16:22:55  shang
- added maximize flag to fill_population function
-
 */
 
 #ifndef _NON_DOMINATED_SORT_INCLUDED_

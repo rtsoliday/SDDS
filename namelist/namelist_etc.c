@@ -7,15 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.3  2002/08/14 16:23:49  soliday
- Added Open License
-
- Revision 1.2  1995/09/05 21:21:35  saunders
- First test release of the SDDS1.5 package.
-
-*/
 
 /* file    : namelist_etc.c
  * contents: count_occurences(), un_quote(), extract_subscripts()

@@ -12,46 +12,6 @@
  * part of sddsplot (plotting program for SDDS files)
  *
  * Michael Borland, 1994.
- $Log: not supported by cvs2svn $
- Revision 1.12  2005/11/04 22:46:46  soliday
- Updated code to be compiled by a 64 bit processor.
-
- Revision 1.11  2003/04/17 14:40:37  soliday
- Fixed last change for Windows.
-
- Revision 1.10  2003/04/14 14:46:24  shang
- added processing time filter function
-
- Revision 1.9  2002/08/14 17:24:54  soliday
- Added Open License
-
- Revision 1.8  1999/06/03 16:09:06  soliday
- Removed compiler warnings under linux.
-
- Revision 1.7  1997/07/08 14:39:50  borland
- Fixed bug that showed up when multipler -filter and/or -match options
- were given for one plot request.  Required knowing the number of rows,
- not number of rows of interest.
-
- Revision 1.6  1997/01/20 21:32:44  borland
- Fixed bug in allocation logic for rowFlag1 and rowFlag2.
-
- Revision 1.5  1996/09/30 17:51:38  borland
- Modified filtering routines to keep track of flags for multiple filters,
- which is necessary in order to implement the logic properly without
- requiring deletion of rows from the SDDS table structure.
-
- * Revision 1.4  1996/02/14  00:59:23  borland
- * Fixed bug in read routines (wasn't resetting row flags between requests).
- * Changed argument parsing over to scanItemList form scan_item_list.
- *
- * Revision 1.3  1995/10/18  21:56:33  borland
- * Modified data-reading routines to read multiple instances of the same file
- * only once (sddsplotRead.c).  Other routines have minor modifications.
- *
- * Revision 1.2  1995/09/05  21:09:51  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "mdb.h"
 #include "graph.h"

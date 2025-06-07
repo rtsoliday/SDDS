@@ -7,23 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.5  1999/06/01 14:37:33  soliday
- Removed warnings when compiled under Linux.
-
- Revision 1.4  1998/08/11 18:27:52  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- Revision 1.3  1998/06/10 23:58:54  borland
- Fixed a memory leak by declaring branch of conditional to be volatile
- text.
-
- * Revision 1.2  1995/09/05  21:22:05  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* prototypes for this file are in conditional.prot */
 /* file    : conditional.c

@@ -10,22 +10,6 @@
 /* dlaran.f -- translated by f2c (version of 30 January 1990  16:02:04).
    You must link the resulting object file with the libraries:
 	-lF77 -lI77 -lm -lc   (in that order)
- $Log: not supported by cvs2svn $
- Revision 1.7  2005/11/04 22:47:14  soliday
- Updated code to be compiled by a 64 bit processor.
-
- Revision 1.6  2002/08/14 16:18:54  soliday
- Added Open License
-
- Revision 1.5  2000/03/27 20:30:11  borland
- Removed confusing (unnecessary) static designation for some variables.
-
- Revision 1.4  1999/07/29 21:54:00  borland
- Added back a file I actually need.
-
- Revision 1.2  1995/09/05 21:19:33  saunders
- First test release of the SDDS1.5 package.
-
 */
 
 #include "f2c.h"

@@ -7,44 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.12  2005/01/12 21:43:54  shang
- added is_string argument to is_memeory() to tell the memory data type.
-
- Revision 1.11  2005/01/10 21:07:20  shang
- modified to use the update functions
-
- Revision 1.10  2002/12/17 18:23:47  soliday
- Fixed a possible uninitialized variable issue.
-
- Revision 1.9  2002/08/14 16:28:58  soliday
- Added Open License
-
- Revision 1.8  1999/07/08 22:24:10  soliday
- Added include statement for ctype.h
-
- Revision 1.7  1999/06/01 14:38:39  soliday
- Removed warnings when compiled under Linux.
-
- Revision 1.6  1999/04/21 01:24:34  borland
- Fixed some incorrect uses of NULL in place of integers, shorts, and
- doubles.
-
- Revision 1.5  1998/08/11 18:27:54  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- Revision 1.4  1997/05/08 21:44:12  borland
- Increased all string bufferes to 16384 characters.
-
- * Revision 1.3  1995/11/13  16:19:37  borland
- * Added long cast to strlen() in comparisons to satisfy Solaris compiler.
- *
- * Revision 1.2  1995/09/05  21:22:18  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* prototypes for this file are in pcode.prot */
 /* file    : pcode.c

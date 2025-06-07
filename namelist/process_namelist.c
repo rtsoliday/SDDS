@@ -7,46 +7,6 @@
  * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
-  $Log: not supported by cvs2svn $
-  Revision 1.13  2011/04/20 21:22:53  borland
-  Replaced strcpy() by strcpy_ss() to fix bug on RHEL6.
-
-  Revision 1.12  2010/02/04 14:39:22  borland
-  Added processNamelist(), which is a new interface to the namelist processor
-  that returns NAMELIST_ERROR when their is an error, instead of exiting.
-
-  Revision 1.11  2008/03/18 22:03:35  borland
-  Changed the special characters for RPN evaluation from [] to ().
-
-  Revision 1.10  2008/02/21 18:41:48  soliday
-  Fixed an issue with allocating memory for a variable I didn't have to.
-
-  Revision 1.9  2007/10/22 20:50:38  soliday
-  Added the ability to use RPN expressions in the namelist parser.
-
-  Revision 1.8  2007/10/22 19:02:26  soliday
-  Reindented code.
-
-  Revision 1.7  2005/12/07 16:21:27  soliday
-  Fixed some compiler warnings on Linux.
-
-  Revision 1.6  2005/11/09 22:03:36  soliday
-  Added support for int32_t
-
-  Revision 1.5  2002/08/14 16:23:49  soliday
-  Added Open License
-
-  Revision 1.4  1999/12/15 16:43:22  soliday
-  Added vxWorks support.
-
-  Revision 1.3  1999/04/14 14:05:15  borland
-  Works with new build system.  Fixed some missing prototypes and function type mismatches.
-
-  Revision 1.2  1995/09/05 21:21:43  saunders
-  First test release of the SDDS1.5 package.
-
-*/
 
 #include "mdb.h"
 #include "match_string.h"

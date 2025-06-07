@@ -7,38 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.10  2006/10/19 17:55:40  soliday
- Updated to work with linux-x86_64.
-
- Revision 1.9  2005/06/13 21:57:13  shang
- added CalculatePhaseAndAmplitudeFromFreq() and adjustFrequencyHalfPlane
-
- Revision 1.8  2004/08/12 19:56:12  soliday
- Added Mike's changes
-
- Revision 1.7  2004/04/07 02:01:34  borland
- Added lowerFreqLimit and upperFreqLimit to PerformNAFF() prototype.
-
- Revision 1.6  2003/07/22 20:01:17  soliday
- Added support for Kylix.
-
- Revision 1.5  2002/08/14 15:40:15  soliday
- Added Open License
-
- Revision 1.4  2002/02/26 03:11:01  borland
- Added prototypes for NAFF functions (fftpackC.h) and
- 1d parabolic optimization routine (mdb.h).  These are both due
- to removing the NAFF functions from sddsnaff.c
-
- Revision 1.3  1999/09/14 18:04:14  soliday
- Added export commands for WIN32 dll files.
-
- Revision 1.2  1995/09/05 21:15:04  saunders
- First test release of the SDDS1.5 package.
-
-*/
 
 #ifdef __cplusplus
 extern "C" {

@@ -13,13 +13,6 @@
  *
  * Original code: A.D.Cox, 1982.
  * C version: M.Borland, 1991.
- $Log: not supported by cvs2svn $
- Revision 1.3  2000/05/11 20:19:17  soliday
- Added extra argument to plot_lines.
-
- Revision 1.2  1995/09/05 21:08:46  saunders
- First test release of the SDDS1.5 package.
-
  */
 #include "mdb.h"
 #include "graph.h"

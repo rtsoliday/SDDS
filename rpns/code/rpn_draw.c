@@ -7,31 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.8  2000/04/13 16:22:16  soliday
- Moved some WIN32 stuff to mdb.h
-
- Revision 1.7  1999/12/21 17:51:53  soliday
- vxWorks does not support popen
-
- Revision 1.6  1999/12/15 18:59:25  soliday
- Added support for vxWorks.
-
- Revision 1.5  1999/07/08 22:27:36  soliday
- Added definitions for sleep and popen for WIN32
-
- Revision 1.4  1999/06/01 14:39:26  soliday
- Removed warnings when compiled under Linux.
-
- Revision 1.3  1998/08/11 18:27:56  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- * Revision 1.2  1995/09/05  21:22:29  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* file: rpn_draw.c
  * purpose: create and manage a synchronized draw subprocess

@@ -7,62 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.17  2005/01/12 21:49:31  shang
- added is_string argument to is_memeory function to tell the memory data type
-
- Revision 1.16  2005/01/10 23:35:31  shang
- it now does not push the string back to string stack after strcmp with variables
-
- Revision 1.15  2005/01/10 21:07:36  shang
- modified to use the update functions
-
- Revision 1.14  2003/08/28 20:49:11  soliday
- Cleaned up the code.
-
- Revision 1.13  2003/03/17 22:19:01  borland
- Fixed bugs in previous changes. Needs to be checked for memory leaks
- in new code.
-
- Revision 1.12  2002/08/14 16:28:57  soliday
- Added Open License
-
- Revision 1.11  2000/06/15 15:52:51  soliday
- Renamed help to rpn_help so that it does not conflict with the IOC.
-
- Revision 1.10  2000/04/13 16:21:20  soliday
- Moved some WIN32 stuff to mdb.h
-
- Revision 1.9  2000/03/27 20:29:02  borland
- Added rpn_execn() and rpn_execs() functions and user functions execn and
- execs.  These execute commands from the string stack.  Results are put
- on the numerical or string stack.
-
- Revision 1.8  1999/12/15 19:01:23  soliday
- Added support for vxWorks.
-
- Revision 1.7  1999/09/14 18:21:37  soliday
- report_stats is no longer defined locally
-
- Revision 1.6  1999/07/08 22:22:19  soliday
- Added definition for sleep function
-
- Revision 1.5  1999/06/01 14:37:48  soliday
- Removed warnings when compiled under Linux.
-
- Revision 1.4  1998/08/11 18:27:52  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- * Revision 1.3  1995/10/07  22:45:12  borland
- * Modified UDF code to use a sorted list plus an index.  Unfortunately, this
- * doesn't seem to have improved performance.
- *
- * Revision 1.2  1995/09/05  21:22:07  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* prototypes for this file are in execute.prot */
 /* file: execute.c

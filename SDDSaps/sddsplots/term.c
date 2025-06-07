@@ -26,46 +26,8 @@
  * 
  * send your comments or suggestions to (pixar!info-gnuplot@sun.com).
  *
- *
- 
- $Log: not supported by cvs2svn $
- Revision 1.28  2011/03/18 18:15:20  borland
- Added gpng (gigantic PNG) type.
-
- Revision 1.27  2011/01/11 22:51:04  soliday
- Changed all the strcpy commands to strcpy_ss because of problems with
- RedHat Enterprise 6. If a strcpy copies the result to the same memory
- space you will get unexpected results.
-
- Revision 1.26  2010/07/29 22:09:10  borland
- Added "hpng" device type (huge PNG, twice as large as lpng).
-
- Revision 1.25  2008/06/11 16:09:50  soliday
- Reindented code.
-
- Revision 1.24  2008/06/11 16:08:16  soliday
- Added new symbols.
-
- Revision 1.23  2006/03/21 17:52:00  soliday
- Fixed problems with the intesity bar with ceps and png output. Also modified
- the split by column data option to automatically find the minimum value
- for a plot request and use that as the start value if no start value is given.
- This enables multiple plots to have the same scale even if they are in
- different parts of the range.
-
- Revision 1.22  2006/01/03 23:22:13  jiaox
- corrected circle drawing in function do_point.
-
- Revision 1.21  2005/12/07 22:01:11  jiaox
- Made the line types ( thickness color dash style) consistent among motif,
- postscript and png devices. Added device arguments dashes and linetypetable
- for these devices to draw lines with user defined line styles.
-
- Revision 1.20  2005/08/15 14:07:59  jiaox
- Added keyword "fill" for graphic option. Also added circel type(9) for symbols.
-
- 
-*/
+ * 
+ */
 #include <stdio.h>
 #include <string.h>
 #include "graphics.h"

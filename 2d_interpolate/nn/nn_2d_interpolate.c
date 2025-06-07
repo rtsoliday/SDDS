@@ -1,15 +1,5 @@
 /* file: nn_2d_interpolate.c
  * nn 2d interpolate routine
- $Log: not supported by cvs2svn $
-
- 11/12/2024 updated to the newest nn package from https://github.com/sakov/nn-c  shang
-
- Revision 1.2  2011/11/29 19:44:34  shang
- made the zoom work.
-
- Revision 1.1  2007/05/04 21:48:27  shang
- first version
-
 */
 #include "mdb.h"
 #include "nn_2d_interpolate.h"

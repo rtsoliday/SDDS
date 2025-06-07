@@ -55,22 +55,3 @@ void	m_version()
 			"To update the version number"); */
 }
 
-/*
- * $Log: not supported by cvs2svn $
- * Revision 1.1.1.1  1999/04/14 14:16:18  borland
- * Moved from OAG area
- *
- * Revision 1.1  1998/03/19 19:38:45  borland
- * First version of the Meschach library added to OAG repository.
- *
- * Revision 1.9  1994/03/24  00:04:05  des
- * Added notes on changes to spILUfactor() and px_inv().
- *
- * Revision 1.8  1994/02/21  04:32:25  des
- * Set version to 1.2b with bug fixes in schur() and installation.
- *
- * Revision 1.7  1994/01/13  05:43:57  des
- * Version 1.2 update
- *
-
- * */

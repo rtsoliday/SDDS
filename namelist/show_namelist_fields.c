@@ -7,18 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/14 16:23:50  soliday
- Added Open License
-
- Revision 1.1  1996/02/09 04:31:49  borland
- Added two routines in this module to support -describeInput option on
- sdds*experiment programs; allows listing namelist names, field names,
- types, and default values.
-
- *
- */
 #include "mdb.h"
 #include "namelist.h"
 #include <ctype.h>

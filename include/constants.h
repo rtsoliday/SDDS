@@ -11,21 +11,6 @@
  * purpose: mathematical and physical constants
  *
  * Michael Borland, 1991
- $Log: not supported by cvs2svn $
- Revision 1.7  2005/01/27 20:15:36  borland
- Restored previous version.  Changes resulted in too many annoying discrepancies.
-
- Revision 1.5  2002/08/14 15:40:14  soliday
- Added Open License
-
- Revision 1.4  1999/01/06 16:45:13  emery
- Added classical radius of electron.
-
- Revision 1.3  1997/08/25 19:24:05  borland
- Undefines macro PI before trying to define it.
-
- * Revision 1.2  1995/09/05  21:14:58  saunders
- * First test release of the SDDS1.5 package.
  *
  */
 

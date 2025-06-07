@@ -7,18 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.4  2002/08/14 16:45:21  soliday
- Added Open License
-
- Revision 1.3  1998/04/21 21:26:37  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:03  saunders
- * First test release of the SDDS1.5 package.
- *
- */
 #include "matlib.h"
 
 /* routine: m_add()

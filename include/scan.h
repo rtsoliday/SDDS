@@ -7,62 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.18  2004/03/16 23:26:35  borland
- Added SCANITEMLIST_IGNORE_VALUELESS macro.
-
- Revision 1.17  2003/07/22 20:01:18  soliday
- Added support for Kylix.
-
- Revision 1.16  2002/08/14 15:40:17  soliday
- Added Open License
-
- Revision 1.15  2002/03/22 22:53:18  soliday
- Replaced free_scanargs with free_scanargs2
-
- Revision 1.14  2002/03/21 23:10:47  soliday
- Added free_scanargs2
-
- Revision 1.13  2002/03/07 01:18:53  soliday
- Added parse_string
-
- Revision 1.12  2002/01/28 16:49:49  soliday
- Added free_scanargs.
-
- Revision 1.11  2000/07/19 16:10:10  soliday
- Added ability to call from C++
-
- Revision 1.10  2000/04/11 16:19:32  soliday
- Modified prototypes to work with new mdbcommon library.
-
- Revision 1.9  2000/01/18 19:59:55  soliday
- Added support for ZLIB.
-
- Revision 1.8  1999/09/14 18:06:21  soliday
- Added export commands for WIN32 dll files.
-
- Revision 1.7  1999/07/22 16:22:06  soliday
- Added contains_keyword_phrase
-
- Revision 1.6  1996/05/29 21:44:48  borland
- Added mode flags for scanItemLists().
-
- * Revision 1.5  1996/02/14  01:02:08  borland
- * Added prototype for scanItemList().
- *
- * Revision 1.4  1996/01/21  00:15:54  borland
- * Added bit flag definitions and prototypes for new versions of unpacking
- * routines.
- *
- * Revision 1.3  1996/01/19  00:18:11  borland
- * SDDS.h: Added popenUsed to SDDS_LAYOUT structure.
- * scan.h: Added prototypes for unpacking functions.
- *
- * Revision 1.2  1995/09/05  21:15:39  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* define structure for use with scanargs(), scanlist() */
 #if !defined(SCAN_INCLUDED)

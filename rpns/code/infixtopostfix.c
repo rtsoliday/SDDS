@@ -7,35 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- * $Log: not supported by cvs2svn $
- * Revision 1.8  2008/09/02 20:38:45  soliday
- * Fixed a bug with negative numbers. It was getting the negative sign
- * confused with a minus sign.
- *
- * Revision 1.7  2005/06/28 21:18:57  soliday
- * Fixed problem with strings containing numbers and numbers containing exponents.
- *
- * Revision 1.6  2003/10/21 19:50:12  soliday
- * Updated so that it does not abort an on error and returns the error code.
- *
- * Revision 1.5  2002/08/14 16:28:57  soliday
- * Added Open License
- *
- * Revision 1.4  2001/04/17 19:09:27  soliday
- * Replaced strlcpy with strncpy because of problems on Linux.
- *
- * Revision 1.3  2001/04/10 18:29:46  soliday
- * Fixed bug when no spaces are around a variable.
- *
- * Revision 1.2  2001/04/10 16:43:05  soliday
- * It now handles variables correctly.
- *
- * Revision 1.1  2001/04/09 20:37:01  soliday
- * First version of infix to postfix conversion routine.
- *
- *
-*/
 
 #include <stdio.h>
 #include <stdlib.h>

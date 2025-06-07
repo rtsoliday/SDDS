@@ -7,17 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- * $Log: not supported by cvs2svn $
- * Revision 1.4  2002/08/14 16:41:19  soliday
- * Added Open License
- *
- * Revision 1.3  1999/05/28 14:54:48  soliday
- * Removed compiler warnings under Linux.
- *
-   Revision 1.2  1995/09/05 21:13:14  saunders
-   First test release of the SDDS1.5 package.
-   */
 #include "f2c.h"
 
 extern int cfftb_(integer *n, doublereal *c, doublereal *wsave);

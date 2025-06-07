@@ -11,19 +11,6 @@
  * purpose: add two matrices
  * usage  : m_add(C, A, B) ==> C = A+B
  * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.3  1998/04/21 21:26:37  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:03  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 
@@ -45,55 +32,6 @@ int fmat_add(FMATRIX *C, FMATRIX *A, FMATRIX *B)
      return(1);
      }
 
-/*CopyrightNotice001
-
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001*/
 
 /* routine: m_alloc()
  * purpose: allocate storage for a matrix 
@@ -103,22 +41,6 @@ CopyrightNotice001*/
  *   m_alloc(&A, n, m)
  * 
  * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.4  1999/05/28 14:55:29  soliday
- Removed compiler warnings under Linux.
-
- Revision 1.3  1998/04/21 21:26:37  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:05  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "mdb.h"
 #include "matlib.h"
@@ -179,56 +101,6 @@ int fmat_check(FMATRIX *A)
     }
 
 
-/*CopyrightNotice001
-
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001*/
-
 /* routine: fmat_copy()
  * purpose: copy a matrix
  * usage:
@@ -236,19 +108,6 @@ CopyrightNotice001*/
  *   ...
  *   fmat_copy(A, B);	! copy B to A 
  * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.3  1998/04/21 21:26:38  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:10  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 
@@ -269,56 +128,6 @@ int fmat_copy(FMATRIX *A, FMATRIX *B)
     }
 
 
-/*CopyrightNotice001
-
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001*/
-
 /* routine: fmat_det()
  * purpose: compute determinant of a matrix 
  * usage:
@@ -328,25 +137,6 @@ CopyrightNotice001*/
  *   det = fmat_det(A);
  *
  * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.5  2002/03/21 16:50:32  shang
- replaced A->a[j][j]!=0 (which is a bug) by A->a[j][i]!=0
-
- Revision 1.4  2000/01/19 14:43:05  borland
- Fixed memory leak.
-
- Revision 1.3  1998/04/21 21:26:38  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:12  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 
@@ -396,70 +186,6 @@ float fmat_det(FMATRIX *D)
     }
  
 
-/*CopyrightNotice001
-
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.3  1998/04/21 21:26:39  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:14  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
-
 #include "mdb.h"
 #include "matlib.h"
 void fmat_diag(FMATRIX *A, float *diagonal_elements) {
@@ -475,55 +201,7 @@ void fmat_diag(FMATRIX *A, float *diagonal_elements) {
     }
 
 
-/*CopyrightNotice001
 
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001*/
 
 /* routine: fmat_free()
  * purpose: free storage allocated to a matrix 
@@ -535,22 +213,6 @@ CopyrightNotice001*/
  *   fmat_free(&A);
  *
  * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.4  1999/12/15 16:56:23  soliday
- Added support for vxWorks.
-
- Revision 1.3  1998/04/21 21:26:39  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:17  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 #if defined(vxWorks)
@@ -580,56 +242,6 @@ void fmat_free(FMATRIX **A)
     }
 
 
-/*CopyrightNotice001
-
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this fmaterial resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001*/
-
 /* routine: fmat_identity()
  * purpose: set elements of a matrix to zero.
  * usage:
@@ -638,19 +250,6 @@ CopyrightNotice001*/
  *  fmat_identity(A);
  *
  * Michael Borland, 1989.
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.3  1998/04/21 21:26:40  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:19  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 
@@ -668,74 +267,12 @@ void fmat_identity(FMATRIX *A)
         }
     }
 
-/*CopyrightNotice001
-
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001*/
 
 /* routine: fmat_invert()
  * purpose: invert a matrix
  * usage: fmat_invert(A, B) ==>  A=INV(B); A and B must point to matrix
  * 	  structures of the same size.
  * Michael Borland, 1986 (after CITLIB routine MATINV)
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.3  1998/04/21 21:26:40  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:21  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 #include "mdb.h"
@@ -879,73 +416,10 @@ int fmat_invert(FMATRIX *A, FMATRIX *B)         /* A=inv(B) */
     }
 
 
-/*CopyrightNotice001
-
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001*/
-
 /* routine: fmat_mult()
  * purpose: multiply two matrices
  * usage  : fmat_mult(C, A, B)  ==>  C= AB
  * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.3  1998/04/21 21:26:41  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:23  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 
@@ -972,70 +446,6 @@ int fmat_mult(
     return(1);
     }
 
-
-/*CopyrightNotice001
-
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.3  1998/04/21 21:26:41  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:24  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* routine: fmat_scmul()
  * purpose: multiply a matrix by a scalar
@@ -1065,56 +475,6 @@ int fmat_scmul(
     }
 
 
-/*CopyrightNotice001
-
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001*/
-
 /* routine: fmat_show()
  * purpose: to display a matrix on the screen 
  * usage:
@@ -1123,19 +483,6 @@ CopyrightNotice001*/
  *   fmat_show(A, "%.4f  ", "label", stdout);   ! print w/a certain format 
  *   
  * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.3  1998/04/21 21:26:41  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:26  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "mdb.h"
 #include "matlib.h"
@@ -1159,73 +506,10 @@ void fmat_show(
     }
 
 
-/*CopyrightNotice001
-
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001*/
 
 /* routine: fmat_trans()
  * purpose: transpose a matrix 
  * usage  : fmat_trans(B, A) ==> B=TRANS(A)
- * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.3  1998/04/21 21:26:42  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:28  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 
@@ -1247,55 +531,7 @@ int fmat_trans(FMATRIX *B, FMATRIX *A)
     }
 
 
-/*CopyrightNotice001
 
-*****************************************************************
-                          COPYRIGHT NOTIFICATION
-*****************************************************************
-
-THE FOLLOWING IS A NOTICE OF COPYRIGHT, AVAILABILITY OF THE CODE,
-AND DISCLAIMER WHICH MUST BE INCLUDED IN THE PROLOGUE OF THE CODE
-AND IN ALL SOURCE LISTINGS OF THE CODE.
- 
-(C)  COPYRIGHT 1995 UNIVERSITY OF CHICAGO
- 
-Argonne National Laboratory (ANL), with facilities in the States of 
-Illinois and Idaho, is owned by the United States Government, and
-operated by the University of Chicago under provision of a contract
-with the Department of Energy.
-
-Portions of this material resulted from work developed under a U.S.
-Government contract and are subject to the following license:  For
-a period of five years from June 30, 1995, the Government is
-granted for itself and others acting on its behalf a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, and perform
-publicly and display publicly.  With the approval of DOE, this
-period may be renewed for two additional five year periods. 
-Following the expiration of this period or periods, the Government
-is granted for itself and others acting on its behalf, a paid-up,
-nonexclusive, irrevocable worldwide license in this computer
-software to reproduce, prepare derivative works, distribute copies
-to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-*****************************************************************
-                                DISCLAIMER
-*****************************************************************
-
-NEITHER THE UNITED STATES GOVERNMENT NOR ANY AGENCY THEREOF, NOR
-THE UNIVERSITY OF CHICAGO, NOR ANY OF THEIR EMPLOYEES OR OFFICERS,
-MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL
-LIABILITY OR RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR
-USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR PROCESS
-DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT INFRINGE PRIVATELY
-OWNED RIGHTS.  
-
-*****************************************************************
-LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
-DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
-
-CopyrightNotice001*/
 
 /* routine: fmat_zero()
  * purpose: set elements of a matrix to zero.
@@ -1303,20 +539,6 @@ CopyrightNotice001*/
  *  MATRIX *A;
  *  ...
  *  fmat_zero(A);
- *
- * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.2  2002/08/08 15:17:32  soliday
- Added support for OSX.
-
- Revision 1.1  2002/08/07 18:52:55  borland
- First version.  Single-precision routines.
-
- Revision 1.3  1998/04/21 21:26:42  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:30  saunders
- * First test release of the SDDS1.5 package.
  *
  */
 #include "matlib.h"

@@ -11,21 +11,6 @@
  * purpose: proto-types for routies in sort.c
  *
  * Michael Borland, 1989
- $Log: not supported by cvs2svn $
- Revision 1.5  2008/03/24 21:09:51  soliday
- Fixed definition for strcmp_skip so that it will work with elegant and
- shared libraries.
-
- Revision 1.4  2007/10/25 22:36:46  borland
- Added strcmp_skip(), which can compare strings while skipping characters
- from a third string.
-
- Revision 1.3  2002/08/14 15:40:17  soliday
- Added Open License
-
- Revision 1.2  1995/09/05 21:15:41  saunders
- First test release of the SDDS1.5 package.
-
  */
 #ifndef _MDBSORT_INCLUDED_
 #define _MDBSORT_INCLUDED_ 1

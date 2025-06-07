@@ -13,19 +13,7 @@
  * Extracted from xwd.c on 1-6-92 and modified * 
  * Routine to be used is windowdump()          * 
  *   Dumps a Drawable as Xwd dumps a window    *
- * $Log: not supported by cvs2svn $
- * Revision 1.5  2000/05/16 19:46:08  soliday
- * Cleaned up some Solaris compiler warnings.
- *
- * Revision 1.4  1999/07/22 18:37:42  soliday
- * Added WIN32 support
- *
- * Revision 1.3  1999/06/03 16:11:25  soliday
- * Removed compiler warnings under linux.
- *
-   Revision 1.2  1995/09/05 21:10:32  saunders
-   First test release of the SDDS1.5 package.
-   */
+ */
 
 #include <stdio.h>
 #include <stdlib.h>

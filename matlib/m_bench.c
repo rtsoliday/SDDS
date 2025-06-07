@@ -7,21 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.5  2000/05/22 15:54:14  soliday
- Renamed unused main function because of conflicts.
-
- Revision 1.4  1999/12/21 17:49:40  soliday
- Added support for vxWorks
-
- Revision 1.3  1999/05/28 14:55:44  soliday
- Removed compiler warnings under Linux.
-
- Revision 1.2  1995/09/05 21:16:07  saunders
- First test release of the SDDS1.5 package.
-
-*/
 
 #include "mdb.h"
 #include "matlib.h"

@@ -7,15 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.3  1999/12/15 16:43:34  soliday
- Added vxWorks support.
-
- Revision 1.2  1995/09/05 21:21:29  saunders
- First test release of the SDDS1.5 package.
-
-*/
 
 #include "mdb.h"
 #include "match_string.h"

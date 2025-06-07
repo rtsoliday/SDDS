@@ -25,7 +25,6 @@
 
 
 /* Sparse matrix factorise/solve header */
-/* RCS id: $Id: sparse2.h,v 1.1.1.1 1999-04-14 14:16:17 borland Exp $ */
 
 
 

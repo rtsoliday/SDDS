@@ -7,39 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.10  2005/01/12 21:43:54  shang
- added is_string argument to is_memeory() to tell the memory data type.
-
- Revision 1.9  2005/01/10 21:06:33  shang
- added "short is_string" number to MEMORY structure and added store_in_str_mem(), rpn_str_recall() function for string and modified other functions to make them also work for string data.
-
- Revision 1.8  2003/10/30 21:20:55  soliday
- Changed the function name "store" to store_in_mem to avoid a conflict with a
- system function.
-
- Revision 1.7  2003/01/08 23:10:03  borland
- Added new argument to binaryIndexSearch().
-
- Revision 1.6  2002/08/14 16:28:58  soliday
- Added Open License
-
- Revision 1.5  1999/06/01 14:38:26  soliday
- Removed warnings when compiled under Linux.
-
- Revision 1.4  1998/08/11 18:27:54  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- * Revision 1.3  1996/02/12  17:19:54  borland
- * Added rpn_quick_store() for faster data storage when checks on memory
- * number are not required.
- *
- * Revision 1.2  1995/09/05  21:22:16  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* prototypes for this file are in memory.prot */
 /* file    : memory.c

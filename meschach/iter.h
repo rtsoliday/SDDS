@@ -36,7 +36,6 @@
 
 #define ITERHH
 
-/* RCS id: $Id: iter.h,v 1.1.1.1 1999-04-14 14:16:17 borland Exp $  */
 
 
 #include	"sparse.h"

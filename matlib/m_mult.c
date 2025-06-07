@@ -11,13 +11,6 @@
  * purpose: multiply two matrices
  * usage  : m_mult(C, A, B)  ==>  C= AB
  * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.3  1998/04/21 21:26:41  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:23  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 

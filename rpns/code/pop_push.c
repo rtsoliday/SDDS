@@ -7,22 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.5  2003/06/19 18:20:08  shang
- added push_long and pop_long function
-
- Revision 1.4  2002/08/14 16:28:58  soliday
- Added Open License
-
- Revision 1.3  1998/08/11 18:27:55  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- Revision 1.2  1995/09/05 21:22:20  saunders
- First test release of the SDDS1.5 package.
-
-*/
 
 /* prototypes for this file are in pop_push.prot */
 /* file    : pop_push.c

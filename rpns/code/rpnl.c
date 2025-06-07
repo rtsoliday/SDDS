@@ -7,25 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.6  2003/08/28 20:49:12  soliday
- Cleaned up the code.
-
- Revision 1.5  2002/08/14 16:29:00  soliday
- Added Open License
-
- Revision 1.4  1999/06/01 14:40:10  soliday
- Removed warnings when compiled under Linux.
-
- Revision 1.3  1998/08/11 18:27:58  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- * Revision 1.2  1995/09/05  21:22:43  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 #include "mdb.h"
 #include "rpn_internal.h"

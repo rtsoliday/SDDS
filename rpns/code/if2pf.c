@@ -7,19 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- * $Log: not supported by cvs2svn $
- * Revision 1.3  2003/09/02 17:59:33  soliday
- * Cleaned up code for Linux.
- *
- * Revision 1.2  2002/08/14 16:28:57  soliday
- * Added Open License
- *
- * Revision 1.1  2001/04/09 20:37:00  soliday
- * First version of infix to postfix conversion routine.
- *
- *
-*/
 
 #include "mdb.h"
 #include "rpn_internal.h"

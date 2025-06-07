@@ -7,54 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.14  2009/10/29 19:53:20  soliday
- Renamed a few global variables that conflicted with MADX.
-
- Revision 1.13  2003/07/09 19:17:38  soliday
- Fixed issues with the dstack and dstackptr
-
- Revision 1.12  2003/03/17 23:26:43  borland
- Fixed bugs in previous changes.
-
- Revision 1.11  2003/03/17 22:19:02  borland
- Fixed bugs in previous changes. Needs to be checked for memory leaks
- in new code.
-
- Revision 1.10  2003/03/17 20:10:41  borland
- Added mudf user-callable function to Make UDF from string stack.
- Added simpson user-callable function to do simpson's rule integration.
- Added rpn_internal() to allow evaluating rpn expressions from inside
- interpreter subroutines.
-
- Revision 1.9  2002/12/17 18:17:49  soliday
- Improved the error message when RPN_DEFNS is not set.
-
- Revision 1.8  2002/08/14 16:29:00  soliday
- Added Open License
-
- Revision 1.7  1999/07/02 16:40:56  borland
- Fixed bug with closing of files.
-
- Revision 1.6  1999/06/01 14:39:57  soliday
- Removed warnings when compiled under Linux.
-
- Revision 1.5  1998/08/11 18:27:58  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- * Revision 1.4  1996/04/02  17:02:36  borland
- * Removed obsolete check on array stack overflow.
- *
- * Revision 1.3  1995/10/07  22:45:18  borland
- * Modified UDF code to use a sorted list plus an index.  Unfortunately, this
- * doesn't seem to have improved performance.
- *
- * Revision 1.2  1995/09/05  21:22:39  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* prototypes for this file are in rpn_sub.prot */
 /* program: rpn

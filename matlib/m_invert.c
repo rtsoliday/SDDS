@@ -12,13 +12,6 @@
  * usage: m_invert(A, B) ==>  A=INV(B); A and B must point to matrix
  * 	  structures of the same size.
  * Michael Borland, 1986 (after CITLIB routine MATINV)
- $Log: not supported by cvs2svn $
- Revision 1.3  1998/04/21 21:26:40  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:21  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 #include "mdb.h"

@@ -10,27 +10,6 @@
 /* file: arrows.c
  * purpose: support for arrows in mpl 
  * Michael Borland, 1992
- $Log: not supported by cvs2svn $
- Revision 1.7  2002/08/14 17:24:50  soliday
- Added Open License
-
- Revision 1.6  2000/04/27 19:22:40  soliday
- Added a thickness element to plot_lines which is set to 0 which means
- use default thickness.
-
- Revision 1.5  1999/06/03 16:04:30  soliday
- Removed compiler warnings under linux.
-
- Revision 1.4  1998/08/25 15:05:23  borland
- New version with major changes to allow multiple scales on x and y axes.
-
- * Revision 1.3  1996/02/29  05:42:28  borland
- * Added variable dot size using subtype qualifier of -graphic option.
- * Required adding an extra argument to the plot_dots() routine.
- *
- * Revision 1.2  1995/09/05  21:09:17  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include <assert.h>
 #include <ctype.h>

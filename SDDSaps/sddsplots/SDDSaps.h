@@ -11,25 +11,6 @@
  * contents: header file for routines used by SDDS command-line applications
  * 
  * M. Borland, 1993.
- $Log: not supported by cvs2svn $
- Revision 1.7  2003/04/14 14:44:56  shang
- added TIME_FILTER_DEFINITION structure
-
- Revision 1.6  2002/08/14 17:24:50  soliday
- Added Open License
-
- Revision 1.5  1999/07/22 18:34:24  soliday
- Added WIN32 support
-
- Revision 1.4  1999/06/03 16:04:07  soliday
- Removed compiler warnings under linux.
-
- Revision 1.3  1998/08/25 15:05:23  borland
- New version with major changes to allow multiple scales on x and y axes.
-
- * Revision 1.2  1995/09/05  21:09:15  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 
 #define COLUMN_BASED 0

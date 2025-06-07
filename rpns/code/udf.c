@@ -7,61 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.15  2005/01/12 21:43:54  shang
- added is_string argument to is_memeory() to tell the memory data type.
-
- Revision 1.14  2005/01/10 21:30:52  shang
- modifed to use updated functions
-
- Revision 1.13  2003/06/18 19:52:32  borland
- Removed the query() and query_e() macros, and replaced with queryn()
- and queryn_e() macros.  The former used gets() whereas the latter do
- not.
-
- Revision 1.12  2003/03/17 20:10:42  borland
- Added mudf user-callable function to Make UDF from string stack.
- Added simpson user-callable function to do simpson's rule integration.
- Added rpn_internal() to allow evaluating rpn expressions from inside
- interpreter subroutines.
-
- Revision 1.11  2003/01/08 23:10:03  borland
- Added new argument to binaryIndexSearch().
-
- Revision 1.10  2002/08/14 16:29:00  soliday
- Added Open License
-
- Revision 1.9  1999/06/01 14:40:21  soliday
- Removed warnings when compiled under Linux.
-
- Revision 1.8  1999/04/21 01:24:34  borland
- Fixed some incorrect uses of NULL in place of integers, shorts, and
- doubles.
-
- Revision 1.7  1998/08/11 18:27:59  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- Revision 1.6  1997/05/08 21:44:13  borland
- Increased all string bufferes to 16384 characters.
-
- * Revision 1.5  1995/11/13  16:19:41  borland
- * Added long cast to strlen() in comparisons to satisfy Solaris compiler.
- *
- * Revision 1.4  1995/10/07  22:45:19  borland
- * Modified UDF code to use a sorted list plus an index.  Unfortunately, this
- * doesn't seem to have improved performance.
- *
- * Revision 1.3  1995/10/03  06:35:36  borland
- * Added better error message to rref (array.c).  Modified udf.c to allow more
- * than 1000 pcode ID numbers for built-ins, memories, etc; now consistent with
- * gen_pcode().
- *
- * Revision 1.2  1995/09/05  21:22:47  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* prototypes for this file are in udf.prot */
 /* file    : udf.c

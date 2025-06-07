@@ -25,8 +25,7 @@
 
 
 /* meminfo.h  26/08/93 */
-/* changed  11/12/93 
- $Log: not supported by cvs2svn $ */
+/* changed  11/12/93  */
 
 
 #ifndef MEM_INFOH

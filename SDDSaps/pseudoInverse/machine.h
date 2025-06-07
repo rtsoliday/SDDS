@@ -2,17 +2,6 @@
 /* Any machine specific stuff goes here */
 /* Add details necessary for your own installation here! */
 
-/*
- * $Log: not supported by cvs2svn $
- * Revision 1.4  2001/01/23 20:36:33  soliday
- * Fixed comments.
- *
- * Revision 1.3  1999/06/03 16:30:57  soliday
- * Removed compiler warnings under linux.
- *
-   Revision 1.2  1995/09/05 21:08:28  saunders
-   First test release of the SDDS1.5 package.
-   */
 
 /* This is for use with "configure" -- if you are not using configure
        then use machine.van for the "vanilla" version of machine.h */

@@ -7,14 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.3  1998/08/25 15:05:30  borland
- New version with major changes to allow multiple scales on x and y axes.
-
- * Revision 1.2  1995/09/05  21:09:38  saunders
- * First test release of the SDDS1.5 package.
- * */
 
 #include <stdio.h>
 

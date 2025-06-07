@@ -26,9 +26,6 @@
 
 /*
                Type definitions for general purpose maths package
- $Log: not supported by cvs2svn $
- Revision 1.2  1995/09/05 21:08:30  saunders
- First test release of the SDDS1.5 package.
 
 */
 

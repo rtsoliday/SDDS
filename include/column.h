@@ -44,10 +44,6 @@
  *   - The label string for each line is optional.
  *
  * Michael Borland, 1989, 1991
- $Log: not supported by cvs2svn $
- Revision 1.2  1995/09/05 21:14:54  saunders
- First test release of the SDDS1.5 package.
-
  */
 
 typedef struct {

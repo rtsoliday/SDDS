@@ -7,45 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.13  2006/10/19 21:49:24  soliday
- Fixed issue with tsetFlags
-
- Revision 1.12  2006/05/22 22:48:01  jiaox
- Added gray keyword to -shade option
-
- Revision 1.11  2005/04/26 22:21:40  shang
- added xlabelScale and ylabelScale to plot contour functions
-
- Revision 1.10  2005/03/07 22:48:49  shang
- added colorSymbol and colorUnits arguments to go_shade_grid()
-
- Revision 1.9  2004/09/14 19:05:10  soliday
- Added tsetFlags to go_plot_contours and go_shade_grid
-
- Revision 1.8  2002/12/04 17:55:59  soliday
- Modifed the do_plot_contours arguments
-
- Revision 1.7  2002/08/14 15:40:14  soliday
- Added Open License
-
- Revision 1.6  2002/01/10 13:45:26  borland
- Added arguments to support thickness option on sddscontour.
-
- Revision 1.5  2001/08/29 19:13:47  soliday
- Added the ability to use a dynamic dx and dy.
-
- Revision 1.4  2001/06/04 20:21:46  soliday
- Added the -layout option.
-
- Revision 1.3  2001/01/16 20:32:14  norume
- Make prototypes match functions.
-
- Revision 1.2  1995/09/05 21:15:00  saunders
- First test release of the SDDS1.5 package.
-
-*/
 
 #include <stdio.h>
 

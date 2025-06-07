@@ -12,46 +12,6 @@
  * part of sddsplot (plotting program for SDDS files)
  *
  * Michael Borland, 1994.
- $Log: not supported by cvs2svn $
- Revision 1.11  2004/04/20 17:20:18  shang
- modified transferNamesToLists() to obtain y1names from editing ynames if
- y1name contains "y1edit="
-
- Revision 1.10  2002/08/14 17:24:56  soliday
- Added Open License
-
- Revision 1.9  2002/07/01 18:38:23  borland
- Can now use wildcards for x quantity and templates for y.
-
- Revision 1.8  1999/07/21 18:07:27  borland
- Eliminated many memory leaks.  Program is now suitable for running with
- -repeat option, although not all leaks are gone.
-
- Revision 1.7  1999/06/03 16:09:38  soliday
- Removed compiler warnings under linux.
-
- Revision 1.6  1999/02/10 14:27:01  borland
- Store the string "$i$iNo data$d$d" in an array so that there are no problems
- with gnu compiler when the string is passed to jxyplot.
- Also, set the character size to the default for each panel using new
- set_default_char_size() routine.
-
- Revision 1.5  1998/08/25 15:05:39  borland
- New version with major changes to allow multiple scales on x and y axes.
-
- * Revision 1.4  1996/01/21  17:57:43  borland
- * Added -namescan option to control scanning of files for matches to wildcard
- * dataname specifications; this allows the user to cut running time when there
- * are many files with identical data elements.
- *
- * Revision 1.3  1995/09/25  23:13:59  borland
- * Modified transferName(s)ToLists to properly deal with %s substitution in
- * y1 and x1 names (used to produce duplicate names); singular version now
- * calls plural version to simplify code.
- *
- * Revision 1.2  1995/09/05  21:10:06  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "mdb.h"
 #include "graph.h"

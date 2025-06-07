@@ -7,47 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.12  2003/08/28 20:49:11  soliday
- Cleaned up the code.
-
- Revision 1.11  2002/08/14 16:28:59  soliday
- Added Open License
-
- Revision 1.10  2000/04/13 16:21:51  soliday
- Moved some WIN32 stuff to mdb.h
-
- Revision 1.9  2000/03/27 20:29:03  borland
- Added rpn_execn() and rpn_execs() functions and user functions execn and
- execs.  These execute commands from the string stack.  Results are put
- on the numerical or string stack.
-
- Revision 1.8  1999/12/21 17:52:24  soliday
- vxWorks does not support popen and getpid
-
- Revision 1.7  1999/12/15 19:00:29  soliday
- Added support for vxWorks.
-
- Revision 1.6  1999/07/08 22:26:59  soliday
- Added include statement for ctype.h, process.h, and unistd.h
- Also defined popen on WIN32 and created a dummy sigpause function for WIN32.
-
- Revision 1.5  1999/06/01 14:39:10  soliday
- Removed warnings when compiled under Linux.
-
- Revision 1.4  1999/05/04 14:47:46  borland
- Added conditional compilation statement to get it to compile under WIN32.
- Won't work properly, but then it probably won't be used on WIN32 either.
-
- Revision 1.3  1998/08/11 18:27:56  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- * Revision 1.2  1995/09/05  21:22:26  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* file: rpn_csh.c
  * purpose: create and manage a synchronized csh subprocess

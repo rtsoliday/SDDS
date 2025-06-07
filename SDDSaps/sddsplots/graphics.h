@@ -3,50 +3,6 @@
  *           function prototypes and things I've added 
  * Equivalent to plot.h and setshow.h from GNUPLOT.
  * Michael Borland, 1991, 1995.
- $Log: not supported by cvs2svn $
- Revision 1.13  2005/11/04 22:46:45  soliday
- Updated code to be compiled by a 64 bit processor.
-
- Revision 1.12  2005/03/22 03:33:54  soliday
- Made various changes including fixing a problem with the intensity bar
- colors. Also changed png and ps default colors so they are all
- the same as motif.
-
- Revision 1.11  2003/11/20 16:03:05  soliday
- Added sendCoordinates to the list of device functions.
-
- Revision 1.10  2002/11/14 03:03:15  borland
- To fix problems with building mpl_motif:
- Moved SDDS_ReadLineColorTable from sddsplot.c to graphics.c.
- Moved LINE_COLOR_TABLE structure definition from sddsplot.h to
- graphics.h.
-
- Revision 1.9  2001/06/04 20:03:08  soliday
- Made some changes that only affect sddscontour.
-
- Revision 1.8  2000/06/07 20:08:10  soliday
- Added line_color and add_color to termentry
-
- Revision 1.7  2000/04/27 19:26:35  soliday
- Now support line thickness.
-
- Revision 1.6  1999/07/22 18:34:50  soliday
- Added WIN32 support
-
- Revision 1.5  1999/06/03 16:06:54  soliday
- Removed compiler warnings under linux.
-
- Revision 1.4  1998/12/22 16:02:35  borland
- New character scaling algorithm for all labels.  Considerable changes
- to psymbol routine that draws characters and returns the size of
- strings.
-
- Revision 1.3  1998/08/25 15:05:26  borland
- New version with major changes to allow multiple scales on x and y axes.
-
- * Revision 1.2  1995/09/05  21:09:23  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 
 

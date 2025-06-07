@@ -12,52 +12,6 @@
  * contents: go_plot_contours(), label_contours(), label_contour()
  *
  * Michael Borland, 1989, 1991
- $Log: not supported by cvs2svn $
- Revision 1.15  2005/08/30 21:32:05  soliday
- Updated to compile with recent changes to sddsplot functions.
-
- Revision 1.14  2005/04/26 22:25:33  shang
- added xlabelScale and ylabelScale arguments
-
- Revision 1.13  2004/09/14 19:03:14  soliday
- Updated to work with the -ticksettings=xtime option.
-
- Revision 1.12  2003/09/02 19:32:36  soliday
- Cleaned up code for Linux.
-
- Revision 1.11  2003/08/16 19:38:55  borland
- More fixes for the frame_end() business. Frame ending is only done in the
- main routine now.  Removed special frame_end code for the columnMatch
- mode, since it shouldn't be needed now.
-
- Revision 1.10  2002/12/04 17:55:20  soliday
- Fixed the shape option when used with the contour option.
-
- Revision 1.9  2002/08/14 17:35:28  soliday
- Added Open License
-
- Revision 1.8  2001/08/13 20:12:39  soliday
- Updated function calls due to changes in sddsplot.
-
- Revision 1.7  2001/06/04 20:21:14  soliday
- Added the -layout option.
-
- Revision 1.6  2000/06/02 21:14:35  soliday
- I had to adjust some function calls so that they work with the new thickness
- argument.
-
- Revision 1.5  2000/04/10 19:01:06  borland
- -shapes option now works again, and uses SDDS files.
-
- Revision 1.4  1999/07/23 15:53:19  soliday
- Added WIN32 support
-
- Revision 1.3  1999/06/03 20:42:39  soliday
- Removed compiler warnings under Linux.
-
- Revision 1.2  1995/09/05 21:08:50  saunders
- First test release of the SDDS1.5 package.
-
  */
 #include "mdb.h"
 #include "graph.h"

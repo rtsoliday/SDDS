@@ -29,7 +29,6 @@
 	Basic sparse routines to be held in sparse.c
 */
 
-/* RCS id: $Id: sparse.h,v 1.1.1.1 1999-04-14 14:16:17 borland Exp $ */
 
 #ifndef SPARSEH
 

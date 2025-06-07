@@ -7,12 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.2  1995/09/05 21:21:31  saunders
- First test release of the SDDS1.5 package.
-
-*/
 
 #include "mdb.h"
 #include "namelist.h"

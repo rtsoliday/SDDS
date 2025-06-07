@@ -7,26 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- * $Log: not supported by cvs2svn $
- * Revision 1.5  2006/10/20 14:08:39  jiaox
- * Added device option -newzoom to turn on/off the newzoom as the mpl_motif
- * starts. Also added newzoom in resource file MPLDriver to set the user default for newzoom feature.
- *
- * Revision 1.4  2002/08/14 17:29:25  soliday
- * Added Open License
- *
- * Revision 1.3  2002/02/18 22:12:28  soliday
- * Fixed problem with the MPLDriver file when selecting default file types.
- *
- * Revision 1.2  1999/10/07 14:56:38  soliday
- * Changed some resources for WIN32.
- *
- * Revision 1.1  1999/07/22 18:40:32  soliday
- * The resouces are now compiled rather then read from a file at execution
- *
- *
- */
 
 /* Fallback resources for MPL Applications */
 

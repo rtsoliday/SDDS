@@ -26,7 +26,6 @@
 
 /*
        Header file for ``matrix2.a'' library file
- $Log: not supported by cvs2svn $
 */
 
 

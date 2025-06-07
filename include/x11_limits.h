@@ -7,12 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.2  1995/09/05 21:15:47  saunders
- First test release of the SDDS1.5 package.
- 
-*/
 
 /* macros giving number of points in x and y for X11 plotting. */
 /* needed by x11.trm and gnuplot_x11.c */

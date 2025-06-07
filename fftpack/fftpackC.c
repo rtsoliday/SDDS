@@ -10,22 +10,6 @@
 /* file: fftpackC.c
  * contents: C languange interface to fftpack routines
  * author: M. Borland, 1995.
- $Log: not supported by cvs2svn $
- Revision 1.6  2002/08/14 16:41:20  soliday
- Added Open License
-
- Revision 1.5  1999/05/28 14:55:01  soliday
- Removed compiler warnings under Linux.
-
- Revision 1.4  1999/04/22 03:34:10  borland
- Change to avoid WIN32 compiler warning.
-
- Revision 1.3  1999/04/22 03:32:43  borland
- Eliminated references to mdb.h to solve WIN32 build problem.
-
- * Revision 1.2  1995/09/05  21:13:16  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "stdio.h"
 #include "stdlib.h"

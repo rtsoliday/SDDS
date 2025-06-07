@@ -10,9 +10,6 @@
 /* radf4.f -- translated by f2c (version of 30 January 1990  16:02:04).
    You must link the resulting object file with the libraries:
 	-lF77 -lI77 -lm -lc   (in that order)
- $Log: not supported by cvs2svn $
- Revision 1.2  1995/09/05 21:13:57  saunders
- First test release of the SDDS1.5 package.
 
 */
 

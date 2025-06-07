@@ -11,33 +11,6 @@
  * purpose: definitions for C matrix routines 
  *
  * Michael Borland, 1989
- $Log: not supported by cvs2svn $
- Revision 1.10  2008/01/05 03:35:32  borland
- Adde m_subtract().
-
- Revision 1.9  2003/07/22 20:01:18  soliday
- Added support for Kylix.
-
- Revision 1.8  2002/08/14 15:40:15  soliday
- Added Open License
-
- Revision 1.7  2002/08/07 18:52:39  borland
- Added prototypes for fmat_* and macros for fm_*  routines, which do single-precision
- matrix computations.
-
- Revision 1.6  1999/09/14 18:04:48  soliday
- Added export commands for WIN32 dll files.
-
- Revision 1.5  1998/06/11 22:21:31  borland
- Fixed typo with p_merror macro.
-
- Revision 1.4  1998/04/21 21:26:05  borland
- New version that provides compatibility with Meschach library in the
- same executable (but not in the same .c file).
-
- * Revision 1.2  1995/09/05  21:15:12  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include <stdio.h>
 

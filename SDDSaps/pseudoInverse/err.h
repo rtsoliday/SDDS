@@ -26,14 +26,6 @@
 
 /* err.h  28/09/1993 */
 
-/*
- * $Log: not supported by cvs2svn $
- * Revision 1.3  1999/06/03 16:30:47  soliday
- * Removed compiler warnings under linux.
- *
-   Revision 1.2  1995/09/05 21:08:25  saunders
-   First test release of the SDDS1.5 package.
-   */
 
 
 #ifndef ERRHEADER

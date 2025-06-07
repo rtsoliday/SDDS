@@ -47,25 +47,7 @@ LICENSING INQUIRIES MAY BE DIRECTED TO THE INDUSTRIAL TECHNOLOGY
 DEVELOPMENT CENTER AT ARGONNE NATIONAL LABORATORY.
 
 CopyrightNotice001
- $Log: not supported by cvs2svn $
- Revision 1.6  1999/06/03 16:08:16  soliday
- Removed compiler warnings under linux.
-
- Revision 1.5  1998/12/22 16:02:37  borland
- New character scaling algorithm for all labels.  Considerable changes
- to psymbol routine that draws characters and returns the size of
- strings.
-
- Revision 1.4  1998/08/25 15:05:29  borland
- New version with major changes to allow multiple scales on x and y axes.
-
- Revision 1.3  1998/01/27 00:57:25  borland
- Changed ix and iy arrays from char to short, since using char's doesn't
- work on some machines.
-
- * Revision 1.2  1995/09/05  21:09:33  saunders
- * First test release of the SDDS1.5 package.
- * */
+ */
 
 #include "mdb.h"
 #include "psymbol.h"

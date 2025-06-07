@@ -12,13 +12,6 @@
  * purpose: interpolation, low-pass filtering, and other operations on
  *          each dimension of a 2D array.
  * Michael Borland, 1993.
- $Log: not supported by cvs2svn $
- Revision 1.3  1999/06/03 20:42:29  soliday
- Removed compiler warnings under Linux.
-
- Revision 1.2  1995/09/05 21:08:48  saunders
- First test release of the SDDS1.5 package.
-
  */
 
 #include "mdb.h"

@@ -7,19 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.4  2002/08/14 16:29:00  soliday
- Added Open License
-
- Revision 1.3  1998/08/11 18:27:59  borland
- New version per R. Soliday with true pcoding of UDFs for 4-8 x faster
- evaluation.
-
- * Revision 1.2  1995/09/05  21:22:45  saunders
- * First test release of the SDDS1.5 package.
- *
-*/
 
 /* prototypes for this file are in stack.prot */
 /* file    : stack.c

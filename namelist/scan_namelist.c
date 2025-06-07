@@ -7,46 +7,6 @@
 * in the file LICENSE that is included with this distribution. 
 \*************************************************************************/
 
-/*
- $Log: not supported by cvs2svn $
- Revision 1.12  2003/12/17 03:39:31  borland
- Use popen()/pclose() instead of popen()/fclose() for commands.  Prevents problems
- with runs that have many in-namelist commands.
-
- Revision 1.11  2003/09/02 17:56:47  soliday
- Cleaned up code for Linux.
-
- Revision 1.10  2003/08/28 20:35:18  soliday
- Cleaned up the code.
-
- Revision 1.9  2002/12/08 02:32:55  borland
- Fixed problems with commands inside namelist items under CONDOR.
- Also, added fclose() for the popen() implementation of the command
- feature.
-
- Revision 1.8  2002/08/14 16:23:49  soliday
- Added Open License
-
- Revision 1.7  2000/02/07 18:10:12  borland
- Now properly removes escapes from { and }.
-
- Revision 1.6  2000/02/07 18:05:58  borland
- Fixed a bug introduced when command feature was added.  New code was
- removing escape characters, which messed up tokenization.
-
- Revision 1.5  2000/01/28 15:49:12  soliday
- Increased value buffer size to 16k
-
- Revision 1.4  2000/01/27 21:52:23  soliday
- Added the ability to run external programs to retieve dynamic data.
-
- Revision 1.3  1999/05/28 14:53:48  soliday
- Removed compiler warnings under Linux.
-
- Revision 1.2  1995/09/05 21:21:45  saunders
- First test release of the SDDS1.5 package.
-
-*/
 
 #include "mdb.h"
 #include "namelist.h"

@@ -8,20 +8,6 @@
 \*************************************************************************/
 
 /* 
- * $Log: not supported by cvs2svn $
- * Revision 1.3  2003/09/02 18:08:32  soliday
- * Cleaned up code for Linux.
- *
- * Revision 1.2  2002/08/14 16:49:36  soliday
- * Added Open License
- *
- * Revision 1.1  2000/04/11 19:57:59  soliday
- * Moved from elegant
- *
- * Revision 1.1  2000/04/11 15:10:23  borland
- * First version of utility for text replacements.
- *
- *
  * program: replaceText
  * purpose: replace strings in a file.
  * a simplified variant of the replace program.

@@ -17,19 +17,6 @@
  *   m_free(&A);
  *
  * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.5  2002/07/31 14:34:19  soliday
- Added support for Mac
-
- Revision 1.4  1999/12/15 16:56:23  soliday
- Added support for vxWorks.
-
- Revision 1.3  1998/04/21 21:26:39  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:17  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 #if defined(vxWorks) || defined(__APPLE__)

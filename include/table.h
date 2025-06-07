@@ -31,22 +31,6 @@
  *   -Lines beyond N+5 will be ignored.
  *
  * Michael Borland, 1988
- $Log: not supported by cvs2svn $
- Revision 1.6  2003/07/22 20:01:18  soliday
- Added support for Kylix.
-
- Revision 1.5  2002/08/14 15:40:18  soliday
- Added Open License
-
- Revision 1.4  2000/04/11 16:19:45  soliday
- Modified prototypes to work with new mdbcommon library.
-
- Revision 1.3  1999/09/14 18:06:29  soliday
- Added export commands for WIN32 dll files.
-
- Revision 1.2  1995/09/05 21:15:43  saunders
- First test release of the SDDS1.5 package.
-
  */
 #include <stdio.h>
 

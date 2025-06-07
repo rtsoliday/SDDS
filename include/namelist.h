@@ -9,23 +9,6 @@
 
 /* definitions for use with namelist scanning routines */
 /* Michael Borland, 1988 
- $Log: not supported by cvs2svn $
- Revision 1.6  2010/02/04 14:39:12  borland
- Added processNamelist(), which is a new interface to the namelist processor
- that returns NAMELIST_ERROR when their is an error, instead of exiting.
-
- Revision 1.5  2005/11/09 22:04:00  soliday
- Added support for int32_t
-
- Revision 1.4  2002/08/14 15:40:17  soliday
- Added Open License
-
- Revision 1.3  1996/02/09 04:32:45  borland
- Added prototypes for show_namelist*_fields().
-
- * Revision 1.2  1995/09/05  21:15:34  saunders
- * First test release of the SDDS1.5 package.
- *
 */
 
 #ifndef _NAMELIST_

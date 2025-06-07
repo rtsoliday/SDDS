@@ -15,24 +15,6 @@
  *           fft_derivative()
  *
  * Michael Borland, 1990-5
- $Log: not supported by cvs2svn $
- Revision 1.7  2009/12/02 22:22:34  soliday
- Added complex number support for non C99 compilers.
-
- Revision 1.6  2009/11/09 18:01:51  borland
- Changed to use C99 complex routines.
-
- Revision 1.5  2002/08/14 16:41:19  soliday
- Added Open License
-
- Revision 1.4  1999/09/14 18:19:39  soliday
- dp_pad_with_zeroes and power_of_2 are no longer defined locally
-
- Revision 1.3  1999/05/28 14:54:37  soliday
- Removed compiler warnings under Linux.
-
- Revision 1.2  1995/09/05 21:13:03  saunders
- First test release of the SDDS1.5 package.
 
  */
 #include <complex>

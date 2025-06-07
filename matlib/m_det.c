@@ -16,19 +16,6 @@
  *   det = m_det(A);
  *
  * Michael Borland, 1986.
- $Log: not supported by cvs2svn $
- Revision 1.5  2002/03/21 16:50:32  shang
- replaced A->a[j][j]!=0 (which is a bug) by A->a[j][i]!=0
-
- Revision 1.4  2000/01/19 14:43:05  borland
- Fixed memory leak.
-
- Revision 1.3  1998/04/21 21:26:38  borland
- New names to allow concurrent use with the Meschach library.
-
- * Revision 1.2  1995/09/05  21:16:12  saunders
- * First test release of the SDDS1.5 package.
- *
  */
 #include "matlib.h"
 

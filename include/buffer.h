@@ -11,19 +11,6 @@
  *       proto-types for string-buffering routines
  *
  * Michael Borland, 1990
- $Log: not supported by cvs2svn $
- Revision 1.5  2002/08/14 15:40:13  soliday
- Added Open License
-
- Revision 1.4  1999/09/14 18:03:40  soliday
- Added export commands for WIN32 dll files.
-
- Revision 1.3  1999/04/14 13:58:47  borland
- Fixed some function types and returns.
-
- Revision 1.2  1995/09/05 21:14:52  saunders
- First test release of the SDDS1.5 package.
-
  */
 #include <stdio.h>
 #undef epicsShareFuncMDBLIB

@@ -30,7 +30,6 @@
 
 #ifndef	MATRIXH
 
-/* RCS id: $Id: matrix.h,v 1.5 2007-01-23 16:27:34 emery Exp $ */
 
 #define	MATRIXH	
 

@@ -12,35 +12,6 @@
  *          equation
  *
  * Michael Borland, 1995
- $Log: not supported by cvs2svn $
- Revision 1.10  2003/09/02 19:32:36  soliday
- Cleaned up code for Linux.
-
- Revision 1.9  2003/06/02 21:37:43  soliday
- Added a function to add parentheses around the string before passing it to if2pf.
-
- Revision 1.8  2002/08/14 17:35:28  soliday
- Added Open License
-
- Revision 1.7  2001/04/10 20:42:57  soliday
- Added the ability to convert algebraic equations to rpn equations.
-
- Revision 1.6  2001/01/10 19:34:34  soliday
- Standardized usage message.
-
- Revision 1.5  2000/10/04 21:02:51  soliday
- Added definition for outfile that was causing problems with Linux when using
- shared libraries.
-
- Revision 1.4  2000/04/10 19:01:06  borland
- -shapes option now works again, and uses SDDS files.
-
- Revision 1.3  1999/06/03 20:42:49  soliday
- Removed compiler warnings under Linux.
-
- Revision 1.2  1995/09/05 21:08:53  saunders
- First test release of the SDDS1.5 package.
-
  */
 #include "mdb.h"
 #include "scan.h"
