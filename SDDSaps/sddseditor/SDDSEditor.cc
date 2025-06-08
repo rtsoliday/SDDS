@@ -12,6 +12,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
+#include <QSplitter>
 #include <QLabel>
 #include <QPushButton>
 #include <QVector>
@@ -58,8 +59,14 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   pageLayout->addWidget(binaryBtn);
   mainLayout->addLayout(pageLayout);
 
+  // container for data panels
+  dataSplitter = new QSplitter(Qt::Vertical, this);
+  mainLayout->addWidget(dataSplitter, 1);
+
   // parameters panel
-  QGroupBox *paramBox = new QGroupBox(tr("Parameters"), this);
+  paramBox = new QGroupBox(tr("Parameters"), this);
+  paramBox->setCheckable(true);
+  paramBox->setChecked(true);
   QVBoxLayout *paramLayout = new QVBoxLayout(paramBox);
   paramModel = new QStandardItemModel(this);
   paramModel->setColumnCount(1);
@@ -71,14 +78,18 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   paramView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   paramView->verticalHeader()->setDefaultSectionSize(18);
   paramView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
-  connect(paramModel, &QStandardItemModel::itemChanged, this, &SDDSEditor::markDirty);
+  connect(paramModel, &QStandardItemModel::itemChanged, this,
+          &SDDSEditor::markDirty);
   connect(paramView->verticalHeader(), &QHeaderView::sectionDoubleClicked, this,
           &SDDSEditor::changeParameterType);
+  connect(paramBox, &QGroupBox::toggled, paramView, &QWidget::setVisible);
   paramLayout->addWidget(paramView);
-  mainLayout->addWidget(paramBox);
+  dataSplitter->addWidget(paramBox);
 
   // columns panel
-  QGroupBox *colBox = new QGroupBox(tr("Columns"), this);
+  colBox = new QGroupBox(tr("Columns"), this);
+  colBox->setCheckable(true);
+  colBox->setChecked(true);
   QVBoxLayout *colLayout = new QVBoxLayout(colBox);
   columnModel = new QStandardItemModel(this);
   columnView = new QTableView(colBox);
@@ -90,11 +101,14 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   columnView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(columnView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeColumnType);
+  connect(colBox, &QGroupBox::toggled, columnView, &QWidget::setVisible);
   colLayout->addWidget(columnView);
-  mainLayout->addWidget(colBox);
+  dataSplitter->addWidget(colBox);
 
   // arrays panel
-  QGroupBox *arrayBox = new QGroupBox(tr("Arrays"), this);
+  arrayBox = new QGroupBox(tr("Arrays"), this);
+  arrayBox->setCheckable(true);
+  arrayBox->setChecked(true);
   QVBoxLayout *arrayLayout = new QVBoxLayout(arrayBox);
   arrayModel = new QStandardItemModel(this);
   arrayView = new QTableView(arrayBox);
@@ -106,8 +120,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   arrayView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(arrayView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeArrayType);
+  connect(arrayBox, &QGroupBox::toggled, arrayView, &QWidget::setVisible);
   arrayLayout->addWidget(arrayView);
-  mainLayout->addWidget(arrayBox);
+  dataSplitter->addWidget(arrayBox);
 
   setCentralWidget(central);
   resize(800, 600);
@@ -479,6 +494,7 @@ void SDDSEditor::populateModels() {
   // parameters
   paramModel->removeRows(0, paramModel->rowCount());
   int32_t pcount = dataset.layout.n_parameters;
+  paramBox->setChecked(pcount > 0);
   for (int32_t i = 0; i < pcount; ++i) {
     PARAMETER_DEFINITION *def = &dataset.layout.parameter_definition[i];
     paramModel->setRowCount(i + 1);
@@ -493,6 +509,7 @@ void SDDSEditor::populateModels() {
 
   // columns
   int32_t ccount = dataset.layout.n_columns;
+  colBox->setChecked(ccount > 0);
   int64_t rows = (ccount > 0 && pd.columns.size() > 0) ? pd.columns[0].size() : 0;
   columnModel->clear();
   columnModel->setColumnCount(ccount);
@@ -511,6 +528,7 @@ void SDDSEditor::populateModels() {
 
   // arrays
   int32_t acount = dataset.layout.n_arrays;
+  arrayBox->setChecked(acount > 0);
   arrayModel->clear();
   int maxLen = 0;
   for (int a = 0; a < acount && a < pd.arrays.size(); ++a)
