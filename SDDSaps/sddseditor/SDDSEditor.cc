@@ -272,7 +272,10 @@ void SDDSEditor::saveFile() {
         SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toDouble(), NULL);
         break;
       case SDDS_LONGDOUBLE: {
-        long double v = text.toDouble();
+        QByteArray ba = text.toLocal8Bit();
+        long double v = 0.0L;
+        if (!ba.isEmpty())
+          v = strtold(ba.constData(), nullptr);
         SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, v, NULL);
         break;
       }
@@ -302,10 +305,20 @@ void SDDSEditor::saveFile() {
         for (auto p : arr)
           free(p);
       } else {
-        QVector<double> arr(rows);
-        for (int64_t r = 0; r < rows; ++r)
-          arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toDouble() : 0.0;
-        SDDS_SetColumnFromDoubles(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (type == SDDS_LONGDOUBLE) {
+          QVector<long double> arr(rows);
+          for (int64_t r = 0; r < rows; ++r) {
+            QString text = r < pd.columns[c].size() ? pd.columns[c][r] : QString();
+            QByteArray ba = text.toLocal8Bit();
+            arr[r] = ba.isEmpty() ? 0.0L : strtold(ba.constData(), nullptr);
+          }
+          SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        } else {
+          QVector<double> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toDouble() : 0.0;
+          SDDS_SetColumnFromDoubles(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        }
       }
     }
 
@@ -340,7 +353,7 @@ void SDDSEditor::saveFile() {
           QString cell = as.values[i];
           switch (type) {
           case SDDS_LONGDOUBLE:
-            ((long double *)buffer)[i] = cell.toDouble();
+            ((long double *)buffer)[i] = strtold(cell.toLocal8Bit().constData(), nullptr);
             break;
           case SDDS_DOUBLE:
             ((double *)buffer)[i] = cell.toDouble();
