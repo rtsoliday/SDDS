@@ -49,6 +49,8 @@ private slots:
   void saveFile();
   void search();
   void pageChanged(int value);
+  void copy();
+  void paste();
 
 private:
   void loadPage(int page);
@@ -60,6 +62,7 @@ private:
   void changeArrayType(int column);
   void message(const QString &text);
   void markDirty();
+  QTableView *focusedTable() const;
 
   SDDS_DATASET dataset;
   bool datasetLoaded;
