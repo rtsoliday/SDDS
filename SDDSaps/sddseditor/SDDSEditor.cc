@@ -19,6 +19,9 @@
 #include <QDockWidget>
 #include <QInputDialog>
 #include <QHeaderView>
+#include <QApplication>
+#include <QShortcut>
+#include <QClipboard>
 #include <cstdlib>
 
 SDDSEditor::SDDSEditor(QWidget *parent)
@@ -124,6 +127,12 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   arrayLayout->addWidget(arrayView);
   dataSplitter->addWidget(arrayBox);
 
+  // shortcuts for copy/paste
+  QShortcut *copySc = new QShortcut(QKeySequence::Copy, this);
+  connect(copySc, &QShortcut::activated, this, &SDDSEditor::copy);
+  QShortcut *pasteSc = new QShortcut(QKeySequence::Paste, this);
+  connect(pasteSc, &QShortcut::activated, this, &SDDSEditor::paste);
+
   setCentralWidget(central);
   resize(800, 600);
 
@@ -154,6 +163,65 @@ void SDDSEditor::message(const QString &text) {
 
 void SDDSEditor::markDirty() {
   dirty = true;
+}
+
+QTableView *SDDSEditor::focusedTable() const {
+  QWidget *w = QApplication::focusWidget();
+  if (w && (w == paramView || paramView->isAncestorOf(w)))
+    return paramView;
+  if (w && (w == columnView || columnView->isAncestorOf(w)))
+    return columnView;
+  if (w && (w == arrayView || arrayView->isAncestorOf(w)))
+    return arrayView;
+  return nullptr;
+}
+
+void SDDSEditor::copy() {
+  QTableView *view = focusedTable();
+  if (!view)
+    return;
+  QModelIndexList indexes = view->selectionModel()->selectedIndexes();
+  if (indexes.isEmpty())
+    return;
+  std::sort(indexes.begin(), indexes.end(), [](const QModelIndex &a,
+                                               const QModelIndex &b) {
+    return a.row() == b.row() ? a.column() < b.column() : a.row() < b.row();
+  });
+  int prevRow = indexes.first().row();
+  QStringList rowTexts;
+  QString rowText;
+  for (const QModelIndex &idx : indexes) {
+    if (idx.row() != prevRow) {
+      rowTexts << rowText;
+      rowText.clear();
+      prevRow = idx.row();
+    } else if (!rowText.isEmpty()) {
+      rowText += '\t';
+    }
+    rowText += idx.data().toString();
+  }
+  rowTexts << rowText;
+  QApplication::clipboard()->setText(rowTexts.join('\n'));
+}
+
+void SDDSEditor::paste() {
+  QTableView *view = focusedTable();
+  if (!view)
+    return;
+  QModelIndex start = view->currentIndex();
+  if (!start.isValid())
+    return;
+  QString text = QApplication::clipboard()->text();
+  QStringList rows = text.split('\n');
+  for (int r = 0; r < rows.size(); ++r) {
+    QStringList cols = rows[r].split('\t');
+    for (int c = 0; c < cols.size(); ++c) {
+      QModelIndex idx = view->model()->index(start.row() + r, start.column() + c);
+      if (idx.isValid())
+        view->model()->setData(idx, cols[c]);
+    }
+  }
+  markDirty();
 }
 
 void SDDSEditor::openFile() {
