@@ -25,6 +25,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
+  // make the console dock roughly five text lines tall
+  int lineH = consoleEdit->fontMetrics().lineSpacing();
+  consoleEdit->setFixedHeight(lineH * 5 + 2 * consoleEdit->frameWidth());
   QDockWidget *dock = new QDockWidget(QString(), this);
   dock->setTitleBarWidget(new QWidget());
   dock->setWidget(consoleEdit);
@@ -65,7 +68,8 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   paramView->setModel(paramModel);
   paramView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::ResizeToContents);
-  paramView->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+  paramView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+  paramView->verticalHeader()->setDefaultSectionSize(18);
   paramView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(paramModel, &QStandardItemModel::itemChanged, this, &SDDSEditor::markDirty);
   connect(paramView->verticalHeader(), &QHeaderView::sectionDoubleClicked, this,
@@ -81,6 +85,8 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   columnView->setModel(columnModel);
   columnView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::ResizeToContents);
+  columnView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+  columnView->verticalHeader()->setDefaultSectionSize(18);
   columnView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(columnView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeColumnType);
@@ -95,6 +101,8 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   arrayView->setModel(arrayModel);
   arrayView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::ResizeToContents);
+  arrayView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+  arrayView->verticalHeader()->setDefaultSectionSize(18);
   arrayView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(arrayView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeArrayType);
