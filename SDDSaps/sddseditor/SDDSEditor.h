@@ -18,6 +18,17 @@
 #include <QLineEdit>
 #include <QStandardItemModel>
 
+struct ArrayStore {
+  QVector<QString> values;
+  QVector<int> dims;
+};
+
+struct PageStore {
+  QVector<QString> parameters;
+  QVector<QVector<QString>> columns;
+  QVector<ArrayStore> arrays;
+};
+
 extern "C" {
 #include "SDDS.h"
 }
@@ -64,6 +75,9 @@ private:
   QStandardItemModel *paramModel;
   QStandardItemModel *columnModel;
   QStandardItemModel *arrayModel;
+
+  QVector<PageStore> pages;
+  int currentPage;
 };
 
 #endif // SDDSEDITOR_H
