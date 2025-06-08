@@ -62,7 +62,10 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   paramModel->setHorizontalHeaderLabels(QStringList() << tr("Value"));
   paramView = new QTableView(paramBox);
   paramView->setModel(paramModel);
-  paramView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+  paramView->horizontalHeader()->setSectionResizeMode(
+      QHeaderView::ResizeToContents);
+  paramView->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+  paramView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(paramModel, &QStandardItemModel::itemChanged, this, &SDDSEditor::markDirty);
   connect(paramView->verticalHeader(), &QHeaderView::sectionDoubleClicked, this,
           &SDDSEditor::changeParameterType);
@@ -75,7 +78,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   columnModel = new QStandardItemModel(this);
   columnView = new QTableView(colBox);
   columnView->setModel(columnModel);
-  columnView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+  columnView->horizontalHeader()->setSectionResizeMode(
+      QHeaderView::ResizeToContents);
+  columnView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(columnView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeColumnType);
   colLayout->addWidget(columnView);
@@ -87,7 +92,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   arrayModel = new QStandardItemModel(this);
   arrayView = new QTableView(arrayBox);
   arrayView->setModel(arrayModel);
-  arrayView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+  arrayView->horizontalHeader()->setSectionResizeMode(
+      QHeaderView::ResizeToContents);
+  arrayView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(arrayView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeArrayType);
   arrayLayout->addWidget(arrayView);
@@ -282,10 +289,13 @@ void SDDSEditor::saveFile() {
       case SDDS_STRING:
         SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toLocal8Bit().data(), NULL);
         break;
-      case SDDS_CHARACTER:
+      case SDDS_CHARACTER: {
+        QByteArray ba = text.toLatin1();
+        char ch = ba.isEmpty() ? '\0' : ba.at(0);
         SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name,
-                           text.isEmpty() ? '\0' : text.at(0).toLatin1(), NULL);
+                           ch, NULL);
         break;
+      }
       default:
         break;
       }
@@ -308,7 +318,8 @@ void SDDSEditor::saveFile() {
         QVector<char> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
           QString text = r < pd.columns[c].size() ? pd.columns[c][r] : QString();
-          arr[r] = text.isEmpty() ? '\0' : text.at(0).toLatin1();
+          QByteArray ba = text.toLatin1();
+          arr[r] = ba.isEmpty() ? '\0' : ba.at(0);
         }
         SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
       } else if (type == SDDS_LONGDOUBLE) {
@@ -346,9 +357,11 @@ void SDDSEditor::saveFile() {
         QVector<char> arr(elements);
         for (int i = 0; i < elements; ++i) {
           QString cell = as.values[i];
-          arr[i] = cell.isEmpty() ? '\0' : cell.at(0).toLatin1();
+          QByteArray ba = cell.toLatin1();
+          arr[i] = ba.isEmpty() ? '\0' : ba.at(0);
         }
-        SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, arr.data(), dims.data());
+        SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA,
+                      arr.data(), dims.data());
       } else {
         size_t size = SDDS_type_size[type - 1];
         void *buffer = malloc(size * elements);
@@ -459,8 +472,8 @@ void SDDSEditor::populateModels() {
   for (int32_t i = 0; i < pcount; ++i) {
     PARAMETER_DEFINITION *def = &dataset.layout.parameter_definition[i];
     paramModel->setRowCount(i + 1);
-    paramModel->setVerticalHeaderItem(i,
-      new QStandardItem(QString("%1 (%2)").arg(def->name).arg(SDDS_GetTypeName(def->type))));
+    paramModel->setVerticalHeaderItem(
+        i, new QStandardItem(QString(def->name)));
     QString value = (i < pd.parameters.size()) ? pd.parameters[i] : QString();
     QStandardItem *item = new QStandardItem(value);
     item->setEditable(true);
@@ -477,7 +490,7 @@ void SDDSEditor::populateModels() {
   for (int32_t i = 0; i < ccount; ++i) {
     COLUMN_DEFINITION *def = &dataset.layout.column_definition[i];
     columnModel->setHeaderData(i, Qt::Horizontal,
-                              QString("%1 (%2)").arg(def->name).arg(SDDS_GetTypeName(def->type)));
+                               QString(def->name));
     for (int64_t r = 0; r < rows; ++r) {
       QString val = (i < pd.columns.size() && r < pd.columns[i].size()) ? pd.columns[i][r] : QString();
       columnModel->setItem(r, i, new QStandardItem(val));
@@ -498,7 +511,7 @@ void SDDSEditor::populateModels() {
   for (int a = 0; a < acount; ++a) {
     ARRAY_DEFINITION *def = &dataset.layout.array_definition[a];
     arrayModel->setHeaderData(a, Qt::Horizontal,
-                              QString("%1 (%2)").arg(def->name).arg(SDDS_GetTypeName(def->type)));
+                              QString(def->name));
     const QVector<QString> vals = (a < pd.arrays.size()) ? pd.arrays[a].values : QVector<QString>();
     for (int i = 0; i < vals.size(); ++i)
       arrayModel->setItem(i, a, new QStandardItem(vals[i]));
@@ -559,20 +572,21 @@ void SDDSEditor::changeParameterType(int row) {
     return;
   QStringList types;
   types << "long" << "double" << "string";
+  if (row < 0 || row >= dataset.layout.n_parameters)
+    return;
   QStandardItem *headerItem = paramModel->verticalHeaderItem(row);
-  QString label = headerItem->text();
-  QString current = label.section(' ', -1).remove('(').remove(')');
+  QString name = dataset.layout.parameter_definition[row].name;
+  QString current = SDDS_GetTypeName(dataset.layout.parameter_definition[row].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Parameter Type"), tr("Type"), types,
                                          types.indexOf(current), false, &ok);
   if (!ok || newType == current)
     return;
   int32_t sddsType = SDDS_IdentifyType(const_cast<char *>(newType.toLocal8Bit().constData()));
-  QString name = label.section(' ', 0, 0);
   SDDS_ChangeParameterInformation(&dataset, (char *)"type", &sddsType,
                                   SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
                                   const_cast<char *>(name.toLocal8Bit().constData()));
-  headerItem->setText(QString("%1 (%2)").arg(name).arg(newType));
+  headerItem->setText(name);
   markDirty();
 }
 
@@ -581,9 +595,10 @@ void SDDSEditor::changeColumnType(int column) {
     return;
   QStringList types;
   types << "long" << "double" << "string";
-  QString label = columnModel->headerData(column, Qt::Horizontal).toString();
-  QString name = label.section(' ', 0, 0);
-  QString current = label.section(' ', -1).remove('(').remove(')');
+  if (column < 0 || column >= dataset.layout.n_columns)
+    return;
+  QString name = dataset.layout.column_definition[column].name;
+  QString current = SDDS_GetTypeName(dataset.layout.column_definition[column].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Column Type"), tr("Type"), types,
                                          types.indexOf(current), false, &ok);
@@ -593,8 +608,7 @@ void SDDSEditor::changeColumnType(int column) {
   SDDS_ChangeColumnInformation(&dataset, (char *)"type", &sddsType,
                                SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
                                const_cast<char *>(name.toLocal8Bit().constData()));
-  columnModel->setHeaderData(column, Qt::Horizontal,
-                             QString("%1 (%2)").arg(name).arg(newType));
+  columnModel->setHeaderData(column, Qt::Horizontal, QString(name));
   markDirty();
 }
 
@@ -603,9 +617,10 @@ void SDDSEditor::changeArrayType(int column) {
     return;
   QStringList types;
   types << "long" << "double" << "string";
-  QString label = arrayModel->headerData(column, Qt::Horizontal).toString();
-  QString name = label.section(' ', 0, 0);
-  QString current = label.section(' ', -1).remove('(').remove(')');
+  if (column < 0 || column >= dataset.layout.n_arrays)
+    return;
+  QString name = dataset.layout.array_definition[column].name;
+  QString current = SDDS_GetTypeName(dataset.layout.array_definition[column].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Array Type"), tr("Type"), types,
                                          types.indexOf(current), false, &ok);
@@ -615,8 +630,7 @@ void SDDSEditor::changeArrayType(int column) {
   SDDS_ChangeArrayInformation(&dataset, (char *)"type", &sddsType,
                               SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
                               const_cast<char *>(name.toLocal8Bit().constData()));
-  arrayModel->setHeaderData(column, Qt::Horizontal,
-                            QString("%1 (%2)").arg(name).arg(newType));
+  arrayModel->setHeaderData(column, Qt::Horizontal, QString(name));
   markDirty();
 }
 
