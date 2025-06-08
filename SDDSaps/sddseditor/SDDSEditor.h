@@ -18,6 +18,9 @@
 #include <QLineEdit>
 #include <QStandardItemModel>
 
+class QGroupBox;
+class QSplitter;
+
 struct ArrayStore {
   QVector<QString> values;
   QVector<int> dims;
@@ -72,6 +75,10 @@ private:
   QTableView *paramView;
   QTableView *columnView;
   QTableView *arrayView;
+  QGroupBox *paramBox;
+  QGroupBox *colBox;
+  QGroupBox *arrayBox;
+  QSplitter *dataSplitter;
   QStandardItemModel *paramModel;
   QStandardItemModel *columnModel;
   QStandardItemModel *arrayModel;
