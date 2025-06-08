@@ -25,7 +25,8 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
-  QDockWidget *dock = new QDockWidget(tr("Console"), this);
+  QDockWidget *dock = new QDockWidget(QString(), this);
+  dock->setTitleBarWidget(new QWidget());
   dock->setWidget(consoleEdit);
   addDockWidget(Qt::TopDockWidgetArea, dock);
 
@@ -101,6 +102,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   mainLayout->addWidget(arrayBox);
 
   setCentralWidget(central);
+  resize(800, 600);
 
   // menu bar
   QMenu *fileMenu = menuBar()->addMenu(tr("File"));
