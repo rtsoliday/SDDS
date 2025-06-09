@@ -63,6 +63,8 @@ private slots:
   void deleteParameter();
   void deleteColumn();
   void deleteArray();
+  void insertColumnRows();
+  void deleteColumnRows();
 
 private:
   void loadPage(int page);
@@ -102,6 +104,7 @@ private:
   QVector<PageStore> pages;
   int currentPage;
   QString currentFilename;
+  int lastRowAddCount;
 };
 
 #endif // SDDSEDITOR_H

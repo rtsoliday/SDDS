@@ -83,7 +83,7 @@ private:
 };
 
 SDDSEditor::SDDSEditor(QWidget *parent)
-  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()) {
+  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()), lastRowAddCount(1) {
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
@@ -262,6 +262,8 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   QMenu *columnRowsMenu = editMenu->addMenu(tr("Column Rows"));
   QAction *colRowIns = columnRowsMenu->addAction(tr("Insert"));
   QAction *colRowDel = columnRowsMenu->addAction(tr("Delete"));
+  connect(colRowIns, &QAction::triggered, this, &SDDSEditor::insertColumnRows);
+  connect(colRowDel, &QAction::triggered, this, &SDDSEditor::deleteColumnRows);
 
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
@@ -1660,6 +1662,64 @@ void SDDSEditor::deleteArray() {
   for (PageStore &pd : pages)
     if (col < pd.arrays.size())
       pd.arrays.remove(col);
+
+  populateModels();
+  markDirty();
+}
+
+void SDDSEditor::insertColumnRows() {
+  if (!datasetLoaded)
+    return;
+
+  bool ok = false;
+  int rowsToAdd =
+      QInputDialog::getInt(this, tr("Insert Rows"), tr("Number of rows"),
+                           lastRowAddCount, 1, 1000000, 1, &ok);
+  if (!ok || rowsToAdd <= 0)
+    return;
+  lastRowAddCount = rowsToAdd;
+
+  QModelIndex idx = columnView->currentIndex();
+  int insertPos = idx.isValid() ? idx.row() + 1 : -1;
+
+  if (currentPage >= 0 && currentPage < pages.size()) {
+    PageStore &pd = pages[currentPage];
+    if (!pd.columns.isEmpty()) {
+      int pos = insertPos >= 0 && insertPos <= pd.columns[0].size()
+                   ? insertPos
+                   : pd.columns[0].size();
+      for (QVector<QString> &col : pd.columns)
+        col.insert(pos, rowsToAdd, QString());
+    }
+  }
+
+  populateModels();
+  markDirty();
+}
+
+void SDDSEditor::deleteColumnRows() {
+  if (!datasetLoaded)
+    return;
+
+  QModelIndexList selection = columnView->selectionModel()->selectedRows();
+  if (selection.isEmpty())
+    return;
+
+  QVector<int> rows;
+  rows.reserve(selection.size());
+  for (const QModelIndex &idx : selection)
+    rows.append(idx.row());
+  std::sort(rows.begin(), rows.end(), std::greater<int>());
+
+  if (currentPage >= 0 && currentPage < pages.size()) {
+    PageStore &pd = pages[currentPage];
+    for (QVector<QString> &col : pd.columns) {
+      for (int r : rows) {
+        if (r < col.size())
+          col.remove(r);
+      }
+    }
+  }
 
   populateModels();
   markDirty();
