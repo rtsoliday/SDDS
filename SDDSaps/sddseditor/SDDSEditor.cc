@@ -165,21 +165,24 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   QMenu *paramMenu = editMenu->addMenu(tr("Parameter"));
   QAction *paramAttr = paramMenu->addAction(tr("Attributes"));
   paramMenu->addAction(tr("Insert"));
-  paramMenu->addAction(tr("Delete"));
+  QAction *paramDel = paramMenu->addAction(tr("Delete"));
   connect(paramAttr, &QAction::triggered, this,
           &SDDSEditor::editParameterAttributes);
+  connect(paramDel, &QAction::triggered, this, &SDDSEditor::deleteParameter);
   QMenu *colMenu = editMenu->addMenu(tr("Column"));
   QAction *colAttr = colMenu->addAction(tr("Attributes"));
   colMenu->addAction(tr("Insert"));
-  colMenu->addAction(tr("Delete"));
+  QAction *colDel = colMenu->addAction(tr("Delete"));
   connect(colAttr, &QAction::triggered, this,
           &SDDSEditor::editColumnAttributes);
+  connect(colDel, &QAction::triggered, this, &SDDSEditor::deleteColumn);
   QMenu *arrayMenu = editMenu->addMenu(tr("Array"));
   QAction *arrayAttr = arrayMenu->addAction(tr("Attributes"));
   arrayMenu->addAction(tr("Insert"));
-  arrayMenu->addAction(tr("Delete"));
+  QAction *arrayDel = arrayMenu->addAction(tr("Delete"));
   connect(arrayAttr, &QAction::triggered, this,
           &SDDSEditor::editArrayAttributes);
+  connect(arrayDel, &QAction::triggered, this, &SDDSEditor::deleteArray);
 
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
@@ -1088,6 +1091,238 @@ void SDDSEditor::changeArrayType(int column) {
                               SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
                               const_cast<char *>(name.toLocal8Bit().constData()));
   arrayModel->setHeaderData(column, Qt::Horizontal, QString(name));
+  markDirty();
+}
+
+static void removeParameterFromLayout(SDDS_LAYOUT *layout, int row) {
+  PARAMETER_DEFINITION *defs = layout->parameter_definition;
+  SORTED_INDEX **indexes = layout->parameter_index;
+  int count = layout->n_parameters;
+
+  int k = -1;
+  for (int i = 0; i < count; ++i) {
+    if (indexes[i]->index == row) {
+      k = i;
+      break;
+    }
+  }
+
+  if (defs[row].name)
+    free(defs[row].name);
+  if (defs[row].symbol)
+    free(defs[row].symbol);
+  if (defs[row].units)
+    free(defs[row].units);
+  if (defs[row].description)
+    free(defs[row].description);
+  if (defs[row].format_string)
+    free(defs[row].format_string);
+  if (defs[row].fixed_value)
+    free(defs[row].fixed_value);
+
+  for (int i = row + 1; i < count; ++i)
+    defs[i - 1] = defs[i];
+
+  if (count - 1 > 0)
+    layout->parameter_definition =
+        (PARAMETER_DEFINITION *)realloc(defs, sizeof(PARAMETER_DEFINITION) * (count - 1));
+  else {
+    free(defs);
+    layout->parameter_definition = nullptr;
+  }
+
+  if (k >= 0) {
+    free(indexes[k]);
+    for (int i = k + 1; i < count; ++i)
+      indexes[i - 1] = indexes[i];
+  }
+  for (int i = 0; i < count - 1; ++i)
+    if (indexes[i]->index > row)
+      indexes[i]->index--;
+
+  if (count - 1 > 0)
+    layout->parameter_index =
+        (SORTED_INDEX **)realloc(indexes, sizeof(SORTED_INDEX *) * (count - 1));
+  else {
+    free(indexes);
+    layout->parameter_index = nullptr;
+  }
+
+  layout->n_parameters = count - 1;
+}
+
+static void removeColumnFromLayout(SDDS_LAYOUT *layout, int col) {
+  COLUMN_DEFINITION *defs = layout->column_definition;
+  SORTED_INDEX **indexes = layout->column_index;
+  int count = layout->n_columns;
+
+  int k = -1;
+  for (int i = 0; i < count; ++i) {
+    if (indexes[i]->index == col) {
+      k = i;
+      break;
+    }
+  }
+
+  if (defs[col].name)
+    free(defs[col].name);
+  if (defs[col].symbol)
+    free(defs[col].symbol);
+  if (defs[col].units)
+    free(defs[col].units);
+  if (defs[col].description)
+    free(defs[col].description);
+  if (defs[col].format_string)
+    free(defs[col].format_string);
+
+  for (int i = col + 1; i < count; ++i)
+    defs[i - 1] = defs[i];
+
+  if (count - 1 > 0)
+    layout->column_definition =
+        (COLUMN_DEFINITION *)realloc(defs, sizeof(COLUMN_DEFINITION) * (count - 1));
+  else {
+    free(defs);
+    layout->column_definition = nullptr;
+  }
+
+  if (k >= 0) {
+    free(indexes[k]);
+    for (int i = k + 1; i < count; ++i)
+      indexes[i - 1] = indexes[i];
+  }
+  for (int i = 0; i < count - 1; ++i)
+    if (indexes[i]->index > col)
+      indexes[i]->index--;
+
+  if (count - 1 > 0)
+    layout->column_index =
+        (SORTED_INDEX **)realloc(indexes, sizeof(SORTED_INDEX *) * (count - 1));
+  else {
+    free(indexes);
+    layout->column_index = nullptr;
+  }
+
+  layout->n_columns = count - 1;
+}
+
+static void removeArrayFromLayout(SDDS_LAYOUT *layout, int col) {
+  ARRAY_DEFINITION *defs = layout->array_definition;
+  SORTED_INDEX **indexes = layout->array_index;
+  int count = layout->n_arrays;
+
+  int k = -1;
+  for (int i = 0; i < count; ++i) {
+    if (indexes[i]->index == col) {
+      k = i;
+      break;
+    }
+  }
+
+  if (defs[col].name)
+    free(defs[col].name);
+  if (defs[col].symbol)
+    free(defs[col].symbol);
+  if (defs[col].units)
+    free(defs[col].units);
+  if (defs[col].description)
+    free(defs[col].description);
+  if (defs[col].format_string)
+    free(defs[col].format_string);
+  if (defs[col].group_name)
+    free(defs[col].group_name);
+
+  for (int i = col + 1; i < count; ++i)
+    defs[i - 1] = defs[i];
+
+  if (count - 1 > 0)
+    layout->array_definition =
+        (ARRAY_DEFINITION *)realloc(defs, sizeof(ARRAY_DEFINITION) * (count - 1));
+  else {
+    free(defs);
+    layout->array_definition = nullptr;
+  }
+
+  if (k >= 0) {
+    free(indexes[k]);
+    for (int i = k + 1; i < count; ++i)
+      indexes[i - 1] = indexes[i];
+  }
+  for (int i = 0; i < count - 1; ++i)
+    if (indexes[i]->index > col)
+      indexes[i]->index--;
+
+  if (count - 1 > 0)
+    layout->array_index =
+        (SORTED_INDEX **)realloc(indexes, sizeof(SORTED_INDEX *) * (count - 1));
+  else {
+    free(indexes);
+    layout->array_index = nullptr;
+  }
+
+  layout->n_arrays = count - 1;
+}
+
+void SDDSEditor::deleteParameter() {
+  if (!datasetLoaded)
+    return;
+  QModelIndex idx = paramView->currentIndex();
+  if (!idx.isValid())
+    return;
+  int row = idx.row();
+  SDDS_LAYOUT *layout = &dataset.layout;
+  if (row < 0 || row >= layout->n_parameters)
+    return;
+
+  removeParameterFromLayout(&dataset.layout, row);
+  SDDS_SaveLayout(&dataset);
+  for (PageStore &pd : pages)
+    if (row < pd.parameters.size())
+      pd.parameters.remove(row);
+
+  populateModels();
+  markDirty();
+}
+
+void SDDSEditor::deleteColumn() {
+  if (!datasetLoaded)
+    return;
+  QModelIndex idx = columnView->currentIndex();
+  if (!idx.isValid())
+    return;
+  int col = idx.column();
+  SDDS_LAYOUT *layout = &dataset.layout;
+  if (col < 0 || col >= layout->n_columns)
+    return;
+
+  removeColumnFromLayout(&dataset.layout, col);
+  SDDS_SaveLayout(&dataset);
+  for (PageStore &pd : pages)
+    if (col < pd.columns.size())
+      pd.columns.remove(col);
+
+  populateModels();
+  markDirty();
+}
+
+void SDDSEditor::deleteArray() {
+  if (!datasetLoaded)
+    return;
+  QModelIndex idx = arrayView->currentIndex();
+  if (!idx.isValid())
+    return;
+  int col = idx.column();
+  SDDS_LAYOUT *layout = &dataset.layout;
+  if (col < 0 || col >= layout->n_arrays)
+    return;
+
+  removeArrayFromLayout(&dataset.layout, col);
+  SDDS_SaveLayout(&dataset);
+  for (PageStore &pd : pages)
+    if (col < pd.arrays.size())
+      pd.arrays.remove(col);
+
+  populateModels();
   markDirty();
 }
 
