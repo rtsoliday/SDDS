@@ -275,36 +275,36 @@ void SDDSEditor::openFile() {
 bool SDDSEditor::loadFile(const QString &path) {
   clearDataset();
   SDDS_SetDefaultIOBufferSize(0);
-  memset(&dataset, 0, sizeof(dataset));
-  if (!SDDS_InitializeInput(&dataset,
+  SDDS_DATASET in;
+  memset(&in, 0, sizeof(in));
+  if (!SDDS_InitializeInput(&in,
                             const_cast<char *>(path.toLocal8Bit().constData()))) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to open file"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return false;
   }
 
-  datasetLoaded = true;
   currentFilename = path;
   dirty = false;
   message(tr("Loaded %1").arg(path));
 
   pages.clear();
-  while (SDDS_ReadPage(&dataset) > 0) {
+  while (SDDS_ReadPage(&in) > 0) {
     PageStore pd;
     int32_t pcount;
-    char **pnames = SDDS_GetParameterNames(&dataset, &pcount);
+    char **pnames = SDDS_GetParameterNames(&in, &pcount);
     for (int32_t i = 0; i < pcount; ++i) {
-      char *val = SDDS_GetParameterAsString(&dataset, pnames[i], NULL);
+      char *val = SDDS_GetParameterAsString(&in, pnames[i], NULL);
       pd.parameters.append(QString(val ? val : ""));
       free(val);
     }
     SDDS_FreeStringArray(pnames, pcount);
     int32_t ccount;
-    char **cnames = SDDS_GetColumnNames(&dataset, &ccount);
-    int64_t rows = SDDS_RowCount(&dataset);
+    char **cnames = SDDS_GetColumnNames(&in, &ccount);
+    int64_t rows = SDDS_RowCount(&in);
     pd.columns.resize(ccount);
     for (int32_t c = 0; c < ccount; ++c) {
-      char **data = SDDS_GetColumnInString(&dataset, cnames[c]);
+      char **data = SDDS_GetColumnInString(&in, cnames[c]);
       pd.columns[c].resize(rows);
       for (int64_t r = 0; r < rows; ++r)
         pd.columns[c][r] = QString(data ? data[r] : "");
@@ -312,15 +312,15 @@ bool SDDSEditor::loadFile(const QString &path) {
     }
     SDDS_FreeStringArray(cnames, ccount);
     int32_t acount;
-    char **anames = SDDS_GetArrayNames(&dataset, &acount);
+    char **anames = SDDS_GetArrayNames(&in, &acount);
     pd.arrays.resize(acount);
     for (int32_t a = 0; a < acount; ++a) {
-      ARRAY_DEFINITION *adef = SDDS_GetArrayDefinition(&dataset, anames[a]);
+      ARRAY_DEFINITION *adef = SDDS_GetArrayDefinition(&in, anames[a]);
       int32_t dim;
-      char **vals = SDDS_GetArrayInString(&dataset, anames[a], &dim);
+      char **vals = SDDS_GetArrayInString(&in, anames[a], &dim);
       pd.arrays[a].dims.resize(adef->dimensions);
       for (int d = 0; d < adef->dimensions; ++d)
-        pd.arrays[a].dims[d] = dataset.array[a].dimension[d];
+        pd.arrays[a].dims[d] = in.array[a].dimension[d];
       pd.arrays[a].values.resize(dim);
       for (int i = 0; i < dim; ++i)
         pd.arrays[a].values[i] = QString(vals[i]);
@@ -329,6 +329,18 @@ bool SDDSEditor::loadFile(const QString &path) {
     SDDS_FreeStringArray(anames, acount);
     pages.append(pd);
   }
+
+  // Copy layout information for later editing and close the file
+  memset(&dataset, 0, sizeof(dataset));
+  if (!SDDS_InitializeCopy(&dataset, &in, NULL, (char *)"m")) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to copy layout"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Terminate(&in);
+    return false;
+  }
+  SDDS_Terminate(&in);
+  datasetLoaded = true;
+
   if (pages.isEmpty()) {
     QMessageBox::warning(this, tr("SDDS"), tr("File contains no pages"));
     return false;
