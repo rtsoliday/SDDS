@@ -64,6 +64,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
 
   // container for data panels
   dataSplitter = new QSplitter(Qt::Vertical, this);
+  //dataSplitter->setChildrenCollapsible(false);
+  dataSplitter->setHandleWidth(4);
+  dataSplitter->setStyleSheet("QSplitter::handle { background-color: #CCCCCC; }");
   mainLayout->addWidget(dataSplitter, 1);
 
   // parameters panel
@@ -127,6 +130,11 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   arrayLayout->addWidget(arrayView);
   dataSplitter->addWidget(arrayBox);
 
+  // let columns and arrays consume additional space when resizing
+  dataSplitter->setStretchFactor(0, 0);
+  dataSplitter->setStretchFactor(1, 1);
+  dataSplitter->setStretchFactor(2, 1);
+
   // shortcuts for copy/paste
   QShortcut *copySc = new QShortcut(QKeySequence::Copy, this);
   connect(copySc, &QShortcut::activated, this, &SDDSEditor::copy);
@@ -134,7 +142,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   connect(pasteSc, &QShortcut::activated, this, &SDDSEditor::paste);
 
   setCentralWidget(central);
-  resize(800, 600);
+  resize(1200, 800);
 
   // menu bar
   QMenu *fileMenu = menuBar()->addMenu(tr("File"));
