@@ -22,6 +22,11 @@
 #include <QApplication>
 #include <QShortcut>
 #include <QClipboard>
+#include <QDialog>
+#include <QFormLayout>
+#include <QDialogButtonBox>
+#include <QButtonGroup>
+#include <QSpinBox>
 #include <cstdlib>
 
 SDDSEditor::SDDSEditor(QWidget *parent)
@@ -157,17 +162,23 @@ SDDSEditor::SDDSEditor(QWidget *parent)
 
   QMenu *editMenu = menuBar()->addMenu(tr("Edit"));
   QMenu *paramMenu = editMenu->addMenu(tr("Parameter"));
-  paramMenu->addAction(tr("Attributes"));
+  QAction *paramAttr = paramMenu->addAction(tr("Attributes"));
   paramMenu->addAction(tr("Insert"));
   paramMenu->addAction(tr("Delete"));
+  connect(paramAttr, &QAction::triggered, this,
+          &SDDSEditor::editParameterAttributes);
   QMenu *colMenu = editMenu->addMenu(tr("Column"));
-  colMenu->addAction(tr("Attributes"));
+  QAction *colAttr = colMenu->addAction(tr("Attributes"));
   colMenu->addAction(tr("Insert"));
   colMenu->addAction(tr("Delete"));
+  connect(colAttr, &QAction::triggered, this,
+          &SDDSEditor::editColumnAttributes);
   QMenu *arrayMenu = editMenu->addMenu(tr("Array"));
-  arrayMenu->addAction(tr("Attributes"));
+  QAction *arrayAttr = arrayMenu->addAction(tr("Attributes"));
   arrayMenu->addAction(tr("Insert"));
   arrayMenu->addAction(tr("Delete"));
+  connect(arrayAttr, &QAction::triggered, this,
+          &SDDSEditor::editArrayAttributes);
 
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
@@ -701,11 +712,288 @@ void SDDSEditor::commitModels() {
     }
   }
 }
+
+void SDDSEditor::editParameterAttributes() {
+  if (!datasetLoaded)
+    return;
+  QModelIndex idx = paramView->currentIndex();
+  if (!idx.isValid())
+    return;
+  int row = idx.row();
+  PARAMETER_DEFINITION *def = &dataset.layout.parameter_definition[row];
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Parameter Attributes"));
+  QFormLayout form(&dlg);
+  QLineEdit name(def->name ? def->name : "", &dlg);
+  QLineEdit symbol(def->symbol ? def->symbol : "", &dlg);
+  QLineEdit units(def->units ? def->units : "", &dlg);
+  QLineEdit desc(def->description ? def->description : "", &dlg);
+  QLineEdit fmt(def->format_string ? def->format_string : "", &dlg);
+  QLineEdit fixed(def->fixed_value ? def->fixed_value : "", &dlg);
+  QHBoxLayout *typeLayout = new QHBoxLayout();
+  QButtonGroup typeGroup(&dlg);
+  QMap<int, QRadioButton *> btns;
+  auto addBtn = [&](const QString &text, int id) {
+    QRadioButton *b = new QRadioButton(text, &dlg);
+    typeGroup.addButton(b, id);
+    typeLayout->addWidget(b);
+    btns[id] = b;
+  };
+  addBtn(tr("short"), SDDS_SHORT);
+  addBtn(tr("ushort"), SDDS_USHORT);
+  addBtn(tr("long"), SDDS_LONG);
+  addBtn(tr("ulong"), SDDS_ULONG);
+  addBtn(tr("long64"), SDDS_LONG64);
+  addBtn(tr("ulong64"), SDDS_ULONG64);
+  addBtn(tr("float"), SDDS_FLOAT);
+  addBtn(tr("double"), SDDS_DOUBLE);
+  addBtn(tr("long double"), SDDS_LONGDOUBLE);
+  addBtn(tr("string"), SDDS_STRING);
+  addBtn(tr("character"), SDDS_CHARACTER);
+  if (btns.contains(def->type))
+    btns[def->type]->setChecked(true);
+  form.addRow(tr("Name"), &name);
+  form.addRow(tr("Symbol"), &symbol);
+  form.addRow(tr("Units"), &units);
+  form.addRow(tr("Description"), &desc);
+  form.addRow(tr("Format"), &fmt);
+  form.addRow(tr("Fixed value"), &fixed);
+  form.addRow(tr("Type"), typeLayout);
+  QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                           Qt::Horizontal, &dlg);
+  form.addRow(&buttons);
+  connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+  QByteArray ba;
+  ba = name.text().toLocal8Bit();
+  SDDS_ChangeParameterInformation(&dataset, (char *)"name", ba.data(),
+                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+
+  ba = symbol.text().toLocal8Bit();
+  SDDS_ChangeParameterInformation(&dataset, (char *)"symbol",
+                                  symbol.text().isEmpty() ? (char *)"" : ba.data(),
+                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+
+  ba = units.text().toLocal8Bit();
+  SDDS_ChangeParameterInformation(&dataset, (char *)"units",
+                                  units.text().isEmpty() ? (char *)"" : ba.data(),
+                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+
+  ba = desc.text().toLocal8Bit();
+  SDDS_ChangeParameterInformation(&dataset, (char *)"description",
+                                  desc.text().isEmpty() ? (char *)"" : ba.data(),
+                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+
+  ba = fmt.text().toLocal8Bit();
+  SDDS_ChangeParameterInformation(&dataset, (char *)"format_string",
+                                  fmt.text().isEmpty() ? NULL : ba.data(),
+                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+
+  ba = fixed.text().toLocal8Bit();
+  SDDS_ChangeParameterInformation(&dataset, (char *)"fixed_value",
+                                  fixed.text().isEmpty() ? NULL : ba.data(),
+                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+  int32_t tval = typeGroup.checkedId();
+  SDDS_ChangeParameterInformation(&dataset, (char *)"type", &tval,
+                                  SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, row);
+  if (paramModel->verticalHeaderItem(row))
+    paramModel->verticalHeaderItem(row)->setText(name.text());
+  markDirty();
+}
+
+void SDDSEditor::editColumnAttributes() {
+  if (!datasetLoaded)
+    return;
+  QModelIndex idx = columnView->currentIndex();
+  if (!idx.isValid())
+    return;
+  int col = idx.column();
+  COLUMN_DEFINITION *def = &dataset.layout.column_definition[col];
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Column Attributes"));
+  QFormLayout form(&dlg);
+  QLineEdit name(def->name ? def->name : "", &dlg);
+  QLineEdit symbol(def->symbol ? def->symbol : "", &dlg);
+  QLineEdit units(def->units ? def->units : "", &dlg);
+  QLineEdit desc(def->description ? def->description : "", &dlg);
+  QLineEdit fmt(def->format_string ? def->format_string : "", &dlg);
+  QSpinBox length(&dlg);
+  length.setRange(0, 1000000);
+  length.setValue(def->field_length);
+  QHBoxLayout *typeLayout = new QHBoxLayout();
+  QButtonGroup typeGroup(&dlg);
+  QMap<int, QRadioButton *> btns;
+  auto addBtn = [&](const QString &text, int id) {
+    QRadioButton *b = new QRadioButton(text, &dlg);
+    typeGroup.addButton(b, id);
+    typeLayout->addWidget(b);
+    btns[id] = b;
+  };
+  addBtn(tr("short"), SDDS_SHORT);
+  addBtn(tr("ushort"), SDDS_USHORT);
+  addBtn(tr("long"), SDDS_LONG);
+  addBtn(tr("ulong"), SDDS_ULONG);
+  addBtn(tr("long64"), SDDS_LONG64);
+  addBtn(tr("ulong64"), SDDS_ULONG64);
+  addBtn(tr("float"), SDDS_FLOAT);
+  addBtn(tr("double"), SDDS_DOUBLE);
+  addBtn(tr("long double"), SDDS_LONGDOUBLE);
+  addBtn(tr("string"), SDDS_STRING);
+  addBtn(tr("character"), SDDS_CHARACTER);
+  if (btns.contains(def->type))
+    btns[def->type]->setChecked(true);
+  form.addRow(tr("Name"), &name);
+  form.addRow(tr("Symbol"), &symbol);
+  form.addRow(tr("Units"), &units);
+  form.addRow(tr("Description"), &desc);
+  form.addRow(tr("Format"), &fmt);
+  form.addRow(tr("Field length"), &length);
+  form.addRow(tr("Type"), typeLayout);
+  QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                           Qt::Horizontal, &dlg);
+  form.addRow(&buttons);
+  connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+  QByteArray ba;
+  ba = name.text().toLocal8Bit();
+  SDDS_ChangeColumnInformation(&dataset, (char *)"name", ba.data(),
+                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+
+  ba = symbol.text().toLocal8Bit();
+  SDDS_ChangeColumnInformation(&dataset, (char *)"symbol",
+                               symbol.text().isEmpty() ? (char *)"" : ba.data(),
+                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+
+  ba = units.text().toLocal8Bit();
+  SDDS_ChangeColumnInformation(&dataset, (char *)"units",
+                               units.text().isEmpty() ? (char *)"" : ba.data(),
+                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+
+  ba = desc.text().toLocal8Bit();
+  SDDS_ChangeColumnInformation(&dataset, (char *)"description",
+                               desc.text().isEmpty() ? (char *)"" : ba.data(),
+                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+
+  ba = fmt.text().toLocal8Bit();
+  SDDS_ChangeColumnInformation(&dataset, (char *)"format_string",
+                               fmt.text().isEmpty() ? NULL : ba.data(),
+                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  int32_t len = length.value();
+  SDDS_ChangeColumnInformation(&dataset, (char *)"field_length", &len,
+                               SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
+  int32_t tval = typeGroup.checkedId();
+  SDDS_ChangeColumnInformation(&dataset, (char *)"type", &tval,
+                               SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
+  columnModel->setHeaderData(col, Qt::Horizontal, name.text());
+  markDirty();
+}
+
+void SDDSEditor::editArrayAttributes() {
+  if (!datasetLoaded)
+    return;
+  QModelIndex idx = arrayView->currentIndex();
+  if (!idx.isValid())
+    return;
+  int col = idx.column();
+  ARRAY_DEFINITION *def = &dataset.layout.array_definition[col];
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Array Attributes"));
+  QFormLayout form(&dlg);
+  QLineEdit name(def->name ? def->name : "", &dlg);
+  QLineEdit symbol(def->symbol ? def->symbol : "", &dlg);
+  QLineEdit units(def->units ? def->units : "", &dlg);
+  QLineEdit desc(def->description ? def->description : "", &dlg);
+  QLineEdit fmt(def->format_string ? def->format_string : "", &dlg);
+  QLineEdit group(def->group_name ? def->group_name : "", &dlg);
+  QSpinBox length(&dlg);
+  length.setRange(0, 1000000);
+  length.setValue(def->field_length);
+  QHBoxLayout *typeLayout = new QHBoxLayout();
+  QButtonGroup typeGroup(&dlg);
+  QMap<int, QRadioButton *> btns;
+  auto addBtn = [&](const QString &text, int id) {
+    QRadioButton *b = new QRadioButton(text, &dlg);
+    typeGroup.addButton(b, id);
+    typeLayout->addWidget(b);
+    btns[id] = b;
+  };
+  addBtn(tr("short"), SDDS_SHORT);
+  addBtn(tr("ushort"), SDDS_USHORT);
+  addBtn(tr("long"), SDDS_LONG);
+  addBtn(tr("ulong"), SDDS_ULONG);
+  addBtn(tr("long64"), SDDS_LONG64);
+  addBtn(tr("ulong64"), SDDS_ULONG64);
+  addBtn(tr("float"), SDDS_FLOAT);
+  addBtn(tr("double"), SDDS_DOUBLE);
+  addBtn(tr("long double"), SDDS_LONGDOUBLE);
+  addBtn(tr("string"), SDDS_STRING);
+  addBtn(tr("character"), SDDS_CHARACTER);
+  if (btns.contains(def->type))
+    btns[def->type]->setChecked(true);
+  form.addRow(tr("Name"), &name);
+  form.addRow(tr("Symbol"), &symbol);
+  form.addRow(tr("Units"), &units);
+  form.addRow(tr("Description"), &desc);
+  form.addRow(tr("Format"), &fmt);
+  form.addRow(tr("Group"), &group);
+  form.addRow(tr("Field length"), &length);
+  form.addRow(tr("Type"), typeLayout);
+  QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                           Qt::Horizontal, &dlg);
+  form.addRow(&buttons);
+  connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+  QByteArray ba;
+  ba = name.text().toLocal8Bit();
+  SDDS_ChangeArrayInformation(&dataset, (char *)"name", ba.data(),
+                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+
+  ba = symbol.text().toLocal8Bit();
+  SDDS_ChangeArrayInformation(&dataset, (char *)"symbol",
+                              symbol.text().isEmpty() ? (char *)"" : ba.data(),
+                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+
+  ba = units.text().toLocal8Bit();
+  SDDS_ChangeArrayInformation(&dataset, (char *)"units",
+                              units.text().isEmpty() ? (char *)"" : ba.data(),
+                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+
+  ba = desc.text().toLocal8Bit();
+  SDDS_ChangeArrayInformation(&dataset, (char *)"description",
+                              desc.text().isEmpty() ? (char *)"" : ba.data(),
+                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+
+  ba = fmt.text().toLocal8Bit();
+  SDDS_ChangeArrayInformation(&dataset, (char *)"format_string",
+                              fmt.text().isEmpty() ? NULL : ba.data(),
+                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+
+  ba = group.text().toLocal8Bit();
+  SDDS_ChangeArrayInformation(&dataset, (char *)"group_name",
+                              group.text().isEmpty() ? (char *)"" : ba.data(),
+                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  int32_t len = length.value();
+  SDDS_ChangeArrayInformation(&dataset, (char *)"field_length", &len,
+                              SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
+  int32_t tval = typeGroup.checkedId();
+  SDDS_ChangeArrayInformation(&dataset, (char *)"type", &tval,
+                              SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
+  arrayModel->setHeaderData(col, Qt::Horizontal, name.text());
+  markDirty();
+}
 void SDDSEditor::changeParameterType(int row) {
   if (!datasetLoaded)
     return;
   QStringList types;
-  types << "long" << "double" << "string";
+  types << "short" << "ushort" << "long" << "ulong" << "long64"
+        << "ulong64" << "float" << "double" << "long double" << "string"
+        << "character";
   if (row < 0 || row >= dataset.layout.n_parameters)
     return;
   QStandardItem *headerItem = paramModel->verticalHeaderItem(row);
@@ -728,7 +1016,9 @@ void SDDSEditor::changeColumnType(int column) {
   if (!datasetLoaded)
     return;
   QStringList types;
-  types << "long" << "double" << "string";
+  types << "short" << "ushort" << "long" << "ulong" << "long64"
+        << "ulong64" << "float" << "double" << "long double" << "string"
+        << "character";
   if (column < 0 || column >= dataset.layout.n_columns)
     return;
   QString name = dataset.layout.column_definition[column].name;
@@ -750,7 +1040,9 @@ void SDDSEditor::changeArrayType(int column) {
   if (!datasetLoaded)
     return;
   QStringList types;
-  types << "long" << "double" << "string";
+  types << "short" << "ushort" << "long" << "ulong" << "long64"
+        << "ulong64" << "float" << "double" << "long double" << "string"
+        << "character";
   if (column < 0 || column >= dataset.layout.n_arrays)
     return;
   QString name = dataset.layout.array_definition[column].name;

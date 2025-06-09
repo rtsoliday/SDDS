@@ -54,6 +54,9 @@ private slots:
   void pageChanged(int value);
   void copy();
   void paste();
+  void editParameterAttributes();
+  void editColumnAttributes();
+  void editArrayAttributes();
 
 private:
   void loadPage(int page);
