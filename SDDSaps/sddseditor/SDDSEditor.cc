@@ -184,8 +184,12 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
   connect(aboutAct, &QAction::triggered, []() {
-    QMessageBox::about(nullptr, QObject::tr("About"),
-                       QObject::tr("SDDS Qt Editor"));
+    QString text =
+        QObject::tr("Programmed by Robert Soliday <soliday@anl.gov>\n"
+                    "Powered (mostly) by caffeine, stubbornness… and OpenAI Codex.\n\n"
+                    "Fun fact: 90% of this code was written by OpenAI Codex, the other 10% was me forcing a square peg into a round hole.\n"
+                    "Proceed with caution: may contain puns, dad jokes, and the occasional infinite loop.");
+    QMessageBox::about(nullptr, QObject::tr("About"), text);
   });
 }
 
