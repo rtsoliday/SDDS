@@ -61,7 +61,7 @@ cd ..
 ├── xlslib/         # xlslib (Excel) library used by sdds2spreadsheet
 ├── zlib/           # GZip support for Windows
 ├── lzma/           # LZMA support for Windows
-├── mdblib/         # memory managment and utility functions
+├── mdblib/         # memory management and utility functions
 ├── mdbmth/         # mathematical computations and numerical analysis functions
 ├── rpns/code       # RPN (Reverse Polish Notation) libraries
 ├── namelist/       # namelist pre-processor for C programs

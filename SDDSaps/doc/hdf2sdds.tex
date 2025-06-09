@@ -14,7 +14,7 @@ hdf2sdds data.hdf data.sdds -withIndex
 \item {\bf synopsis:}
 \begin{flushleft}{\tt
 hdf2sdds [{\em HDFfile}] [{\em SDDSfile}] [-pipe[=out]]
-[-query] [-ascii] [-binary] [-withIndex] [-reduceFactor={\em integer}[,keep={\em interger}]] [-3doutput]
+[-query] [-ascii] [-binary] [-withIndex] [-reduceFactor={\em integer}[,keep={\em integer}]] [-3doutput]
 }\end{flushleft}
 \item {\bf files: }
 
@@ -29,7 +29,7 @@ hdf2sdds [{\em HDFfile}] [{\em SDDSfile}] [-pipe[=out]]
     \item {\tt -ascii} --- Requests that the output be ASCII.
     \item {\tt -binary} --- Requests that the output be binary.
     \item {\tt -withIndex} --- An index column is added to the output file.
-    \item {\tt -reduceFactor={\em integer}[,keep={\em interger}]} --- Write the first {\em keep}th value of every {\em reduceFactor} values in order to reduce the size of ouput file. The attributes are written to the output file by their originial data types.
+    \item {\tt -reduceFactor={\em integer}[,keep={\em integer}]} --- Write the first {\em keep}th value of every {\em reduceFactor} values in order to reduce the size of output file. The attributes are written to the output file by their original data types.
     \item {\tt -3doutput} --- Used to convert 3-dimensional HDF data.
 \end{itemize}
 \item {\bf author:} R. Soliday, ANL/APS.
