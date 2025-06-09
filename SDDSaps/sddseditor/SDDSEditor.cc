@@ -84,8 +84,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   paramModel->setHorizontalHeaderLabels(QStringList() << tr("Value"));
   paramView = new QTableView(paramBox);
   paramView->setModel(paramModel);
-  paramView->horizontalHeader()->setSectionResizeMode(
-      QHeaderView::ResizeToContents);
+  // Let the single value column expand to take up the available space.
+  // This keeps the parameter table readable even when the window is wide.
+  paramView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
   paramView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   paramView->verticalHeader()->setDefaultSectionSize(18);
   paramView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
@@ -643,6 +644,12 @@ void SDDSEditor::populateModels() {
   for (int64_t r = 0; r < rows; ++r)
     columnModel->setVerticalHeaderItem(r, new QStandardItem(QString::number(r + 1)));
 
+  // Resize columns to fit their contents first so initial widths are reasonable
+  // then allow them to stretch to fill the remaining space and be adjusted by
+  // the user.
+  columnView->resizeColumnsToContents();
+  columnView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+
   // arrays
   int32_t acount = dataset.layout.n_arrays;
   arrayBox->setChecked(acount > 0);
@@ -663,6 +670,10 @@ void SDDSEditor::populateModels() {
   }
   for (int r = 0; r < maxLen; ++r)
     arrayModel->setVerticalHeaderItem(r, new QStandardItem(QString::number(r + 1)));
+
+  // Similar treatment for arrays table.
+  arrayView->resizeColumnsToContents();
+  arrayView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 }
 
 void SDDSEditor::clearDataset() {
