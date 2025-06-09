@@ -155,6 +155,20 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   connect(saveAsAct, &QAction::triggered, this, &SDDSEditor::saveFileAs);
   connect(quitAct, &QAction::triggered, this, &QWidget::close);
 
+  QMenu *editMenu = menuBar()->addMenu(tr("Edit"));
+  QMenu *paramMenu = editMenu->addMenu(tr("Parameter"));
+  paramMenu->addAction(tr("Attributes"));
+  paramMenu->addAction(tr("Insert"));
+  paramMenu->addAction(tr("Delete"));
+  QMenu *colMenu = editMenu->addMenu(tr("Column"));
+  colMenu->addAction(tr("Attributes"));
+  colMenu->addAction(tr("Insert"));
+  colMenu->addAction(tr("Delete"));
+  QMenu *arrayMenu = editMenu->addMenu(tr("Array"));
+  arrayMenu->addAction(tr("Attributes"));
+  arrayMenu->addAction(tr("Insert"));
+  arrayMenu->addAction(tr("Delete"));
+
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
   connect(aboutAct, &QAction::triggered, []() {
