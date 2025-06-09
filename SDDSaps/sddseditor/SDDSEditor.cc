@@ -25,7 +25,7 @@
 #include <cstdlib>
 
 SDDSEditor::SDDSEditor(QWidget *parent)
-  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0) {
+  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()) {
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
@@ -140,9 +140,11 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   QMenu *fileMenu = menuBar()->addMenu(tr("File"));
   QAction *openAct = fileMenu->addAction(tr("Open"));
   QAction *saveAct = fileMenu->addAction(tr("Save"));
+  QAction *saveAsAct = fileMenu->addAction(tr("Save as..."));
   QAction *quitAct = fileMenu->addAction(tr("Quit"));
   connect(openAct, &QAction::triggered, this, &SDDSEditor::openFile);
   connect(saveAct, &QAction::triggered, this, &SDDSEditor::saveFile);
+  connect(saveAsAct, &QAction::triggered, this, &SDDSEditor::saveFileAs);
   connect(quitAct, &QAction::triggered, this, &QWidget::close);
 
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
@@ -244,6 +246,8 @@ bool SDDSEditor::loadFile(const QString &path) {
   }
 
   datasetLoaded = true;
+  currentFilename = path;
+  dirty = false;
   message(tr("Loaded %1").arg(path));
 
   pages.clear();
@@ -302,14 +306,10 @@ bool SDDSEditor::loadFile(const QString &path) {
   return true;
 }
 
-void SDDSEditor::saveFile() {
+bool SDDSEditor::writeFile(const QString &path) {
   if (!datasetLoaded)
-    return;
+    return false;
   commitModels();
-  QString path = QFileDialog::getSaveFileName(this, tr("Save SDDS"), QString(),
-                                             tr("SDDS Files (*.sdds);;All Files (*)"));
-  if (path.isEmpty())
-    return;
 
   SDDS_DATASET out;
   memset(&out, 0, sizeof(out));
@@ -317,14 +317,14 @@ void SDDSEditor::saveFile() {
                            const_cast<char *>(path.toLocal8Bit().constData()), (char *)"w")) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to open output"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-    return;
+    return false;
   }
   out.layout.data_mode.mode = asciiBtn->isChecked() ? SDDS_ASCII : SDDS_BINARY;
   if (!SDDS_WriteLayout(&out)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to write layout"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     SDDS_Terminate(&out);
-    return;
+    return false;
   }
 
   int pcount = dataset.layout.n_parameters;
@@ -339,7 +339,7 @@ void SDDSEditor::saveFile() {
       QMessageBox::warning(this, tr("SDDS"), tr("Failed to start page"));
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
       SDDS_Terminate(&out);
-      return;
+      return false;
     }
 
     for (int i = 0; i < pcount && i < pd.parameters.size(); ++i) {
@@ -504,13 +504,29 @@ void SDDSEditor::saveFile() {
       QMessageBox::warning(this, tr("SDDS"), tr("Failed to write page"));
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
       SDDS_Terminate(&out);
-      return;
+      return false;
     }
   }
 
   SDDS_Terminate(&out);
   dirty = false;
   message(tr("Saved %1").arg(path));
+  return true;
+}
+
+void SDDSEditor::saveFile() {
+  if (currentFilename.isEmpty())
+    return;
+  writeFile(currentFilename);
+}
+
+void SDDSEditor::saveFileAs() {
+  QString path = QFileDialog::getSaveFileName(this, tr("Save SDDS"), currentFilename,
+                                             tr("SDDS Files (*.sdds);;All Files (*)"));
+  if (path.isEmpty())
+    return;
+  if (writeFile(path))
+    currentFilename = path;
 }
 
 void SDDSEditor::search() {
