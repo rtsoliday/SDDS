@@ -164,24 +164,27 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   QMenu *editMenu = menuBar()->addMenu(tr("Edit"));
   QMenu *paramMenu = editMenu->addMenu(tr("Parameter"));
   QAction *paramAttr = paramMenu->addAction(tr("Attributes"));
-  paramMenu->addAction(tr("Insert"));
+  QAction *paramIns = paramMenu->addAction(tr("Insert"));
   QAction *paramDel = paramMenu->addAction(tr("Delete"));
   connect(paramAttr, &QAction::triggered, this,
           &SDDSEditor::editParameterAttributes);
+  connect(paramIns, &QAction::triggered, this, &SDDSEditor::insertParameter);
   connect(paramDel, &QAction::triggered, this, &SDDSEditor::deleteParameter);
   QMenu *colMenu = editMenu->addMenu(tr("Column"));
   QAction *colAttr = colMenu->addAction(tr("Attributes"));
-  colMenu->addAction(tr("Insert"));
+  QAction *colIns = colMenu->addAction(tr("Insert"));
   QAction *colDel = colMenu->addAction(tr("Delete"));
   connect(colAttr, &QAction::triggered, this,
           &SDDSEditor::editColumnAttributes);
+  connect(colIns, &QAction::triggered, this, &SDDSEditor::insertColumn);
   connect(colDel, &QAction::triggered, this, &SDDSEditor::deleteColumn);
   QMenu *arrayMenu = editMenu->addMenu(tr("Array"));
   QAction *arrayAttr = arrayMenu->addAction(tr("Attributes"));
-  arrayMenu->addAction(tr("Insert"));
+  QAction *arrayIns = arrayMenu->addAction(tr("Insert"));
   QAction *arrayDel = arrayMenu->addAction(tr("Delete"));
   connect(arrayAttr, &QAction::triggered, this,
           &SDDSEditor::editArrayAttributes);
+  connect(arrayIns, &QAction::triggered, this, &SDDSEditor::insertArray);
   connect(arrayDel, &QAction::triggered, this, &SDDSEditor::deleteArray);
 
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
@@ -1261,6 +1264,247 @@ static void removeArrayFromLayout(SDDS_LAYOUT *layout, int col) {
   }
 
   layout->n_arrays = count - 1;
+}
+
+void SDDSEditor::insertParameter() {
+  if (!datasetLoaded)
+    return;
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("New Parameter"));
+  QFormLayout form(&dlg);
+  QLineEdit name(&dlg);
+  QLineEdit symbol(&dlg);
+  QLineEdit units(&dlg);
+  QLineEdit desc(&dlg);
+  QLineEdit fmt(&dlg);
+  QLineEdit fixed(&dlg);
+  QHBoxLayout *typeLayout = new QHBoxLayout();
+  QButtonGroup typeGroup(&dlg);
+  QMap<int, QRadioButton *> btns;
+  auto addBtn = [&](const QString &text, int id) {
+    QRadioButton *b = new QRadioButton(text, &dlg);
+    typeGroup.addButton(b, id);
+    typeLayout->addWidget(b);
+    btns[id] = b;
+  };
+  addBtn(tr("short"), SDDS_SHORT);
+  addBtn(tr("ushort"), SDDS_USHORT);
+  addBtn(tr("long"), SDDS_LONG);
+  addBtn(tr("ulong"), SDDS_ULONG);
+  addBtn(tr("long64"), SDDS_LONG64);
+  addBtn(tr("ulong64"), SDDS_ULONG64);
+  addBtn(tr("float"), SDDS_FLOAT);
+  addBtn(tr("double"), SDDS_DOUBLE);
+  addBtn(tr("long double"), SDDS_LONGDOUBLE);
+  addBtn(tr("string"), SDDS_STRING);
+  addBtn(tr("character"), SDDS_CHARACTER);
+  if (btns.contains(SDDS_STRING))
+    btns[SDDS_STRING]->setChecked(true);
+  form.addRow(tr("Name"), &name);
+  form.addRow(tr("Symbol"), &symbol);
+  form.addRow(tr("Units"), &units);
+  form.addRow(tr("Description"), &desc);
+  form.addRow(tr("Format"), &fmt);
+  form.addRow(tr("Fixed value"), &fixed);
+  form.addRow(tr("Type"), typeLayout);
+  QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                           Qt::Horizontal, &dlg);
+  form.addRow(&buttons);
+  connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
+    return;
+
+  QByteArray baName = name.text().toLocal8Bit();
+  QByteArray baSym = symbol.text().toLocal8Bit();
+  QByteArray baUnits = units.text().toLocal8Bit();
+  QByteArray baDesc = desc.text().toLocal8Bit();
+  QByteArray baFmt = fmt.text().toLocal8Bit();
+  QByteArray baFixed = fixed.text().toLocal8Bit();
+
+  if (SDDS_DefineParameter(&dataset, baName.constData(),
+                           symbol.text().isEmpty() ? NULL : baSym.constData(),
+                           units.text().isEmpty() ? NULL : baUnits.constData(),
+                           desc.text().isEmpty() ? NULL : baDesc.constData(),
+                           fmt.text().isEmpty() ? NULL : baFmt.constData(),
+                           typeGroup.checkedId(),
+                           fixed.text().isEmpty() ? NULL : baFixed.data()) < 0) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to add parameter"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
+
+  SDDS_SaveLayout(&dataset);
+  for (PageStore &pd : pages)
+    pd.parameters.append(QString());
+
+  populateModels();
+  markDirty();
+}
+
+void SDDSEditor::insertColumn() {
+  if (!datasetLoaded)
+    return;
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("New Column"));
+  QFormLayout form(&dlg);
+  QLineEdit name(&dlg);
+  QLineEdit symbol(&dlg);
+  QLineEdit units(&dlg);
+  QLineEdit desc(&dlg);
+  QLineEdit fmt(&dlg);
+  QSpinBox length(&dlg);
+  length.setRange(0, 1000000);
+  length.setValue(0);
+  QHBoxLayout *typeLayout = new QHBoxLayout();
+  QButtonGroup typeGroup(&dlg);
+  QMap<int, QRadioButton *> btns;
+  auto addBtn = [&](const QString &text, int id) {
+    QRadioButton *b = new QRadioButton(text, &dlg);
+    typeGroup.addButton(b, id);
+    typeLayout->addWidget(b);
+    btns[id] = b;
+  };
+  addBtn(tr("short"), SDDS_SHORT);
+  addBtn(tr("ushort"), SDDS_USHORT);
+  addBtn(tr("long"), SDDS_LONG);
+  addBtn(tr("ulong"), SDDS_ULONG);
+  addBtn(tr("long64"), SDDS_LONG64);
+  addBtn(tr("ulong64"), SDDS_ULONG64);
+  addBtn(tr("float"), SDDS_FLOAT);
+  addBtn(tr("double"), SDDS_DOUBLE);
+  addBtn(tr("long double"), SDDS_LONGDOUBLE);
+  addBtn(tr("string"), SDDS_STRING);
+  addBtn(tr("character"), SDDS_CHARACTER);
+  if (btns.contains(SDDS_DOUBLE))
+    btns[SDDS_DOUBLE]->setChecked(true);
+  form.addRow(tr("Name"), &name);
+  form.addRow(tr("Symbol"), &symbol);
+  form.addRow(tr("Units"), &units);
+  form.addRow(tr("Description"), &desc);
+  form.addRow(tr("Format"), &fmt);
+  form.addRow(tr("Field length"), &length);
+  form.addRow(tr("Type"), typeLayout);
+  QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                           Qt::Horizontal, &dlg);
+  form.addRow(&buttons);
+  connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
+    return;
+
+  QByteArray baName = name.text().toLocal8Bit();
+  QByteArray baSym = symbol.text().toLocal8Bit();
+  QByteArray baUnits = units.text().toLocal8Bit();
+  QByteArray baDesc = desc.text().toLocal8Bit();
+  QByteArray baFmt = fmt.text().toLocal8Bit();
+
+  if (SDDS_DefineColumn(&dataset, baName.constData(),
+                        symbol.text().isEmpty() ? NULL : baSym.constData(),
+                        units.text().isEmpty() ? NULL : baUnits.constData(),
+                        desc.text().isEmpty() ? NULL : baDesc.constData(),
+                        fmt.text().isEmpty() ? NULL : baFmt.constData(),
+                        typeGroup.checkedId(), length.value()) < 0) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to add column"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
+
+  SDDS_SaveLayout(&dataset);
+  for (PageStore &pd : pages) {
+    int rows = pd.columns.size() ? pd.columns[0].size() : 0;
+    pd.columns.append(QVector<QString>(rows));
+  }
+
+  populateModels();
+  markDirty();
+}
+
+void SDDSEditor::insertArray() {
+  if (!datasetLoaded)
+    return;
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("New Array"));
+  QFormLayout form(&dlg);
+  QLineEdit name(&dlg);
+  QLineEdit symbol(&dlg);
+  QLineEdit units(&dlg);
+  QLineEdit desc(&dlg);
+  QLineEdit fmt(&dlg);
+  QLineEdit group(&dlg);
+  QSpinBox length(&dlg);
+  length.setRange(0, 1000000);
+  length.setValue(0);
+  QHBoxLayout *typeLayout = new QHBoxLayout();
+  QButtonGroup typeGroup(&dlg);
+  QMap<int, QRadioButton *> btns;
+  auto addBtn = [&](const QString &text, int id) {
+    QRadioButton *b = new QRadioButton(text, &dlg);
+    typeGroup.addButton(b, id);
+    typeLayout->addWidget(b);
+    btns[id] = b;
+  };
+  addBtn(tr("short"), SDDS_SHORT);
+  addBtn(tr("ushort"), SDDS_USHORT);
+  addBtn(tr("long"), SDDS_LONG);
+  addBtn(tr("ulong"), SDDS_ULONG);
+  addBtn(tr("long64"), SDDS_LONG64);
+  addBtn(tr("ulong64"), SDDS_ULONG64);
+  addBtn(tr("float"), SDDS_FLOAT);
+  addBtn(tr("double"), SDDS_DOUBLE);
+  addBtn(tr("long double"), SDDS_LONGDOUBLE);
+  addBtn(tr("string"), SDDS_STRING);
+  addBtn(tr("character"), SDDS_CHARACTER);
+  if (btns.contains(SDDS_DOUBLE))
+    btns[SDDS_DOUBLE]->setChecked(true);
+  form.addRow(tr("Name"), &name);
+  form.addRow(tr("Symbol"), &symbol);
+  form.addRow(tr("Units"), &units);
+  form.addRow(tr("Description"), &desc);
+  form.addRow(tr("Format"), &fmt);
+  form.addRow(tr("Group"), &group);
+  form.addRow(tr("Field length"), &length);
+  form.addRow(tr("Type"), typeLayout);
+  QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                           Qt::Horizontal, &dlg);
+  form.addRow(&buttons);
+  connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
+    return;
+
+  QByteArray baName = name.text().toLocal8Bit();
+  QByteArray baSym = symbol.text().toLocal8Bit();
+  QByteArray baUnits = units.text().toLocal8Bit();
+  QByteArray baDesc = desc.text().toLocal8Bit();
+  QByteArray baFmt = fmt.text().toLocal8Bit();
+  QByteArray baGroup = group.text().toLocal8Bit();
+
+  if (SDDS_DefineArray(&dataset, baName.constData(),
+                       symbol.text().isEmpty() ? NULL : baSym.constData(),
+                       units.text().isEmpty() ? NULL : baUnits.constData(),
+                       desc.text().isEmpty() ? NULL : baDesc.constData(),
+                       fmt.text().isEmpty() ? NULL : baFmt.constData(),
+                       typeGroup.checkedId(), length.value(), 1,
+                       group.text().isEmpty() ? NULL : baGroup.constData()) < 0) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to add array"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
+
+  SDDS_SaveLayout(&dataset);
+  for (PageStore &pd : pages) {
+    ArrayStore as;
+    as.dims = QVector<int>(1, 5);
+    as.values.resize(5);
+    pd.arrays.append(as);
+  }
+
+  populateModels();
+  markDirty();
 }
 
 void SDDSEditor::deleteParameter() {

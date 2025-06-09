@@ -57,6 +57,9 @@ private slots:
   void editParameterAttributes();
   void editColumnAttributes();
   void editArrayAttributes();
+  void insertParameter();
+  void insertColumn();
+  void insertArray();
   void deleteParameter();
   void deleteColumn();
   void deleteArray();
