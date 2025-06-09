@@ -27,7 +27,60 @@
 #include <QDialogButtonBox>
 #include <QButtonGroup>
 #include <QSpinBox>
+#include <QLineEdit>
+#include <QStyledItemDelegate>
+#include <functional>
 #include <cstdlib>
+
+static bool validateTextForType(const QString &text, int type,
+                                bool showMessage = true) {
+  if (SDDS_NUMERIC_TYPE(type)) {
+    QString trimmed = text.trimmed();
+    if (!trimmed.isEmpty()) {
+      bool ok = true;
+      if (SDDS_FLOATING_TYPE(type))
+        trimmed.toDouble(&ok);
+      else
+        trimmed.toLongLong(&ok);
+      if (!ok) {
+        if (showMessage)
+          QMessageBox::warning(nullptr, QObject::tr("SDDS"),
+                               QObject::tr("Invalid numeric value"));
+        return false;
+      }
+    }
+  } else if (type == SDDS_CHARACTER) {
+    if (!text.isEmpty() && text.size() != 1) {
+      if (showMessage)
+        QMessageBox::warning(nullptr, QObject::tr("SDDS"),
+                             QObject::tr("Character field must have length 1"));
+      return false;
+    }
+  }
+  return true;
+}
+
+class SDDSItemDelegate : public QStyledItemDelegate {
+public:
+  using TypeFunc = std::function<int(const QModelIndex &)>;
+  explicit SDDSItemDelegate(TypeFunc tf, QObject *parent = nullptr)
+      : QStyledItemDelegate(parent), typeFunc(std::move(tf)) {}
+
+  void setModelData(QWidget *editorWidget, QAbstractItemModel *model,
+                    const QModelIndex &index) const override {
+    QLineEdit *line = qobject_cast<QLineEdit *>(editorWidget);
+    if (!line) {
+      QStyledItemDelegate::setModelData(editorWidget, model, index);
+      return;
+    }
+
+    if (validateTextForType(line->text(), typeFunc(index)))
+      QStyledItemDelegate::setModelData(editorWidget, model, index);
+  }
+
+private:
+  TypeFunc typeFunc;
+};
 
 SDDSEditor::SDDSEditor(QWidget *parent)
   : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()) {
@@ -84,6 +137,11 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   paramModel->setHorizontalHeaderLabels(QStringList() << tr("Value"));
   paramView = new QTableView(paramBox);
   paramView->setModel(paramModel);
+  paramView->setItemDelegate(new SDDSItemDelegate(
+      [this](const QModelIndex &idx) {
+        return dataset.layout.parameter_definition[idx.row()].type;
+      },
+      paramView));
   // Let the single value column expand to take up the available space.
   // This keeps the parameter table readable even when the window is wide.
   paramView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -106,6 +164,13 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   columnModel = new QStandardItemModel(this);
   columnView = new QTableView(colBox);
   columnView->setModel(columnModel);
+  connect(columnModel, &QStandardItemModel::itemChanged, this,
+          &SDDSEditor::markDirty);
+  columnView->setItemDelegate(new SDDSItemDelegate(
+      [this](const QModelIndex &idx) {
+        return dataset.layout.column_definition[idx.column()].type;
+      },
+      columnView));
   columnView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::ResizeToContents);
   columnView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
@@ -125,6 +190,13 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   arrayModel = new QStandardItemModel(this);
   arrayView = new QTableView(arrayBox);
   arrayView->setModel(arrayModel);
+  connect(arrayModel, &QStandardItemModel::itemChanged, this,
+          &SDDSEditor::markDirty);
+  arrayView->setItemDelegate(new SDDSItemDelegate(
+      [this](const QModelIndex &idx) {
+        return dataset.layout.array_definition[idx.column()].type;
+      },
+      arrayView));
   arrayView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::ResizeToContents);
   arrayView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
@@ -259,15 +331,34 @@ void SDDSEditor::paste() {
     return;
   QString text = QApplication::clipboard()->text();
   QStringList rows = text.split('\n');
+  bool multiPaste = rows.size() > 1 || text.contains('\t');
+  bool changed = false;
+  bool warned = false;
   for (int r = 0; r < rows.size(); ++r) {
     QStringList cols = rows[r].split('\t');
     for (int c = 0; c < cols.size(); ++c) {
       QModelIndex idx = view->model()->index(start.row() + r, start.column() + c);
-      if (idx.isValid())
+      if (!idx.isValid())
+        continue;
+      int type = SDDS_STRING;
+      if (view == paramView)
+        type = dataset.layout.parameter_definition[idx.row()].type;
+      else if (view == columnView)
+        type = dataset.layout.column_definition[idx.column()].type;
+      else if (view == arrayView)
+        type = dataset.layout.array_definition[idx.column()].type;
+      bool show = multiPaste ? !warned : true;
+      bool valid = validateTextForType(cols[c], type, show);
+      if (valid) {
         view->model()->setData(idx, cols[c]);
+        changed = true;
+      }
+      if (!valid && show)
+        warned = true;
     }
   }
-  markDirty();
+  if (changed)
+    markDirty();
 }
 
 void SDDSEditor::openFile() {
