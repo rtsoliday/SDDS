@@ -648,7 +648,9 @@ void SDDSEditor::populateModels() {
   // then allow them to stretch to fill the remaining space and be adjusted by
   // the user.
   columnView->resizeColumnsToContents();
-  columnView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+  columnView->horizontalHeader()->setStretchLastSection(true);
+  columnView->horizontalHeader()->setSectionResizeMode(
+      QHeaderView::Interactive);
 
   // arrays
   int32_t acount = dataset.layout.n_arrays;
@@ -673,7 +675,9 @@ void SDDSEditor::populateModels() {
 
   // Similar treatment for arrays table.
   arrayView->resizeColumnsToContents();
-  arrayView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+  arrayView->horizontalHeader()->setStretchLastSection(true);
+  arrayView->horizontalHeader()->setSectionResizeMode(
+      QHeaderView::Interactive);
 }
 
 void SDDSEditor::clearDataset() {
