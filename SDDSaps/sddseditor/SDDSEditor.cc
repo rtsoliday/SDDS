@@ -259,6 +259,10 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   connect(arrayIns, &QAction::triggered, this, &SDDSEditor::insertArray);
   connect(arrayDel, &QAction::triggered, this, &SDDSEditor::deleteArray);
 
+  QMenu *columnRowsMenu = editMenu->addMenu(tr("Column Rows"));
+  QAction *colRowIns = columnRowsMenu->addAction(tr("Insert"));
+  QAction *colRowDel = columnRowsMenu->addAction(tr("Delete"));
+
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
   connect(aboutAct, &QAction::triggered, []() {
