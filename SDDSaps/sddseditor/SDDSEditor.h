@@ -17,6 +17,8 @@
 #include <QRadioButton>
 #include <QLineEdit>
 #include <QStandardItemModel>
+#include <QVector>
+#include <QString>
 
 class QGroupBox;
 class QSplitter;
@@ -47,6 +49,7 @@ public:
 private slots:
   void openFile();
   void saveFile();
+  void saveFileAs();
   void search();
   void pageChanged(int value);
   void copy();
@@ -57,6 +60,7 @@ private:
   void populateModels();
   void commitModels();
   void clearDataset();
+  bool writeFile(const QString &path);
   void changeParameterType(int row);
   void changeColumnType(int column);
   void changeArrayType(int column);
@@ -88,6 +92,7 @@ private:
 
   QVector<PageStore> pages;
   int currentPage;
+  QString currentFilename;
 };
 
 #endif // SDDSEDITOR_H
