@@ -57,6 +57,9 @@ private slots:
   void editParameterAttributes();
   void editColumnAttributes();
   void editArrayAttributes();
+  void deleteParameter();
+  void deleteColumn();
+  void deleteArray();
 
 private:
   void loadPage(int page);
