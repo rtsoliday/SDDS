@@ -65,6 +65,9 @@ private slots:
   void deleteArray();
   void insertColumnRows();
   void deleteColumnRows();
+  void clonePage();
+  void insertPage();
+  void deletePage();
   void columnHeaderMenuRequested(const QPoint &pos);
   void columnCellMenuRequested(const QPoint &pos);
   void arrayHeaderMenuRequested(const QPoint &pos);
