@@ -31,6 +31,7 @@
 #include <QButtonGroup>
 #include <QSpinBox>
 #include <QLineEdit>
+#include <QRegularExpression>
 #include <QStyledItemDelegate>
 #include <functional>
 #include <cstdlib>
@@ -87,7 +88,7 @@ private:
 };
 
 SDDSEditor::SDDSEditor(QWidget *parent)
-  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()), lastRowAddCount(1) {
+  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()), lastRowAddCount(1), lastSearchPattern(QString()) {
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
@@ -226,6 +227,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   arrayView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(arrayView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeArrayType);
+  arrayView->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(arrayView->horizontalHeader(), &QHeaderView::customContextMenuRequested,
+          this, &SDDSEditor::arrayHeaderMenuRequested);
   connect(arrayBox, &QGroupBox::toggled, arrayView, &QWidget::setVisible);
   arrayLayout->addWidget(arrayView);
   dataSplitter->addWidget(arrayBox);
@@ -1173,6 +1177,7 @@ void SDDSEditor::columnHeaderMenuRequested(const QPoint &pos) {
   QAction *plotAct = menu.addAction(tr("Plot from file"));
   QAction *ascAct = menu.addAction(tr("Sort ascending"));
   QAction *descAct = menu.addAction(tr("Sort descending"));
+  QAction *searchAct = menu.addAction(tr("Search"));
   QAction *chosen =
       menu.exec(columnView->horizontalHeader()->mapToGlobal(pos));
   if (chosen == plotAct)
@@ -1181,6 +1186,20 @@ void SDDSEditor::columnHeaderMenuRequested(const QPoint &pos) {
     sortColumn(column, Qt::AscendingOrder);
   else if (chosen == descAct)
     sortColumn(column, Qt::DescendingOrder);
+  else if (chosen == searchAct)
+    searchColumn(column);
+}
+
+void SDDSEditor::arrayHeaderMenuRequested(const QPoint &pos) {
+  int column = arrayView->horizontalHeader()->logicalIndexAt(pos);
+  if (column < 0 || column >= dataset.layout.n_arrays)
+    return;
+  QMenu menu(this);
+  QAction *searchAct = menu.addAction(tr("Search"));
+  QAction *chosen =
+      menu.exec(arrayView->horizontalHeader()->mapToGlobal(pos));
+  if (chosen == searchAct)
+    searchArray(column);
 }
 
 void SDDSEditor::plotColumn(int column) {
@@ -1245,6 +1264,158 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
 
   populateModels();
   markDirty();
+}
+
+void SDDSEditor::searchColumn(int column) {
+  if (!datasetLoaded)
+    return;
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Search Column"));
+  QVBoxLayout layout(&dlg);
+  QLineEdit patternEdit(&dlg);
+  patternEdit.setText(lastSearchPattern);
+  layout.addWidget(&patternEdit);
+  QHBoxLayout btnLayout;
+  QPushButton searchBtn(tr("Search"), &dlg);
+  QPushButton prevBtn(tr("Previous"), &dlg);
+  QPushButton nextBtn(tr("Next"), &dlg);
+  QPushButton closeBtn(tr("Close"), &dlg);
+  btnLayout.addWidget(&searchBtn);
+  btnLayout.addWidget(&prevBtn);
+  btnLayout.addWidget(&nextBtn);
+  btnLayout.addWidget(&closeBtn);
+  layout.addLayout(&btnLayout);
+
+  QVector<int> matches;
+  int matchIndex = -1;
+
+  auto focusMatch = [&]() {
+    if (matchIndex < 0 || matchIndex >= matches.size())
+      return;
+    QModelIndex idx = columnModel->index(matches[matchIndex], column);
+    columnView->setCurrentIndex(idx);
+    columnView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
+  };
+
+  auto runSearch = [&]() {
+    QString pat = patternEdit.text();
+    matches.clear();
+    matchIndex = -1;
+    if (pat.isEmpty())
+      return;
+    QRegularExpression rx(
+        QRegularExpression::wildcardToRegularExpression(pat),
+        QRegularExpression::CaseInsensitiveOption);
+    lastSearchPattern = pat;
+    for (int r = 0; r < columnModel->rowCount(); ++r) {
+      QString val;
+      QStandardItem *it = columnModel->item(r, column);
+      if (it)
+        val = it->text();
+      if (rx.match(val).hasMatch())
+        matches.append(r);
+    }
+    if (!matches.isEmpty()) {
+      matchIndex = 0;
+      focusMatch();
+    } else {
+      QMessageBox::information(&dlg, tr("Search"), tr("No matches found"));
+    }
+  };
+
+  QObject::connect(&searchBtn, &QPushButton::clicked, runSearch);
+  QObject::connect(&nextBtn, &QPushButton::clicked, [&]() {
+    if (matches.isEmpty())
+      return;
+    matchIndex = (matchIndex + 1) % matches.size();
+    focusMatch();
+  });
+  QObject::connect(&prevBtn, &QPushButton::clicked, [&]() {
+    if (matches.isEmpty())
+      return;
+    matchIndex = (matchIndex - 1 + matches.size()) % matches.size();
+    focusMatch();
+  });
+  QObject::connect(&closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+  dlg.exec();
+}
+
+void SDDSEditor::searchArray(int column) {
+  if (!datasetLoaded)
+    return;
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Search Array"));
+  QVBoxLayout layout(&dlg);
+  QLineEdit patternEdit(&dlg);
+  patternEdit.setText(lastSearchPattern);
+  layout.addWidget(&patternEdit);
+  QHBoxLayout btnLayout;
+  QPushButton searchBtn(tr("Search"), &dlg);
+  QPushButton prevBtn(tr("Previous"), &dlg);
+  QPushButton nextBtn(tr("Next"), &dlg);
+  QPushButton closeBtn(tr("Close"), &dlg);
+  btnLayout.addWidget(&searchBtn);
+  btnLayout.addWidget(&prevBtn);
+  btnLayout.addWidget(&nextBtn);
+  btnLayout.addWidget(&closeBtn);
+  layout.addLayout(&btnLayout);
+
+  QVector<int> matches;
+  int matchIndex = -1;
+
+  auto focusMatch = [&]() {
+    if (matchIndex < 0 || matchIndex >= matches.size())
+      return;
+    QModelIndex idx = arrayModel->index(matches[matchIndex], column);
+    arrayView->setCurrentIndex(idx);
+    arrayView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
+  };
+
+  auto runSearch = [&]() {
+    QString pat = patternEdit.text();
+    matches.clear();
+    matchIndex = -1;
+    if (pat.isEmpty())
+      return;
+    QRegularExpression rx(
+        QRegularExpression::wildcardToRegularExpression(pat),
+        QRegularExpression::CaseInsensitiveOption);
+    lastSearchPattern = pat;
+    for (int r = 0; r < arrayModel->rowCount(); ++r) {
+      QString val;
+      QStandardItem *it = arrayModel->item(r, column);
+      if (it)
+        val = it->text();
+      if (rx.match(val).hasMatch())
+        matches.append(r);
+    }
+    if (!matches.isEmpty()) {
+      matchIndex = 0;
+      focusMatch();
+    } else {
+      QMessageBox::information(&dlg, tr("Search"), tr("No matches found"));
+    }
+  };
+
+  QObject::connect(&searchBtn, &QPushButton::clicked, runSearch);
+  QObject::connect(&nextBtn, &QPushButton::clicked, [&]() {
+    if (matches.isEmpty())
+      return;
+    matchIndex = (matchIndex + 1) % matches.size();
+    focusMatch();
+  });
+  QObject::connect(&prevBtn, &QPushButton::clicked, [&]() {
+    if (matches.isEmpty())
+      return;
+    matchIndex = (matchIndex - 1 + matches.size()) % matches.size();
+    focusMatch();
+  });
+  QObject::connect(&closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+  dlg.exec();
 }
 
 void SDDSEditor::changeArrayType(int column) {

@@ -66,6 +66,7 @@ private slots:
   void insertColumnRows();
   void deleteColumnRows();
   void columnHeaderMenuRequested(const QPoint &pos);
+  void arrayHeaderMenuRequested(const QPoint &pos);
   void plotColumn(int column);
 
 private:
@@ -78,6 +79,8 @@ private:
   void changeColumnType(int column);
   void changeArrayType(int column);
   void sortColumn(int column, Qt::SortOrder order);
+  void searchColumn(int column);
+  void searchArray(int column);
   void message(const QString &text);
   void markDirty();
   QTableView *focusedTable() const;
@@ -108,6 +111,7 @@ private:
   int currentPage;
   QString currentFilename;
   int lastRowAddCount;
+  QString lastSearchPattern;
 };
 
 #endif // SDDSEDITOR_H
