@@ -82,6 +82,7 @@ private:
   void changeArrayType(int column);
   void showColumnMenu(QTableView *view, int column, const QPoint &globalPos);
   void showArrayMenu(QTableView *view, int column, const QPoint &globalPos);
+  void resizeArray(int column);
   void sortColumn(int column, Qt::SortOrder order);
   void searchColumn(int column);
   void searchArray(int column);

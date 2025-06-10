@@ -65,6 +65,13 @@ static bool validateTextForType(const QString &text, int type,
   return true;
 }
 
+static int dimProduct(const QVector<int> &dims) {
+  int prod = 1;
+  for (int d : dims)
+    prod *= d > 0 ? d : 1;
+  return prod;
+}
+
 class SDDSItemDelegate : public QStyledItemDelegate {
 public:
   using TypeFunc = std::function<int(const QModelIndex &)>;
@@ -1051,6 +1058,9 @@ void SDDSEditor::editArrayAttributes() {
   QSpinBox length(&dlg);
   length.setRange(0, 1000000);
   length.setValue(def->field_length);
+  QSpinBox dimsCount(&dlg);
+  dimsCount.setRange(1, 1000000);
+  dimsCount.setValue(def->dimensions);
   QHBoxLayout *typeLayout = new QHBoxLayout();
   QButtonGroup typeGroup(&dlg);
   QMap<int, QRadioButton *> btns;
@@ -1080,6 +1090,7 @@ void SDDSEditor::editArrayAttributes() {
   form.addRow(tr("Format"), &fmt);
   form.addRow(tr("Group"), &group);
   form.addRow(tr("Field length"), &length);
+  form.addRow(tr("Dimensions"), &dimsCount);
   form.addRow(tr("Type"), typeLayout);
   QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                            Qt::Horizontal, &dlg);
@@ -1117,6 +1128,19 @@ void SDDSEditor::editArrayAttributes() {
   SDDS_ChangeArrayInformation(&dataset, (char *)"group_name",
                               group.text().isEmpty() ? (char *)"" : ba.data(),
                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  int32_t dimCnt = dimsCount.value();
+  SDDS_ChangeArrayInformation(&dataset, (char *)"dimensions", &dimCnt,
+                              SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
+  for (PageStore &pd : pages) {
+    if (col >= pd.arrays.size())
+      continue;
+    ArrayStore &as = pd.arrays[col];
+    int old = as.dims.size();
+    as.dims.resize(dimCnt);
+    for (int i = old; i < dimCnt; ++i)
+      as.dims[i] = 1;
+    as.values.resize(dimProduct(as.dims));
+  }
   int32_t len = length.value();
   SDDS_ChangeArrayInformation(&dataset, (char *)"field_length", &len,
                               SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
@@ -1124,6 +1148,7 @@ void SDDSEditor::editArrayAttributes() {
   SDDS_ChangeArrayInformation(&dataset, (char *)"type", &tval,
                               SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
   arrayModel->setHeaderData(col, Qt::Horizontal, name.text());
+  populateModels();
   markDirty();
 }
 void SDDSEditor::changeParameterType(int row) {
@@ -1215,9 +1240,12 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
     return;
   QMenu menu(view);
   QAction *searchAct = menu.addAction(tr("Search"));
+  QAction *resizeAct = menu.addAction(tr("Resize"));
   QAction *chosen = menu.exec(globalPos);
   if (chosen == searchAct)
     searchArray(column);
+  else if (chosen == resizeAct)
+    resizeArray(column);
 }
 
 void SDDSEditor::arrayHeaderMenuRequested(const QPoint &pos) {
@@ -1372,6 +1400,47 @@ void SDDSEditor::searchColumn(int column) {
   QObject::connect(&closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
 
   dlg.exec();
+}
+
+void SDDSEditor::resizeArray(int column) {
+  if (!datasetLoaded || currentPage < 0 || currentPage >= pages.size())
+    return;
+
+  ARRAY_DEFINITION *def = &dataset.layout.array_definition[column];
+  PageStore &pd = pages[currentPage];
+  if (column < 0 || column >= pd.arrays.size())
+    return;
+
+  ArrayStore &as = pd.arrays[column];
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Resize Array"));
+  QFormLayout form(&dlg);
+  QVector<QSpinBox *> boxes(def->dimensions);
+  for (int i = 0; i < def->dimensions; ++i) {
+    QSpinBox *sb = new QSpinBox(&dlg);
+    sb->setRange(1, 1000000);
+    sb->setValue(i < as.dims.size() ? as.dims[i] : 1);
+    form.addRow(tr("Dim %1").arg(i + 1), sb);
+    boxes[i] = sb;
+  }
+
+  QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                           Qt::Horizontal, &dlg);
+  form.addRow(&buttons);
+  connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  as.dims.resize(def->dimensions);
+  for (int i = 0; i < def->dimensions; ++i)
+    as.dims[i] = boxes[i]->value();
+  int newSize = dimProduct(as.dims);
+  as.values.resize(newSize);
+
+  populateModels();
+  markDirty();
 }
 
 void SDDSEditor::searchArray(int column) {
