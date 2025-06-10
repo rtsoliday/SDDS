@@ -1338,6 +1338,20 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
   markDirty();
 }
 
+
+#if QT_VERSION < QT_VERSION_CHECK(5,15,0)
+// escapes a shell-style wildcard to a regex string
+static QString wildcardToRegularExpression(const QString &wc) {
+    // first escape all regex-special chars
+    QString rx = QRegularExpression::escape(wc);
+    // then un-escape the wildcard symbols and turn them into regex
+    rx.replace("\\*", ".*");
+    rx.replace("\\?", ".");
+    return rx;
+}
+#endif
+
+
 void SDDSEditor::searchColumn(int column) {
   if (!datasetLoaded)
     return;
@@ -1376,9 +1390,15 @@ void SDDSEditor::searchColumn(int column) {
     matchIndex = -1;
     if (pat.isEmpty())
       return;
+#if QT_VERSION >= QT_VERSION_CHECK(5,15,0)
     QRegularExpression rx(
         QRegularExpression::wildcardToRegularExpression(pat),
         QRegularExpression::CaseInsensitiveOption);
+#else
+    QRegularExpression rx(
+        wildcardToRegularExpression(pat),
+        QRegularExpression::CaseInsensitiveOption);
+#endif
     lastSearchPattern = pat;
     for (int r = 0; r < columnModel->rowCount(); ++r) {
       QString val;
@@ -1493,9 +1513,15 @@ void SDDSEditor::searchArray(int column) {
     matchIndex = -1;
     if (pat.isEmpty())
       return;
+#if QT_VERSION >= QT_VERSION_CHECK(5,15,0)
     QRegularExpression rx(
         QRegularExpression::wildcardToRegularExpression(pat),
         QRegularExpression::CaseInsensitiveOption);
+#else
+    QRegularExpression rx(
+        wildcardToRegularExpression(pat),
+        QRegularExpression::CaseInsensitiveOption);
+#endif
     lastSearchPattern = pat;
     for (int r = 0; r < arrayModel->rowCount(); ++r) {
       QString val;
