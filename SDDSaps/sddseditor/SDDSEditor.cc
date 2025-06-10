@@ -111,12 +111,6 @@ SDDSEditor::SDDSEditor(QWidget *parent)
           this, &SDDSEditor::pageChanged);
   pageLayout->addWidget(pageCombo);
 
-  searchEdit = new QLineEdit(this);
-  QPushButton *searchBtn = new QPushButton(tr("Search"), this);
-  connect(searchBtn, &QPushButton::clicked, this, &SDDSEditor::search);
-  pageLayout->addWidget(searchEdit);
-  pageLayout->addWidget(searchBtn);
-
   pageLayout->addStretch(1);
   asciiBtn = new QRadioButton(tr("ascii"), this);
   binaryBtn = new QRadioButton(tr("binary"), this);
@@ -129,11 +123,14 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   tableFont.setStyleName("Regular");
   tableFont.setPointSize(10);
 
+  const QString headerStyle =
+      "QHeaderView::section { background-color: #f0f0f0; }";
+
   // container for data panels
   dataSplitter = new QSplitter(Qt::Vertical, this);
   //dataSplitter->setChildrenCollapsible(false);
   dataSplitter->setHandleWidth(4);
-  dataSplitter->setStyleSheet("QSplitter::handle { background-color: #CCCCCC; }");
+  dataSplitter->setStyleSheet("QSplitter::handle { background-color: lightgrey; }");
   mainLayout->addWidget(dataSplitter, 1);
 
   // parameters panel
@@ -158,6 +155,8 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   paramView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
   paramView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   paramView->verticalHeader()->setDefaultSectionSize(18);
+  paramView->horizontalHeader()->setStyleSheet(headerStyle);
+  paramView->verticalHeader()->setStyleSheet(headerStyle);
   paramView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(paramModel, &QStandardItemModel::itemChanged, this,
           &SDDSEditor::markDirty);
@@ -188,6 +187,8 @@ SDDSEditor::SDDSEditor(QWidget *parent)
       QHeaderView::ResizeToContents);
   columnView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   columnView->verticalHeader()->setDefaultSectionSize(18);
+  columnView->horizontalHeader()->setStyleSheet(headerStyle);
+  columnView->verticalHeader()->setStyleSheet(headerStyle);
   columnView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(columnView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeColumnType);
@@ -219,6 +220,8 @@ SDDSEditor::SDDSEditor(QWidget *parent)
       QHeaderView::ResizeToContents);
   arrayView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   arrayView->verticalHeader()->setDefaultSectionSize(18);
+  arrayView->horizontalHeader()->setStyleSheet(headerStyle);
+  arrayView->verticalHeader()->setStyleSheet(headerStyle);
   arrayView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(arrayView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeArrayType);
@@ -698,33 +701,6 @@ void SDDSEditor::saveFileAs() {
     return;
   if (writeFile(path))
     currentFilename = path;
-}
-
-void SDDSEditor::search() {
-  QString text = searchEdit->text();
-  if (text.isEmpty())
-    return;
-  for (int r = 0; r < paramModel->rowCount(); ++r) {
-    if (paramModel->verticalHeaderItem(r)->text().contains(text, Qt::CaseInsensitive)) {
-      paramView->selectRow(r);
-      paramView->scrollTo(paramModel->index(r, 0));
-      return;
-    }
-  }
-  for (int c = 0; c < columnModel->columnCount(); ++c) {
-    if (columnModel->headerData(c, Qt::Horizontal).toString().contains(text, Qt::CaseInsensitive)) {
-      columnView->selectColumn(c);
-      columnView->scrollTo(columnModel->index(0, c));
-      return;
-    }
-  }
-  for (int c = 0; c < arrayModel->columnCount(); ++c) {
-    if (arrayModel->headerData(c, Qt::Horizontal).toString().contains(text, Qt::CaseInsensitive)) {
-      arrayView->selectColumn(c);
-      arrayView->scrollTo(arrayModel->index(0, c));
-      return;
-    }
-  }
 }
 
 void SDDSEditor::pageChanged(int value) {

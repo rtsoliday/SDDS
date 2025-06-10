@@ -51,7 +51,6 @@ private slots:
   void openFile();
   void saveFile();
   void saveFileAs();
-  void search();
   void pageChanged(int value);
   void copy();
   void paste();
