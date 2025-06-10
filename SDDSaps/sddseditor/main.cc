@@ -7,8 +7,10 @@
 #include <QApplication>
 #include <QPalette>
 #include <QStyleFactory>
+#include <QLoggingCategory>
 
 int main(int argc, char **argv) {
+  QLoggingCategory::setFilterRules("qt.qpa.xcb.*=false");
   QApplication app(argc, argv);
   app.setStyle(QStyleFactory::create("Fusion"));
   QPalette pal = app.palette();
