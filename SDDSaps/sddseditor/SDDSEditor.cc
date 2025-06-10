@@ -34,6 +34,7 @@
 #include <QStyledItemDelegate>
 #include <functional>
 #include <cstdlib>
+#include <algorithm>
 
 static bool validateTextForType(const QString &text, int type,
                                 bool showMessage = true) {
@@ -1169,11 +1170,17 @@ void SDDSEditor::columnHeaderMenuRequested(const QPoint &pos) {
   if (column < 0 || column >= dataset.layout.n_columns)
     return;
   QMenu menu(this);
-  QAction *plotAct = menu.addAction(tr("Plot"));
+  QAction *plotAct = menu.addAction(tr("Plot from file"));
+  QAction *ascAct = menu.addAction(tr("Sort ascending"));
+  QAction *descAct = menu.addAction(tr("Sort descending"));
   QAction *chosen =
       menu.exec(columnView->horizontalHeader()->mapToGlobal(pos));
   if (chosen == plotAct)
     plotColumn(column);
+  else if (chosen == ascAct)
+    sortColumn(column, Qt::AscendingOrder);
+  else if (chosen == descAct)
+    sortColumn(column, Qt::DescendingOrder);
 }
 
 void SDDSEditor::plotColumn(int column) {
@@ -1198,6 +1205,46 @@ void SDDSEditor::plotColumn(int column) {
   }
 
   QProcess::startDetached("sddsplot", args);
+}
+
+void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
+  if (!datasetLoaded || currentPage < 0 || currentPage >= pages.size())
+    return;
+
+  commitModels();
+
+  PageStore &pd = pages[currentPage];
+  if (column < 0 || column >= pd.columns.size())
+    return;
+
+  int rows = pd.columns[column].size();
+  QVector<int> idx(rows);
+  for (int i = 0; i < rows; ++i)
+    idx[i] = i;
+
+  int type = dataset.layout.column_definition[column].type;
+  auto cmp = [&](int a, int b) {
+    QString av = a < pd.columns[column].size() ? pd.columns[column][a] : QString();
+    QString bv = b < pd.columns[column].size() ? pd.columns[column][b] : QString();
+    if (SDDS_NUMERIC_TYPE(type)) {
+      long double aval = av.toDouble();
+      long double bval = bv.toDouble();
+      return order == Qt::AscendingOrder ? aval < bval : aval > bval;
+    }
+    return order == Qt::AscendingOrder ? av < bv : av > bv;
+  };
+
+  std::stable_sort(idx.begin(), idx.end(), cmp);
+
+  for (int c = 0; c < pd.columns.size(); ++c) {
+    QVector<QString> sorted(rows);
+    for (int i = 0; i < rows; ++i)
+      sorted[i] = idx[i] < pd.columns[c].size() ? pd.columns[c][idx[i]] : QString();
+    pd.columns[c] = sorted;
+  }
+
+  populateModels();
+  markDirty();
 }
 
 void SDDSEditor::changeArrayType(int column) {

@@ -77,6 +77,7 @@ private:
   void changeParameterType(int row);
   void changeColumnType(int column);
   void changeArrayType(int column);
+  void sortColumn(int column, Qt::SortOrder order);
   void message(const QString &text);
   void markDirty();
   QTableView *focusedTable() const;
