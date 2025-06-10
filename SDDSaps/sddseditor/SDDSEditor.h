@@ -19,6 +19,7 @@
 #include <QStandardItemModel>
 #include <QVector>
 #include <QString>
+#include <QPoint>
 
 class QGroupBox;
 class QSplitter;
@@ -65,6 +66,8 @@ private slots:
   void deleteArray();
   void insertColumnRows();
   void deleteColumnRows();
+  void columnHeaderMenuRequested(const QPoint &pos);
+  void plotColumn(int column);
 
 private:
   void loadPage(int page);

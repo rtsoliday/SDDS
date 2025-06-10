@@ -19,6 +19,8 @@
 #include <QDockWidget>
 #include <QInputDialog>
 #include <QHeaderView>
+#include <QMenu>
+#include <QProcess>
 #include <QApplication>
 #include <QShortcut>
 #include <QClipboard>
@@ -178,6 +180,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   columnView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(columnView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeColumnType);
+  columnView->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(columnView->horizontalHeader(), &QHeaderView::customContextMenuRequested,
+          this, &SDDSEditor::columnHeaderMenuRequested);
   connect(colBox, &QGroupBox::toggled, columnView, &QWidget::setVisible);
   colLayout->addWidget(columnView);
   dataSplitter->addWidget(colBox);
@@ -1168,6 +1173,42 @@ void SDDSEditor::changeColumnType(int column) {
                                const_cast<char *>(name.toLocal8Bit().constData()));
   columnModel->setHeaderData(column, Qt::Horizontal, QString(name));
   markDirty();
+}
+
+void SDDSEditor::columnHeaderMenuRequested(const QPoint &pos) {
+  int column = columnView->horizontalHeader()->logicalIndexAt(pos);
+  if (column < 0 || column >= dataset.layout.n_columns)
+    return;
+  QMenu menu(this);
+  QAction *plotAct = menu.addAction(tr("Plot"));
+  QAction *chosen =
+      menu.exec(columnView->horizontalHeader()->mapToGlobal(pos));
+  if (chosen == plotAct)
+    plotColumn(column);
+}
+
+void SDDSEditor::plotColumn(int column) {
+  if (!datasetLoaded || currentFilename.isEmpty())
+    return;
+
+  QString colName = dataset.layout.column_definition[column].name;
+  bool hasTime = false;
+  for (int c = 0; c < dataset.layout.n_columns; ++c) {
+    if (QString(dataset.layout.column_definition[c].name) == QLatin1String("Time")) {
+      hasTime = true;
+      break;
+    }
+  }
+
+  QStringList args;
+  args << "-split=page" << "-sep=page" << currentFilename;
+  if (hasTime) {
+    args << QString("-col=Time,%1").arg(colName) << "-tick=xtime";
+  } else {
+    args << QString("-col=%1").arg(colName);
+  }
+
+  QProcess::startDetached("sddsplot", args);
 }
 
 void SDDSEditor::changeArrayType(int column) {
