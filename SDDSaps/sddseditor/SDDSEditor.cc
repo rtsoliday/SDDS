@@ -308,6 +308,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   QAction *pageClone = pageMenu->addAction(tr("Insert and clone current page"));
   QAction *pageIns = pageMenu->addAction(tr("Insert"));
   QAction *pageDel = pageMenu->addAction(tr("Delete"));
+  connect(pageClone, &QAction::triggered, this, &SDDSEditor::clonePage);
+  connect(pageIns, &QAction::triggered, this, &SDDSEditor::insertPage);
+  connect(pageDel, &QAction::triggered, this, &SDDSEditor::deletePage);
 
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
@@ -2076,6 +2079,88 @@ void SDDSEditor::deleteColumnRows() {
   }
 
   populateModels();
+  markDirty();
+}
+
+void SDDSEditor::clonePage() {
+  if (!datasetLoaded || currentPage < 0 || currentPage >= pages.size())
+    return;
+
+  commitModels();
+  PageStore pd = pages[currentPage];
+  int insertPos = currentPage + 1;
+  pages.insert(insertPos, pd);
+
+  pageCombo->blockSignals(true);
+  pageCombo->clear();
+  for (int i = 0; i < pages.size(); ++i)
+    pageCombo->addItem(tr("Page %1").arg(i + 1));
+  pageCombo->blockSignals(false);
+  pageCombo->setCurrentIndex(insertPos);
+
+  markDirty();
+}
+
+void SDDSEditor::insertPage() {
+  if (!datasetLoaded)
+    return;
+
+  commitModels();
+
+  PageStore pd;
+  pd.parameters = QVector<QString>(dataset.layout.n_parameters);
+
+  int ccount = dataset.layout.n_columns;
+  pd.columns.resize(ccount);
+  int rows = 0;
+  if (currentPage >= 0 && currentPage < pages.size() && !pages[currentPage].columns.isEmpty())
+    rows = pages[currentPage].columns[0].size();
+  for (int c = 0; c < ccount; ++c)
+    pd.columns[c].resize(rows);
+
+  int acount = dataset.layout.n_arrays;
+  pd.arrays.resize(acount);
+  for (int a = 0; a < acount; ++a) {
+    int dims = dataset.layout.array_definition[a].dimensions;
+    if (currentPage >= 0 && currentPage < pages.size() && a < pages[currentPage].arrays.size())
+      pd.arrays[a].dims = pages[currentPage].arrays[a].dims;
+    else
+      pd.arrays[a].dims = QVector<int>(dims, 1);
+    pd.arrays[a].values.resize(dimProduct(pd.arrays[a].dims));
+  }
+
+  int insertPos = currentPage + 1;
+  pages.insert(insertPos, pd);
+
+  pageCombo->blockSignals(true);
+  pageCombo->clear();
+  for (int i = 0; i < pages.size(); ++i)
+    pageCombo->addItem(tr("Page %1").arg(i + 1));
+  pageCombo->blockSignals(false);
+  pageCombo->setCurrentIndex(insertPos);
+
+  markDirty();
+}
+
+void SDDSEditor::deletePage() {
+  if (!datasetLoaded || pages.size() <= 1 || currentPage < 0 ||
+      currentPage >= pages.size())
+    return;
+
+  commitModels();
+  pages.remove(currentPage);
+
+  if (currentPage >= pages.size())
+    currentPage = pages.size() - 1;
+
+  pageCombo->blockSignals(true);
+  pageCombo->clear();
+  for (int i = 0; i < pages.size(); ++i)
+    pageCombo->addItem(tr("Page %1").arg(i + 1));
+  pageCombo->setCurrentIndex(currentPage);
+  pageCombo->blockSignals(false);
+
+  loadPage(currentPage + 1);
   markDirty();
 }
 
