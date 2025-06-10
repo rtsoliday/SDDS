@@ -51,6 +51,7 @@ private slots:
   void openFile();
   void saveFile();
   void saveFileAs();
+  void saveFileAsHDF();
   void pageChanged(int value);
   void copy();
   void paste();
@@ -82,6 +83,7 @@ private:
   void commitModels();
   void clearDataset();
   bool writeFile(const QString &path);
+  bool writeHDF(const QString &path);
   void changeParameterType(int row);
   void changeColumnType(int column);
   void changeArrayType(int column);
