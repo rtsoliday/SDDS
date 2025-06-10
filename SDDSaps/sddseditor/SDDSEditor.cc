@@ -197,6 +197,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   columnView->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(columnView->horizontalHeader(), &QHeaderView::customContextMenuRequested,
           this, &SDDSEditor::columnHeaderMenuRequested);
+  columnView->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(columnView, &QTableView::customContextMenuRequested,
+          this, &SDDSEditor::columnCellMenuRequested);
   connect(colBox, &QGroupBox::toggled, columnView, &QWidget::setVisible);
   colLayout->addWidget(columnView);
   dataSplitter->addWidget(colBox);
@@ -230,6 +233,9 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   arrayView->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(arrayView->horizontalHeader(), &QHeaderView::customContextMenuRequested,
           this, &SDDSEditor::arrayHeaderMenuRequested);
+  arrayView->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(arrayView, &QTableView::customContextMenuRequested,
+          this, &SDDSEditor::arrayCellMenuRequested);
   connect(arrayBox, &QGroupBox::toggled, arrayView, &QWidget::setVisible);
   arrayLayout->addWidget(arrayView);
   dataSplitter->addWidget(arrayBox);
@@ -1169,17 +1175,16 @@ void SDDSEditor::changeColumnType(int column) {
   markDirty();
 }
 
-void SDDSEditor::columnHeaderMenuRequested(const QPoint &pos) {
-  int column = columnView->horizontalHeader()->logicalIndexAt(pos);
+void SDDSEditor::showColumnMenu(QTableView *view, int column,
+                                const QPoint &globalPos) {
   if (column < 0 || column >= dataset.layout.n_columns)
     return;
-  QMenu menu(this);
+  QMenu menu(view);
   QAction *plotAct = menu.addAction(tr("Plot from file"));
   QAction *ascAct = menu.addAction(tr("Sort ascending"));
   QAction *descAct = menu.addAction(tr("Sort descending"));
   QAction *searchAct = menu.addAction(tr("Search"));
-  QAction *chosen =
-      menu.exec(columnView->horizontalHeader()->mapToGlobal(pos));
+  QAction *chosen = menu.exec(globalPos);
   if (chosen == plotAct)
     plotColumn(column);
   else if (chosen == ascAct)
@@ -1190,16 +1195,43 @@ void SDDSEditor::columnHeaderMenuRequested(const QPoint &pos) {
     searchColumn(column);
 }
 
-void SDDSEditor::arrayHeaderMenuRequested(const QPoint &pos) {
-  int column = arrayView->horizontalHeader()->logicalIndexAt(pos);
+void SDDSEditor::columnHeaderMenuRequested(const QPoint &pos) {
+  int column = columnView->horizontalHeader()->logicalIndexAt(pos);
+  showColumnMenu(columnView, column,
+                 columnView->horizontalHeader()->mapToGlobal(pos));
+}
+
+void SDDSEditor::columnCellMenuRequested(const QPoint &pos) {
+  QModelIndex idx = columnView->indexAt(pos);
+  if (!idx.isValid())
+    return;
+  showColumnMenu(columnView, idx.column(),
+                 columnView->viewport()->mapToGlobal(pos));
+}
+
+void SDDSEditor::showArrayMenu(QTableView *view, int column,
+                               const QPoint &globalPos) {
   if (column < 0 || column >= dataset.layout.n_arrays)
     return;
-  QMenu menu(this);
+  QMenu menu(view);
   QAction *searchAct = menu.addAction(tr("Search"));
-  QAction *chosen =
-      menu.exec(arrayView->horizontalHeader()->mapToGlobal(pos));
+  QAction *chosen = menu.exec(globalPos);
   if (chosen == searchAct)
     searchArray(column);
+}
+
+void SDDSEditor::arrayHeaderMenuRequested(const QPoint &pos) {
+  int column = arrayView->horizontalHeader()->logicalIndexAt(pos);
+  showArrayMenu(arrayView, column,
+                arrayView->horizontalHeader()->mapToGlobal(pos));
+}
+
+void SDDSEditor::arrayCellMenuRequested(const QPoint &pos) {
+  QModelIndex idx = arrayView->indexAt(pos);
+  if (!idx.isValid())
+    return;
+  showArrayMenu(arrayView, idx.column(),
+                arrayView->viewport()->mapToGlobal(pos));
 }
 
 void SDDSEditor::plotColumn(int column) {
