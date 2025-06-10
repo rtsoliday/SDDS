@@ -20,6 +20,7 @@
 #include <QVector>
 #include <QString>
 #include <QPoint>
+#include <QUndoStack>
 
 class QGroupBox;
 class QSplitter;
@@ -54,6 +55,8 @@ private slots:
   void pageChanged(int value);
   void copy();
   void paste();
+  void undo();
+  void redo();
   void editParameterAttributes();
   void editColumnAttributes();
   void editArrayAttributes();
@@ -116,6 +119,8 @@ private:
   QStandardItemModel *paramModel;
   QStandardItemModel *columnModel;
   QStandardItemModel *arrayModel;
+
+  QUndoStack *undoStack;
 
   QVector<PageStore> pages;
   int currentPage;

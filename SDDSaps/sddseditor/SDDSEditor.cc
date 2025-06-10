@@ -33,6 +33,8 @@
 #include <QLineEdit>
 #include <QRegularExpression>
 #include <QStyledItemDelegate>
+#include <QUndoStack>
+#include <QUndoCommand>
 #include <functional>
 #include <cstdlib>
 #include <algorithm>
@@ -72,11 +74,28 @@ static int dimProduct(const QVector<int> &dims) {
   return prod;
 }
 
+class CellEditCommand : public QUndoCommand {
+public:
+  CellEditCommand(QAbstractItemModel *m, const QModelIndex &i,
+                  const QVariant &o, const QVariant &n)
+      : model(m), index(i), oldVal(o), newVal(n) {
+    setText("Edit cell");
+  }
+  void undo() override { model->setData(index, oldVal); }
+  void redo() override { model->setData(index, newVal); }
+
+private:
+  QAbstractItemModel *model;
+  QModelIndex index;
+  QVariant oldVal;
+  QVariant newVal;
+};
+
 class SDDSItemDelegate : public QStyledItemDelegate {
 public:
   using TypeFunc = std::function<int(const QModelIndex &)>;
-  explicit SDDSItemDelegate(TypeFunc tf, QObject *parent = nullptr)
-      : QStyledItemDelegate(parent), typeFunc(std::move(tf)) {}
+  SDDSItemDelegate(TypeFunc tf, QUndoStack *us, QObject *parent = nullptr)
+      : QStyledItemDelegate(parent), typeFunc(std::move(tf)), undoStack(us) {}
 
   void setModelData(QWidget *editorWidget, QAbstractItemModel *model,
                     const QModelIndex &index) const override {
@@ -86,16 +105,24 @@ public:
       return;
     }
 
-    if (validateTextForType(line->text(), typeFunc(index)))
-      QStyledItemDelegate::setModelData(editorWidget, model, index);
+    if (!validateTextForType(line->text(), typeFunc(index)))
+      return;
+    QVariant oldValue = index.data();
+    QVariant newValue = line->text();
+    if (oldValue == newValue)
+      return;
+    undoStack->push(new CellEditCommand(model, index, oldValue, newValue));
   }
 
 private:
   TypeFunc typeFunc;
+  QUndoStack *undoStack;
 };
 
 SDDSEditor::SDDSEditor(QWidget *parent)
-  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()), lastRowAddCount(1), lastSearchPattern(QString()) {
+  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true),
+    undoStack(new QUndoStack(this)), currentPage(0), currentFilename(QString()),
+    lastRowAddCount(1), lastSearchPattern(QString()) {
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
@@ -158,7 +185,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
       [this](const QModelIndex &idx) {
         return dataset.layout.parameter_definition[idx.row()].type;
       },
-      paramView));
+      undoStack, paramView));
   // Let the single value column expand to take up the available space.
   // This keeps the parameter table readable even when the window is wide.
   paramView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -191,7 +218,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
       [this](const QModelIndex &idx) {
         return dataset.layout.column_definition[idx.column()].type;
       },
-      columnView));
+      undoStack, columnView));
   columnView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::ResizeToContents);
   columnView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
@@ -227,7 +254,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
       [this](const QModelIndex &idx) {
         return dataset.layout.array_definition[idx.column()].type;
       },
-      arrayView));
+      undoStack, arrayView));
   arrayView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::ResizeToContents);
   arrayView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
@@ -275,6 +302,13 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   connect(quitAct, &QAction::triggered, this, &QWidget::close);
 
   QMenu *editMenu = menuBar()->addMenu(tr("Edit"));
+  QAction *undoAct = editMenu->addAction(tr("Undo"));
+  undoAct->setShortcut(QKeySequence::Undo);
+  QAction *redoAct = editMenu->addAction(tr("Redo"));
+  redoAct->setShortcut(QKeySequence::Redo);
+  connect(undoAct, &QAction::triggered, this, &SDDSEditor::undo);
+  connect(redoAct, &QAction::triggered, this, &SDDSEditor::redo);
+  editMenu->addSeparator();
   QMenu *paramMenu = editMenu->addMenu(tr("Parameter"));
   QAction *paramAttr = paramMenu->addAction(tr("Attributes"));
   QAction *paramIns = paramMenu->addAction(tr("Insert"));
@@ -407,8 +441,12 @@ void SDDSEditor::paste() {
       bool show = multiPaste ? !warned : true;
       bool valid = validateTextForType(cols[c], type, show);
       if (valid) {
-        view->model()->setData(idx, cols[c]);
-        changed = true;
+        QVariant oldVal = idx.data();
+        QVariant newVal = cols[c];
+        if (oldVal != newVal) {
+          undoStack->push(new CellEditCommand(view->model(), idx, oldVal, newVal));
+          changed = true;
+        }
       }
       if (!valid && show)
         warned = true;
@@ -2193,6 +2231,10 @@ void SDDSEditor::deletePage() {
   loadPage(currentPage + 1);
   markDirty();
 }
+
+void SDDSEditor::undo() { undoStack->undo(); }
+
+void SDDSEditor::redo() { undoStack->redo(); }
 
 void SDDSEditor::restartApp() {
   QString program = QCoreApplication::applicationFilePath();
