@@ -18,6 +18,7 @@
 #include <QVector>
 #include <QDockWidget>
 #include <QInputDialog>
+#include <QFont>
 #include <QHeaderView>
 #include <QMenu>
 #include <QProcess>
@@ -99,9 +100,11 @@ SDDSEditor::SDDSEditor(QWidget *parent)
 
   QWidget *central = new QWidget(this);
   QVBoxLayout *mainLayout = new QVBoxLayout(central);
+  mainLayout->setContentsMargins(0, 0, 0, 0);
 
   // page selector bar
   QHBoxLayout *pageLayout = new QHBoxLayout();
+  pageLayout->setContentsMargins(0, 0, 0, 0);
   pageLayout->addWidget(new QLabel(tr("Page"), this));
   pageCombo = new QComboBox(this);
   connect(pageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -122,6 +125,10 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   pageLayout->addWidget(binaryBtn);
   mainLayout->addLayout(pageLayout);
 
+  QFont tableFont("Source Code Pro");
+  tableFont.setStyleName("Regular");
+  tableFont.setPointSize(10);
+
   // container for data panels
   dataSplitter = new QSplitter(Qt::Vertical, this);
   //dataSplitter->setChildrenCollapsible(false);
@@ -134,10 +141,12 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   paramBox->setCheckable(true);
   paramBox->setChecked(true);
   QVBoxLayout *paramLayout = new QVBoxLayout(paramBox);
+  paramLayout->setContentsMargins(0, 0, 0, 0);
   paramModel = new QStandardItemModel(this);
   paramModel->setColumnCount(1);
   paramModel->setHorizontalHeaderLabels(QStringList() << tr("Value"));
   paramView = new QTableView(paramBox);
+  paramView->setFont(tableFont);
   paramView->setModel(paramModel);
   paramView->setItemDelegate(new SDDSItemDelegate(
       [this](const QModelIndex &idx) {
@@ -163,8 +172,10 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   colBox->setCheckable(true);
   colBox->setChecked(true);
   QVBoxLayout *colLayout = new QVBoxLayout(colBox);
+  colLayout->setContentsMargins(0, 0, 0, 0);
   columnModel = new QStandardItemModel(this);
   columnView = new QTableView(colBox);
+  columnView->setFont(tableFont);
   columnView->setModel(columnModel);
   connect(columnModel, &QStandardItemModel::itemChanged, this,
           &SDDSEditor::markDirty);
@@ -192,8 +203,10 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   arrayBox->setCheckable(true);
   arrayBox->setChecked(true);
   QVBoxLayout *arrayLayout = new QVBoxLayout(arrayBox);
+  arrayLayout->setContentsMargins(0, 0, 0, 0);
   arrayModel = new QStandardItemModel(this);
   arrayView = new QTableView(arrayBox);
+  arrayView->setFont(tableFont);
   arrayView->setModel(arrayModel);
   connect(arrayModel, &QStandardItemModel::itemChanged, this,
           &SDDSEditor::markDirty);
