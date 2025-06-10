@@ -266,10 +266,12 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   QAction *openAct = fileMenu->addAction(tr("Open"));
   QAction *saveAct = fileMenu->addAction(tr("Save"));
   QAction *saveAsAct = fileMenu->addAction(tr("Save as..."));
+  QAction *restartAct = fileMenu->addAction(tr("Restart"));
   QAction *quitAct = fileMenu->addAction(tr("Quit"));
   connect(openAct, &QAction::triggered, this, &SDDSEditor::openFile);
   connect(saveAct, &QAction::triggered, this, &SDDSEditor::saveFile);
   connect(saveAsAct, &QAction::triggered, this, &SDDSEditor::saveFileAs);
+  connect(restartAct, &QAction::triggered, this, &SDDSEditor::restartApp);
   connect(quitAct, &QAction::triggered, this, &QWidget::close);
 
   QMenu *editMenu = menuBar()->addMenu(tr("Edit"));
@@ -314,6 +316,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
 
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
+  QAction *helpAct = infoMenu->addAction(tr("Help"));
   connect(aboutAct, &QAction::triggered, []() {
     QString text =
         QObject::tr("Programmed by Robert Soliday <soliday@anl.gov>\n"
@@ -322,6 +325,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
                     "Proceed with caution: may contain puns, dad jokes, and the occasional infinite loop.");
     QMessageBox::about(nullptr, QObject::tr("About"), text);
   });
+  connect(helpAct, &QAction::triggered, this, &SDDSEditor::showHelp);
 }
 
 SDDSEditor::~SDDSEditor() {
@@ -2162,6 +2166,37 @@ void SDDSEditor::deletePage() {
 
   loadPage(currentPage + 1);
   markDirty();
+}
+
+void SDDSEditor::restartApp() {
+  QString program = QCoreApplication::applicationFilePath();
+  QStringList args = QCoreApplication::arguments();
+  if (!args.isEmpty())
+    args.removeFirst();
+  QProcess::startDetached(program, args);
+  QCoreApplication::quit();
+}
+
+void SDDSEditor::showHelp() {
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Help"));
+  QVBoxLayout layout(&dlg);
+  QPlainTextEdit text(&dlg);
+  text.setReadOnly(true);
+  text.setPlainText(tr("Open a file using File->Open.\n"
+                       "Select a page and edit parameters, columns or arrays in the tables.\n"
+                       "Right click headers for more actions such as:\n"
+                       " - Plotting a column\n"
+                       " - Sorting column or array data\n"
+                       " - Searching for values in columns or arrays\n"
+                       " - Resizing arrays\n"
+                       "Use the Edit menu to insert or delete items, and File->Save to commit changes."));
+  text.setMinimumSize(400, 300);
+  layout.addWidget(&text);
+  QDialogButtonBox box(QDialogButtonBox::Ok, Qt::Horizontal, &dlg);
+  connect(&box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  layout.addWidget(&box);
+  dlg.exec();
 }
 
 #include "SDDSEditor_moc.h"

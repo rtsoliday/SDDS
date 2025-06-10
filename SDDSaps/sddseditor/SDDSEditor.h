@@ -73,6 +73,8 @@ private slots:
   void arrayHeaderMenuRequested(const QPoint &pos);
   void arrayCellMenuRequested(const QPoint &pos);
   void plotColumn(int column);
+  void restartApp();
+  void showHelp();
 
 private:
   void loadPage(int page);
