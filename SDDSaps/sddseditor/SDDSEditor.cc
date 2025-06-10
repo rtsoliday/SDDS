@@ -304,6 +304,11 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   connect(colRowIns, &QAction::triggered, this, &SDDSEditor::insertColumnRows);
   connect(colRowDel, &QAction::triggered, this, &SDDSEditor::deleteColumnRows);
 
+  QMenu *pageMenu = editMenu->addMenu(tr("Page"));
+  QAction *pageClone = pageMenu->addAction(tr("Insert and clone current page"));
+  QAction *pageIns = pageMenu->addAction(tr("Insert"));
+  QAction *pageDel = pageMenu->addAction(tr("Delete"));
+
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
   connect(aboutAct, &QAction::triggered, []() {
