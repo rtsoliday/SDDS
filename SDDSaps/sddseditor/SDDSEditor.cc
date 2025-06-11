@@ -1306,6 +1306,11 @@ void SDDSEditor::clearDataset() {
   }
 }
 void SDDSEditor::commitModels() {
+  if (QWidget *fw = QApplication::focusWidget()) {
+    fw->clearFocus();
+    qApp->processEvents();
+  }
+
   if (!datasetLoaded || pages.isEmpty() || currentPage < 0 || currentPage >= pages.size())
     return;
 
