@@ -1,0 +1,40 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddseditor}
+\label{sddseditor}
+
+\begin{itemize}
+\item {\bf description:} \verb|sddseditor| is a Qt graphical application for viewing
+and modifying SDDS files.  Multiple pages of parameters, columns and arrays can be
+edited using familiar table widgets.  Standard shortcuts such as
+\verb|Ctrl+O| for opening files, \verb|Ctrl+S| for saving, \verb|Ctrl+C| and
+\verb|Ctrl+V| for copy and paste, and \verb|Ctrl+Z|/\verb|Ctrl+Shift+Z| for
+undo and redo are provided.  Additional actions are available from context menus
+on the column and array headers including plotting a column with
+\progref{sddsplot}, sorting, searching, and resizing arrays.  Files may also be
+exported to HDF format using \verb|Ctrl+Shift+H|.
+
+\item {\bf examples:}
+Open an existing SDDS file in the editor:
+\begin{flushleft}{\tt
+sddseditor lattice.twi
+}\end{flushleft}
+Start the editor without loading a file:
+\begin{flushleft}{\tt
+sddseditor
+}\end{flushleft}
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddseditor [inputFile]
+}\end{flushleft}
+
+\item {\bf see also:}
+    \begin{itemize}
+    \item \progref{sddsplot}
+    \item \progref{sddsprocess}
+    \item \progref{SDDS editing}
+    \end{itemize}
+\item {\bf author:} R. Soliday, ANL/APS.
+\end{itemize}
