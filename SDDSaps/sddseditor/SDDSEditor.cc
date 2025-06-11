@@ -1262,71 +1262,77 @@ bool SDDSEditor::writeCSV(const QString &path) {
     return t;
   };
 
-  const PageStore &pd = pages[currentPage];
-
   int32_t pcount = dataset.layout.n_parameters;
-  if (pcount > 0) {
-    out << "Parameters" << '\n';
-    for (int32_t i = 0; i < pcount; ++i) {
-      const char *name = dataset.layout.parameter_definition[i].name;
-      QString value = (i < pd.parameters.size()) ? pd.parameters[i] : QString();
-      out << escape(QString::fromLocal8Bit(name)) << ',' << escape(value) << '\n';
-    }
-    out << '\n';
-  }
-
   int32_t ccount = dataset.layout.n_columns;
-  if (ccount > 0) {
-    out << "Columns" << '\n';
-    for (int32_t i = 0; i < ccount; ++i) {
-      const char *name = dataset.layout.column_definition[i].name;
-      out << escape(QString::fromLocal8Bit(name));
-      if (i != ccount - 1)
-        out << ',';
-    }
-    out << '\n';
+  int32_t acount = dataset.layout.n_arrays;
 
-    int64_t rows = (pd.columns.size() > 0) ? pd.columns[0].size() : 0;
-    for (int64_t r = 0; r < rows; ++r) {
-      for (int32_t c = 0; c < ccount; ++c) {
-        QString cell = (r < pd.columns[c].size()) ? pd.columns[c][r] : QString();
-        out << escape(cell);
-        if (c != ccount - 1)
-          out << ',';
+  for (int pg = 0; pg < pages.size(); ++pg) {
+    const PageStore &pd = pages[pg];
+
+    if (pg > 0)
+      out << '\n';
+
+    if (pcount > 0) {
+      out << "Parameters" << '\n';
+      for (int32_t i = 0; i < pcount; ++i) {
+        const char *name = dataset.layout.parameter_definition[i].name;
+        QString value = (i < pd.parameters.size()) ? pd.parameters[i] : QString();
+        out << escape(QString::fromLocal8Bit(name)) << ',' << escape(value) << '\n';
       }
       out << '\n';
     }
-    out << '\n';
-  }
 
-  int32_t acount = dataset.layout.n_arrays;
-  if (acount > 0) {
-    out << "Arrays" << '\n';
-    for (int32_t a = 0; a < acount; ++a) {
-      const char *name = dataset.layout.array_definition[a].name;
-      out << escape(QString::fromLocal8Bit(name));
-      if (a != acount - 1)
-        out << ',';
+    if (ccount > 0) {
+      out << "Columns" << '\n';
+      for (int32_t i = 0; i < ccount; ++i) {
+        const char *name = dataset.layout.column_definition[i].name;
+        out << escape(QString::fromLocal8Bit(name));
+        if (i != ccount - 1)
+          out << ',';
+      }
+      out << '\n';
+
+      int64_t rows = (pd.columns.size() > 0) ? pd.columns[0].size() : 0;
+      for (int64_t r = 0; r < rows; ++r) {
+        for (int32_t c = 0; c < ccount; ++c) {
+          QString cell = (r < pd.columns[c].size()) ? pd.columns[c][r] : QString();
+          out << escape(cell);
+          if (c != ccount - 1)
+            out << ',';
+        }
+        out << '\n';
+      }
+      out << '\n';
     }
-    out << '\n';
 
-    int maxLen = 0;
-    for (int a = 0; a < acount && a < pd.arrays.size(); ++a)
-      if (pd.arrays[a].values.size() > maxLen)
-        maxLen = pd.arrays[a].values.size();
-
-    for (int r = 0; r < maxLen; ++r) {
-      for (int a = 0; a < acount; ++a) {
-        QString cell = (a < pd.arrays.size() && r < pd.arrays[a].values.size())
-                           ? pd.arrays[a].values[r]
-                           : QString();
-        out << escape(cell);
+    if (acount > 0) {
+      out << "Arrays" << '\n';
+      for (int32_t a = 0; a < acount; ++a) {
+        const char *name = dataset.layout.array_definition[a].name;
+        out << escape(QString::fromLocal8Bit(name));
         if (a != acount - 1)
           out << ',';
       }
       out << '\n';
+
+      int maxLen = 0;
+      for (int a = 0; a < acount && a < pd.arrays.size(); ++a)
+        if (pd.arrays[a].values.size() > maxLen)
+          maxLen = pd.arrays[a].values.size();
+
+      for (int r = 0; r < maxLen; ++r) {
+        for (int a = 0; a < acount; ++a) {
+          QString cell = (a < pd.arrays.size() && r < pd.arrays[a].values.size())
+                             ? pd.arrays[a].values[r]
+                             : QString();
+          out << escape(cell);
+          if (a != acount - 1)
+            out << ',';
+        }
+        out << '\n';
+      }
+      out << '\n';
     }
-    out << '\n';
   }
 
   file.close();
