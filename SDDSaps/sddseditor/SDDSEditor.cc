@@ -1778,7 +1778,7 @@ void SDDSEditor::searchColumn(int column) {
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Search Column"));
   QVBoxLayout layout(&dlg);
-  QFormLayout form(&dlg);
+  QFormLayout form;
   QLineEdit patternEdit(&dlg);
   patternEdit.setText(lastSearchPattern);
   QLineEdit replaceEdit(&dlg);
@@ -1972,7 +1972,7 @@ void SDDSEditor::searchArray(int column) {
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Search Array"));
   QVBoxLayout layout(&dlg);
-  QFormLayout form(&dlg);
+  QFormLayout form;
   QLineEdit patternEdit(&dlg);
   patternEdit.setText(lastSearchPattern);
   QLineEdit replaceEdit(&dlg);
