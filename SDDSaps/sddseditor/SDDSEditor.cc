@@ -24,6 +24,7 @@
 #include <QMenu>
 #include <QProcess>
 #include <QApplication>
+#include <QCloseEvent>
 #include <hdf5.h>
 #include <QShortcut>
 #include <QClipboard>
@@ -411,6 +412,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
     QMessageBox::about(nullptr, QObject::tr("About"), text);
   });
   connect(helpAct, &QAction::triggered, this, &SDDSEditor::showHelp);
+  updateWindowTitle();
 }
 
 SDDSEditor::~SDDSEditor() {
@@ -423,6 +425,38 @@ void SDDSEditor::message(const QString &text) {
 
 void SDDSEditor::markDirty() {
   dirty = true;
+  updateWindowTitle();
+}
+
+bool SDDSEditor::maybeSave() {
+  if (!dirty)
+    return true;
+  QMessageBox::StandardButton ret = QMessageBox::warning(
+      this, tr("SDDS"),
+      tr("The document has been modified.\nDo you want to save your changes?"),
+      QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+      QMessageBox::Save);
+  if (ret == QMessageBox::Save) {
+    saveFile();
+    return !dirty;
+  }
+  return ret != QMessageBox::Cancel;
+}
+
+void SDDSEditor::updateWindowTitle() {
+  QString title = tr("SDDS Editor");
+  if (!currentFilename.isEmpty())
+    title = QFileInfo(currentFilename).fileName() + " - " + title;
+  if (dirty)
+    title += " *";
+  setWindowTitle(title);
+}
+
+void SDDSEditor::closeEvent(QCloseEvent *event) {
+  if (maybeSave())
+    event->accept();
+  else
+    event->ignore();
 }
 
 QTableView *SDDSEditor::focusedTable() const {
@@ -603,6 +637,8 @@ void SDDSEditor::paste() {
 }
 
 void SDDSEditor::openFile() {
+  if (!maybeSave())
+    return;
   QString path = QFileDialog::getOpenFileName(this, tr("Open SDDS"), QString(),
                                              tr("SDDS Files (*.sdds);;All Files (*)"));
   if (path.isEmpty())
@@ -691,6 +727,7 @@ bool SDDSEditor::loadFile(const QString &path) {
   pageCombo->blockSignals(false);
   currentPage = 0;
   loadPage(1);
+  updateWindowTitle();
   return true;
 }
 
@@ -919,6 +956,7 @@ bool SDDSEditor::writeFile(const QString &path) {
 
   SDDS_Terminate(&out);
   dirty = false;
+  updateWindowTitle();
   if (updateSymlink) {
     QFile::remove(path);
     if (!QFile::link(finalPath, path))
@@ -1190,8 +1228,10 @@ void SDDSEditor::saveFileAs() {
                                              tr("SDDS Files (*.sdds);;All Files (*)"));
   if (path.isEmpty())
     return;
-  if (writeFile(path))
+  if (writeFile(path)) {
     currentFilename = path;
+    updateWindowTitle();
+  }
 }
 
 void SDDSEditor::saveFileAsHDF() {
@@ -2798,6 +2838,8 @@ void SDDSEditor::deletePage() {
 }
 
 void SDDSEditor::restartApp() {
+  if (!maybeSave())
+    return;
   QString program = QCoreApplication::applicationFilePath();
   QStringList args = QCoreApplication::arguments();
   if (!args.isEmpty())

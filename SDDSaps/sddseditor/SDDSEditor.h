@@ -21,6 +21,7 @@
 #include <QString>
 #include <QPoint>
 #include <QUndoStack>
+#include <QCloseEvent>
 
 class QGroupBox;
 class QSplitter;
@@ -99,6 +100,9 @@ private:
   void searchArray(int column);
   void message(const QString &text);
   void markDirty();
+  bool maybeSave();
+  void updateWindowTitle();
+  void closeEvent(QCloseEvent *event) override;
   QTableView *focusedTable() const;
 
   SDDS_DATASET dataset;
