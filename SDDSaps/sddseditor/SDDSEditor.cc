@@ -726,7 +726,7 @@ bool SDDSEditor::loadFile(const QString &path) {
     SDDS_FreeStringArray(anames, acount);
     pages.append(pd);
   }
-
+ 
   // Copy layout information for later editing and close the file
   memset(&dataset, 0, sizeof(dataset));
   if (!SDDS_InitializeCopy(&dataset, &in, NULL, (char *)"m")) {
@@ -1425,20 +1425,31 @@ void SDDSEditor::populateModels() {
   int32_t ccount = dataset.layout.n_columns;
   colBox->setChecked(ccount > 0);
   int64_t rows = (ccount > 0 && pd.columns.size() > 0) ? pd.columns[0].size() : 0;
-  columnModel->clear();
+
   columnModel->setColumnCount(ccount);
   columnModel->setRowCount(rows);
+
+  columnModel->blockSignals(true);
+
   for (int32_t i = 0; i < ccount; ++i) {
     COLUMN_DEFINITION *def = &dataset.layout.column_definition[i];
-    columnModel->setHeaderData(i, Qt::Horizontal,
-                               QString(def->name));
+    columnModel->setHeaderData(i, Qt::Horizontal, QString(def->name));
     for (int64_t r = 0; r < rows; ++r) {
-      QString val = (i < pd.columns.size() && r < pd.columns[i].size()) ? pd.columns[i][r] : QString();
-      columnModel->setItem(r, i, new QStandardItem(val));
+      QString val =
+          (i < pd.columns.size() && r < pd.columns[i].size()) ? pd.columns[i][r] : QString();
+      QStandardItem *item = columnModel->item(r, i);
+      if (!item) {
+        item = new QStandardItem;
+        columnModel->setItem(r, i, item);
+      }
+      item->setText(val);
     }
   }
   for (int64_t r = 0; r < rows; ++r)
     columnModel->setVerticalHeaderItem(r, new QStandardItem(QString::number(r + 1)));
+
+  columnModel->blockSignals(false);
+
 
   // Resize columns to fit their contents first so initial widths are reasonable
   // then allow them to stretch to fill the remaining space and be adjusted by
@@ -1469,11 +1480,13 @@ void SDDSEditor::populateModels() {
   for (int r = 0; r < maxLen; ++r)
     arrayModel->setVerticalHeaderItem(r, new QStandardItem(QString::number(r + 1)));
 
+
   // Similar treatment for arrays table.
   arrayView->resizeColumnsToContents();
   arrayView->horizontalHeader()->setStretchLastSection(true);
   arrayView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::Interactive);
+
 
   updatingModels = false;
 }
