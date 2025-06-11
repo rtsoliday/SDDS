@@ -1922,7 +1922,7 @@ void SDDSEditor::searchColumn(int column) {
       if (it)
         val = it->text();
       int pos = 0;
-      while ((pos = val.indexOf(pat, pos, Qt::CaseInsensitive)) >= 0) {
+      while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
         matches.append({r, pos});
         pos += pat.length();
       }
@@ -1970,7 +1970,7 @@ void SDDSEditor::searchColumn(int column) {
       QString val = it->text();
       int pos = 0;
       bool changed = false;
-      while ((pos = val.indexOf(pat, pos, Qt::CaseInsensitive)) >= 0) {
+      while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
         val.replace(pos, pat.length(), repl);
         pos += repl.length();
         ++replaced;
@@ -2116,7 +2116,7 @@ void SDDSEditor::searchArray(int column) {
       if (it)
         val = it->text();
       int pos = 0;
-      while ((pos = val.indexOf(pat, pos, Qt::CaseInsensitive)) >= 0) {
+      while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
         matches.append({r, pos});
         pos += pat.length();
       }
@@ -2164,7 +2164,7 @@ void SDDSEditor::searchArray(int column) {
       QString val = it->text();
       int pos = 0;
       bool changed = false;
-      while ((pos = val.indexOf(pat, pos, Qt::CaseInsensitive)) >= 0) {
+      while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
         val.replace(pos, pat.length(), repl);
         pos += repl.length();
         ++replaced;
