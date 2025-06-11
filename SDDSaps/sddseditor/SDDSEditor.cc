@@ -329,11 +329,19 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   // menu bar
   QMenu *fileMenu = menuBar()->addMenu(tr("File"));
   QAction *openAct = fileMenu->addAction(tr("Open"));
+  openAct->setShortcut(QKeySequence::Open);
+  fileMenu->addSeparator();
   QAction *saveAct = fileMenu->addAction(tr("Save"));
+  saveAct->setShortcut(QKeySequence::Save);
   QAction *saveAsAct = fileMenu->addAction(tr("Save as..."));
+  saveAsAct->setShortcut(QKeySequence::SaveAs);
   QAction *saveHdfAct = fileMenu->addAction(tr("Save As HDF"));
+  saveHdfAct->setShortcut(QKeySequence(tr("Ctrl+Shift+H")));
+  fileMenu->addSeparator();
   QAction *restartAct = fileMenu->addAction(tr("Restart"));
+  restartAct->setShortcut(QKeySequence(tr("Ctrl+R")));
   QAction *quitAct = fileMenu->addAction(tr("Quit"));
+  quitAct->setShortcut(QKeySequence::Quit);
   connect(openAct, &QAction::triggered, this, &SDDSEditor::openFile);
   connect(saveAct, &QAction::triggered, this, &SDDSEditor::saveFile);
   connect(saveAsAct, &QAction::triggered, this, &SDDSEditor::saveFileAs);
@@ -373,6 +381,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
           &SDDSEditor::editArrayAttributes);
   connect(arrayIns, &QAction::triggered, this, &SDDSEditor::insertArray);
   connect(arrayDel, &QAction::triggered, this, &SDDSEditor::deleteArray);
+  editMenu->addSeparator();
 
   QMenu *columnRowsMenu = editMenu->addMenu(tr("Column Rows"));
   QAction *colRowIns = columnRowsMenu->addAction(tr("Insert"));
