@@ -4,6 +4,7 @@
  */
 
 #include "SDDSEditor.h"
+#include "mdb.h"
 
 #include <QMenuBar>
 #include <QFileDialog>
@@ -1858,6 +1859,11 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
       long double aval = av.toDouble();
       long double bval = bv.toDouble();
       return order == Qt::AscendingOrder ? aval < bval : aval > bval;
+    } else if (type == SDDS_STRING) {
+      QByteArray aa = av.toUtf8();
+      QByteArray bb = bv.toUtf8();
+      int r = strcmp_nh(aa.constData(), bb.constData());
+      return order == Qt::AscendingOrder ? r < 0 : r > 0;
     }
     return order == Qt::AscendingOrder ? av < bv : av > bv;
   };
