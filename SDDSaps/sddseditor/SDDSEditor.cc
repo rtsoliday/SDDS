@@ -23,6 +23,7 @@
 #include <QMenu>
 #include <QProcess>
 #include <QApplication>
+#include <hdf5.h>
 #include <QShortcut>
 #include <QClipboard>
 #include <QDialog>
@@ -70,6 +71,33 @@ static int dimProduct(const QVector<int> &dims) {
   for (int d : dims)
     prod *= d > 0 ? d : 1;
   return prod;
+}
+
+static hid_t hdfTypeForSdds(int32_t type) {
+  switch (type) {
+  case SDDS_SHORT:
+    return H5T_NATIVE_SHORT;
+  case SDDS_USHORT:
+    return H5T_NATIVE_USHORT;
+  case SDDS_LONG:
+    return H5T_NATIVE_INT;
+  case SDDS_ULONG:
+    return H5T_NATIVE_UINT;
+  case SDDS_LONG64:
+    return H5T_NATIVE_LLONG;
+  case SDDS_ULONG64:
+    return H5T_NATIVE_ULLONG;
+  case SDDS_FLOAT:
+    return H5T_NATIVE_FLOAT;
+  case SDDS_DOUBLE:
+    return H5T_NATIVE_DOUBLE;
+  case SDDS_LONGDOUBLE:
+    return H5T_NATIVE_LDOUBLE;
+  case SDDS_CHARACTER:
+    return H5T_NATIVE_CHAR;
+  default:
+    return H5T_C_S1;
+  }
 }
 
 class SDDSItemDelegate : public QStyledItemDelegate {
@@ -275,11 +303,13 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   QAction *openAct = fileMenu->addAction(tr("Open"));
   QAction *saveAct = fileMenu->addAction(tr("Save"));
   QAction *saveAsAct = fileMenu->addAction(tr("Save as..."));
+  QAction *saveHdfAct = fileMenu->addAction(tr("Save As HDF"));
   QAction *restartAct = fileMenu->addAction(tr("Restart"));
   QAction *quitAct = fileMenu->addAction(tr("Quit"));
   connect(openAct, &QAction::triggered, this, &SDDSEditor::openFile);
   connect(saveAct, &QAction::triggered, this, &SDDSEditor::saveFile);
   connect(saveAsAct, &QAction::triggered, this, &SDDSEditor::saveFileAs);
+  connect(saveHdfAct, &QAction::triggered, this, &SDDSEditor::saveFileAsHDF);
   connect(restartAct, &QAction::triggered, this, &SDDSEditor::restartApp);
   connect(quitAct, &QAction::triggered, this, &QWidget::close);
 
@@ -826,6 +856,257 @@ bool SDDSEditor::writeFile(const QString &path) {
   return true;
 }
 
+bool SDDSEditor::writeHDF(const QString &path) {
+  if (!datasetLoaded)
+    return false;
+  commitModels();
+
+  QByteArray fname = QFile::encodeName(path);
+  hid_t file = H5Fcreate(fname.constData(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+  if (file < 0) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to create HDF file"));
+    return false;
+  }
+
+  int pcount = dataset.layout.n_parameters;
+  int ccount = dataset.layout.n_columns;
+  int acount = dataset.layout.n_arrays;
+
+  for (int pg = 0; pg < pages.size(); ++pg) {
+    const PageStore &pd = pages[pg];
+    QByteArray gname = QString("page%1").arg(pg + 1).toLocal8Bit();
+    hid_t page = H5Gcreate(file, gname.constData(), 0);
+    if (page < 0) {
+      H5Fclose(file);
+      return false;
+    }
+
+    if (pcount > 0) {
+      hid_t grp = H5Gcreate(page, "parameters", 0);
+      for (int i = 0; i < pcount && i < pd.parameters.size(); ++i) {
+        const char *name = dataset.layout.parameter_definition[i].name;
+        int32_t type = dataset.layout.parameter_definition[i].type;
+        QString val = pd.parameters[i];
+        hid_t space = H5Screate(H5S_SCALAR);
+        if (type == SDDS_STRING) {
+          QByteArray ba = val.toLocal8Bit();
+          hid_t dtype = H5Tcopy(H5T_C_S1);
+          H5Tset_size(dtype, ba.size() + 1);
+          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          const char *ptr = ba.constData();
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, &ptr);
+          H5Dclose(ds);
+          H5Tclose(dtype);
+        } else if (type == SDDS_CHARACTER) {
+          QByteArray ba = val.toLatin1();
+          char ch = ba.isEmpty() ? '\0' : ba.at(0);
+          hid_t ds = H5Dcreate(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
+          H5Dwrite(ds, H5T_NATIVE_CHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, &ch);
+          H5Dclose(ds);
+        } else {
+          hid_t dtype = hdfTypeForSdds(type);
+          long double ldbuf;
+          double dbuf;
+          float fbuf;
+          int64_t i64buf;
+          uint64_t u64buf;
+          int32_t i32buf;
+          uint32_t u32buf;
+          short s16buf;
+          unsigned short u16buf;
+          void *buf = nullptr;
+          switch (type) {
+          case SDDS_LONGDOUBLE:
+            ldbuf = strtold(val.toLocal8Bit().constData(), nullptr);
+            buf = &ldbuf;
+            break;
+          case SDDS_DOUBLE:
+            dbuf = val.toDouble();
+            buf = &dbuf;
+            break;
+          case SDDS_FLOAT:
+            fbuf = val.toFloat();
+            buf = &fbuf;
+            break;
+          case SDDS_LONG64:
+            i64buf = val.toLongLong();
+            buf = &i64buf;
+            break;
+          case SDDS_ULONG64:
+            u64buf = val.toULongLong();
+            buf = &u64buf;
+            break;
+          case SDDS_LONG:
+            i32buf = val.toInt();
+            buf = &i32buf;
+            break;
+          case SDDS_ULONG:
+            u32buf = val.toUInt();
+            buf = &u32buf;
+            break;
+          case SDDS_SHORT:
+            s16buf = (short)val.toInt();
+            buf = &s16buf;
+            break;
+          case SDDS_USHORT:
+            u16buf = (unsigned short)val.toUInt();
+            buf = &u16buf;
+            break;
+          default:
+            dbuf = val.toDouble();
+            buf = &dbuf;
+            break;
+          }
+          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
+          H5Dclose(ds);
+        }
+        H5Sclose(space);
+      }
+      H5Gclose(grp);
+    }
+
+    if (ccount > 0) {
+      hid_t grp = H5Gcreate(page, "columns", 0);
+      int64_t rows = (ccount > 0 && pd.columns.size() > 0) ? pd.columns[0].size() : 0;
+      hsize_t dims[1] = { (hsize_t)rows };
+      for (int c = 0; c < ccount && c < pd.columns.size(); ++c) {
+        const char *name = dataset.layout.column_definition[c].name;
+        int32_t type = dataset.layout.column_definition[c].type;
+        hid_t space = H5Screate_simple(1, dims, NULL);
+        if (type == SDDS_STRING) {
+          QVector<QByteArray> store(rows);
+          QVector<char *> ptrs(rows);
+          for (int64_t r = 0; r < rows; ++r) {
+            QString txt = r < pd.columns[c].size() ? pd.columns[c][r] : QString();
+            store[r] = txt.toLocal8Bit();
+            ptrs[r] = store[r].data();
+          }
+          hid_t dtype = H5Tcopy(H5T_C_S1);
+          H5Tset_size(dtype, H5T_VARIABLE);
+          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, ptrs.data());
+          H5Dclose(ds);
+          H5Tclose(dtype);
+        } else if (type == SDDS_CHARACTER) {
+          QVector<char> arr(rows);
+          for (int64_t r = 0; r < rows; ++r) {
+            QByteArray ba = (r < pd.columns[c].size()) ? pd.columns[c][r].toLatin1() : QByteArray();
+            arr[r] = ba.isEmpty() ? '\0' : ba.at(0);
+          }
+          hid_t ds = H5Dcreate(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
+          H5Dwrite(ds, H5T_NATIVE_CHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        } else if (type == SDDS_LONGDOUBLE) {
+          QVector<long double> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? strtold(pd.columns[c][r].toLocal8Bit().constData(), nullptr) : 0.0L;
+          hid_t ds = H5Dcreate(grp, name, H5T_NATIVE_LDOUBLE, space, H5P_DEFAULT);
+          H5Dwrite(ds, H5T_NATIVE_LDOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        } else {
+          QVector<double> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toDouble() : 0.0;
+          hid_t dtype = hdfTypeForSdds(type);
+          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        }
+        H5Sclose(space);
+      }
+      H5Gclose(grp);
+    }
+
+    if (acount > 0) {
+      hid_t grp = H5Gcreate(page, "arrays", 0);
+      for (int a = 0; a < acount && a < pd.arrays.size(); ++a) {
+        const char *name = dataset.layout.array_definition[a].name;
+        int32_t type = dataset.layout.array_definition[a].type;
+        const ArrayStore &as = pd.arrays[a];
+        int dimsCount = as.dims.size();
+        QVector<hsize_t> dims(dimsCount);
+        for (int i = 0; i < dimsCount; ++i)
+          dims[i] = as.dims[i];
+        hid_t space = H5Screate_simple(dimsCount, dims.data(), NULL);
+        int elements = as.values.size();
+        if (type == SDDS_STRING) {
+          QVector<QByteArray> store(elements);
+          QVector<char *> ptrs(elements);
+          for (int i = 0; i < elements; ++i) {
+            store[i] = as.values[i].toLocal8Bit();
+            ptrs[i] = store[i].data();
+          }
+          hid_t dtype = H5Tcopy(H5T_C_S1);
+          H5Tset_size(dtype, H5T_VARIABLE);
+          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, ptrs.data());
+          H5Dclose(ds);
+          H5Tclose(dtype);
+        } else if (type == SDDS_CHARACTER) {
+          QVector<char> arr(elements);
+          for (int i = 0; i < elements; ++i) {
+            QByteArray ba = as.values[i].toLatin1();
+            arr[i] = ba.isEmpty() ? '\0' : ba.at(0);
+          }
+          hid_t ds = H5Dcreate(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
+          H5Dwrite(ds, H5T_NATIVE_CHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        } else {
+          size_t size = SDDS_type_size[type - 1];
+          QVector<char> buffer(size * elements);
+          for (int i = 0; i < elements; ++i) {
+            QString cell = as.values[i];
+            switch (type) {
+            case SDDS_LONGDOUBLE:
+              ((long double *)buffer.data())[i] = strtold(cell.toLocal8Bit().constData(), nullptr);
+              break;
+            case SDDS_DOUBLE:
+              ((double *)buffer.data())[i] = cell.toDouble();
+              break;
+            case SDDS_FLOAT:
+              ((float *)buffer.data())[i] = cell.toFloat();
+              break;
+            case SDDS_LONG64:
+              ((int64_t *)buffer.data())[i] = cell.toLongLong();
+              break;
+            case SDDS_ULONG64:
+              ((uint64_t *)buffer.data())[i] = cell.toULongLong();
+              break;
+            case SDDS_LONG:
+              ((int32_t *)buffer.data())[i] = cell.toInt();
+              break;
+            case SDDS_ULONG:
+              ((uint32_t *)buffer.data())[i] = cell.toUInt();
+              break;
+            case SDDS_SHORT:
+              ((short *)buffer.data())[i] = (short)cell.toInt();
+              break;
+            case SDDS_USHORT:
+              ((unsigned short *)buffer.data())[i] = (unsigned short)cell.toUInt();
+              break;
+            default:
+              ((double *)buffer.data())[i] = cell.toDouble();
+              break;
+            }
+          }
+          hid_t dtype = hdfTypeForSdds(type);
+          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer.data());
+          H5Dclose(ds);
+        }
+        H5Sclose(space);
+      }
+      H5Gclose(grp);
+    }
+
+    H5Gclose(page);
+  }
+
+  H5Fclose(file);
+  return true;
+}
+
 void SDDSEditor::saveFile() {
   if (currentFilename.isEmpty())
     return;
@@ -839,6 +1120,15 @@ void SDDSEditor::saveFileAs() {
     return;
   if (writeFile(path))
     currentFilename = path;
+}
+
+void SDDSEditor::saveFileAsHDF() {
+  QString path = QFileDialog::getSaveFileName(this, tr("Save HDF"), currentFilename,
+                                             tr("HDF Files (*.h5 *.hdf);;All Files (*)"));
+  if (path.isEmpty())
+    return;
+  if (writeHDF(path))
+    message(tr("Saved %1").arg(path));
 }
 
 void SDDSEditor::pageChanged(int value) {
