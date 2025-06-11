@@ -738,6 +738,11 @@ bool SDDSEditor::loadFile(const QString &path) {
   SDDS_Terminate(&in);
   datasetLoaded = true;
 
+  // Update radio buttons to reflect the file's storage mode
+  asciiSave = dataset.layout.data_mode.mode == SDDS_ASCII;
+  asciiBtn->setChecked(asciiSave);
+  binaryBtn->setChecked(!asciiSave);
+
   if (pages.isEmpty()) {
     QMessageBox::warning(this, tr("SDDS"), tr("File contains no pages"));
     return false;
