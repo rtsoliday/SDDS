@@ -1,6 +1,6 @@
 DD  = ../
 include ../../Makefile.rules
-	
+
 PROD = sddseditor
 sddseditor_SRC = main.cc SDDSEditor.cc
 
@@ -16,7 +16,7 @@ ifeq ($(OS), Linux)
   CCFLAGS += -I../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets) -DH5_USE_16_API -I/usr/include/hdf5/serial
   LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport)
   PROD_LIBS = -lSDDS1 -lrpnlib -lmdbmth -lmdblib
-  PROD_SYS_LIBS = $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm
+  PROD_SYS_LIBS = $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm -ldl
 endif
 
 ifeq ($(OS), Darwin)
