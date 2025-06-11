@@ -122,6 +122,7 @@ private:
   QString currentFilename;
   int lastRowAddCount;
   QString lastSearchPattern;
+  QString lastReplaceText;
 };
 
 #endif // SDDSEDITOR_H
