@@ -164,6 +164,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   paramView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
   paramView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   paramView->verticalHeader()->setDefaultSectionSize(18);
+  paramView->verticalHeader()->setSectionsMovable(true);
   paramView->horizontalHeader()->setStyleSheet(headerStyle);
   paramView->verticalHeader()->setStyleSheet(headerStyle);
   paramView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
@@ -171,6 +172,8 @@ SDDSEditor::SDDSEditor(QWidget *parent)
           &SDDSEditor::markDirty);
   connect(paramView->verticalHeader(), &QHeaderView::sectionDoubleClicked, this,
           &SDDSEditor::changeParameterType);
+  connect(paramView->verticalHeader(), &QHeaderView::sectionMoved, this,
+          &SDDSEditor::parameterMoved);
   connect(paramBox, &QGroupBox::toggled, paramView, &QWidget::setVisible);
   paramLayout->addWidget(paramView);
   dataSplitter->addWidget(paramBox);
@@ -196,11 +199,14 @@ SDDSEditor::SDDSEditor(QWidget *parent)
       QHeaderView::ResizeToContents);
   columnView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   columnView->verticalHeader()->setDefaultSectionSize(18);
+  columnView->horizontalHeader()->setSectionsMovable(true);
   columnView->horizontalHeader()->setStyleSheet(headerStyle);
   columnView->verticalHeader()->setStyleSheet(headerStyle);
   columnView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(columnView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeColumnType);
+  connect(columnView->horizontalHeader(), &QHeaderView::sectionMoved, this,
+          &SDDSEditor::columnMoved);
   columnView->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(columnView->horizontalHeader(), &QHeaderView::customContextMenuRequested,
           this, &SDDSEditor::columnHeaderMenuRequested);
@@ -232,11 +238,14 @@ SDDSEditor::SDDSEditor(QWidget *parent)
       QHeaderView::ResizeToContents);
   arrayView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   arrayView->verticalHeader()->setDefaultSectionSize(18);
+  arrayView->horizontalHeader()->setSectionsMovable(true);
   arrayView->horizontalHeader()->setStyleSheet(headerStyle);
   arrayView->verticalHeader()->setStyleSheet(headerStyle);
   arrayView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(arrayView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeArrayType);
+  connect(arrayView->horizontalHeader(), &QHeaderView::sectionMoved, this,
+          &SDDSEditor::arrayMoved);
   arrayView->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(arrayView->horizontalHeader(), &QHeaderView::customContextMenuRequested,
           this, &SDDSEditor::arrayHeaderMenuRequested);
@@ -349,6 +358,105 @@ QTableView *SDDSEditor::focusedTable() const {
   if (w && (w == arrayView || arrayView->isAncestorOf(w)))
     return arrayView;
   return nullptr;
+}
+
+void SDDSEditor::parameterMoved(int, int, int) {
+  if (!datasetLoaded)
+    return;
+  commitModels();
+  QHeaderView *vh = paramView->verticalHeader();
+  int count = dataset.layout.n_parameters;
+  QVector<int> order(count);
+  for (int i = 0; i < count; ++i)
+    order[i] = vh->logicalIndex(i);
+  QVector<int> oldToNew(count);
+  for (int i = 0; i < count; ++i)
+    oldToNew[order[i]] = i;
+  PARAMETER_DEFINITION *oldDefs = dataset.layout.parameter_definition;
+  PARAMETER_DEFINITION *newDefs =
+      (PARAMETER_DEFINITION *)malloc(sizeof(PARAMETER_DEFINITION) * count);
+  for (int i = 0; i < count; ++i)
+    newDefs[i] = oldDefs[order[i]];
+  free(oldDefs);
+  dataset.layout.parameter_definition = newDefs;
+  for (int i = 0; i < count; ++i)
+    dataset.layout.parameter_index[i]->index =
+        oldToNew[dataset.layout.parameter_index[i]->index];
+  for (PageStore &pd : pages) {
+    QVector<QString> newParams(count);
+    for (int i = 0; i < count; ++i)
+      if (order[i] < pd.parameters.size())
+        newParams[i] = pd.parameters[order[i]];
+    pd.parameters = newParams;
+  }
+  populateModels();
+  markDirty();
+}
+
+void SDDSEditor::columnMoved(int, int, int) {
+  if (!datasetLoaded)
+    return;
+  commitModels();
+  QHeaderView *hh = columnView->horizontalHeader();
+  int count = dataset.layout.n_columns;
+  QVector<int> order(count);
+  for (int i = 0; i < count; ++i)
+    order[i] = hh->logicalIndex(i);
+  QVector<int> oldToNew(count);
+  for (int i = 0; i < count; ++i)
+    oldToNew[order[i]] = i;
+  COLUMN_DEFINITION *oldDefs = dataset.layout.column_definition;
+  COLUMN_DEFINITION *newDefs =
+      (COLUMN_DEFINITION *)malloc(sizeof(COLUMN_DEFINITION) * count);
+  for (int i = 0; i < count; ++i)
+    newDefs[i] = oldDefs[order[i]];
+  free(oldDefs);
+  dataset.layout.column_definition = newDefs;
+  for (int i = 0; i < count; ++i)
+    dataset.layout.column_index[i]->index =
+        oldToNew[dataset.layout.column_index[i]->index];
+  for (PageStore &pd : pages) {
+    QVector<QVector<QString>> newCols(count);
+    for (int i = 0; i < count; ++i)
+      if (order[i] < pd.columns.size())
+        newCols[i] = pd.columns[order[i]];
+    pd.columns = newCols;
+  }
+  populateModels();
+  markDirty();
+}
+
+void SDDSEditor::arrayMoved(int, int, int) {
+  if (!datasetLoaded)
+    return;
+  commitModels();
+  QHeaderView *hh = arrayView->horizontalHeader();
+  int count = dataset.layout.n_arrays;
+  QVector<int> order(count);
+  for (int i = 0; i < count; ++i)
+    order[i] = hh->logicalIndex(i);
+  QVector<int> oldToNew(count);
+  for (int i = 0; i < count; ++i)
+    oldToNew[order[i]] = i;
+  ARRAY_DEFINITION *oldDefs = dataset.layout.array_definition;
+  ARRAY_DEFINITION *newDefs =
+      (ARRAY_DEFINITION *)malloc(sizeof(ARRAY_DEFINITION) * count);
+  for (int i = 0; i < count; ++i)
+    newDefs[i] = oldDefs[order[i]];
+  free(oldDefs);
+  dataset.layout.array_definition = newDefs;
+  for (int i = 0; i < count; ++i)
+    dataset.layout.array_index[i]->index =
+        oldToNew[dataset.layout.array_index[i]->index];
+  for (PageStore &pd : pages) {
+    QVector<ArrayStore> newArr(count);
+    for (int i = 0; i < count; ++i)
+      if (order[i] < pd.arrays.size())
+        newArr[i] = pd.arrays[order[i]];
+    pd.arrays = newArr;
+  }
+  populateModels();
+  markDirty();
 }
 
 void SDDSEditor::copy() {

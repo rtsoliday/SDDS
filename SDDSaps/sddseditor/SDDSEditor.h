@@ -75,6 +75,9 @@ private slots:
   void plotColumn(int column);
   void restartApp();
   void showHelp();
+  void parameterMoved(int logical, int oldVisual, int newVisual);
+  void columnMoved(int logical, int oldVisual, int newVisual);
+  void arrayMoved(int logical, int oldVisual, int newVisual);
 
 private:
   void loadPage(int page);
