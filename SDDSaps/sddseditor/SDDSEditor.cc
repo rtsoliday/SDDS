@@ -154,7 +154,7 @@ private:
 };
 
 SDDSEditor::SDDSEditor(QWidget *parent)
-  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()), lastRowAddCount(1), lastSearchPattern(QString()), lastReplaceText(QString()), undoStack(new QUndoStack(this)) {
+  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()), lastRowAddCount(1), lastSearchPattern(QString()), lastReplaceText(QString()), undoStack(new QUndoStack(this)), updatingModels(false) {
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
@@ -424,6 +424,8 @@ void SDDSEditor::message(const QString &text) {
 }
 
 void SDDSEditor::markDirty() {
+  if (updatingModels)
+    return;
   dirty = true;
   updateWindowTitle();
 }
@@ -1262,6 +1264,8 @@ void SDDSEditor::populateModels() {
 
   const PageStore &pd = pages[currentPage];
 
+  updatingModels = true;
+
   // parameters
   paramModel->removeRows(0, paramModel->rowCount());
   int32_t pcount = dataset.layout.n_parameters;
@@ -1331,6 +1335,8 @@ void SDDSEditor::populateModels() {
   arrayView->horizontalHeader()->setStretchLastSection(true);
   arrayView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::Interactive);
+
+  updatingModels = false;
 }
 
 void SDDSEditor::clearDataset() {

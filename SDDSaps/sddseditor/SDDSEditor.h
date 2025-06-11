@@ -134,6 +134,7 @@ private:
   QString lastSearchPattern;
   QString lastReplaceText;
   QUndoStack *undoStack;
+  bool updatingModels;
 };
 
 #endif // SDDSEDITOR_H
