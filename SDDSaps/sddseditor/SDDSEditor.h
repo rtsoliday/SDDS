@@ -57,6 +57,7 @@ private slots:
   void pageChanged(int value);
   void copy();
   void paste();
+  void deleteCells();
   void editParameterAttributes();
   void editColumnAttributes();
   void editArrayAttributes();
