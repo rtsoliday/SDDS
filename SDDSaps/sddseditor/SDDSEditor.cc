@@ -325,6 +325,8 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   connect(copySc, &QShortcut::activated, this, &SDDSEditor::copy);
   QShortcut *pasteSc = new QShortcut(QKeySequence::Paste, this);
   connect(pasteSc, &QShortcut::activated, this, &SDDSEditor::paste);
+  QShortcut *delSc = new QShortcut(QKeySequence::Delete, this);
+  connect(delSc, &QShortcut::activated, this, &SDDSEditor::deleteCells);
 
   setCentralWidget(central);
   resize(1200, 800);
@@ -636,6 +638,20 @@ void SDDSEditor::paste() {
   }
   if (changed)
     markDirty();
+}
+
+void SDDSEditor::deleteCells() {
+  QTableView *view = focusedTable();
+  if (!view)
+    return;
+  QModelIndexList indexes = view->selectionModel()->selectedIndexes();
+  if (indexes.isEmpty())
+    return;
+  for (const QModelIndex &idx : indexes) {
+    if (idx.isValid())
+      view->model()->setData(idx, QString());
+  }
+  markDirty();
 }
 
 void SDDSEditor::openFile() {
