@@ -34,6 +34,7 @@
 #include <QLineEdit>
 #include <QStyledItemDelegate>
 #include <QPersistentModelIndex>
+#include <QUndoStack>
 #include <functional>
 #include <cstdlib>
 #include <algorithm>
@@ -100,11 +101,27 @@ static hid_t hdfTypeForSdds(int32_t type) {
   }
 }
 
+class SetDataCommand : public QUndoCommand {
+public:
+  SetDataCommand(QStandardItemModel *model, const QModelIndex &index,
+                 const QString &oldVal, const QString &newVal)
+      : m(model), idx(index), oldValue(oldVal), newValue(newVal) {}
+
+  void undo() override { m->setData(idx, oldValue); }
+  void redo() override { m->setData(idx, newValue); }
+
+private:
+  QStandardItemModel *m;
+  QModelIndex idx;
+  QString oldValue;
+  QString newValue;
+};
+
 class SDDSItemDelegate : public QStyledItemDelegate {
 public:
   using TypeFunc = std::function<int(const QModelIndex &)>;
-  explicit SDDSItemDelegate(TypeFunc tf, QObject *parent = nullptr)
-      : QStyledItemDelegate(parent), typeFunc(std::move(tf)) {}
+  SDDSItemDelegate(TypeFunc tf, QUndoStack *stack, QObject *parent = nullptr)
+      : QStyledItemDelegate(parent), typeFunc(std::move(tf)), undoStack(stack) {}
 
   void setModelData(QWidget *editorWidget, QAbstractItemModel *model,
                     const QModelIndex &index) const override {
@@ -114,16 +131,27 @@ public:
       return;
     }
 
-    if (validateTextForType(line->text(), typeFunc(index)))
+    if (!validateTextForType(line->text(), typeFunc(index)))
+      return;
+    QString oldVal = index.data(Qt::EditRole).toString();
+    QString newVal = line->text();
+    if (oldVal == newVal) {
       QStyledItemDelegate::setModelData(editorWidget, model, index);
+      return;
+    }
+    if (undoStack)
+      undoStack->push(new SetDataCommand(static_cast<QStandardItemModel *>(model), index, oldVal, newVal));
+    else
+      model->setData(index, newVal);
   }
 
 private:
   TypeFunc typeFunc;
+  QUndoStack *undoStack;
 };
 
 SDDSEditor::SDDSEditor(QWidget *parent)
-  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()), lastRowAddCount(1), lastSearchPattern(QString()), lastReplaceText(QString()) {
+  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()), lastRowAddCount(1), lastSearchPattern(QString()), lastReplaceText(QString()), undoStack(new QUndoStack(this)) {
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
@@ -186,7 +214,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
       [this](const QModelIndex &idx) {
         return dataset.layout.parameter_definition[idx.row()].type;
       },
-      paramView));
+      undoStack, paramView));
   // Let the single value column expand to take up the available space.
   // This keeps the parameter table readable even when the window is wide.
   paramView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -222,7 +250,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
       [this](const QModelIndex &idx) {
         return dataset.layout.column_definition[idx.column()].type;
       },
-      columnView));
+      undoStack, columnView));
   columnView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::ResizeToContents);
   columnView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
@@ -261,7 +289,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
       [this](const QModelIndex &idx) {
         return dataset.layout.array_definition[idx.column()].type;
       },
-      arrayView));
+      undoStack, arrayView));
   arrayView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::ResizeToContents);
   arrayView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
@@ -314,6 +342,13 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   connect(quitAct, &QAction::triggered, this, &QWidget::close);
 
   QMenu *editMenu = menuBar()->addMenu(tr("Edit"));
+  QAction *undoAct = editMenu->addAction(tr("Undo"));
+  undoAct->setShortcut(QKeySequence::Undo);
+  QAction *redoAct = editMenu->addAction(tr("Redo"));
+  redoAct->setShortcut(QKeySequence::Redo);
+  connect(undoAct, &QAction::triggered, undoStack, &QUndoStack::undo);
+  connect(redoAct, &QAction::triggered, undoStack, &QUndoStack::redo);
+  editMenu->addSeparator();
   QMenu *paramMenu = editMenu->addMenu(tr("Parameter"));
   QAction *paramAttr = paramMenu->addAction(tr("Attributes"));
   QAction *paramIns = paramMenu->addAction(tr("Insert"));

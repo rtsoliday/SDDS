@@ -20,6 +20,7 @@
 #include <QVector>
 #include <QString>
 #include <QPoint>
+#include <QUndoStack>
 
 class QGroupBox;
 class QSplitter;
@@ -128,6 +129,7 @@ private:
   int lastRowAddCount;
   QString lastSearchPattern;
   QString lastReplaceText;
+  QUndoStack *undoStack;
 };
 
 #endif // SDDSEDITOR_H
