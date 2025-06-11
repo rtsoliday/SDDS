@@ -9,6 +9,7 @@
 #include <QMenuBar>
 #include <QFileDialog>
 #include <QFile>
+#include <QTextStream>
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QVBoxLayout>
@@ -341,8 +342,10 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   saveAct->setShortcut(QKeySequence::Save);
   QAction *saveAsAct = fileMenu->addAction(tr("Save as..."));
   saveAsAct->setShortcut(QKeySequence::SaveAs);
-  QAction *saveHdfAct = fileMenu->addAction(tr("Save As HDF"));
+  QAction *saveHdfAct = fileMenu->addAction(tr("Export HDF"));
   saveHdfAct->setShortcut(QKeySequence(tr("Ctrl+Shift+H")));
+  QAction *csvAct = fileMenu->addAction(tr("Export CSV"));
+  csvAct->setShortcut(QKeySequence(tr("Ctrl+Shift+C")));
   fileMenu->addSeparator();
   QAction *restartAct = fileMenu->addAction(tr("Restart"));
   restartAct->setShortcut(QKeySequence(tr("Ctrl+R")));
@@ -352,6 +355,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   connect(saveAct, &QAction::triggered, this, &SDDSEditor::saveFile);
   connect(saveAsAct, &QAction::triggered, this, &SDDSEditor::saveFileAs);
   connect(saveHdfAct, &QAction::triggered, this, &SDDSEditor::saveFileAsHDF);
+  connect(csvAct, &QAction::triggered, this, &SDDSEditor::exportCSV);
   connect(restartAct, &QAction::triggered, this, &SDDSEditor::restartApp);
   connect(quitAct, &QAction::triggered, this, &QWidget::close);
 
@@ -1236,6 +1240,99 @@ bool SDDSEditor::writeHDF(const QString &path) {
   return true;
 }
 
+bool SDDSEditor::writeCSV(const QString &path) {
+  if (!datasetLoaded)
+    return false;
+  commitModels();
+
+  QFile file(path);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to open output"));
+    return false;
+  }
+
+  QTextStream out(&file);
+
+  auto escape = [](const QString &txt) {
+    QString t = txt;
+    t.replace('"', "\"\"");
+    bool need = t.contains(',') || t.contains('"') || t.contains('\n');
+    if (need)
+      t = '"' + t + '"';
+    return t;
+  };
+
+  const PageStore &pd = pages[currentPage];
+
+  int32_t pcount = dataset.layout.n_parameters;
+  if (pcount > 0) {
+    out << "Parameters" << '\n';
+    for (int32_t i = 0; i < pcount; ++i) {
+      const char *name = dataset.layout.parameter_definition[i].name;
+      QString value = (i < pd.parameters.size()) ? pd.parameters[i] : QString();
+      out << escape(QString::fromLocal8Bit(name)) << ',' << escape(value) << '\n';
+    }
+    out << '\n';
+  }
+
+  int32_t ccount = dataset.layout.n_columns;
+  if (ccount > 0) {
+    out << "Columns" << '\n';
+    for (int32_t i = 0; i < ccount; ++i) {
+      const char *name = dataset.layout.column_definition[i].name;
+      out << escape(QString::fromLocal8Bit(name));
+      if (i != ccount - 1)
+        out << ',';
+    }
+    out << '\n';
+
+    int64_t rows = (pd.columns.size() > 0) ? pd.columns[0].size() : 0;
+    for (int64_t r = 0; r < rows; ++r) {
+      for (int32_t c = 0; c < ccount; ++c) {
+        QString cell = (r < pd.columns[c].size()) ? pd.columns[c][r] : QString();
+        out << escape(cell);
+        if (c != ccount - 1)
+          out << ',';
+      }
+      out << '\n';
+    }
+    out << '\n';
+  }
+
+  int32_t acount = dataset.layout.n_arrays;
+  if (acount > 0) {
+    out << "Arrays" << '\n';
+    for (int32_t a = 0; a < acount; ++a) {
+      const char *name = dataset.layout.array_definition[a].name;
+      out << escape(QString::fromLocal8Bit(name));
+      if (a != acount - 1)
+        out << ',';
+    }
+    out << '\n';
+
+    int maxLen = 0;
+    for (int a = 0; a < acount && a < pd.arrays.size(); ++a)
+      if (pd.arrays[a].values.size() > maxLen)
+        maxLen = pd.arrays[a].values.size();
+
+    for (int r = 0; r < maxLen; ++r) {
+      for (int a = 0; a < acount; ++a) {
+        QString cell = (a < pd.arrays.size() && r < pd.arrays[a].values.size())
+                           ? pd.arrays[a].values[r]
+                           : QString();
+        out << escape(cell);
+        if (a != acount - 1)
+          out << ',';
+      }
+      out << '\n';
+    }
+    out << '\n';
+  }
+
+  file.close();
+  return true;
+}
+
 void SDDSEditor::saveFile() {
   if (currentFilename.isEmpty())
     return;
@@ -1259,6 +1356,20 @@ void SDDSEditor::saveFileAsHDF() {
   if (path.isEmpty())
     return;
   if (writeHDF(path))
+    message(tr("Saved %1").arg(path));
+}
+
+void SDDSEditor::exportCSV() {
+  QString def = currentFilename;
+  if (!def.isEmpty()) {
+    QFileInfo fi(def);
+    def = fi.path() + '/' + fi.completeBaseName() + ".csv";
+  }
+  QString path = QFileDialog::getSaveFileName(this, tr("Export CSV"), def,
+                                             tr("CSV Files (*.csv);;All Files (*)"));
+  if (path.isEmpty())
+    return;
+  if (writeCSV(path))
     message(tr("Saved %1").arg(path));
 }
 

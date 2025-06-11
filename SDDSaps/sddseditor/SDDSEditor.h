@@ -54,6 +54,7 @@ private slots:
   void saveFile();
   void saveFileAs();
   void saveFileAsHDF();
+  void exportCSV();
   void pageChanged(int value);
   void copy();
   void paste();
@@ -90,6 +91,7 @@ private:
   void clearDataset();
   bool writeFile(const QString &path);
   bool writeHDF(const QString &path);
+  bool writeCSV(const QString &path);
   void changeParameterType(int row);
   void changeColumnType(int column);
   void changeArrayType(int column);
