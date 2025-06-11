@@ -8,6 +8,7 @@
 #include <QMenuBar>
 #include <QFileDialog>
 #include <QFile>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -35,6 +36,7 @@
 #include <QStyledItemDelegate>
 #include <QPersistentModelIndex>
 #include <QUndoStack>
+#include <QRegularExpression>
 #include <functional>
 #include <cstdlib>
 #include <algorithm>
@@ -697,10 +699,31 @@ bool SDDSEditor::writeFile(const QString &path) {
     return false;
   commitModels();
 
+  QString finalPath = path;
+  bool updateSymlink = false;
+  QFileInfo fi(path);
+  if (fi.isSymLink()) {
+    QString target = fi.symLinkTarget();
+    QRegularExpression re("(.*?)([.-])(\\d+)$");
+    QRegularExpressionMatch m = re.match(target);
+    if (m.hasMatch()) {
+      QString prefix = m.captured(1);
+      QString sep = m.captured(2);
+      QString digits = m.captured(3);
+      bool ok = false;
+      int num = digits.toInt(&ok);
+      if (ok) {
+        QString newDigits = QString::number(num + 1).rightJustified(digits.length(), '0');
+        finalPath = prefix + sep + newDigits;
+        updateSymlink = true;
+      }
+    }
+  }
+
   SDDS_DATASET out;
   memset(&out, 0, sizeof(out));
   if (!SDDS_InitializeCopy(&out, &dataset,
-                           const_cast<char *>(path.toLocal8Bit().constData()), (char *)"w")) {
+                           const_cast<char *>(finalPath.toLocal8Bit().constData()), (char *)"w")) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to open output"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return false;
@@ -896,7 +919,12 @@ bool SDDSEditor::writeFile(const QString &path) {
 
   SDDS_Terminate(&out);
   dirty = false;
-  message(tr("Saved %1").arg(path));
+  if (updateSymlink) {
+    QFile::remove(path);
+    if (!QFile::link(finalPath, path))
+      QMessageBox::warning(this, tr("SDDS"), tr("Failed to update symlink"));
+  }
+  message(tr("Saved %1").arg(finalPath));
   return true;
 }
 
