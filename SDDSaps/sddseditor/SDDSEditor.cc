@@ -1502,6 +1502,8 @@ void SDDSEditor::clearDataset() {
     SDDS_Terminate(&dataset);
     datasetLoaded = false;
     paramModel->clear();
+    paramModel->setColumnCount(1);
+    paramModel->setHorizontalHeaderLabels(QStringList() << tr("Value"));
     columnModel->clear();
     arrayModel->clear();
     pageCombo->clear();
