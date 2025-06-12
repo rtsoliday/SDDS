@@ -235,6 +235,12 @@ SDDSEditor::SDDSEditor(QWidget *parent)
           &SDDSEditor::changeParameterType);
   connect(paramView->verticalHeader(), &QHeaderView::sectionMoved, this,
           &SDDSEditor::parameterMoved);
+  paramView->verticalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(paramView->verticalHeader(), &QHeaderView::customContextMenuRequested,
+          this, &SDDSEditor::parameterHeaderMenuRequested);
+  paramView->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(paramView, &QTableView::customContextMenuRequested,
+          this, &SDDSEditor::parameterCellMenuRequested);
   connect(paramBox, &QGroupBox::toggled, paramView, &QWidget::setVisible);
   paramLayout->addWidget(paramView);
   dataSplitter->addWidget(paramBox);
@@ -1860,6 +1866,32 @@ void SDDSEditor::changeParameterType(int row) {
   markDirty();
 }
 
+void SDDSEditor::showParameterMenu(QTableView *view, int row,
+                                   const QPoint &globalPos) {
+  if (row < 0 || row >= dataset.layout.n_parameters)
+    return;
+  QMenu menu(view);
+  QAction *delAct = menu.addAction(tr("Delete"));
+  QAction *chosen = menu.exec(globalPos);
+  if (chosen == delAct) {
+    paramView->setCurrentIndex(paramModel->index(row, 0));
+    deleteParameter();
+  }
+}
+
+void SDDSEditor::parameterHeaderMenuRequested(const QPoint &pos) {
+  int row = paramView->verticalHeader()->logicalIndexAt(pos);
+  showParameterMenu(paramView, row,
+                    paramView->verticalHeader()->mapToGlobal(pos));
+}
+
+void SDDSEditor::parameterCellMenuRequested(const QPoint &pos) {
+  QModelIndex idx = paramView->indexAt(pos);
+  if (!idx.isValid())
+    return;
+  showParameterMenu(paramView, idx.row(), paramView->viewport()->mapToGlobal(pos));
+}
+
 void SDDSEditor::changeColumnType(int column) {
   if (!datasetLoaded)
     return;
@@ -1893,6 +1925,7 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
   QAction *ascAct = menu.addAction(tr("Sort ascending"));
   QAction *descAct = menu.addAction(tr("Sort descending"));
   QAction *searchAct = menu.addAction(tr("Search"));
+  QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
   if (chosen == plotAct)
     plotColumn(column);
@@ -1902,6 +1935,10 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
     sortColumn(column, Qt::DescendingOrder);
   else if (chosen == searchAct)
     searchColumn(column);
+  else if (chosen == delAct) {
+    columnView->setCurrentIndex(columnModel->index(0, column));
+    deleteColumn();
+  }
 }
 
 void SDDSEditor::columnHeaderMenuRequested(const QPoint &pos) {
@@ -1925,11 +1962,16 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
   QMenu menu(view);
   QAction *searchAct = menu.addAction(tr("Search"));
   QAction *resizeAct = menu.addAction(tr("Resize"));
+  QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
   if (chosen == searchAct)
     searchArray(column);
   else if (chosen == resizeAct)
     resizeArray(column);
+  else if (chosen == delAct) {
+    arrayView->setCurrentIndex(arrayModel->index(0, column));
+    deleteArray();
+  }
 }
 
 void SDDSEditor::arrayHeaderMenuRequested(const QPoint &pos) {

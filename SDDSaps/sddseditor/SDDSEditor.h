@@ -73,6 +73,8 @@ private slots:
   void clonePage();
   void insertPage();
   void deletePage();
+  void parameterHeaderMenuRequested(const QPoint &pos);
+  void parameterCellMenuRequested(const QPoint &pos);
   void columnHeaderMenuRequested(const QPoint &pos);
   void columnCellMenuRequested(const QPoint &pos);
   void arrayHeaderMenuRequested(const QPoint &pos);
@@ -95,6 +97,7 @@ private:
   void changeParameterType(int row);
   void changeColumnType(int column);
   void changeArrayType(int column);
+  void showParameterMenu(QTableView *view, int row, const QPoint &globalPos);
   void showColumnMenu(QTableView *view, int column, const QPoint &globalPos);
   void showArrayMenu(QTableView *view, int column, const QPoint &globalPos);
   void resizeArray(int column);
