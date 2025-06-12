@@ -671,7 +671,6 @@ void SDDSEditor::openFile() {
 
 bool SDDSEditor::loadFile(const QString &path) {
   clearDataset();
-  SDDS_SetDefaultIOBufferSize(0);
   SDDS_DATASET in;
   memset(&in, 0, sizeof(in));
   if (!SDDS_InitializeInput(&in,
