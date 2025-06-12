@@ -663,7 +663,7 @@ void SDDSEditor::openFile() {
   if (!maybeSave())
     return;
   QString path = QFileDialog::getOpenFileName(this, tr("Open SDDS"), QString(),
-                                             tr("SDDS Files (*.sdds);;All Files (*)"));
+                                             tr("SDDS Files (*.sdds *.sdds.xz *.sdds.gz);;All Files (*)"));
   if (path.isEmpty())
     return;
   loadFile(path);
