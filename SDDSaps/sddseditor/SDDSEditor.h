@@ -36,6 +36,10 @@ struct PageStore {
   QVector<ArrayStore> arrays;
 };
 
+#ifdef _WIN32
+#include <inttypes.h>
+#endif
+
 extern "C" {
 #include "SDDS.h"
 }

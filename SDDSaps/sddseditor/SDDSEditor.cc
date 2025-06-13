@@ -1015,14 +1015,14 @@ bool SDDSEditor::writeHDF(const QString &path) {
   for (int pg = 0; pg < pages.size(); ++pg) {
     const PageStore &pd = pages[pg];
     QByteArray gname = QString("page%1").arg(pg + 1).toLocal8Bit();
-    hid_t page = H5Gcreate(file, gname.constData(), 0);
+    hid_t page = H5Gcreate1(file, gname.constData(), 0);
     if (page < 0) {
       H5Fclose(file);
       return false;
     }
 
     if (pcount > 0) {
-      hid_t grp = H5Gcreate(page, "parameters", 0);
+      hid_t grp = H5Gcreate1(page, "parameters", 0);
       for (int i = 0; i < pcount && i < pd.parameters.size(); ++i) {
         const char *name = dataset.layout.parameter_definition[i].name;
         int32_t type = dataset.layout.parameter_definition[i].type;
@@ -1032,7 +1032,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
           QByteArray ba = val.toLocal8Bit();
           hid_t dtype = H5Tcopy(H5T_C_S1);
           H5Tset_size(dtype, ba.size() + 1);
-          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
           const char *ptr = ba.constData();
           H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, &ptr);
           H5Dclose(ds);
@@ -1040,7 +1040,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
         } else if (type == SDDS_CHARACTER) {
           QByteArray ba = val.toLatin1();
           char ch = ba.isEmpty() ? '\0' : ba.at(0);
-          hid_t ds = H5Dcreate(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
+          hid_t ds = H5Dcreate1(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
           H5Dwrite(ds, H5T_NATIVE_CHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, &ch);
           H5Dclose(ds);
         } else {
@@ -1097,7 +1097,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
             buf = &dbuf;
             break;
           }
-          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
           H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
           H5Dclose(ds);
         }
@@ -1107,7 +1107,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
     }
 
     if (ccount > 0) {
-      hid_t grp = H5Gcreate(page, "columns", 0);
+      hid_t grp = H5Gcreate1(page, "columns", 0);
       int64_t rows = (ccount > 0 && pd.columns.size() > 0) ? pd.columns[0].size() : 0;
       hsize_t dims[1] = { (hsize_t)rows };
       for (int c = 0; c < ccount && c < pd.columns.size(); ++c) {
@@ -1124,7 +1124,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
           }
           hid_t dtype = H5Tcopy(H5T_C_S1);
           H5Tset_size(dtype, H5T_VARIABLE);
-          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
           H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, ptrs.data());
           H5Dclose(ds);
           H5Tclose(dtype);
@@ -1134,14 +1134,14 @@ bool SDDSEditor::writeHDF(const QString &path) {
             QByteArray ba = (r < pd.columns[c].size()) ? pd.columns[c][r].toLatin1() : QByteArray();
             arr[r] = ba.isEmpty() ? '\0' : ba.at(0);
           }
-          hid_t ds = H5Dcreate(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
+          hid_t ds = H5Dcreate1(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
           H5Dwrite(ds, H5T_NATIVE_CHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
           H5Dclose(ds);
         } else if (type == SDDS_LONGDOUBLE) {
           QVector<long double> arr(rows);
           for (int64_t r = 0; r < rows; ++r)
             arr[r] = r < pd.columns[c].size() ? strtold(pd.columns[c][r].toLocal8Bit().constData(), nullptr) : 0.0L;
-          hid_t ds = H5Dcreate(grp, name, H5T_NATIVE_LDOUBLE, space, H5P_DEFAULT);
+          hid_t ds = H5Dcreate1(grp, name, H5T_NATIVE_LDOUBLE, space, H5P_DEFAULT);
           H5Dwrite(ds, H5T_NATIVE_LDOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
           H5Dclose(ds);
         } else {
@@ -1149,7 +1149,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
           for (int64_t r = 0; r < rows; ++r)
             arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toDouble() : 0.0;
           hid_t dtype = hdfTypeForSdds(type);
-          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
           H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
           H5Dclose(ds);
         }
@@ -1159,7 +1159,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
     }
 
     if (acount > 0) {
-      hid_t grp = H5Gcreate(page, "arrays", 0);
+      hid_t grp = H5Gcreate1(page, "arrays", 0);
       for (int a = 0; a < acount && a < pd.arrays.size(); ++a) {
         const char *name = dataset.layout.array_definition[a].name;
         int32_t type = dataset.layout.array_definition[a].type;
@@ -1179,7 +1179,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
           }
           hid_t dtype = H5Tcopy(H5T_C_S1);
           H5Tset_size(dtype, H5T_VARIABLE);
-          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
           H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, ptrs.data());
           H5Dclose(ds);
           H5Tclose(dtype);
@@ -1189,7 +1189,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
             QByteArray ba = as.values[i].toLatin1();
             arr[i] = ba.isEmpty() ? '\0' : ba.at(0);
           }
-          hid_t ds = H5Dcreate(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
+          hid_t ds = H5Dcreate1(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
           H5Dwrite(ds, H5T_NATIVE_CHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
           H5Dclose(ds);
         } else {
@@ -1231,7 +1231,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
             }
           }
           hid_t dtype = hdfTypeForSdds(type);
-          hid_t ds = H5Dcreate(grp, name, dtype, space, H5P_DEFAULT);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
           H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer.data());
           H5Dclose(ds);
         }
