@@ -38,6 +38,7 @@
 #include <QLineEdit>
 #include <QStyledItemDelegate>
 #include <QPersistentModelIndex>
+#include <QEvent>
 #include <QUndoStack>
 #include <QRegularExpression>
 #include <functional>
@@ -155,8 +156,12 @@ private:
   QUndoStack *undoStack;
 };
 
-SDDSEditor::SDDSEditor(QWidget *parent)
-  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true), currentPage(0), currentFilename(QString()), lastRowAddCount(1), lastSearchPattern(QString()), lastReplaceText(QString()), undoStack(new QUndoStack(this)), updatingModels(false) {
+SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
+  : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true),
+    currentPage(0), currentFilename(QString()), lastRowAddCount(1),
+    lastSearchPattern(QString()), lastReplaceText(QString()),
+    undoStack(new QUndoStack(this)), updatingModels(false),
+    darkPalette(darkPalette) {
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
@@ -193,9 +198,6 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   tableFont.setStyleName("Regular");
   tableFont.setPointSize(10);
 
-  const QString headerStyle =
-      "QHeaderView::section { background-color: #f0f0f0; }";
-
   // container for data panels
   dataSplitter = new QSplitter(Qt::Vertical, this);
   //dataSplitter->setChildrenCollapsible(false);
@@ -226,8 +228,6 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   paramView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   paramView->verticalHeader()->setDefaultSectionSize(18);
   paramView->verticalHeader()->setSectionsMovable(true);
-  paramView->horizontalHeader()->setStyleSheet(headerStyle);
-  paramView->verticalHeader()->setStyleSheet(headerStyle);
   paramView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(paramModel, &QStandardItemModel::itemChanged, this,
           &SDDSEditor::markDirty);
@@ -267,8 +267,6 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   columnView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   columnView->verticalHeader()->setDefaultSectionSize(18);
   columnView->horizontalHeader()->setSectionsMovable(true);
-  columnView->horizontalHeader()->setStyleSheet(headerStyle);
-  columnView->verticalHeader()->setStyleSheet(headerStyle);
   columnView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(columnView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeColumnType);
@@ -306,8 +304,6 @@ SDDSEditor::SDDSEditor(QWidget *parent)
   arrayView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   arrayView->verticalHeader()->setDefaultSectionSize(18);
   arrayView->horizontalHeader()->setSectionsMovable(true);
-  arrayView->horizontalHeader()->setStyleSheet(headerStyle);
-  arrayView->verticalHeader()->setStyleSheet(headerStyle);
   arrayView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(arrayView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
           this, &SDDSEditor::changeArrayType);
@@ -425,6 +421,7 @@ SDDSEditor::SDDSEditor(QWidget *parent)
     QMessageBox::about(nullptr, QObject::tr("About"), text);
   });
   connect(helpAct, &QAction::triggered, this, &SDDSEditor::showHelp);
+  applyTheme(darkPalette);
   updateWindowTitle();
 }
 
@@ -3041,6 +3038,42 @@ void SDDSEditor::deletePage() {
 
   loadPage(currentPage + 1);
   markDirty();
+}
+
+void SDDSEditor::applyTheme(bool dark) {
+  darkPalette = dark;
+  pageCombo->setStyleSheet(dark
+      ? "QComboBox { color: white; background-color: #303030; } "
+        "QComboBox QAbstractItemView { color: white; background-color: #303030; }"
+      : "");
+  const QString headerStyle = dark
+      ? "QHeaderView::section { background-color: #404040; color: white; }"
+      : "QHeaderView::section { background-color: #f0f0f0; }";
+  paramView->horizontalHeader()->setStyleSheet(headerStyle);
+  paramView->verticalHeader()->setStyleSheet(headerStyle);
+  columnView->horizontalHeader()->setStyleSheet(headerStyle);
+  columnView->verticalHeader()->setStyleSheet(headerStyle);
+  arrayView->horizontalHeader()->setStyleSheet(headerStyle);
+  arrayView->verticalHeader()->setStyleSheet(headerStyle);
+  dataSplitter->setStyleSheet(dark
+      ? "QSplitter::handle { background-color: #303030; }"
+      : "QSplitter::handle { background-color: lightgrey; }");
+}
+
+void SDDSEditor::changeEvent(QEvent *event) {
+  if (event->type() == QEvent::ApplicationPaletteChange ||
+      event->type() == QEvent::PaletteChange) {
+    QPalette pal = qApp->palette();
+    bool dark = pal.color(QPalette::Window).lightness() < 128;
+    QColor textColor = dark ? Qt::white : Qt::black;
+    pal.setColor(QPalette::Active, QPalette::Text, textColor);
+    pal.setColor(QPalette::Inactive, QPalette::Text, textColor);
+    pal.setColor(QPalette::Active, QPalette::WindowText, textColor);
+    pal.setColor(QPalette::Inactive, QPalette::WindowText, textColor);
+    qApp->setPalette(pal);
+    applyTheme(dark);
+  }
+  QMainWindow::changeEvent(event);
 }
 
 void SDDSEditor::restartApp() {

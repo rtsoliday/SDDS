@@ -15,7 +15,6 @@
 #include <QPlainTextEdit>
 #include <QComboBox>
 #include <QRadioButton>
-#include <QLineEdit>
 #include <QStandardItemModel>
 #include <QVector>
 #include <QString>
@@ -45,7 +44,7 @@ class SDDSEditor : public QMainWindow {
   Q_OBJECT
 
 public:
-  explicit SDDSEditor(QWidget *parent = nullptr);
+  explicit SDDSEditor(bool darkPalette = false, QWidget *parent = nullptr);
   ~SDDSEditor();
   bool loadFile(const QString &path);
 
@@ -86,7 +85,11 @@ private slots:
   void columnMoved(int logical, int oldVisual, int newVisual);
   void arrayMoved(int logical, int oldVisual, int newVisual);
 
+protected:
+  void changeEvent(QEvent *event) override;
+
 private:
+  void applyTheme(bool dark);
   void loadPage(int page);
   void populateModels();
   void commitModels();
@@ -120,7 +123,6 @@ private:
   QComboBox *pageCombo;
   QRadioButton *asciiBtn;
   QRadioButton *binaryBtn;
-  QLineEdit *searchEdit;
 
   QTableView *paramView;
   QTableView *columnView;
@@ -141,6 +143,7 @@ private:
   QString lastReplaceText;
   QUndoStack *undoStack;
   bool updatingModels;
+  bool darkPalette;
 };
 
 #endif // SDDSEDITOR_H
