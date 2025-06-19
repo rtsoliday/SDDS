@@ -13,7 +13,13 @@
  * or
  * 
  * @f[
-  * y(n) = a_0 + a_1 \sin(2\pi a_2 x(n) + a_3) + a_4 x(n)
+  * y(n) = a_0 + a_1 \sin(2\pi a_2 x(n) + a_3) + a_5 x(n)
+  * @f]
+  *
+ * or
+ * 
+ * @f[
+  * y(n) = a_0 + a_1 \sin(2\pi a_2 x(n) + a_3)*exp(x(n)*a_5) + a_6 x(n)
   * @f]
  *
  * Based on user-provided parameters and options, the program performs fitting and outputs
@@ -28,9 +34,10 @@
  *             [-tolerance=<value>]
  *             [-limits=evaluations=<number>,passes=<number>]
  *             [-verbosity=<integer>]
- *             [-guess=constant=<constant>,factor=<factor>,frequency=<freq>,phase=<phase>,slope=<slope>]
+ *             [-guess=constant=<constant>,factor=<factor>,frequency=<freq>,phase=<phase>,slope=<slope>,rate=<value>]
  *             [-lockFrequency]
  *             [-addSlope]
+ *             [-addExponential={grow|decay}]
  *             [-majorOrder=row|column]
  * ```
  *
@@ -49,13 +56,14 @@
  * | `-guess`                              | Provides initial guesses for fit parameters.    |
  * | `-lockFrequency`                      | Locks the frequency parameter during fitting.                                         |
  * | `-addSlope`                           | Includes a slope term in the fit.                                                    |
+ * | `-addExponential`                     | Includes decaying expontential factor in the fit.                                    |
  * | `-majorOrder`                         | Specifies the major order for data processing.                                       |
  *
  * @subsection Incompatibilities
  * - `-lockFrequency` cannot be used with `-guess=frequency=<freq>`.
  *
  * @subsection Requirements
- * - For `-guess`, at least one of the guess parameters (`constant`, `factor`, `frequency`, `phase`, `slope`) is required.
+ * - For `-guess`, at least one of the guess parameters (`constant`, `factor`, `frequency`, `phase`, `rate`, `slope`) is required.
  * 
  * @copyright
  *   - (c) 2002 The University of Chicago, as Operator of Argonne National Laboratory.
@@ -73,6 +81,13 @@
 #include "SDDS.h"
 #include "scan.h"
 
+#define EXPONENTIAL_DECAY 0
+#define EXPONENTIAL_GROW 1
+#define EXPONENTIAL_OPTIONS 2
+static char *expotentialOptions[EXPONENTIAL_OPTIONS] = {
+  "decay", "grow"
+};
+
 /* Enumeration for option types */
 enum option_type {
   SET_TOLERANCE,
@@ -86,6 +101,7 @@ enum option_type {
   SET_MAJOR_ORDER,
   SET_LOCK_FREQ,
   SET_ADD_SLOPE,
+  SET_ADD_EXPONENTIAL,
   N_OPTIONS
 };
 
@@ -101,6 +117,7 @@ char *option[N_OPTIONS] = {
   "majorOrder",
   "lockFrequency",
   "addSlope",
+  "addExponential",
 };
 
 static char *USAGE =
@@ -113,7 +130,7 @@ static char *USAGE =
   "       [-verbosity=<integer>]\n"
   "       [-guess=constant=<constant>,factor=<factor>,frequency=<freq>,phase=<phase>,slope=<slope>]\n"
   "       [-lockFrequency]\n"
-  "       [-addSlope]\n"
+  "       [-addSlope] [-addExponential={grow|decay}\n"
   "       [-majorOrder=row|column]\n\n"
   "Description:\n"
   "  Performs a sinusoidal fit of the form:\n"
@@ -132,6 +149,7 @@ static char *USAGE =
   "  -guess=constant=<c>,factor=<f>,frequency=<freq>,phase=<p>,slope=<s> : Provide initial guesses for fit parameters.\n"
   "  -lockFrequency             : Lock the frequency parameter during fitting.\n"
   "  -addSlope                  : Include a slope term in the fit.\n"
+  "  -addExponential            : Include exponential decay of the sinusoid.\n"
   "  -majorOrder=row|column     : Specify the major order for data processing.\n\n"
   "Author:\n"
   "  Michael Borland\n"
@@ -140,14 +158,16 @@ static char *USAGE =
 static double *xData, *yData;
 static int64_t nData;
 static double yMin, yMax, xMin, xMax;
-static double fit[5];
+static double fit[6];
+static short disable[6] = {0,0,0,0,1,1};
+static short addSlope, addExponential;
+static double *fitData, *residualData, rmsResidual;
 
 double fitFunction(double *a, long *invalid);
-double fitFunctionWithSlope(double *a, long *invalid);
 void report(double res, double *a, long pass, long n_eval, long n_dimen);
 void setupOutputFile(SDDS_DATASET *OutputTable, int32_t *xIndex, int32_t *yIndex, int32_t *fitIndex,
                      int32_t *residualIndex, char *output, long fullOutput, SDDS_DATASET *InputTable,
-                     char *xName, char *yName, short columnMajorOrder, short addSlope);
+                     char *xName, char *yName, short columnMajorOrder, short addSlope, short addExponential);
 char *makeInverseUnits(char *units);
 
 long verbosity;
@@ -157,12 +177,13 @@ long verbosity;
 #define GUESS_FREQ_GIVEN 0x0004
 #define GUESS_PHASE_GIVEN 0x0008
 #define GUESS_SLOPE_GIVEN 0x0010
+#define GUESS_RATE_GIVEN 0x0020
 
 int main(int argc, char **argv) {
   double tolerance, result;
   int32_t nEvalMax = 5000, nPassMax = 25;
-  double a[5], da[5];
-  double alo[5], ahi[5];
+  double a[6], da[6];
+  double alo[6], ahi[6];
   long n_dimen = 4;
   int64_t zeroes;
   SDDS_DATASET InputTable, OutputTable;
@@ -172,14 +193,12 @@ int main(int argc, char **argv) {
   char *input, *output, *xName, *yName;
   int32_t xIndex, yIndex, fitIndex, residualIndex;
   long retval;
-  double *fitData, *residualData, rmsResidual;
   unsigned long guessFlags, dummyFlags, pipeFlags;
-  double constantGuess, factorGuess, freqGuess, phaseGuess, slopeGuess;
+  double constantGuess, factorGuess, freqGuess, phaseGuess, slopeGuess, rateGuess;
   double firstZero, lastZero;
   unsigned long simplexFlags = 0, majorOrderFlag;
   short columnMajorOrder = -1;
   short lockFreq = 0;
-  short addSlope = 0;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&s_arg, argc, argv);
@@ -192,6 +211,7 @@ int main(int argc, char **argv) {
   xName = yName = NULL;
   guessFlags = 0;
   pipeFlags = 0;
+  constantGuess = factorGuess = freqGuess = phaseGuess = slopeGuess = rateGuess = 0;
 
   for (i_arg = 1; i_arg < argc; i_arg++) {
     if (s_arg[i_arg].arg_type == OPTION) {
@@ -226,8 +246,9 @@ int main(int argc, char **argv) {
                           "factor", SDDS_DOUBLE, &factorGuess, 1, GUESS_FACTOR_GIVEN,
                           "frequency", SDDS_DOUBLE, &freqGuess, 1, GUESS_FREQ_GIVEN,
                           "phase", SDDS_DOUBLE, &phaseGuess, 1, GUESS_PHASE_GIVEN,
-                          "slope", SDDS_DOUBLE, &slopeGuess, 1, GUESS_SLOPE_GIVEN, NULL))
-          SDDS_Bomb("invalid -guess syntax");
+                          "slope", SDDS_DOUBLE, &slopeGuess, 1, GUESS_SLOPE_GIVEN, NULL,
+                          "rate", SDDS_DOUBLE, &rateGuess, 1, GUESS_RATE_GIVEN, NULL))
+        SDDS_Bomb("invalid -guess syntax");
         break;
       case SET_COLUMNS:
         if (s_arg[i_arg].n_items != 3)
@@ -243,7 +264,23 @@ int main(int argc, char **argv) {
         break;
       case SET_ADD_SLOPE:
         addSlope = 1;
-        n_dimen = 5;
+        n_dimen += 1;
+        break;
+      case SET_ADD_EXPONENTIAL:
+        n_dimen += 1;
+        if (s_arg[i_arg].n_items!=2) 
+          SDDS_Bomb("incorrect -addExponential syntax");
+        switch (match_string(s_arg[i_arg].list[1], expotentialOptions, EXPONENTIAL_OPTIONS, 0)) {
+        case EXPONENTIAL_DECAY:
+          addExponential = -1;
+          break;
+        case EXPONENTIAL_GROW:
+          addExponential = 1;
+          break;
+        default:
+          SDDS_Bomb("incorrect -addExponential syntax");
+          break;
+        }
         break;
       case SET_LIMITS:
         if (s_arg[i_arg].n_items < 2)
@@ -274,18 +311,29 @@ int main(int argc, char **argv) {
     }
   }
 
-  processFilenames("sddssinefit", &input, &output, pipeFlags, 0, NULL);
+  if (addSlope)
+    disable[4] = 0;
+  if (addExponential)
+    disable[5] = 0;
+  
+  if ((guessFlags & GUESS_SLOPE_GIVEN) && !addSlope)
+    SDDS_Bomb("-guess=slope given but -addSlope not given");
 
+  if ((guessFlags & GUESS_RATE_GIVEN) && !addExponential)
+    SDDS_Bomb("-guess=rate given but -addExponential not given");
+  
+  processFilenames("sddssinefit", &input, &output, pipeFlags, 0, NULL);
+  
   if (!xName || !yName)
     SDDS_Bomb("-columns option must be specified.");
-
+  
   if (!SDDS_InitializeInput(&InputTable, input) ||
       SDDS_GetColumnIndex(&InputTable, xName) < 0 ||
       SDDS_GetColumnIndex(&InputTable, yName) < 0)
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-
+  
   setupOutputFile(&OutputTable, &xIndex, &yIndex, &fitIndex, &residualIndex, output, fullOutput,
-                  &InputTable, xName, yName, columnMajorOrder, addSlope);
+                  &InputTable, xName, yName, columnMajorOrder, addSlope, addExponential);
 
   fitData = residualData = NULL;
 
@@ -293,9 +341,11 @@ int main(int argc, char **argv) {
   alo[1] = alo[2] = 0;
   ahi[1] = ahi[2] = DBL_MAX;
   alo[3] = -(ahi[3] = PIx2);
-  if (addSlope) {
+  if (addSlope) 
     alo[4] = -(ahi[4] = DBL_MAX);
-  }
+  if (addExponential)
+    alo[5] = -(ahi[5] = DBL_MAX);
+    
   firstZero = lastZero = 0;
   while ((retval = SDDS_ReadPage(&InputTable)) > 0) {
     if (!(xData = SDDS_GetColumnInDoubles(&InputTable, xName)) ||
@@ -303,6 +353,9 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if ((nData = SDDS_CountRowsOfInterest(&InputTable)) < 4)
       continue;
+
+    fitData = SDDS_Realloc(fitData, sizeof(*fitData) * nData);
+    residualData = SDDS_Realloc(residualData, sizeof(*residualData) * nData);
 
     find_min_max(&yMin, &yMax, yData, nData);
     find_min_max(&xMin, &xMax, xData, nData);
@@ -323,9 +376,8 @@ int main(int argc, char **argv) {
     else
       a[2] = zeroes / (2 * fabs(lastZero - firstZero));
     a[3] = 0;
-    if (addSlope) {
-      a[4] = 0;
-    }
+    a[4] = 0;
+    a[5] = 0;
     if (guessFlags & GUESS_CONSTANT_GIVEN)
       a[0] = constantGuess;
     if (guessFlags & GUESS_FACTOR_GIVEN)
@@ -336,6 +388,8 @@ int main(int argc, char **argv) {
       a[3] = phaseGuess;
     if (guessFlags & GUESS_SLOPE_GIVEN)
       a[4] = slopeGuess;
+    if (guessFlags & GUESS_SLOPE_GIVEN)
+      a[5] = rateGuess;
 
     alo[1] = a[1] / 2;
     if (!(da[0] = a[0] * 0.1))
@@ -344,37 +398,26 @@ int main(int argc, char **argv) {
       da[1] = 0.01;
     da[2] = a[2] * 0.25;
     da[3] = 0.01;
-    if (addSlope) {
+    if (addSlope)
       da[4] = 0.01;
+    if (addExponential) {
+      if (a[5])
+        da[5] = a[5]*0.01;
+      else
+        da[5] = 0.001;
     }
-
+    
     if (lockFreq) {
       alo[2] = ahi[2] = a[2];
       da[2] = 0;
+      disable[2] = 1;
     }
 
-    if (addSlope) {
-      simplexMin(&result, a, da, alo, ahi, NULL, n_dimen, -DBL_MAX, tolerance, fitFunctionWithSlope,
-                 (verbosity > 0 ? report : NULL), nEvalMax, nPassMax, 12, 3, 1.0, simplexFlags);
-    } else {
-      simplexMin(&result, a, da, alo, ahi, NULL, n_dimen, -DBL_MAX, tolerance, fitFunction,
-                 (verbosity > 0 ? report : NULL), nEvalMax, nPassMax, 12, 3, 1.0, simplexFlags);
-    }
-    fitData = trealloc(fitData, sizeof(*fitData) * nData);
-    residualData = trealloc(residualData, sizeof(*residualData) * nData);
-    if (addSlope) {
-      for (i = result = 0; i < nData; i++) {
-        fitData[i] = a[0] + a[1] * sin(PIx2 * a[2] * xData[i] + a[3]) + a[4] * xData[i];
-        residualData[i] = yData[i] - fitData[i];
-        result += sqr(residualData[i]);
-      }
-    } else {
-      for (i = result = 0; i < nData; i++) {
-        fitData[i] = a[0] + a[1] * sin(PIx2 * a[2] * xData[i] + a[3]);
-        residualData[i] = yData[i] - fitData[i];
-        result += sqr(residualData[i]);
-      }
-    }
+    simplexMin(&result, a, da, alo, ahi, disable, 6, -DBL_MAX, tolerance, fitFunction, 
+               (verbosity > 0 ? report : NULL), nEvalMax, nPassMax, 12, 3, 1.0, simplexFlags);
+
+    for (i = result = 0; i < nData; i++)
+      result += sqr(residualData[i]);
     rmsResidual = sqrt(result / nData);
     if (verbosity > 1) {
       fprintf(stderr, "RMS deviation: %.15e\n", rmsResidual);
@@ -406,6 +449,9 @@ int main(int argc, char **argv) {
         (addSlope &&
          (!SDDS_SetParameters(&OutputTable, SDDS_PASS_BY_VALUE | SDDS_SET_BY_NAME,
                               "sinefitSlope", a[4], NULL))) ||
+        (addExponential &&
+         (!SDDS_SetParameters(&OutputTable, SDDS_PASS_BY_VALUE | SDDS_SET_BY_NAME,
+                              "sinefitRate", a[5], NULL))) ||
         (fullOutput && (!SDDS_SetColumn(&OutputTable, SDDS_SET_BY_INDEX, yData, nData, yIndex) ||
                         !SDDS_SetColumn(&OutputTable, SDDS_SET_BY_INDEX, residualData, nData, residualIndex))) ||
         !SDDS_WritePage(&OutputTable))
@@ -426,7 +472,7 @@ int main(int argc, char **argv) {
 
 void setupOutputFile(SDDS_DATASET *OutputTable, int32_t *xIndex, int32_t *yIndex, int32_t *fitIndex,
                      int32_t *residualIndex, char *output, long fullOutput, SDDS_DATASET *InputTable,
-                     char *xName, char *yName, short columnMajorOrder, short addSlope) {
+                     char *xName, char *yName, short columnMajorOrder, short addSlope, short addExponential) {
   char *name, *yUnits, *description, *xUnits, *inverse_xUnits;
   int32_t typeValue = SDDS_DOUBLE;
   static char *residualNamePart = "Residual";
@@ -484,6 +530,11 @@ void setupOutputFile(SDDS_DATASET *OutputTable, int32_t *xIndex, int32_t *yIndex
                              NULL, SDDS_DOUBLE, 0) < 0)
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
+  if (addExponential) {
+    if (SDDS_DefineParameter(OutputTable, "sinefitRate", NULL, inverse_xUnits,  "Exponential decay rate for sinusoidal fit",
+                             NULL, SDDS_DOUBLE, 0) < 0)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  }
   if (!SDDS_WriteLayout(OutputTable))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
@@ -515,45 +566,27 @@ char *makeInverseUnits(char *units) {
 
 double fitFunction(double *a, long *invalid) {
   int64_t i;
-  double chi;
-  static double min_chi;
+  double chi, min_chi, fitValue;
 
   min_chi = DBL_MAX;
 
   *invalid = 0;
-  for (i = chi = 0; i < nData; i++)
-    chi += sqr(yData[i] - (a[0] + a[1] * sin(PIx2 * a[2] * xData[i] + a[3])));
-  if (isnan(chi) || isinf(chi))
-    *invalid = 1;
-  if (verbosity > 3)
-    fprintf(stderr, "Trial: a = %e, %e, %e, %e  --> chi = %e, invalid = %ld\n", a[0], a[1], a[2], a[3], chi, *invalid);
-  if (min_chi > chi) {
-    min_chi = chi;
-    fit[0] = a[0];
-    fit[1] = a[1];
-    fit[2] = a[2];
-    fit[3] = a[3];
-    if (verbosity > 2)
-      fprintf(stderr, "New best chi = %e:  a = %e, %e, %e, %e\n", chi, fit[0], fit[1], fit[2], fit[3]);
+  for (i = chi = 0; i < nData; i++) {
+    fitValue = a[1] * sin(PIx2 * a[2] * xData[i] + a[3]);
+    if (addExponential)
+      fitValue *= exp(xData[i]*a[5]);
+    if (addSlope)
+      fitValue += a[4] * xData[i];
+    fitValue += a[0];
+    fitData[i] = fitValue;
+    residualData[i] = yData[i] - fitValue;
+    chi += sqr(residualData[i]);
   }
-  return chi;
-}
-
-double fitFunctionWithSlope(double *a, long *invalid) {
-  int64_t i;
-  double chi;
-  static double min_chi;
-
-  min_chi = DBL_MAX;
-
-  *invalid = 0;
-  for (i = chi = 0; i < nData; i++)
-    chi += sqr(yData[i] - (a[0] + a[1] * sin(PIx2 * a[2] * xData[i] + a[3]) + a[4] * xData[i]));
   if (isnan(chi) || isinf(chi))
     *invalid = 1;
   if (verbosity > 3)
-    fprintf(stderr, "Trial: a = %e, %e, %e, %e, %e  --> chi = %e, invalid = %ld\n",
-            a[0], a[1], a[2], a[3], a[4], chi, *invalid);
+    fprintf(stderr, "Trial: a = %e, %e, %e, %e, %e, %e  --> chi = %e, invalid = %ld\n",
+            a[0], a[1], a[2], a[3], a[4], a[5], chi, *invalid);
   if (min_chi > chi) {
     min_chi = chi;
     fit[0] = a[0];
@@ -561,9 +594,10 @@ double fitFunctionWithSlope(double *a, long *invalid) {
     fit[2] = a[2];
     fit[3] = a[3];
     fit[4] = a[4];
+    fit[5] = a[5];
     if (verbosity > 2)
-      fprintf(stderr, "New best chi = %e:  a = %e, %e, %e, %e, %e\n",
-              chi, fit[0], fit[1], fit[2], fit[3], fit[4]);
+      fprintf(stderr, "New best chi = %e:  a = %e, %e, %e, %e, %e, %e\n",
+              chi, fit[0], fit[1], fit[2], fit[3], fit[4], fit[5]);
   }
   return chi;
 }
@@ -573,7 +607,7 @@ void report(double y, double *x, long pass, long nEval, long n_dimen) {
 
   fprintf(stderr, "Pass %ld, after %ld evaluations: result = %.16e\n", pass, nEval, y);
   fprintf(stderr, "a = ");
-  for (i = 0; i < n_dimen; i++)
+  for (i = 0; i < 6; i++)
     fprintf(stderr, "%.8e ", x[i]);
   fputc('\n', stderr);
 }
