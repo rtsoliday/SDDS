@@ -9,20 +9,9 @@
 #include <QColor>
 #include <QStyleFactory>
 #include <QLoggingCategory>
-#include <QMessageLogContext>
-#include <QDebug>
-
-static void filterXcbWarnings(QtMsgType type, const QMessageLogContext &ctx,
-                              const QString &msg) {
-  QByteArray cat = ctx.category ? QByteArray(ctx.category) : QByteArray();
-  if (type == QtWarningMsg && cat.startsWith("qt.qpa.xcb"))
-    return;
-  qt_message_output(type, ctx, msg);
-}
 
 int main(int argc, char **argv) {
   QLoggingCategory::setFilterRules("qt.qpa.xcb.*=false\nqt.qpa.fonts=false");
-  qInstallMessageHandler(filterXcbWarnings);
   QApplication app(argc, argv);
   app.setStyle(QStyleFactory::create("Fusion"));
   QPalette pal = app.palette();
