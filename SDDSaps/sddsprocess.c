@@ -44,6 +44,7 @@
  *             -retain={column|parameter|array},<matching-string>[,...]
  *             -description=[text=<string>][,contents=<string>]
  *             -majorOrder=row|column
+ *             -xzLevel=<0-9>
  *             -threads=<number>
  * ```
  *
@@ -84,6 +85,7 @@
  * | `-retain`                           | Retain only the specified columns, parameters, or arrays.                        |
  * | `-description`                      | Add or modify the description of the output SDDS file.                           |
  * | `-majorOrder`                       | Set the major order of the output data (row-major or column-major).              |
+ * | `-xzLevel`                          | Set LZMA compression level when writing .xz files.                               |
  * | `-threads`                          | Specify the number of threads to use for processing.                             |
  *
  * @section processingModes Processing Modes
@@ -175,6 +177,7 @@ enum option_type {
   SET_MAJOR_ORDER,
   SET_EVALUATE,
   SET_THREADS,
+  SET_XZLEVEL,
   N_OPTIONS
 };
 
@@ -214,6 +217,7 @@ char *option[N_OPTIONS] = {
   "majorOrder",
   "evaluate",
   "threads",
+  "xzlevel",
 };
 
 char *usageArray[] = {
@@ -289,6 +293,8 @@ char *usageArray[] = {
   "       Add or modify the description of the output SDDS file.\n",
   "  -majorOrder=row|column\n",
   "       Set the major order of the output data (row-major or column-major).\n",
+  "  -xzLevel=<0-9>\n",
+  "       Set LZMA compression level when writing .xz files.\n",
   "  -threads=<number>\n",
   "       Specify the number of threads to use for processing.\n",
   "\n",
@@ -397,6 +403,7 @@ int main(int argc, char **argv) {
   long i_page_memory, table_number_memory, n_rows_memory, row_deletion, skip_page;
   long random_number_seed;
   unsigned long pipeFlags, majorOrderFlag;
+  long xzLevel = SDDS_GetLZMACompressionLevel();
 
   char **retain_column, **delete_column;
   long retain_columns, delete_columns, rename_columns, edit_column_requests;
@@ -535,6 +542,11 @@ int main(int argc, char **argv) {
           columnMajorOrder = 1;
         else if (majorOrderFlag & SDDS_ROW_MAJOR_ORDER)
           columnMajorOrder = 0;
+        break;
+      case SET_XZLEVEL:
+        if (s_arg[i_arg].n_items != 2 || sscanf(s_arg[i_arg].list[1], "%ld", &xzLevel) != 1 || xzLevel < 0 || xzLevel > 9)
+          SDDS_Bomb("invalid -xzLevel syntax");
+        SDDS_SetLZMACompressionLevel(xzLevel);
         break;
       case SET_MATCH:
         if (s_arg[i_arg].n_items < 3)
