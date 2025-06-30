@@ -20,6 +20,7 @@
  *             [-collapse]
  *             [-recover[=clip]]
  *             [-majorOrder=row|column]
+ *             [-xzLevel=<0-9>]
  * ```
  *
  * @section Options
@@ -35,6 +36,7 @@
  * | `-collapse`                          | Collapse the output into a single page, as processed through `sddscollapse`.                   |
  * | `-recover`                           | Recover incomplete or corrupted data, optionally clipping incomplete pages.                    |
  * | `-majorOrder`                        | Specify row-major or column-major order for output.                                             |
+ * | `-xzLevel`                           | Set LZMA compression level when writing .xz files.                                               |
  *
  * @subsection Incompatibilities
  *   - `-collapse` is incompatible with:
@@ -73,6 +75,7 @@ enum option_type {
   SET_RECOVER,
   SET_MAJOR_ORDER,
   SET_APPEND,
+  SET_XZLEVEL,
   N_OPTIONS
 };
 
@@ -86,7 +89,8 @@ static char *option[N_OPTIONS] = {
   "collapse",
   "recover",
   "majorOrder",
-  "append"
+  "append",
+  "xzlevel"
 };
 
 char *USAGE =
@@ -101,7 +105,8 @@ char *USAGE =
   "    [-overWrite]\n"
   "    [-collapse]\n"
   "    [-recover[=clip]]\n"
-  "    [-majorOrder=row|column]\n\n"
+  "    [-majorOrder=row|column]\n"
+  "    [-xzLevel=<0-9>]\n\n"
   "Options:\n"
   "  -pipe=input,output      Enable piping for input and/or output.\n"
   "  -delete=type,pattern    Delete columns, parameters, or arrays matching the pattern.\n"
@@ -112,7 +117,8 @@ char *USAGE =
   "  -overWrite              Overwrite the output file if it exists.\n"
   "  -collapse               Collapse the output as if processed through sddscollapse.\n"
   "  -recover=clip           Recover incomplete/corrupted data, optionally clipping incomplete pages.\n"
-  "  -majorOrder=row|column  Specify data write order: row-major or column-major.\n\n"
+  "  -majorOrder=row|column  Specify data write order: row-major or column-major.\n"
+  "  -xzLevel=<0-9>          Set LZMA compression level when writing .xz files.\n\n"
   "Description:\n"
   "  sddscombine combines data from a series of SDDS files into a single SDDS file, usually with one page for each page in each file. "
   "Data is added from files in the order that they are listed on the command line. A new parameter ('Filename') is added to show the source of each page.\n\n"
@@ -160,6 +166,7 @@ int main(int argc, char **argv) {
   char *param, *last_param, *this_param, *text, *contents, **column;
   long param_index, param_type, param_size, output_pending;
   unsigned long pipeFlags, majorOrderFlag;
+  long xzLevel = SDDS_GetLZMACompressionLevel();
 
   char **retain_column, **delete_column;
   long retain_columns, delete_columns;
@@ -212,6 +219,11 @@ int main(int argc, char **argv) {
           columnMajorOrder = 1;
         else if (majorOrderFlag & SDDS_ROW_MAJOR_ORDER)
           columnMajorOrder = 0;
+        break;
+      case SET_XZLEVEL:
+        if (s_arg[i_arg].n_items != 2 || sscanf(s_arg[i_arg].list[1], "%ld", &xzLevel) != 1 || xzLevel < 0 || xzLevel > 9)
+          SDDS_Bomb("invalid -xzLevel syntax");
+        SDDS_SetLZMACompressionLevel(xzLevel);
         break;
       case SET_MERGE:
         if (s_arg[i_arg].n_items > 2)

@@ -57,6 +57,7 @@
  * | `-acceptAllNames`                 | Relax naming restrictions in the SDDS library.          |
  * | `-rowlimit`                       | Limit the number of rows in the output.                 |
  * | `-majorOrder`                     | Set major order to row or column.                       |
+ * | `-xzLevel`                        | Set LZMA compression level when writing .xz files.       |
  *
  * @subsection Incompatibilities
  *   - `-binary` and `-ascii` are mutually exclusive.
@@ -114,7 +115,8 @@ static char *mode_name[MODES] = {
 #define SET_ROWLIMIT 17
 #define SET_MAJOR_ORDER 18
 #define SET_CONVERT_UNITS 19
-#define N_OPTIONS 20
+#define SET_XZLEVEL 20
+#define N_OPTIONS 21
 
 char *option[N_OPTIONS] = {
   "binary",
@@ -136,7 +138,8 @@ char *option[N_OPTIONS] = {
   "keeppages",
   "rowlimit",
   "majororder",
-  "convertunits"};
+  "convertunits",
+  "xzlevel"};
 
 char *USAGE = "sddsconvert [<source-file>] [<target-file>]\n\
 [-pipe=[input][,output]]\n\
@@ -150,7 +153,8 @@ char *USAGE = "sddsconvert [<source-file>] [<target-file>]\n\
 [-editnames={column|parameter|array},<wildcard-string>,<edit-string>]\n\
 [-convertUnits={column|parameter|array},<name>,<new-units>,[<old-units>[,<factor>]]\n\
 [-acceptAllNames] [-rowlimit=<number>]\n\
-[-majorOrder=row|column]\n\n\
+[-majorOrder=row|column]\n\
+[-xzLevel=<0-9>]\n\n\
 sddsconvert converts SDDS files between ASCII and binary, and allows wildcard-based filtering.\n\
 Any element matched by a deletion string is deleted unless matched by a retention string.\n\
 The -acceptAllNames option may force the SDDS library to accept unusual names.\n\
@@ -246,6 +250,7 @@ int main(int argc, char **argv) {
   long removePages, keepPages, keep;
   int64_t rowLimit;
   short column_major = -1;
+  long xzLevel = SDDS_GetLZMACompressionLevel();
 
   long convert_units_arrays = 0, convert_units_columns = 0, convert_units_parameters = 0;
   CONVERT_UNITS *convert_units_array = NULL, *convert_units_column = NULL, *convert_units_parameter = NULL;
@@ -302,6 +307,11 @@ int main(int argc, char **argv) {
           column_major = 1;
         if (majorOrderFlag & SDDS_ROW_MAJOR_ORDER)
           column_major = 0;
+        break;
+      case SET_XZLEVEL:
+        if (s_arg[i_arg].n_items != 2 || sscanf(s_arg[i_arg].list[1], "%ld", &xzLevel) != 1 || xzLevel < 0 || xzLevel > 9)
+          SDDS_Bomb("invalid -xzLevel syntax");
+        SDDS_SetLZMACompressionLevel(xzLevel);
         break;
       case SET_BINARY:
         binary_output = 1;

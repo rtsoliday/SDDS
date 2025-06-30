@@ -19,10 +19,11 @@ sddscombine APS1.twi APS2.twi APS3.twi APSall.twi
 \item {\bf synopsis:} 
 \begin{flushleft}{\tt
 sddscombine [{\em inputFileList}] [{\em outputFile}] [-pipe[=input][,output]]
-[-merge[={\em parameterName}]] [-overWrite] [-sparse={\em integer}] 
+[-merge[={\em parameterName}]] [-overWrite] [-sparse={\em integer}]
 [-collapse]
 [-delete=\{columns | parameters | arrays\},{\em matchingString}[,...]]
 [-retain=\{columns | parameters | arrays\},{\em matchingString}[,...]]
+[-xzLevel={\em integer}]
 }\end{flushleft}
 
 \item {\bf files:}
@@ -45,6 +46,7 @@ each page.
     \item \verb|sparse={\em integer}| --- Specifies sparsing the tabular data in the input to retain
         only every {\em integer}-th row.
     \item \verb|collapse| --- Specifies collapsing the data, as done by \verb|sddscollapse|.
+    \item \verb|xzLevel={\em integer}| --- Sets the LZMA compression level when writing \verb|.xz| files.
     \item {\tt -delete=\{columns | parameters | arrays\},{\em matchingString}[,{\em matchingString}...]},\\
         {\tt -retain=\{columns | parameters | arrays\},{\em matchingString}[,{\em matchingString}...]}
          --- These options specify wildcard strings to be used to select entities

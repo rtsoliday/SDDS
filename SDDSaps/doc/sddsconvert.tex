@@ -33,6 +33,7 @@ sddsconvert [{\em inputFile}] [{\em outputFile}] [-pipe[=input][,output]] \\ \
 [-editNames=\{columns | parameters | arrays\},{\em matchingString},{\em editString} \\ \ 
 [-description={\em text},{\em contents}] \\ \ 
 [-recover[=clip]] [-linesPerRow={\rm number}] [-nowarnings] [-acceptAllNames]\\ \ 
+[-xzLevel={\em integer}] \
 }\end{flushleft}
 \item {\bf files:}
 {\em inputFile} is an SDDS file containing data to be processed.  The {\em outputFile} argument is
@@ -72,6 +73,7 @@ replaced.
     \item {\tt -linesPerRow={\rm number}} --- Sets the number of lines of text output per row of the tabular data,
         for ASCII output only.
     \item {\tt -noWarnings} --- Suppresses warning messages, such as file replacement warnings.
+    \item {\tt -xzLevel} --- Sets the LZMA compression level when writing .xz files.
     \item {\tt -acceptAllNames} --- Forces acceptance of any name for an SDDS data element (e.g., a column).
         This can be used with the \verb|rename| or \verb|editNames| options to fix invalid names in SDDS
         files.  This option is provided for backward compatibility to the original version of SDDS,

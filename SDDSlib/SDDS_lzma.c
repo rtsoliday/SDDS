@@ -63,6 +63,17 @@ struct lzmafile {
   unsigned char rdbuf[BUF_SIZE]; /* read buffer used by lzmaRead */
 };
 
+static int lzmaCompressionLevel = 2;
+
+void SDDS_SetLZMACompressionLevel(int32_t level) {
+  if (level >= 0 && level <= 9)
+    lzmaCompressionLevel = level;
+}
+
+int32_t SDDS_GetLZMACompressionLevel(void) {
+  return lzmaCompressionLevel;
+}
+
 /* lzma_open opens the file whose name is the string pointed to
    by 'path' and associates a stream with it. The 'mode' argument
    is expected to be 'r' or 'w'. Upon successful completion, a 
@@ -83,9 +94,7 @@ void *lzma_open(const char *path, const char *mode) {
 #endif
     lf->str.avail_in = 0;
   } else {
-    /* I decided to use level 2 encoding */
-    /* Perhaps this should be user configurable in an environment variable */
-    ret = LZMA_EASY_ENCODER(&lf->str, 2);
+    ret = LZMA_EASY_ENCODER(&lf->str, lzmaCompressionLevel);
   }
   if (ret != LZMA_OK) {
     fprintf(stderr, "lzma_open error: %d\n", ret);

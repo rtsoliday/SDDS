@@ -397,7 +397,9 @@ extern "C" {
   epicsShareFuncSDDS extern void SDDS_DisableFSync(SDDS_DATASET *SDDS_dataset);
   epicsShareFuncSDDS extern void SDDS_EnableFSync(SDDS_DATASET *SDDS_dataset);
   epicsShareFuncSDDS extern int32_t SDDS_DoFSync(SDDS_DATASET *SDDS_dataset);
-  epicsShareFuncSDDS extern int32_t SDDS_DefineParameter(SDDS_DATASET *SDDS_dataset, const char *name, const char *symbol, const char *units, const char *description, 
+  epicsShareFuncSDDS extern void SDDS_SetLZMACompressionLevel(int32_t level);
+  epicsShareFuncSDDS extern int32_t SDDS_GetLZMACompressionLevel(void);
+  epicsShareFuncSDDS extern int32_t SDDS_DefineParameter(SDDS_DATASET *SDDS_dataset, const char *name, const char *symbol, const char *units, const char *description,
                                                          const char *format_string, int32_t type, char *fixed_value);
   epicsShareFuncSDDS extern int32_t SDDS_DefineParameter1(SDDS_DATASET *SDDS_dataset, const char *name, const char *symbol, const char *units, const char *description, 
                                                           const char *format_string, int32_t type, void *fixed_value);
