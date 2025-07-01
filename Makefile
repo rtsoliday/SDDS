@@ -67,10 +67,10 @@ DIRS += SDDSaps
 DIRS += SDDSaps/sddsplots
 #DIRS += SDDSaps/sddsplots/winMotifDriver
 #DIRS += SDDSaps/sddsplots/motifDriver
-DIRS += SDDSaps/sddseditor
 DIRS += $(PLOT_DRIVER)
 DIRS += SDDSaps/sddscontours
 DIRS += SDDSaps/pseudoInverse
+DIRS += SDDSaps/sddseditor
 DIRS += levmar
 ifneq ($(MPI_CC),)
 DIRS += pgapack
@@ -145,8 +145,6 @@ SDDSaps: tiff
 	$(MAKE) -C $@
 SDDSaps/sddsplots: SDDSaps
 	$(MAKE) -C $@
-SDDSaps/sddseditor: SDDSaps
-	$(MAKE) -C $@
 SDDSaps/sddsplots/winMotifDriver: SDDSaps/sddsplots
 	$(MAKE) -C $@
 SDDSaps/sddsplots/motifDriver: SDDSaps/sddsplots
@@ -157,7 +155,9 @@ SDDSaps/sddscontours: $(PLOT_DRIVER) SDDSaps/sddsplots
 	$(MAKE) -C $@
 SDDSaps/pseudoInverse: SDDSaps/sddscontours
 	$(MAKE) -C $@
-levmar: SDDSaps/pseudoInverse
+SDDSaps/sddseditor: SDDSaps/pseudoInverse
+	$(MAKE) -C $@
+levmar: SDDSaps/sddseditor
 	$(MAKE) -C $@
 ifneq ($(MPI_CC),)
 pgapack: levmar
@@ -187,12 +187,12 @@ clean:
 	$(MAKE) -C tiff clean
 	$(MAKE) -C SDDSaps clean
 	$(MAKE) -C SDDSaps/sddsplots clean
-	$(MAKE) -C SDDSaps/sddseditor clean
 	$(MAKE) -C SDDSaps/sddsplots/winMotifDriver clean
 	$(MAKE) -C SDDSaps/sddsplots/motifDriver clean
 	$(MAKE) -C SDDSaps/sddsplots/qtDriver clean
 	$(MAKE) -C SDDSaps/sddscontours clean
 	$(MAKE) -C SDDSaps/pseudoInverse clean
+	$(MAKE) -C SDDSaps/sddseditor clean
 	$(MAKE) -C levmar clean
 ifneq ($(MPI_CC),)
 	$(MAKE) -C pgapack clean
