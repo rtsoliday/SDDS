@@ -44,6 +44,8 @@
 #include <functional>
 #include <cstdlib>
 #include <algorithm>
+#include <limits>
+#include <QLocale>
 
 static bool validateTextForType(const QString &text, int type,
                                 bool showMessage = true) {
@@ -107,6 +109,26 @@ static hid_t hdfTypeForSdds(int32_t type) {
   }
 }
 
+static QString canonicalizeForDisplay(const QString &text, int type) {
+  if (text.isEmpty())
+    return text;
+  if (type == SDDS_DOUBLE) {
+    bool ok = true;
+    double val = text.toDouble(&ok);
+    if (ok)
+      return QLocale::c().toString(val, 'g', std::numeric_limits<double>::max_digits10 - 1);
+  } else if (type == SDDS_LONGDOUBLE) {
+    //long double val = std::stold(text.toStdString());
+    //return QString::asprintf("%.*Lg", std::numeric_limits<long double>::max_digits10, val);
+  } else if (type == SDDS_FLOAT) {
+    bool ok = true;
+    float val = text.toFloat(&ok);
+    if (ok)
+      return QLocale::c().toString(val, 'g', std::numeric_limits<float>::max_digits10);
+  }
+  return text;
+}
+
 class SetDataCommand : public QUndoCommand {
 public:
   SetDataCommand(QStandardItemModel *model, const QModelIndex &index,
@@ -129,6 +151,19 @@ public:
   SDDSItemDelegate(TypeFunc tf, QUndoStack *stack, QObject *parent = nullptr)
       : QStyledItemDelegate(parent), typeFunc(std::move(tf)), undoStack(stack) {}
 
+  void initStyleOption(QStyleOptionViewItem *option,
+                       const QModelIndex &index) const override {
+    QStyledItemDelegate::initStyleOption(option, index);
+    option->text = canonicalizeForDisplay(option->text, typeFunc(index));
+  }
+
+  void setEditorData(QWidget *editor, const QModelIndex &index) const override {
+    QStyledItemDelegate::setEditorData(editor, index);
+    QLineEdit *line = qobject_cast<QLineEdit *>(editor);
+    if (line)
+      line->setText(canonicalizeForDisplay(line->text(), typeFunc(index)));
+  }
+
   void setModelData(QWidget *editorWidget, QAbstractItemModel *model,
                     const QModelIndex &index) const override {
     QLineEdit *line = qobject_cast<QLineEdit *>(editorWidget);
@@ -140,7 +175,7 @@ public:
     if (!validateTextForType(line->text(), typeFunc(index)))
       return;
     QString oldVal = index.data(Qt::EditRole).toString();
-    QString newVal = line->text();
+    QString newVal = canonicalizeForDisplay(line->text(), typeFunc(index));
     if (oldVal == newVal) {
       QStyledItemDelegate::setModelData(editorWidget, model, index);
       return;
