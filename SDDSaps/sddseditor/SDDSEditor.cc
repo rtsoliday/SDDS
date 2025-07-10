@@ -116,7 +116,7 @@ static QString canonicalizeForDisplay(const QString &text, int type) {
     bool ok = true;
     double val = text.toDouble(&ok);
     if (ok)
-      return QLocale::c().toString(val, 'g', std::numeric_limits<double>::max_digits10 - 1);
+      return QLocale::c().toString(val, 'g', std::numeric_limits<double>::max_digits10 - 2);
   } else if (type == SDDS_LONGDOUBLE) {
     //long double val = std::stold(text.toStdString());
     //return QString::asprintf("%.*Lg", std::numeric_limits<long double>::max_digits10, val);
@@ -124,7 +124,7 @@ static QString canonicalizeForDisplay(const QString &text, int type) {
     bool ok = true;
     float val = text.toFloat(&ok);
     if (ok)
-      return QLocale::c().toString(val, 'g', std::numeric_limits<float>::max_digits10);
+      return QLocale::c().toString(val, 'g', std::numeric_limits<float>::max_digits10 - 2);
   }
   return text;
 }
@@ -934,6 +934,16 @@ bool SDDSEditor::writeFile(const QString &path) {
           arr[r] = ba.isEmpty() ? 0.0L : strtold(ba.constData(), nullptr);
         }
         SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+      } else if (type == SDDS_LONG64) {
+        QVector<int64_t> arr(rows);
+        for (int64_t r = 0; r < rows; ++r)
+          arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toLongLong() : 0;
+        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+      } else if (type == SDDS_ULONG64) {
+        QVector<uint64_t> arr(rows);
+        for (int64_t r = 0; r < rows; ++r)
+          arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toULongLong() : 0;
+        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
       } else {
         QVector<double> arr(rows);
         for (int64_t r = 0; r < rows; ++r)
@@ -1178,6 +1188,22 @@ bool SDDSEditor::writeHDF(const QString &path) {
             arr[r] = r < pd.columns[c].size() ? strtold(pd.columns[c][r].toLocal8Bit().constData(), nullptr) : 0.0L;
           hid_t ds = H5Dcreate1(grp, name, H5T_NATIVE_LDOUBLE, space, H5P_DEFAULT);
           H5Dwrite(ds, H5T_NATIVE_LDOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        } else if (type == SDDS_LONG64) {
+          QVector<int64_t> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toLongLong() : 0;
+          hid_t dtype = hdfTypeForSdds(type);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        } else if (type == SDDS_ULONG64) {
+          QVector<uint64_t> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toULongLong() : 0;
+          hid_t dtype = hdfTypeForSdds(type);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
           H5Dclose(ds);
         } else {
           QVector<double> arr(rows);
