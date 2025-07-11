@@ -12,11 +12,16 @@ ifeq ($(OS), Linux)
           /usr/bin/moc \
           /bin/moc-qt5 \
           /usr/bin/moc-qt5))
-  MOC_VER_DIGIT := $(shell $(MOC) -v | cut -d' ' -f2 | cut -c1)
-  CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets)
-  LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport)
-  PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
-  PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
+  ifeq ($(strip $(MOC)),)
+    $(warning Qt ‘moc’ not found – please install your Qt development packages; disabling mpl_qt build)
+    PROD :=
+  else
+    MOC_VER_DIGIT := $(shell $(MOC) -v | cut -d' ' -f2 | cut -c1)
+    CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets)
+    LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport)
+    PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
+    PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
+  endif
 endif
 
 ifeq ($(OS), Darwin)

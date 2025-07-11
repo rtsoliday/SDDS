@@ -12,11 +12,16 @@ ifeq ($(OS), Linux)
           /usr/bin/moc \
           /bin/moc-qt5 \
           /usr/bin/moc-qt5))
-  MOC_VER_DIGIT := $(shell $(MOC) -v | cut -d' ' -f2 | cut -c1)
-  CCFLAGS += -I../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets) -DH5_USE_16_API -I/usr/include/hdf5/serial
-  LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport)
-  PROD_LIBS = -lSDDS1 -lrpnlib -lmdbmth -lmdblib
-  PROD_SYS_LIBS = $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm -ldl
+  ifeq ($(strip $(MOC)),)
+    $(warning Qt ‘moc’ not found – please install your Qt development packages; disabling sddseditor build)
+    PROD :=
+  else
+    MOC_VER_DIGIT := $(shell $(MOC) -v | cut -d' ' -f2 | cut -c1)
+    CCFLAGS += -I../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets) -DH5_USE_16_API -I/usr/include/hdf5/serial
+    LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport)
+    PROD_LIBS = -lSDDS1 -lrpnlib -lmdbmth -lmdblib
+    PROD_SYS_LIBS = $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm -ldl
+  endif
 endif
 
 ifeq ($(OS), Darwin)
