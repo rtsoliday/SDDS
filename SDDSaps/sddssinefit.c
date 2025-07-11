@@ -128,15 +128,16 @@ static char *USAGE =
   "       [-tolerance=<value>]\n"
   "       [-limits=evaluations=<number>,passes=<number>]\n"
   "       [-verbosity=<integer>]\n"
-  "       [-guess=constant=<constant>,factor=<factor>,frequency=<freq>,phase=<phase>,slope=<slope>]\n"
+  "       [-guess=constant=<constant>,factor=<factor>,frequency=<freq>,phase=<phase>,slope=<slope>,rate=<value>]\n"
   "       [-lockFrequency]\n"
   "       [-addSlope] [-addExponential={grow|decay}\n"
   "       [-majorOrder=row|column]\n\n"
   "Description:\n"
   "  Performs a sinusoidal fit of the form:\n"
   "    y = <constant> + <factor>*sin(2*PI*<freq>*x + <phase>)\n"
-  "  or\n"
   "    y = <constant> + <factor>*sin(2*PI*<freq>*x + <phase>) + <slope>*x\n\n"
+  "  or\n"
+  "    y = <constant> + <factor>*sin(2*PI*<freq>*x + <phase>)*exp(<rate>*x) + <slope>*x\n\n"
   "Options:\n"
   "  <inputfile>                : Path to the input SDDS file.\n"
   "  <outputfile>               : Path to the output SDDS file.\n"
@@ -146,7 +147,7 @@ static char *USAGE =
   "  -tolerance=<value>         : Set the tolerance for the fitting algorithm (default: 1e-6).\n"
   "  -limits=evaluations=<n>,passes=<m> : Set maximum number of evaluations and passes (default: 5000 evaluations, 25 passes).\n"
   "  -verbosity=<integer>       : Set verbosity level (default: 0).\n"
-  "  -guess=constant=<c>,factor=<f>,frequency=<freq>,phase=<p>,slope=<s> : Provide initial guesses for fit parameters.\n"
+  "  -guess=constant=<c>,factor=<f>,frequency=<freq>,phase=<p>,slope=<s>,rate=<r> : Provide initial guesses for fit parameters.\n"
   "  -lockFrequency             : Lock the frequency parameter during fitting.\n"
   "  -addSlope                  : Include a slope term in the fit.\n"
   "  -addExponential            : Include exponential decay of the sinusoid.\n"
@@ -246,8 +247,9 @@ int main(int argc, char **argv) {
                           "factor", SDDS_DOUBLE, &factorGuess, 1, GUESS_FACTOR_GIVEN,
                           "frequency", SDDS_DOUBLE, &freqGuess, 1, GUESS_FREQ_GIVEN,
                           "phase", SDDS_DOUBLE, &phaseGuess, 1, GUESS_PHASE_GIVEN,
-                          "slope", SDDS_DOUBLE, &slopeGuess, 1, GUESS_SLOPE_GIVEN, NULL,
-                          "rate", SDDS_DOUBLE, &rateGuess, 1, GUESS_RATE_GIVEN, NULL))
+                          "slope", SDDS_DOUBLE, &slopeGuess, 1, GUESS_SLOPE_GIVEN, 
+                          "rate", SDDS_DOUBLE, &rateGuess, 1, GUESS_RATE_GIVEN, NULL,
+			  NULL))
         SDDS_Bomb("invalid -guess syntax");
         break;
       case SET_COLUMNS:
@@ -347,6 +349,9 @@ int main(int argc, char **argv) {
     alo[5] = -(ahi[5] = DBL_MAX);
     
   firstZero = lastZero = 0;
+  if (verbosity>5) {
+    simplexFlags = SIMPLEX_VERBOSE_LEVEL1;
+  }
   while ((retval = SDDS_ReadPage(&InputTable)) > 0) {
     if (!(xData = SDDS_GetColumnInDoubles(&InputTable, xName)) ||
         !(yData = SDDS_GetColumnInDoubles(&InputTable, yName)))
@@ -368,6 +373,8 @@ int main(int argc, char **argv) {
         else
           lastZero = (xData[i] + xData[i - 1]) / 2;
         zeroes++;
+	if (zeroes>5)
+	  break;
       }
     a[0] = (yMin + yMax) / 2;
     a[1] = (yMax - yMin) / 2;
@@ -388,7 +395,7 @@ int main(int argc, char **argv) {
       a[3] = phaseGuess;
     if (guessFlags & GUESS_SLOPE_GIVEN)
       a[4] = slopeGuess;
-    if (guessFlags & GUESS_SLOPE_GIVEN)
+    if (guessFlags & GUESS_RATE_GIVEN)
       a[5] = rateGuess;
 
     alo[1] = a[1] / 2;
@@ -571,6 +578,9 @@ double fitFunction(double *a, long *invalid) {
   min_chi = DBL_MAX;
 
   *invalid = 0;
+  if (verbosity>5) {
+    fprintf(stderr, "Trial: a = %e, %e, %e, %e, %e, %e\n", a[0], a[1], a[2], a[3], a[4], a[5]);
+  }
   for (i = chi = 0; i < nData; i++) {
     fitValue = a[1] * sin(PIx2 * a[2] * xData[i] + a[3]);
     if (addExponential)
@@ -582,11 +592,10 @@ double fitFunction(double *a, long *invalid) {
     residualData[i] = yData[i] - fitValue;
     chi += sqr(residualData[i]);
   }
-  if (isnan(chi) || isinf(chi))
+  if (isnan(chi) || isinf(chi)) 
     *invalid = 1;
-  if (verbosity > 3)
-    fprintf(stderr, "Trial: a = %e, %e, %e, %e, %e, %e  --> chi = %e, invalid = %ld\n",
-            a[0], a[1], a[2], a[3], a[4], a[5], chi, *invalid);
+  if (verbosity > 5)
+    fprintf(stderr, " --> chi = %e, invalid = %ld\n", chi, *invalid);
   if (min_chi > chi) {
     min_chi = chi;
     fit[0] = a[0];
