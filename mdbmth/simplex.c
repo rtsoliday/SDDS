@@ -45,18 +45,25 @@ long simplexMinAbort(unsigned long abort) {
   return simplexFlags & SIMPLEX_ABORT ? 1 : 0;
 }
 
-long checkVariableLimits(double *x, double *xlo, double *xhi, long n) {
+long checkVariableLimits(double *x, double *xlo, double *xhi, short *disable, long n) {
   long i;
 
   if (xlo)
-    for (i = 0; i < n; i++)
-      if (xlo[i] != xhi[i] && x[i] < xlo[i])
+    for (i = 0; i < n; i++) {
+      if (disable[i] || (xhi && xlo[i] == xhi[i]))
+	continue;
+      if (x[i] < xlo[i])
         return 0;
-
+    }
+  
   if (xhi)
-    for (i = 0; i < n; i++)
-      if (xlo[i] != xhi[i] && x[i] > xhi[i])
+    for (i = 0; i < n; i++) {
+      if (disable[i] || (xlo && xlo[i] == xhi[i]))
+	continue;
+      if (x[i] > xhi[i])
         return 0;
+    }
+  
   return 1;
 }
 
@@ -114,7 +121,7 @@ double trialSimplex(
   }
 
   /* check limits on the values of each coordinate of the trial vector */
-  if (!checkVariableLimits(trialVector, coordLowerLimit, coordUpperLimit, dimensions)) {
+  if (!checkVariableLimits(trialVector, coordLowerLimit, coordUpperLimit, disable, dimensions)) {
     /* return 1e9*funcValue[worstPoint]; this is wrong 
       in the casue of funcValue[worstPoint]<0 */
 #if DEBUG
@@ -571,9 +578,11 @@ long simplexMin(
   if (flags & SIMPLEX_VERBOSE_LEVEL1) {
     fprintf(stdout, "simplexMin: starting conditions:\n");
     for (direction = 0; direction < dimensions; direction++)
-      fprintf(stdout, "direction %ld: guess=%le delta=%le disable=%hd\n",
+      fprintf(stdout, "direction %ld: guess=%le delta=%le disable=%hd, min=%le, max=%le\n",
               direction, xGuess[direction], dxGuess[direction],
-              disable ? disable[direction] : (short)0);
+              disable ? disable[direction] : (short)0,
+	      xLowerLimit ? xLowerLimit[direction] : -DBL_MAX,
+	      xUpperLimit ? xUpperLimit[direction] : DBL_MAX);
     fflush(stdout);
   }
 
@@ -645,7 +654,7 @@ long simplexMin(
           }
           simplexVector[point][dimension] = simplexVector[point - 1][dimension] + dxGuess[dimension] / divisor;
           if ((xLowerLimit || xUpperLimit) &&
-              !checkVariableLimits(simplexVector[point], xLowerLimit, xUpperLimit, dimensions)) {
+              !checkVariableLimits(simplexVector[point], xLowerLimit, xUpperLimit, disable, dimensions)) {
 #if DEBUG
             long idum;
             fprintf(stdout, " Point outside of bounds:\n");
@@ -658,6 +667,10 @@ long simplexMin(
             /* y[point] = fabs(y[0])*1e9;*/
             y[point] = DBL_MAX;
           } else {
+#if DEBUG
+	    fprintf(stdout, " Evaluating point\n");
+	    fflush(stdout);
+#endif
             y[point] = (*func)(simplexVector[point], &isInvalid);
             totalEvaluations++;
             if (isInvalid) {
@@ -718,7 +731,7 @@ long simplexMin(
           simplexVector[point][dimension] = simplexVector[0][dimension] +
                                             dxGuess[dimension] / divisor;
           if ((xLowerLimit || xUpperLimit) &&
-              !checkVariableLimits(simplexVector[point], xLowerLimit, xUpperLimit, dimensions)) {
+              !checkVariableLimits(simplexVector[point], xLowerLimit, xUpperLimit, disable, dimensions)) {
             divisions++;
           } else {
             y[point] = (*func)(simplexVector[point], &isInvalid);
@@ -761,7 +774,7 @@ long simplexMin(
           divisor /= divisorFactor; /* increase step size */
           simplexVector[point][dimension] += dxGuess[dimension] / divisor;
           if ((xLowerLimit || xUpperLimit) &&
-              !checkVariableLimits(simplexVector[point], xLowerLimit, xUpperLimit, dimensions)) {
+              !checkVariableLimits(simplexVector[point], xLowerLimit, xUpperLimit, disable, dimensions)) {
             simplexVector[point][dimension] -= dxGuess[dimension] / divisor;
             break;
           }
@@ -925,6 +938,7 @@ long simplexMin(
  * @param x Array of variable values to be checked and corrected.
  * @param xlo Array of lower limits for each variable.
  * @param xhi Array of upper limits for each variable.
+ * @param disable Array of flags indicating if variable is disabled.
  * @param n Number of variables.
  */
 void enforceVariableLimits(double *x, double *xlo, double *xhi, long n) {
