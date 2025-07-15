@@ -20,18 +20,16 @@
  * @brief Computes the complex error function of a given complex number.
  *
  * @param z The complex number input.
- * @param flag Pointer to a flag variable to store computation status.
+ * @param overflow Pointer to a flag variable to store computation status.
  *        1 = error, 0 = no error
  * @return The complex error function value of z.
  */
-std::complex<double> complexErf(std::complex<double> z, long *flag) {
+std::complex<double> complexErf(std::complex<double> z, long *overflow) {
   double xi, yi;
   double u = 0, v = 0;
-  long lflag = 0;
   xi = z.real();
   yi = z.imag();
-  wofz(&xi, &yi, &u, &v, &lflag);
-  *flag = lflag;
+  wofz(&xi, &yi, &u, &v, overflow);
   return std::complex<double>(u, v);
 }
 
