@@ -50,7 +50,7 @@ long checkVariableLimits(double *x, double *xlo, double *xhi, short *disable, lo
 
   if (xlo)
     for (i = 0; i < n; i++) {
-      if (disable[i] || (xhi && xlo[i] == xhi[i]))
+      if (disable && (disable[i] || (xhi && xlo[i] == xhi[i])))
 	continue;
       if (x[i] < xlo[i])
         return 0;
@@ -58,7 +58,7 @@ long checkVariableLimits(double *x, double *xlo, double *xhi, short *disable, lo
   
   if (xhi)
     for (i = 0; i < n; i++) {
-      if (disable[i] || (xlo && xlo[i] == xhi[i]))
+      if (disable && (disable[i] || (xlo && xlo[i] == xhi[i])))
 	continue;
       if (x[i] > xhi[i])
         return 0;
