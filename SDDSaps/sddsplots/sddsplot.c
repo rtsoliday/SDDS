@@ -103,9 +103,9 @@ char *USAGE3 = "  -topTitle\n\
   -subticksettings=[{xy}divisions=<integer>][,[{xy}]grid][,[{xy}]linetype=<integer>][,[{xy}]thickness=<integer>][,{xy}size=<fraction>][,xNoLogLabel][,yNoLogLabel]\n\
   -ticksettings=[{xy}spacing=<value>][,[{xy}]grid][,[{xy}]linetype=<integer>][,[{xy}]thickness=<integer>][,{xy}size=<fraction>][{xy}modulus=<value>][,[{xy}]logarithmic][,{xy}factor=<value>][,{xy}time][,{xy}nonExponentialLabels][,{xy}scaleChars=<factor>][,[{xy}]labelThickness=<integer>]\n\
   -enumeratedScales=[interval=<integer>][,limit=<integer>][,scale=<factor>][,allTicks][,rotate][,editCommand=<string>]\n\
-  -xScalesGroup={ID=<string>|fileIndex|fileString|nameIndex|nameString|page|request|units}\n";
+  -xScalesGroup={ID=<string>|fileIndex|fileString|nameIndex|nameString|page|request|units}[,top]\n";
 
-char *USAGE4 = "  -yScalesGroup={ID=<string>|fileIndex|fileString|nameIndex|nameString|page|request|units}\n\
+char *USAGE4 = "  -yScalesGroup={ID=<string>|fileIndex|fileString|nameIndex|nameString|page|request|units}[,right]\n\
   -legend={{xy}symbol|{xy}description|{xy}name|filename|specified=<string>|parameter=<name>}{,editCommand=<edit-string>}[,units][,firstFileOnly][,scale=<value>][,thickness=<integer>][,nosubtype]\n\
   -pointlabel=<name>[,edit=<editCommand>][,scale=<number>][,justifyMode={rcl}{bct}][,thickness=<integer>[,lineType=<integer>]][,vertical]\n\
   -newPanel  -endPanel  -nextPage\n\
