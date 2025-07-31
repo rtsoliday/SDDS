@@ -2333,10 +2333,6 @@ int32_t SDDS_ReadBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_i
   if (last_rows < 0)
     last_rows = 0;
   /* Fix this limitation later */
-  if (SDDS_dataset->layout.data_mode.column_major && sparse_statistics != 0) {
-    SDDS_SetError("sparse_statistics is not yet supported for column-major layout. Use sddsconvert -majorOrder=row to convert first.\n");
-    return (0);
-  }
 
   if (last_rows) {
     sparse_interval = 1;
@@ -2368,11 +2364,118 @@ int32_t SDDS_ReadBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_i
   }
   if (SDDS_dataset->layout.data_mode.column_major) {
     SDDS_dataset->n_rows = n_rows;
-    if (!SDDS_ReadBinaryColumns(SDDS_dataset, sparse_interval, sparse_offset)) {
-      SDDS_SetError("Unable to read page--column reading error (SDDS_ReadBinaryPageDetailed)");
-      return (0);
+    if (sparse_statistics == 0) {
+      if (!SDDS_ReadBinaryColumns(SDDS_dataset, sparse_interval, sparse_offset)) {
+        SDDS_SetError("Unable to read page--column reading error (SDDS_ReadBinaryPageDetailed)");
+        return (0);
+      }
+      return (SDDS_dataset->page_number);
+    } else {
+      /* allocate space for full columns if needed */
+      if (SDDS_dataset->n_rows_allocated < n_rows) {
+        if (!SDDS_LengthenTable(SDDS_dataset, n_rows - SDDS_dataset->n_rows_allocated)) {
+          SDDS_SetError("Unable to read page--couldn't start page (SDDS_ReadBinaryPageDetailed)");
+          return (0);
+        }
+      }
+      if (!SDDS_ReadBinaryColumns(SDDS_dataset, 1, 0)) {
+        SDDS_SetError("Unable to read page--column reading error (SDDS_ReadBinaryPageDetailed)");
+        return (0);
+      }
+      statData = (void**)malloc(SDDS_dataset->layout.n_columns * sizeof(void*));
+      for (i = 0; i < SDDS_dataset->layout.n_columns; i++) {
+        statData[i] = NULL;
+        if (SDDS_FLOATING_TYPE(SDDS_dataset->layout.column_definition[i].type))
+          statData[i] = (double*)calloc(sparse_interval, sizeof(double));
+      }
+      n_rows -= sparse_offset;
+      for (j = k = 0; j < n_rows; j++) {
+        for (i = 0; i < SDDS_dataset->layout.n_columns; i++) {
+          switch (SDDS_dataset->layout.column_definition[i].type) {
+          case SDDS_FLOAT:
+            if (statData[i])
+              ((double*)statData[i])[j % sparse_interval] = (double)(((float*)SDDS_dataset->data[i])[j + sparse_offset]);
+            break;
+          case SDDS_DOUBLE:
+            if (statData[i])
+              ((double*)statData[i])[j % sparse_interval] = ((double*)SDDS_dataset->data[i])[j + sparse_offset];
+            break;
+          case SDDS_LONGDOUBLE:
+            if (statData[i])
+              ((double*)statData[i])[j % sparse_interval] = (double)(((long double*)SDDS_dataset->data[i])[j + sparse_offset]);
+            break;
+          case SDDS_STRING:
+            if (((char ***)SDDS_dataset->data)[i][k])
+              free(((char ***)SDDS_dataset->data)[i][k]);
+            ((char ***)SDDS_dataset->data)[i][k] = ((char ***)SDDS_dataset->data)[i][j + sparse_offset];
+            ((char ***)SDDS_dataset->data)[i][j + sparse_offset] = NULL;
+            break;
+          case SDDS_SHORT:
+            ((short*)SDDS_dataset->data[i])[k] = ((short*)SDDS_dataset->data[i])[j + sparse_offset];
+            break;
+          case SDDS_USHORT:
+            ((unsigned short*)SDDS_dataset->data[i])[k] = ((unsigned short*)SDDS_dataset->data[i])[j + sparse_offset];
+            break;
+          case SDDS_LONG:
+            ((int32_t*)SDDS_dataset->data[i])[k] = ((int32_t*)SDDS_dataset->data[i])[j + sparse_offset];
+            break;
+          case SDDS_ULONG:
+            ((uint32_t*)SDDS_dataset->data[i])[k] = ((uint32_t*)SDDS_dataset->data[i])[j + sparse_offset];
+            break;
+          case SDDS_LONG64:
+            ((int64_t*)SDDS_dataset->data[i])[k] = ((int64_t*)SDDS_dataset->data[i])[j + sparse_offset];
+            break;
+          case SDDS_ULONG64:
+            ((uint64_t*)SDDS_dataset->data[i])[k] = ((uint64_t*)SDDS_dataset->data[i])[j + sparse_offset];
+            break;
+          case SDDS_CHARACTER:
+            ((char*)SDDS_dataset->data[i])[k] = ((char*)SDDS_dataset->data[i])[j + sparse_offset];
+            break;
+          default:
+            break;
+          }
+          if (statData[i]) {
+            if (sparse_statistics == 1)
+              compute_average(&statResult, (double*)statData[i], (j % sparse_interval) + 1);
+            else if (sparse_statistics == 2)
+              compute_median(&statResult, (double*)statData[i], (j % sparse_interval) + 1);
+            else if (sparse_statistics == 3)
+              statResult = min_in_array((double*)statData[i], (j % sparse_interval) + 1);
+            else if (sparse_statistics == 4)
+              statResult = max_in_array((double*)statData[i], (j % sparse_interval) + 1);
+            switch (SDDS_dataset->layout.column_definition[i].type) {
+            case SDDS_FLOAT:
+              ((float*)SDDS_dataset->data[i])[k] = statResult;
+              break;
+            case SDDS_DOUBLE:
+              ((double*)SDDS_dataset->data[i])[k] = statResult;
+              break;
+            case SDDS_LONGDOUBLE:
+              ((long double*)SDDS_dataset->data[i])[k] = statResult;
+              break;
+            }
+          }
+        }
+        if (j % sparse_interval == sparse_interval - 1)
+          k++;
+      }
+      for (i = 0; i < SDDS_dataset->layout.n_columns; i++) {
+        if (SDDS_dataset->layout.column_definition[i].type == SDDS_STRING) {
+          int64_t r;
+          for (r = k; r < SDDS_dataset->n_rows; r++) {
+            if (((char ***)SDDS_dataset->data)[i][r]) {
+              free(((char ***)SDDS_dataset->data)[i][r]);
+              ((char ***)SDDS_dataset->data)[i][r] = NULL;
+            }
+          }
+        }
+        if (statData[i])
+          free(statData[i]);
+      }
+      free(statData);
+      SDDS_dataset->n_rows = k;
+      return (SDDS_dataset->page_number);
     }
-    return (SDDS_dataset->page_number);
   }
   if ((sparse_interval <= 1) && (sparse_offset == 0)) {
     for (j = 0; j < n_rows; j++) {
