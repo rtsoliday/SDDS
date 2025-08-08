@@ -109,7 +109,10 @@ char *USAGE = "sddscontour [-pipe] [<SDDSfilename>]\n\
  [-mapShade=<hue0>,<hue1>] \n\
  [-scales=<xl>,<xh>,<yl>,<yh>] [-v1v2Preferred] \n\
  [-labelcontours=interval[,offset]] [-logscale[=<floor>]]\n\
- [-device=<name>[,<device-arguments>]] [-output=<filename>]\n\
+ [-device={qt|motif|png|postscript}[,<device-arguments>]] [-output=<filename>]\n\
+ qt device arguments: '-dashes <0|1> -linetype <filename> -movie 1 [-interval <seconds>] -keep <number> -share <name> -timeoutHours <hours> -spectrum'\n\
+ motif device arguments: '-dashes 1 -linetype lineDefineFile'\n\
+ png device arguments: 'rootname=<name>,template=<string>,onwhite,onblack,dashes,movie'\n\
  [-interpolate=<nx>,<ny>[,{floor|ceiling|antiripple}]] [-filter=<xcutoff>,<ycutoff>]\n\
  [-shapes=<filename>,<xColumn>,<yColumn>[,type=<lineType>][,thickness=<value>]]\n\
  [-symbols=<filename>,<xColumn>,<yColumn>[,type=<symbolType>][,fill][,thickness=<value>][,scale=<factor>]]\n\

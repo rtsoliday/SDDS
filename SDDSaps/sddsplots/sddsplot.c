@@ -127,9 +127,10 @@ char *USAGE5 = "  -offset=[{x|y}change={value>][,{x|y}parameter=<name>][,{x|y}in
   -convertunits={column|parameter},<name>,<new-units-name>,<old-units-name>[,<factor>]\n\
   -orderColors={temperature|rtemperature|spectral|rspectral|start=(<red>,<green>,<blue>){[,finish=(<red>,<green>,<blue>)]|[,increment=(<red>,<green>,<blue>)]}}\n\
   All colors range from 0 to 65535.\n\
-  -device={qt|motif|png|postscript}[,dashes,linetypetable=<lineDefineFile>]\n\
-  for qt and motif device arguments, use '-dashes 1 -linetype lineDefineFile' \n\
-  for png device arguments, use 'rootname=<name>,template=<string>,onwhite,onblack,dashes,movie' \n\n\
+  -device={qt|motif|png|postscript}[,dashes,linetypetable=<lineDefineFile>,movie,interval=<seconds>,keep=<number>,share=<name>,timeoutHours=<hours>,spectrum]\n\
+  qt device arguments: '-dashes <0|1> -linetype <filename> -movie 1 [-interval <seconds>] -keep <number> -share <name> -timeoutHours <hours> -spectrum'\n\
+  motif device arguments: '-dashes 1 -linetype lineDefineFile'\n\
+  png device arguments: 'rootname=<name>,template=<string>,onwhite,onblack,dashes,movie' \n\n\
   A <match-test> is of the form <name>=<matching-string>[,!], where ! signifies logical negation.\n\
   A <logic-operation> is one of & (logical and) or | (logical or), optionally followed by a ! to \n\
   logically negate the value of the expression.\n\

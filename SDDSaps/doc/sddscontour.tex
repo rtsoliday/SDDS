@@ -224,9 +224,11 @@ C, respectively.
 [-output={\em filename}] [-verbosity[=level]]
 }\end{flushleft}
         \begin{itemize}
-        \item \verb|device| --- Specifies the device name and optional device-specific arguments. png devices
+        \item \verb|device| --- Specifies the device name and optional device-specific arguments. Qt device
+        arguments include \verb|-dashes <0|1>|, \verb|-linetype <filename>|, \verb|-movie 1| [\verb|-interval <sec>|],
+        \verb|-keep <number>|, \verb|-share <name>|, \verb|-timeoutHours <hours>|, and \verb|-spectrum|. png devices
         take rootname and template identifiers. {\tt rootname={\em string}} specifies a rootname
-        for automatic filename generation; the resulting filenames are of the form {\em rootname}.DDD, where DDD 
+        for automatic filename generation; the resulting filenames are of the form {\em rootname}.DDD, where DDD
         is a three-digit integer. {\tt template={\em string}} provides a more general facility; one uses it to
         specify an sprintf-style format string to use in creating filenames. For example, the behavior obtained
         using {\tt rootname={\em name}} may be obtained  using {\tt template={\em name}.\%03ld}.

@@ -194,12 +194,16 @@ local switches.
         \begin{itemize} 
         \item {\tt motif} --- The device arguments are a single string of space-separated entries of the
         form {\tt -{\em resourceName} {\em value}}.  These are passed directly to the MOTIF ``outboard-driver''
-        without any interpretation.For example,{\tt "-dashes {\em 1}"} qualifier sets the line types with 
+        without any interpretation.For example,{\tt "-dashes {\em 1}"} qualifier sets the line types with
         built-in dash styles; {\tt "-linetype {\em linetypeFileName }"} forces MOTIF "outboard-driver" to use
-        the user-defined line types (color,dash,thickness)  in a SDDS file intead of the default line types. 
-        Other resource names may be found in the help for the driver. 
+        the user-defined line types (color,dash,thickness)  in a SDDS file intead of the default line types.
+        Other resource names may be found in the help for the driver.
+        \item {\tt qt} --- The device arguments are given as a space-separated string passed to the Qt
+        driver.  Valid options include {\tt -dashes <0|1>}, {\tt -linetype <file>}, {\tt -movie 1}
+        [{\tt -interval <sec>}], {\tt -keep <number>}, {\tt -share <name>}, {\tt -timeoutHours <hours>}, and
+        {\tt -spectrum}.
         \item {\tt postscript},{\tt cpostscript} --- Four qualifiers are presently accepted. {\tt dash} sets
-        the cpostscript device to use built-in dash styles for the line drawing. 
+        the cpostscript device to use built-in dash styles for the line drawing.
         {\tt linetypetable={\em linetypeFileName}} replaces the default line types with the customized line types
         defined in a SDDS file. {\tt onblack} and {\tt onwhite} set the background of the plot.
         \item {\tt png} --- PNG devices accept {\tt rootname}, {\tt template}, {\tt onwhite}, {\tt onblack}, 
