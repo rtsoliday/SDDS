@@ -25,6 +25,9 @@ endif
 
 include Makefile.rules
 
+# Command to invoke pytest. Additional options can be supplied by setting PYTEST.
+PYTEST ?= pytest -q
+
 ifeq ($(OS), Linux)
   GSL_LOCAL = $(wildcard gsl)
   ifneq ($(IMPROV_BUILD),1)
@@ -76,7 +79,7 @@ ifneq ($(MPI_CC),)
 DIRS += pgapack
 endif
 
-.PHONY: all $(DIRS) clean distclean
+.PHONY: all $(DIRS) clean distclean test
 
 all: $(DIRS)
 
@@ -203,3 +206,6 @@ distclean: clean
 	$(HDF5_CLEAN)
 	rm -rf bin/$(OS)-$(ARCH)
 	rm -rf lib/$(OS)-$(ARCH)
+
+test: all
+	$(PYTEST)
