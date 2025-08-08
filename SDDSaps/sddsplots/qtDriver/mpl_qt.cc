@@ -6,6 +6,9 @@
  */
 
 #include "mpl_qt.h"
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <unistd.h>
 
 double scalex, scaley;
 #define Xpixel(value) (int)(((value) - userx0) * scalex)
@@ -45,6 +48,8 @@ int spectrumallocated = 0;
 unsigned short red0 = 0, green0 = 0, blue0 = 0, red1 = 65535, green1 = 65535, blue1 = 65535;
 int currentPlot = 1;
 FILE *ifp = NULL;
+class StdinReader;
+StdinReader *stdinReader = NULL;
 bool replotZoom = true;
 bool tracking = false;
 bool domovie = false;
@@ -65,23 +70,26 @@ QMainWindow *mainWindowPointer;
 class StdinReader : public QObject {
   Q_OBJECT
 public:
-  StdinReader(QObject *parent = nullptr) : QObject(parent) {
-    // Create a notifier for stdin (file descriptor 0)
-    notifier = new QSocketNotifier(fileno(stdin), QSocketNotifier::Read, this);
+  StdinReader(int fd, QObject *parent = nullptr) : QObject(parent) {
+    notifier = new QSocketNotifier(fd, QSocketNotifier::Read, this);
     connect(notifier, &QSocketNotifier::activated, this, &StdinReader::handleActivated);
   }
+  void setEnabled(bool enable) { notifier->setEnabled(enable); }
 public slots:
   void handleActivated(int) {
-    // Call the global readdata() when stdin is ready
     if (domovie)
       notifier->setEnabled(false);
     if (readdata() == 1) {
       notifier->setEnabled(false);
+      if (ifp && ifp != stdin) {
+        fclose(ifp);
+        ifp = NULL;
+      }
       QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
       mainWindowPointer->setWindowTitle(wtitle);
     } else if (domovie) {
       QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
-      QTime dieTime= QTime::currentTime().addSecs(movieIntervalTime);
+      QTime dieTime = QTime::currentTime().addSecs(movieIntervalTime);
       mainWindowPointer->setWindowTitle(wtitle);
       while (QTime::currentTime() < dieTime)
         QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
@@ -94,6 +102,22 @@ public slots:
 private:
   QSocketNotifier *notifier;
 };
+
+static void startReader(int fd) {
+  if (stdinReader) {
+    delete stdinReader;
+    stdinReader = NULL;
+  }
+  if (ifp && ifp != stdin) {
+    fclose(ifp);
+    ifp = NULL;
+  }
+  if (fd == 0)
+    ifp = stdin;
+  else
+    ifp = fdopen(fd, "rb");
+  stdinReader = new StdinReader(fd);
+}
 
 /**
  * @brief Canvas widget for drawing plots.
@@ -570,6 +594,7 @@ int main(int argc, char *argv[]) {
   QWidget *centralWidget = new QWidget;
   QVBoxLayout *layout = new QVBoxLayout(centralWidget);
 
+  QString shareName;
   for (int i = 1; i < argc; i++) {
     if (argv[i][0] == '-' || argv[i][0] == '/') {
       switch (argv[i][1]) {
@@ -621,6 +646,7 @@ int main(int argc, char *argv[]) {
                         "              [-linetype <filename>]\n"
                         "              [-movie 1 [-interval 1]]\n"
                         "              [-keep <number>]\n"
+                        "              [-share <name>]\n"
                         "              [-timeoutHours <hours>]\n");
         fprintf(stdout, "Example: sddsplot \"-device=qt,-dashes 1 -movie 1 -interval 5\"\n");
         exit(0);
@@ -661,10 +687,12 @@ int main(int argc, char *argv[]) {
           exit(1);
         }
         break;
-      case 's': /* -spectrum */
+      case 's': /* -spectrum or -share */
         if (!strcmp("spectrum", argv[i] + 1)) {
           if (!spectrumallocated)
             allocspectrum();
+        } else if (!strcmp("share", argv[i] + 1)) {
+          shareName = argv[++i];
         } else {
           fprintf(stderr, "Invalid option %s\n", argv[i]);
           exit(1);
@@ -695,6 +723,45 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  QLocalServer *server = NULL;
+  if (!shareName.isEmpty()) {
+    QLocalSocket sock;
+    sock.connectToServer(shareName);
+    if (sock.waitForConnected(100)) {
+      char buffer[4096];
+      size_t n;
+      while ((n = fread(buffer, 1, sizeof(buffer), stdin)) > 0) {
+        sock.write(buffer, n);
+        sock.flush();
+        sock.waitForBytesWritten(-1);
+      }
+      sock.flush();
+      sock.waitForBytesWritten(-1);
+      sock.disconnectFromServer();
+      if (sock.state() != QLocalSocket::UnconnectedState)
+        sock.waitForDisconnected();
+      return 0;
+    } else {
+      server = new QLocalServer(&mainWindow);
+      if (!server->listen(shareName)) {
+        fprintf(stderr, "Unable to listen on share %s\n", shareName.toLocal8Bit().constData());
+        return 1;
+      }
+      QObject::connect(server, &QLocalServer::newConnection, [&]() {
+        QLocalSocket *socket = server->nextPendingConnection();
+        int fd = dup(socket->socketDescriptor());
+        if (fd == -1) {
+          perror("dup");
+          socket->deleteLater();
+          return;
+        }
+        startReader(fd);
+        stdinReader->handleActivated(0);
+        QObject::connect(socket, &QLocalSocket::disconnected, socket, &QLocalSocket::deleteLater);
+      });
+    }
+  }
+
   // Add a large black frame (serves as a canvas for future graph)
   canvas = new Canvas;
   canvas->resize(WIDTH, HEIGHT);
@@ -709,7 +776,7 @@ int main(int argc, char *argv[]) {
 
   alloccolors();
 
-  new StdinReader(&app);
+  startReader(0);
 
   return app.exec();
 }
