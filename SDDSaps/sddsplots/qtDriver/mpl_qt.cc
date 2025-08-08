@@ -6,9 +6,14 @@
  */
 
 #include "mpl_qt.h"
+
+#include <unistd.h>
+#ifndef _WIN32
+#  include <fcntl.h>
+#endif
+
 #include <QLocalServer>
 #include <QLocalSocket>
-#include <unistd.h>
 #ifdef _WIN32
 #  include <windows.h>
 #elif defined(__APPLE__)
@@ -146,6 +151,13 @@ static void startReader(int fd) {
   if (ifp && ifp != stdin) {
     fclose(ifp);
     ifp = NULL;
+  }
+  if (fd != 0) {
+#ifndef _WIN32
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags != -1)
+      fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+#endif
   }
   if (fd == 0)
     ifp = stdin;
