@@ -978,7 +978,7 @@ void columnbin_sddsplot_data(PLOT_SPEC *plspec)
     dataset = plspec->dataset[iset];
     plreq = plspec->plot_request+dataset.request_index;
     if (plreq->split.flags&SPLIT_COLUMNBIN && (plreq->split.width == 0)) {
-      plreq->split.width = (plreq->split.end - plreq->split.start) / 100.0;
+      plreq->split.width = nextafter((plreq->split.end - plreq->split.start) / 100.0, -INFINITY);
     }
   }
   keep = NULL;
