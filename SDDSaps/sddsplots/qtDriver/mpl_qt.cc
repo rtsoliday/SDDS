@@ -790,8 +790,18 @@ int main(int argc, char *argv[]) {
           socket->deleteLater();
           return;
         }
+        int previousPlots = nplots;
         startReader(fd);
         stdinReader->handleActivated(0);
+        if (nplots > previousPlots) {
+          currentPlot = previousPlots + 1;
+          cur = last;
+          while (cur->prev && cur->nplot > currentPlot)
+            cur = cur->prev;
+          canvas->update();
+          QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
+          mainWindow.setWindowTitle(wtitle);
+        }
         makeWindowVisible(&mainWindow);
         QObject::connect(socket, &QLocalSocket::disconnected, socket, &QLocalSocket::deleteLater);
       });
