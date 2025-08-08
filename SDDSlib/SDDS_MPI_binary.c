@@ -1185,8 +1185,8 @@ int32_t SDDS_MPI_BufferedRead(void *target, int64_t targetSize, SDDS_DATASET *SD
   }
   if ((fBuffer->bytesLeft -= targetSize) >= 0) {
     /* sufficient data is already in the buffer */
-    if (target) {
-      memcpy((char *)target, (char *)fBuffer->data, targetSize);
+    if (target && targetSize > 0) {
+      memcpy((char *)target, (char *)fBuffer->data, (size_t)targetSize);
     }
     fBuffer->data += targetSize;
     return 1;
@@ -1197,8 +1197,8 @@ int32_t SDDS_MPI_BufferedRead(void *target, int64_t targetSize, SDDS_DATASET *SD
     /* first, use the data that is already available. this cleans out the buffer */
     if ((offset = fBuffer->bytesLeft)) {
       /* some data is available in the buffer */
-      if (target) {
-        memcpy((char *)target, (char *)fBuffer->data, offset);
+      if (target && offset > 0) {
+        memcpy((char *)target, (char *)fBuffer->data, (size_t)offset);
       }
       bytesNeeded = targetSize - offset;
       fBuffer->bytesLeft = 0;
@@ -1234,8 +1234,8 @@ int32_t SDDS_MPI_BufferedRead(void *target, int64_t targetSize, SDDS_DATASET *SD
       MPI_dataset->end_of_file = 1;
     if (fBuffer->bytesLeft < bytesNeeded)
       return 0;
-    if (target)
-      memcpy((char *)target + offset, (char *)fBuffer->data, bytesNeeded);
+    if (target && bytesNeeded > 0)
+      memcpy((char *)target + offset, (char *)fBuffer->data, (size_t)bytesNeeded);
     fBuffer->data += bytesNeeded;
     fBuffer->bytesLeft -= bytesNeeded;
     return 1;
@@ -1285,8 +1285,8 @@ int32_t SDDS_MPI_BufferedReadAll(void *target, int64_t targetSize, SDDS_DATASET 
   }
   if ((fBuffer->bytesLeft -= targetSize) >= 0) {
     /* sufficient data is already in the buffer */
-    if (target) {
-      memcpy((char *)target, (char *)fBuffer->data, targetSize);
+    if (target && targetSize > 0) {
+      memcpy((char *)target, (char *)fBuffer->data, (size_t)targetSize);
     }
     fBuffer->data += targetSize;
     return 1;
@@ -1297,8 +1297,8 @@ int32_t SDDS_MPI_BufferedReadAll(void *target, int64_t targetSize, SDDS_DATASET 
     /* first, use the data that is already available. this cleans out the buffer */
     if ((offset = fBuffer->bytesLeft)) {
       /* some data is available in the buffer */
-      if (target) {
-        memcpy((char *)target, (char *)fBuffer->data, offset);
+      if (target && offset > 0) {
+        memcpy((char *)target, (char *)fBuffer->data, (size_t)offset);
       }
       bytesNeeded = targetSize - offset;
       fBuffer->bytesLeft = 0;
@@ -1334,8 +1334,8 @@ int32_t SDDS_MPI_BufferedReadAll(void *target, int64_t targetSize, SDDS_DATASET 
       MPI_dataset->end_of_file = 1;
     if (fBuffer->bytesLeft < bytesNeeded)
       return 0;
-    if (target)
-      memcpy((char *)target + offset, (char *)fBuffer->data, bytesNeeded);
+    if (target && bytesNeeded > 0)
+      memcpy((char *)target + offset, (char *)fBuffer->data, (size_t)bytesNeeded);
     fBuffer->data += bytesNeeded;
     fBuffer->bytesLeft -= bytesNeeded;
     return 1;
