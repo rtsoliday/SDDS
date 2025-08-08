@@ -9,6 +9,11 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <unistd.h>
+#ifdef _WIN32
+#  include <windows.h>
+#elif defined(__APPLE__)
+#  include <ApplicationServices/ApplicationServices.h>
+#endif
 
 double scalex, scaley;
 #define Xpixel(value) (int)(((value) - userx0) * scalex)
@@ -60,6 +65,36 @@ extern "C" {
 QAction *replotZoomAction;
 QFrame *canvas;
 QMainWindow *mainWindowPointer;
+
+/**
+ * @brief Ensure the window is visible and active.
+ *
+ * Restores and raises the given window across platforms so that it
+ * becomes visible even if minimized or on a different workspace.
+ *
+ * @param window Pointer to the window to make visible.
+ */
+static void makeWindowVisible(QMainWindow *window) {
+#ifdef _WIN32
+  HWND hwnd = (HWND)window->winId();
+  if (IsIconic(hwnd))
+    ShowWindow(hwnd, SW_RESTORE);
+  else
+    ShowWindow(hwnd, SW_SHOW);
+  SetForegroundWindow(hwnd);
+#elif defined(__APPLE__)
+  ProcessSerialNumber psn = {0, kCurrentProcess};
+  TransformProcessType(&psn, kProcessTransformToForegroundApplication);
+  SetFrontProcess(&psn);
+  window->showNormal();
+  window->raise();
+  window->activateWindow();
+#else
+  window->showNormal();
+  window->raise();
+  window->activateWindow();
+#endif
+}
 
 /**
  * @brief Reads from standard input and triggers plot updates.
@@ -757,6 +792,7 @@ int main(int argc, char *argv[]) {
         }
         startReader(fd);
         stdinReader->handleActivated(0);
+        makeWindowVisible(&mainWindow);
         QObject::connect(socket, &QLocalSocket::disconnected, socket, &QLocalSocket::deleteLater);
       });
     }
