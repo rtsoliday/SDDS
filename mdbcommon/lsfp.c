@@ -1,8 +1,11 @@
 
-/* routine: lsfp()
- * purpose: compute nth order polynomial least squares, using only specified
- *          terms.
- * 
+/**
+ * @file lsfp.c
+ * @brief Polynomial least squares fit using specified terms.
+ *
+ * Implements the `lsfp` routine that computes an nth order polynomial
+ * least squares fit using only the terms requested by the caller.
+ *
  * Michael Borland, 1986.
  */
 #include "matlib.h"
