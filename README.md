@@ -6,7 +6,7 @@ The **SDDS (Self Describing Data Sets) Library** is a C/C++ library designed for
 ## Features
 - Read and write **ASCII** and **binary** SDDS files.
 - Supports **parameters**, **arrays**, and **column** data.
-- Includes utilities for **data compression (LZMA, GZIP)**.
+- Includes utilities for **data compression (LZMA, Zstd, GZIP)**.
 - Compatible with **MPI for parallel processing**.
 - Provides numerical manipulation and mathematical utilities.
 
@@ -22,22 +22,22 @@ sudo yum install gcc gcc-c++ make zlib-devel libzstd-devel xz-devel hdf5-devel l
 
 ### Ubuntu, Debian
 ```bash
-sudo apt install --ignore-missing gcc g++ make zlib1g-dev libzstd-dev liblzma-dev libhdf5-dev libaec-dev libgsl-dev libpng-dev libgd-dev liblerc-dev libdeflate-dev libtiff-dev qtbase5-dev libblas-dev liblapack-dev liblapacke-dev mpich libmpich-dev
+sudo apt install --ignore-missing gcc g++ make zlib1g-dev libzstd-dev liblzma-dev libhdf5-dev libaec-dev libgsl-dev libpng-dev libgd-dev liblerc-dev libdeflate-dev libtiff-dev qtbase5-dev libblas-dev liblapack-dev liblapacke-dev libfftw3-dev mpich libmpich-dev
 ```
 
 ### OpenSUSE
 ```bash
-sudo zypper install gcc gcc-c++ make zlib-devel libzstd-devel xz-devel hdf5-devel libaec-devel gsl-devel libpng-devel gd-devel lerc-devel libdeflate-devel libtiff-devel qt5-qtbase-devel blas-devel lapack-devel mpich mpich-devel
+sudo zypper install gcc gcc-c++ make zlib-devel libzstd-devel xz-devel hdf5-devel libaec-devel gsl-devel libpng-devel gd-devel lerc-devel libdeflate-devel libtiff-devel qt5-qtbase-devel blas-devel lapack-devel mpich mpich-devel fftw3-devel
 ```
 
 ### MacOS with MacPorts
 ```bash
-sudo port install zlib zstd xz hdf5 libaec gsl libpng gd2 lerc libdeflate tiff qt5 mpich
+sudo port install zlib zstd xz hdf5 libaec gsl libpng gd2 lerc libdeflate tiff qt5 mpich fftw-3
 ```
 
 ### Windows with Cygwin and MSVC
 - Install [Microsoft MPI](https://learn.microsoft.com/en-us/message-passing-interface/microsoft-mpi)
-- Install [Qt6](https://doc.qt.io/qt-6/qt-online-installation.html)
+- Install [Qt5](https://doc.qt.io/qt-5/qt5-introduction.html)
 - Install and build GNU Scientific Library
 ```bash
 git clone https://github.com/rtsoliday/gsl.git
@@ -71,7 +71,7 @@ cd ..
 ├── matlib/         # matrix manipulation functions
 ├── mdbcommon/      # general utility functions
 ├── utils/          # misc utility programs
-├── 2d_interpolate/ #
+├── 2d_interpolate/ # 2D interpolation libraries
 │   ├── nn/         # Natural Neighbours interpolation library
 │   ├── csa/        # Cubic Spline Approximation
 ├── png/            # PNG support for Windows
