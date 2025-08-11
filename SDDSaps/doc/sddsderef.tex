@@ -53,7 +53,7 @@ sddsderef [{\em input}] [{\em output}] [-pipe[=input][,output]]
     the index or indices given (as explicit values).  Unless the array (or 
     column) varies from page to page, the new parameter will have the 
     same value on each page. 
-    \item {\tt -outBounds=\{exit | delete\}} --- Specifies behavior in the event
+    \item {\tt -outOfBounds=\{exit | delete\}} --- Specifies behavior in the event
         that an index value is out of bounds (i.e., less than 0, or greater than
         or equal to the number of array elements or rows).  If {\tt exit} is given,
         the program aborts with an error; this is the default behavior.
