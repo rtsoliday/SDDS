@@ -43,8 +43,14 @@ double makeFloat64FromFloat80(unsigned char x[16], int32_t byteOrder);
 
 static int32_t defaultIOBufferSize = SDDS_FILEBUFFER_SIZE;
 
-/* this routine is obsolete.  Use SDDS_SetDefaultIOBufferSize(0) to effectively turn
- * off buffering.
+/**
+ * @brief Obsolete routine retained for backward compatibility.
+ *
+ * This function no longer performs any operations. Use
+ * SDDS_SetDefaultIOBufferSize(0) to disable buffering instead.
+ *
+ * @param dummy Unused parameter kept for API compatibility.
+ * @return Always returns 0.
  */
 int32_t SDDS_SetBufferedRead(int32_t dummy) {
   return 0;

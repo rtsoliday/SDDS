@@ -1,18 +1,23 @@
 /**
  * @file SDDS_utils.c
- * @brief This file provides miscellaneous functions for interacting with SDDS objects.
+ * @brief Miscellaneous helper functions for SDDS objects
  *
- * This file provides miscellaneous functions for interacting with SDDS objects.
+ * @details Provides general-purpose routines for working with SDDS data
+ * sets, including value printing and data buffer management.
  *
- * @copyright 
+ * @copyright
  *   - (c) 2002 The University of Chicago, as Operator of Argonne National Laboratory.
  *   - (c) 2002 The Regents of the University of California, as Operator of Los Alamos National Laboratory.
  *
- * @license 
+ * @license
  * This file is distributed under the terms of the Software License Agreement
  * found in the file LICENSE included with this distribution.
  *
- * @author M. Borland, C. Saunders, R. Soliday. H. Shang
+ * @authors
+ *   M. Borland,
+ *   C. Saunders,
+ *   R. Soliday,
+ *   H. Shang
  */
 
 #include "SDDS.h"

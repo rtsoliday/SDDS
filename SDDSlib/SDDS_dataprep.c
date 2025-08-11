@@ -1,18 +1,24 @@
 /**
  * @file SDDS_dataprep.c
- * @brief This file provides functions for SDDS dataset preparations.
+ * @brief Functions for preparing SDDS data sets
  *
- * This file provides functions for SDDS dataset preparations.
+ * @details Implements utility routines used prior to writing or
+ * manipulating SDDS tables, such as allocating column flags and starting
+ * new pages.
  *
- * @copyright 
+ * @copyright
  *   - (c) 2002 The University of Chicago, as Operator of Argonne National Laboratory.
  *   - (c) 2002 The Regents of the University of California, as Operator of Los Alamos National Laboratory.
  *
- * @license 
+ * @license
  * This file is distributed under the terms of the Software License Agreement
  * found in the file LICENSE included with this distribution.
  *
- * @author M. Borland, C. Saunders, R. Soliday. H. Shang
+ * @authors
+ *   M. Borland,
+ *   C. Saunders,
+ *   R. Soliday,
+ *   H. Shang
  */
 
 #include "SDDS.h"
