@@ -16,6 +16,14 @@
 #include "mdb.h"
 #include <time.h>
 
+/**
+ * @brief Determines whether a given year is a leap year.
+ *
+ * Years below 100 are interpreted as 19xx if greater than 95, otherwise 20xx.
+ *
+ * @param year The year to evaluate.
+ * @return 1 if the year is a leap year, 0 if not, and -1 for invalid input.
+ */
 short IsLeapYear(short year) {
   if (year < 0)
     return -1;
@@ -57,6 +65,15 @@ static short DaysInMonths[2][12] = {
   },
 };
 
+/**
+ * @brief Computes the Julian day number from a calendar date.
+ *
+ * @param month Month of the year (1-12).
+ * @param day Day of the month.
+ * @param year Year value.
+ * @param julianDay Pointer to store the resulting Julian day number.
+ * @return 1 on success, 0 on failure.
+ */
 short JulianDayFromMonthDay(short month, short day, short year, short *julianDay) {
   short leapYear, jday, i, daysInMonth;
 
@@ -75,6 +92,15 @@ short JulianDayFromMonthDay(short month, short day, short year, short *julianDay
   return 1;
 }
 
+/**
+ * @brief Converts a Julian day number to month and day components.
+ *
+ * @param julianDay The Julian day number to convert.
+ * @param year Year corresponding to the Julian day.
+ * @param month Pointer to store the resulting month (1-12).
+ * @param day Pointer to store the resulting day of the month.
+ * @return 1 on success, 0 on failure.
+ */
 short MonthDayFromJulianDay(short julianDay, short year, short *month, short *day) {
   short leapYear, sum, i, days;
 

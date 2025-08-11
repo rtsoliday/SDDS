@@ -24,16 +24,20 @@ static char *month[12] = {
   "august", "september", "october",
   "november", "december"};
 
-/* routine: convert_date_time()
- * purpose: convert time string, as from mtime(), to DATE_TIME structure.
- * assumed format of input string: day month year hours:minutes
- * The month must be written out (e.g., "June", not 6).
- * Michael Borland, 1987
+/**
+ * @brief Converts a time string into a DATE_TIME structure.
+ *
+ * The input should have the format "day month year hours:minutes" with the
+ * month written out (e.g., "June" rather than "6").
+ *
+ * @param dt Pointer to the DATE_TIME structure to populate.
+ * @param ct0 String containing the time specification.
+ * @return 1 on success, 0 on failure, or NO_TIME if the format is invalid.
  */
 
 convert_date_time(dt, ct0)
   DATE_TIME *dt;
-char *ct0;
+  char *ct0;
 {
   register char *ptr, *ct;
   register long i, l;
