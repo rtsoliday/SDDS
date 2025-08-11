@@ -1,11 +1,11 @@
-/*
-  --------------------------------------------------------------------
-  lookupa.c, by Bob Jenkins, December 1996. Public Domain.  No warranty.
-  Source is http://burtleburtle.net/bob/c/lookupa.c
-  Customized for elegant for both 32 and 64 bits machines by Yusong Wang,
-  May, 2007.
-  --------------------------------------------------------------------
-*/
+/**
+ * @file lookupa.c
+ * @brief Jenkins lookup hash functions for 32- and 64-bit machines.
+ *
+ * Based on public domain code by Bob Jenkins (December 1996), sourced from
+ * http://burtleburtle.net/bob/c/lookupa.c. Customized for elegant for both
+ * 32- and 64-bit machines by Yusong Wang (May 2007). Public domain; no warranty.
+ */
 #ifndef STANDARD
 #  include "standard.h"
 #endif

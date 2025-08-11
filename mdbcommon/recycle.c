@@ -1,17 +1,12 @@
-/*
-  --------------------------------------------------------------------
-  By Bob Jenkins, September 1996.  recycle.c
-  You may use this code in any way you wish, and it is free.  No warranty.
-
-  This manages memory for commonly-allocated structures.
-  It allocates RESTART to REMAX items at a time.
-  Timings have shown that, if malloc is used for every new structure,
-  malloc will consume about 90% of the time in a program.  This
-  module cuts down the number of mallocs by an order of magnitude.
-  This also decreases memory fragmentation, and freeing structures
-  only requires freeing the root.
-  --------------------------------------------------------------------
-*/
+/**
+ * @file recycle.c
+ * @brief Memory recycling routines for frequently allocated structures.
+ *
+ * Provides functions that manage pools of reusable memory blocks to
+ * reduce malloc overhead and memory fragmentation. Written by Bob
+ * Jenkins (September 1996) and released to the public domain with no
+ * warranty.
+ */
 
 #ifndef STANDARD
 #  include "standard.h"
