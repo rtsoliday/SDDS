@@ -1,19 +1,36 @@
-/*************************************************************************\
-* Copyright (c) 2002 The University of Chicago, as Operator of Argonne
-* National Laboratory.
-* Copyright (c) 2002 The Regents of the University of California, as
-* Operator of Los Alamos National Laboratory.
-* This file is distributed subject to a Software License Agreement found
-* in the file LICENSE that is included with this distribution. 
-\*************************************************************************/
-
-/* dlaran.f -- translated by f2c (version of 30 January 1990  16:02:04).
-   You must link the resulting object file with the libraries:
-	-lF77 -lI77 -lm -lc   (in that order)
-*/
+/**
+ * @file dlaran.c
+ * @brief LAPACK-based random number generator.
+ *
+ * @details Translation of the LAPACK auxiliary routine `DLARAN` using the
+ * f2c tool. Generates uniform random numbers in the interval (0, 1) using
+ * a 48-bit seed stored across four 12-bit integers.
+ *
+ * @copyright
+ *   - (c) 2002 The University of Chicago, as Operator of Argonne National Laboratory.
+ *   - (c) 2002 The Regents of the University of California, as Operator of Los Alamos National Laboratory.
+ *
+ * @license
+ *   This file is distributed subject to a Software License Agreement found in the file LICENSE
+ *   that is included with this distribution.
+ *
+ * @author
+ *   - Original LAPACK authors
+ *   - SDDS maintainers
+ */
 
 #include "f2c.h"
 
+/* dlaran.f -- translated by f2c (version of 30 January 1990  16:02:04).
+   You must link the resulting object file with the libraries:
+        -lF77 -lI77 -lm -lc   (in that order)
+*/
+
+/**
+ * @brief Generates a random number using the DLARAN algorithm.
+ * @param iseed Seed array of four integers. Updated in place.
+ * @return Uniform random number in the interval (0, 1).
+ */
 doublereal dlaran_(integer *iseed) {
   /* System generated locals */
   doublereal ret_val;
@@ -106,6 +123,13 @@ doublereal dlaran_(integer *iseed) {
 
 } /* dlaran_ */
 
+/**
+ * @brief Advance the DLARAN seed and return a random number.
+ * @param iseed Seed array of four integers. Updated in place.
+ * @param increment Number of times to update the seed before returning the
+ * new value.
+ * @return Uniform random number in the interval (0, 1).
+ */
 doublereal dlaran_oag(integer *iseed, long increment) {
   doublereal ret_val;
 
