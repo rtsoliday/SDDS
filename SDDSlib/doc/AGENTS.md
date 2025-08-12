@@ -7,15 +7,25 @@ This directory contains Markdown files for the SDDS library.
 - Wrap lines at a reasonable length (~100 characters).
 - Reference source files and directories with relative paths.
 
-
 # Building
-Before running `make`, ensure the following packages are installed:
-`texlive-base`, `texlive-latex-base`, `texlive-latex-extra`,
-`texlive-fonts-recommended`, `texlive-plain-generic`,
-`texlive-extra-utils`, `tex4ht`, and `ghostscript`.
+Before running `make`, install the required LaTeX packages:
 
- Use the provided `Makefile` to generate PostScript, PDF and HTML output:
+```bash
+apt-get update
+apt-get install -y --no-install-recommends \
+  texlive-base texlive-latex-base texlive-latex-extra \
+  texlive-fonts-recommended texlive-plain-generic \
+  texlive-extra-utils tex4ht ghostscript
+```
 
- ```
- make
- ```
+If an error related to `ca-certificates-java` appears, remove the OpenJDK packages:
+
+```bash
+apt-get remove --purge -y openjdk-*-jre-headless default-jre-headless default-jre
+```
+
+Use the provided `Makefile` to generate PostScript, PDF and HTML output:
+
+```
+make
+```
