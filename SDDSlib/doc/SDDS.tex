@@ -1,0 +1,3414 @@
+\documentclass[11pt]{article}
+\usepackage{hyperref}
+\usepackage[dvips]{graphicx}
+%%% PROGREF
+% created by R. Soliday
+%
+% $Log: not supported by cvs2svn $
+% Revision 1.2  2003/10/17 20:56:04  soliday
+% Added SDDS_VerifyArrayExists,SDDS_VerifyColumnExists,SDDS_VerifyParameterExists
+%
+% Revision 1.1  2002/09/23 22:33:56  soliday
+% The last version of this was created in 1994 and was lost.
+%
+%
+%
+%\newcommand{\progref}[2]{\hyperref{#1}{{\tt #2} (}{)}{#1}}
+%\newcommand{\progref}[1]{\hyperref{SDDS_#1}{{\tt SDDS\_#1} (}{)}{SDDS\_#1}}
+%\newcommand{\progref}[1]{\hyperref[#1]{#1}}
+\newcommand{\progref}[1]{\hyperref[SDDS_#1]{\tt SDDS\_#1}}
+
+
+\pagestyle{plain}
+\tolerance=10000
+\newenvironment{req}{\begin{equation} \rm}{\end{equation}}
+\setlength{\topmargin}{0.15 in}
+\setlength{\oddsidemargin}{0 in}
+\setlength{\evensidemargin}{0 in} % not applicable anyway
+\setlength{\textwidth}{6.5 in}
+\setlength{\headheight}{-0.5 in} % for 11pt font size
+%\setlength{\footheight}{0 in}
+\setlength{\textheight}{9 in}
+\begin{document}
+
+\title{Application Programmer's Guide for SDDS Version 4}
+\author{Michael Borland and Robert Soliday\\Advanced Photon Source\\ \date{\today}}
+\maketitle
+
+SDDS is a file protocol for Self Describing Data Sets. This document describes Version 4 of the SDDS protocol and the function library that supports it. It is intended for those who wish to develop programs that use SDDS files.
+
+\section{Definition of SDDS Protocol}
+
+\subsection{Structure of the SDDS Header}
+\label{sect:header}
+
+The first line of a data set must be of the form ``SDDS{\em n}'', where {\em n} is the integer SDDS version number. This document describes versions 1 through 4.
+
+The SDDS header consists of a series of namelist-like constructs, called namelist commands.  These constructs differ from FORTRAN namelists in that the SDDS routines scan each construct, determine which it is, and use the data appropriately. There are six namelist commands recognized under versions 1 through 4.  Each is listed below along with the data type and default values.
+
+For each command, an example of usage is given.  Several styles of entering the namelist commands are exhibited.  I suggest that the user choose a style that makes it easy to pick out the beginning of each command.  Note that while each namelist command may occupy one or more lines, no two commands may occupy portions of the same line.
+
+Any field value containing an ampersand must be enclosed in double quotes, as must string values containing whitespace characters.
+
+Another character with special meaning is the exclamation point, which introduces a comment.  An exclamation point anywhere in a line indicates that the remainder of the line is a comment and should be ignored.  A literal exclamation point is obtained with the sequence \verb|\!|, or by enclosing the exclamation point in double quotes.
+
+The commands are briefly described in the following list, and described in detail in the following subsections:
+\begin{itemize}
+\item {\bf description} --- Specifies a data set description, consisting of informal and formal text descriptions of the data set.
+\item {\bf column} --- Defines an additional column for the tabular-data section of the data pages.
+\item {\bf parameter} --- Defines an additional parameter data element for the data pages.
+\item {\bf array} --- Defines an additional array data element for the data pages.
+\item {\bf include} --- Directs that header lines be read from a named file.  Rarely used.
+\item {\bf data} --- Defines the data mode (ASCII or binary) along with layout parameters, and is always the last command in the header.
+\end{itemize}
+
+The {\tt column}, {\tt parameter}, and {\tt array} commands have a {\tt name} field that is used to identify the data being defined.  Each type of data has a separate ``name-space'', so that one may, for example, use the same name for a column and a parameter in the same file.  This is discouraged, however, because it may produce unexpected results with some programs.  Names may contain any alphanumeric character, as well as any of the following: {\tt @ : \# + - \% . \_ \$ \& / }.  The first letter of a name may not be a digit.
+
+
+\subsubsection{Data Set Description}
+\begin{verbatim}
+&description 
+    STRING text = NULL
+    STRING contents = NULL
+&end
+\end{verbatim}
+
+This optional command describes the data set in terms of two strings.  The first, {\tt text}, is an informal description that is intended principly for human consumption.  The second, {\tt contents}, is intended to formally specify the type of data stored in a data set.  Most frequently, the {\tt contents} field is used to record the name of the program that created or most recently modified the file.
+
+Example:
+\begin{verbatim}
+&description
+        text = "Twiss parameters for APS lattice",
+        contents = "Twiss parameters"
+&end
+\end{verbatim}
+
+{\em Note:} In many cases it is best to use a string parameter for descriptive text instead of the {\tt description} command.  The reason is that the Toolkit programs will allow manipulation of a string parameter.
+
+\subsubsection{Tabular-Data Column Definition}
+\begin{verbatim}
+&column
+    STRING name = NULL
+    STRING symbol = NULL
+    STRING units = NULL
+    STRING description = NULL
+    STRING format_string = NULL
+    STRING type = NULL
+    long field_length = 0
+&end
+\end{verbatim}
+
+This optional command defines a column that will appear in the tabular data section of each data page.  The {\tt name} field must be supplied, as must the {\tt type} field.  The type must be one of {\tt short}, {\tt ushort}, {\tt long}, {\tt ulong}, {\tt float}, {\tt double}, {\tt longdouble}, {\tt character}, or {\tt string}, indicating the corresponding C data types.  The {\tt string} type refers to a NULL-terminated character string.
+
+The optional {\tt symbol} field allows specification of a symbol to represent the column; it may contain escape sequences, for example, to produce Greek or mathematical characters.  The optional {\tt units} field allows specification of the units of the column.  The optional {\tt description} field provides for an informal description of the column, that may be used as a plot label, for example.  The optional {\tt format\_string} field allows specification of the {\tt printf} format string to be used to print the data (e.g., for ASCII in SDDS or other formats).
+
+For ASCII data, the optional {\tt field\_length} field specifies the number of characters occupied by the data for the column.  If zero, the data is assumed to be bounded by whitespace characters.  If negative, the absolute value is taken as the field length, but leading and trailing whitespace characters will be deleted from {\tt string} data.  This feature permits reading fixed-field-length FORTRAN output without modification of the data to include separators.
+
+The order in which successive {\tt column} commands appear is the order in which the columns are assumed to come in each row of the tabular data.
+
+Example (using {\tt sddsplot} conventions for Greek and subscript operations):
+\begin{verbatim}
+&column name=element, type=string, description="element name" &end
+&column 
+    name=z, symbol=z, units=m, type=double, 
+    description="Longitudinal Position" &end
+&column 
+    name=alphax, symbol="$ga$r$bx$n", units=m, 
+    type=double, description="Horizontal Alpha Function" &end
+&column 
+    name=betax, symbol="$gb$r$bx$n", units=m, 
+    type=double, description="Horizontal Beta Function" &end
+&column 
+    name=etax, symbol="$gc$r$bx$n", units=m, 
+    type=double, description="Horizontal Dispersion" &end
+.
+.
+.
+\end{verbatim}
+
+\subsubsection{Parameter Definition}
+\begin{verbatim}
+&parameter
+    STRING name = NULL
+    STRING symbol = NULL
+    STRING units = NULL
+    STRING description = NULL
+    STRING format_string = NULL
+    STRING type = NULL
+    STRING fixed_value = NULL
+&end
+\end{verbatim}
+
+This optional command defines a parameter that will appear along with the tabular data section of each data page.  The {\tt name} field must be supplied, as must the {\em type} field.  The type must be one of {\tt short}, {\tt ushort}, {\tt long}, {\tt ulong}, {\tt float}, {\tt double}, {\tt longdouble}, {\tt character}, or {\tt string}, indicating the correponding C data types.  The {\tt string} type refers to a NULL-terminated character string.
+
+The optional {\tt symbol} field allows specification of a symbol to represent the parameter; it may contain escape sequences, for example, to produce Greek or mathematical characters.  The optional {\tt units} field allows specification of the units of the parameter.  The optional {\tt description} field provides for an informal description of the parameter.  The optional {\tt format} field allows specification of the {\tt printf} format string to be used to print the data (e.g., for ASCII in SDDS or other formats).
+
+The optional {\tt fixed\_value} field allows specification of a constant value for a given parameter.  This value will not change from data page to data page, and is not specified along with non-fixed parameters or tabular data.  This feature is for convenience  only; the parameter thus defined is treated like any other.
+
+The order in which successive {\tt parameter} commands appear is the order in which the parameters are assumed to come in the data.  For ASCII data, each parameter that does not have a {\tt fixed\_value} will occupy a separate line in the input file ahead of the tabular data.
+
+Example:
+\begin{verbatim}
+&parameter name=NUx, symbol="$gn$r$bx$n", 
+  description="Horizontal Betatron Tune", type=double &end
+&parameter name=NUy, symbol="$gn$r$by$n", 
+  description="Vertical Betatron Tune", type=double &end
+&parameter name=L, symbol=L, description="Ring Circumference", 
+  type=double, fixed_value=30.6667 &end
+.
+.
+.
+\end{verbatim}
+
+\subsubsection{Array Data Definition}
+
+\begin{verbatim}
+&array 
+    STRING name = NULL
+    STRING symbol = NULL
+    STRING units = NULL
+    STRING description = NULL
+    STRING format_string = NULL
+    STRING type = NULL
+    STRING group_name = NULL
+    long field_length = 0
+    long dimensions = 1
+&end
+\end{verbatim}
+
+This optional command defines an array that will appear along with the tabular data section of each data page.  The {\tt name} field must be supplied, as must the {\tt type} field.  The type must be one of {\tt short}, {\tt ushort}, {\tt long}, {\tt ulong}, {\tt float}, {\tt double}, {\tt longdouble}, {\tt character}, or {\tt string}, indicating the corresponding C data types.  The {\tt string} type refers to a NULL-terminated character string.
+
+The optional {\tt symbol} field allows specification of a symbol to represent the array; it may contain escape sequences, for example, to produce Greek or mathematical characters.  The optional {\tt units} field allows specification of the units of the array.  The optional {\tt description} field provides for an informal description of the array.  The optional {\tt format\_string} field allows specification of the {\tt printf} format string to be used to print the data (e.g., for ASCII in SDDS or other formats).  The optional {\tt group\_name} field allows specification of a string giving the name of the array group to which the array belongs; such strings may be defined by the user to indicate that different arrays are related (e.g., have the same dimensions, or parallel elements). The optional {\tt dimensions} field gives the number of dimensions in the array.
+
+The order in which successive {\tt array} commands appear is the order in which the arrays are assumed to come in the data.  For ASCII data, each array will occupy at least one line in the input file ahead of the tabular data; data for different arrays may not occupy portions of the same line.  This is discussed in more detail below.
+
+Example:
+\begin{verbatim}
+&array name=Rx, units=R-standard-units, type=double, dimensions=2,
+        description="Horizontal transport matrix in standard units",
+        group_name="2x2 transport matrices" &end
+&array name=R-standard-units, type=string, dimensions=2, 
+        description="Standard units of 2x2 transport matrices",
+        group_name="2x2 transport matrices" &end
+&array name=P, units=P-standard-units, type=double, dimensions=1, 
+        description="Particle coordinate vector in standard units" &end
+&array name=P-standard-units, type=string, dimensions=1, 
+        description="Standard units of particle coordinate vectors" &end
+.
+.
+.
+\end{verbatim}
+
+
+\subsubsection{Header File Include Specification}
+\begin{verbatim}
+&include
+    STRING filename = NULL
+&end
+\end{verbatim}
+
+This optional command directs that SDDS header lines be read from the file named by the {\tt filename} field.  These commands may be nested.
+
+Example of a minimal header:
+\begin{verbatim}
+SDDS1
+&include filename="SDDS.twiss-parameter-header" &end
+! data follows:
+.
+.
+.
+\end{verbatim}
+
+\subsubsection{Data Mode and Arrangement Defintion}
+\begin{verbatim}
+&data
+    STRING mode = "binary"
+    long lines_per_row = 1
+    long no_row_counts = 0
+    long column_major_order = 0
+    long additional_header_lines = 0
+&end
+\end{verbatim}
+
+This command is optional unless {\tt parameter} commands without {\tt fixed\_value} fields, {\tt array} commands, or {\tt column} commands have been given.
+
+The {\tt mode} field is required, and may have one of the values ``ascii'' or ``binary''.  If binary mode is specified, the other entries of the command are irrelevant and are ignored.  In ASCII mode, these entries are optional.
+
+In ASCII mode, each row of the tabular data occupies {\tt lines\_per\_row} rows in the file.  If {\tt lines\_per\_row} is zero, however, the data is assumed to be in ``stream'' format, which means that line breaks are irrelevant. Each line is processed until it is consumed, at which point the next line is read and processed.
+
+Normally, each data page includes an integer specifying the number of rows in the tabular data section.  This allows for preallocation of arrays for data storage, and obviates the need for an end-of-page indicator.  However, if {\tt no\_row\_counts} is set to a non-zero value, the number of rows will be determined by looking for the occurence of an empty line.  A comment line does {\em not} qualify as an empty line in this sense.
+
+If {\tt additional\_header\_lines} is set to a non-zero value, it gives the number of non-SDDS data lines that follow the {\tt data} command.  Such lines are treated as comments.
+
+If {\tt column\_major\_order} is set to a non-zero value and {\tt mode} is set to ``binary'', it will store the column data in column major order instead of the default row major order which normally results in faster reading and writing of the data file.
+
+\subsubsection{Version Differences}
+
+SDDS2 adds support for unsigned integer data types: ushort and ulong
+
+SDDS3 adds support for column major ordering of the column data in binary format: {\tt column\_major\_order}=1
+
+SDDS4 adds support for the long double data type: longdouble
+
+The SDDS library will automatically use the lowest version number required when writing SDDS files.
+
+\subsection{Structure of SDDS ASCII Data Pages}
+
+Since the user may wish to create SDDS data sets without using the SDDS function library, a more detailed description of the structure of ASCII data pages is provided.  Comment lines (beginning with an exclamation point) may be placed anywhere within a data page.  Since they essentially do not exist as far as the SDDS routines are concern, I omit mention of them in what follows.
+
+The first SDDS data page begins immediately following the {\tt data} command and the optional additional header lines, the number of which is specified by the \verb|additional_header_lines| parameter of the {\tt data} command.
+
+If parameters have been defined, then the next ${\rm N_p-N_{fp}}$ lines each contains the value of a single {\tt parameter}, where ${\rm N_p}$ is the total number of parameters and ${\rm N_{fp}}$ is the number of parameters for which the \verb|fixed_value| field was specified.  These will be assigned to the parameters in the order that the \verb|parameter| commands occur in the header.  Multi-token string parameters need not be enclosed in quotation marks.
+
+If arrays have been defined, then the data for these arrays comes next.  There must be at least one ASCII line for each array.  This line must contain a list of whitespace-separated integer values giving the size of the array in each dimension.  The number of values must be that given by the {\tt dimensions} field of the {\tt array} definition.  If the number of elements in the array (given by the product of these integers) is nonzero, then additional ASCII lines are read until the required number of elements has been scanned.  It is an error for a blank line or end-of-file to appear before the required elements have been scanned.
+
+If tabular-data columns have been defined, the data for these elements follows. If the \verb|no_row_counts| parameter of the {\tt data} command is zero, the first line of this section is expected to contain an integer giving the number of rows in the upcoming data page.  If \verb|no_row_counts| is non-zero, no such line is expected.  The remainder of the tabular data section has various forms depending on the parameters of the {\bf data} command, as discussed above.  The default format is that each line contains the whitespace-separated values for a single row of the tabular data.  
+
+For column and array data, string data containing whitespace characters must be enclosed in double-quotes.  For column, array, and parameter data, nonprintable character data should be ``escaped'' using C-style octal sequences.
+
+More than one data page may appear in the data set.  Subsequent data pages have the same structure as just described. If \verb|no_row_counts=1| is given in the {\tt data} command, then a blank line is taken to end each data set.  An invalid line (e.g., too few rows or invalid data) is treated as an error, and the rest of the file is ignored.
+
+\subsection{Structure of SDDS Binary Data Pages}
+
+Since the user may wish to read or write SDDS data sets without using the SDDS function library, a more detailed description of the structure of the data pages is provided. 
+
+The first SDDS data page begins immediately following the {\tt data}
+command and the optional additional header lines, the number of which
+is specified by the \verb|additional_header_lines| parameter of the
+{\tt data} command.
+
+All binary data is stored in the machine representation, except for
+strings.  Strings are stored in a variable-record format that consists
+of a long signed integers followed by a sequence of characters.  The number
+of characters is equal to the value in the signed integer.  Note that
+the SDDS library has features that allow recognition and interpretation
+of big- and little-endian data representations, which are not described here.
+
+The first element in the data page is the row count, which is a long
+signed integer.  This exists even in files that do not contain any
+columns.
+
+If parameters have been defined, then their values follow in the order
+that the {\tt parameter} definitions appear in the header.  Note that
+if a parameter is define as ``fixed-value'' in the {\tt parameter}
+definition, then its value will not appear.
+
+If arrays have been defined, then they follow next, in the order that
+the {\tt array} definitions appear in the header.  For each array, a
+series of long signed integers is first given, one for each dimension
+of the array.  For example, a two-dimensional array would have two
+integers, specifying the size of the array in the first and second
+dimension.  If the two integers are, say, {\tt n} and {\tt m} in that
+order, then the declaration of the array in a C program would be, for
+example, {\tt a[n][m]}.  Elements of the array are put in the file in
+C storage order, which means that the outermost index varies fastest
+as the data is accessed in storage order.
+
+If tabular-data columns have been defined, then the table data follows.
+Data is stored as rows, so that data for columns is intermixed by default.  The
+order of the columns is the same as the order of the {\tt column} definitions
+in the header. If however {\tt column\_major\_order} is non-zero, then the 
+data for each column is stored in a single stream and not intermixed.
+
+\section{Overview of Library Routines}
+This section gives a brief description of the library routines grouped by functions. The reader should refer to the manual pages for more detailed information. 
+\subsection{Input Routines}
+\subsubsection{Setup}
+
+\begin{itemize}
+\item \progref{InitializeInput} --- Opens a file and initializes the SDDS\_TABLE structure used to access the data set.
+\item \progref{InitializeHeaderlessInput} --- Opens a file and initializes the SDDS\_TABLE structure used to access the data set, but does not attempt to read the header, which is assumed not to exist. The caller must define the header using the SDDS\_Define X routines. This method of using SDDS is {\em not} recommended, as it defeats the purpose of having a self-describing data set by imbedding the description in a program.
+\item \progref{ReadTable} --- Reads the next data table from a data set. 
+\end{itemize}
+
+\subsubsection{Determining File Contents}
+
+\begin{itemize}
+\item \progref{GetArrayInformation} --- Returns information about the fields of an array definition. This is the preferred way to get this information.
+\item \progref{GetColumnInformation} --- Returns information about the fields of a column definition. This is the preferred way to get this information.
+\item \progref{GetParameterInformation} --- Returns information about the fields of a parameter definition. This is the preferred way to get this information.
+\item Other routines:
+\begin{itemize}
+\item \progref{GetArrayDefinition} --- Returns a pointer to the ARRAY\_DEFINITION structure for a named array.
+\item \progref{GetArrayNames} --- Returns a pointer to an array of strings giving the names of all arrays.
+\item \progref{GetArrayIndex} --- Returns the index of a named array in the table structure. This can be used for fast access to the data.
+\item \progref{GetArrayType} --- Returns the data type of a named array in the table structure.
+\item \progref{GetColumnDefinition} --- Returns a pointer to the COLUMN\_DEFINITION structure for a named column.
+\item \progref{GetColumnNames} --- Returns a pointer to an array of strings giving the names of all columns.
+\item \progref{GetColumnIndex} --- Returns the index of a named column in the table structure. This can be used for fast access to the data.
+\item \progref{GetColumnType} --- Returns the data type of a named column in the table structure.
+\item \progref{GetParameterDefinition} --- Returns a pointer to the PARAMETER\_DEFINITION structure for a named parameter.
+\item \progref{GetParameterNames} --- Returns a pointer to an array of strings giving the names of all parameters.
+\item \progref{GetParameterIndex} --- Returns the index of a named parameter in the table structure. This can be used for fast access to the data.
+\item \progref{GetParameterType} --- Returns the data type of a named parameter in the table structure.
+\item \progref{VerifyArrayExists} --- Returns the index of a named array if it exists as the specified data type.
+\item \progref{VerifyColumnExists} --- Returns the index of a named column if it exists as the specified data type.
+\item \progref{VerifyParameterExists} --- Returns the index of a named Parameter if it exists as the specified data type.
+\end{itemize}
+\end{itemize}
+
+\subsubsection{Column Selection}
+
+\begin{itemize}
+\item \progref{SetColumnFlags} --- Sets all column-selection flags to a given value, indicating whether columns are initially ``of interest'' or not). By default, all columns are initially of interest.
+\item \progref{SetColumnsOfInterest} --- Modifies the ``of interest'' status of columns using lists of column names, wildcard matching, and so forth. General two-term logic is possible using the previous status of each column and the results of newly-requested matching.
+\item \progref{DeleteColumn} --- Deletes a named column from the current data table of a data set.
+\item \progref{DeleteUnsetColumns} --- Deletes all ``unset'' columns--i.e., those not declared as ``of interest''. 
+\end{itemize}
+
+\subsubsection{Row Selection}
+
+\begin{itemize}
+\item \progref{SetRowFlags} --- Set all row-selection flags to a given value, indicating whether all rows are initially ``of interest'' or not. By default, all rows are initially of interest.
+\item \progref{SetRowsOfInterest} --- Modifies row-selection flags based on string matching to the data in a named column, with general two-term logic supported using the previous status of each row and the results of the newly-requested matching.
+\item \progref{FilterRowsOfInterest} --- Modifies row-selection flags based on whether the numeric entries in a named column are within a specified interval, with general two-term logic supported using the previous status of each row and the results of the newly-requested matching.
+\item \progref{CountRowsOfInterest} --- Counts the number of rows in the current data table that are currently ``of interest'', i.e., those with non-zero row-selection flags.
+\item \progref{DeleteUnsetRows} --- Deletes all rows of the current data table that are not currently of interest. 
+\end{itemize}
+
+\subsubsection{Access to Tabular Data}
+
+\begin{itemize}
+\item \progref{GetColumn} --- Returns a pointer to an array of data values from a single column of the tabular portion of the current data table. Only rows that are ``of interest'' are returned.
+\item \progref{GetColumnInDoubles} --- Returns a pointer to an array of doubles containing the numeric data values (converted to double if necessary) from a single column of the tabular portion of the current data table. Only rows that are ``of interest'' are returned.
+\item \progref{GetMatrixFromColumn} --- Returns a pointer to a two-dimensional array of data values from a single column of the tabular portion of the current data table. Only rows that are ``of interest'' are included. The dimensions of the array are supplied by the caller (from parameters stored in the data set, for example).
+\item \progref{GetMatrixOfRows} --- Returns a pointer to a two-dimensional array of data values from the rows and columns ``of interest''. The columns are ordered as defined by calls to SDDS\_SetColumnsOfInterest, and must have the same data type.
+\item \progref{GetRow} --- Returns a pointer to a single row containing data values from the columns ``of interest''. Only the rows ``of interest'' are returned. The columns are ordered as defined by calls to SDDS\_SetColumnsOfInterest, and must have the same data type.
+\item \progref{GetValue} --- Returns a pointer to a single value from the tabular data. The data is requested by giving the column name and the row number. Only values from the rows ``of interest'' are returned. 
+\end{itemize}
+
+\subsubsection{Access to Array Data}
+
+\begin{itemize}
+\item \progref{GetArray} --- Returns a pointer to an SDDS\_ARRAY structure containing the current data and other information for a named array of a data set. 
+\end{itemize}
+
+\subsubsection{Access to Parameter Data}
+
+\begin{itemize}
+\item \progref{GetParameter} --- Returns a pointer to the current value of a named parameter of a data set. 
+\end{itemize}
+
+\subsection{Output Routines}
+\subsubsection{Setup}
+
+\begin{itemize}
+\item \progref{InitializeCopy} --- Initializes a SDDS\_TABLE structure in preparation for internally copying the current data table of another data set.
+\item \progref{InitializeOutput} --- Initializes a SDDS\_TABLE structure in preparation for output of data to a data set. This includes opening the file but not writing the SDDS header, which is yet to be defined.
+\item \progref{StartTable} --- Signals the beginning of a new data table of a data set that is being created in a program. Usually calls to this routine are interleaved with calls to SDDS\_WriteTable.
+\item \progref{CopyTable} --- Copies the current data table from one data set structure to another. The target data set is usually set up using SDDS\_InitializeCopy. 
+\end{itemize}
+
+\subsubsection{Defining Data Set Elements}
+
+\begin{itemize}
+\item \progref{DefineArray} --- Defines a new array for a data set.
+\item \progref{DefineColumn} --- Defines a new tabular-data column for a data set.
+\item \progref{DefineParameter} --- Defines a new data table parameter for a data set. 
+\end{itemize}
+
+\subsubsection{Defining Data Table Elements}
+
+\begin{itemize}
+\item \progref{SetArray} --- Sets the values in an array for the current table of a data set.
+\item \progref{SetParameters} --- Sets the values of parameters for the current table of a data set.
+\item \progref{SetRowValues} --- Sets the values of tabular data for the current table of a data set. 
+\end{itemize}
+
+\subsubsection{Output}
+
+\begin{itemize}
+\item \progref{WriteLayout} --- Writes the SDDS header to the file defined by a previous call to SDDS\_InitializeOutput or SDDS\_InitializeCopy. The contents of the header must have been previously defined by calls to the SDDS\_Define X routines.
+\item \progref{WriteTable} --- Writes the current data table to the data set file. The contents of the table must have been previously defined by calls to SDDS\_SetArray, SDDS\_SetParameters, and SDDS\_SetRowValues. 
+\end{itemize}
+
+\subsection{Error Handling and Utilities}
+
+\begin{itemize}
+\item \progref{CastValue} --- Casts a numeric value from one SDDS data type to another.
+\item \progref{ConvertToDouble} --- Converts a numeric value from any SDDS numeric data type to double precision.
+\item \progref{GetTypeSize} --- Returns the size in bytes of a given SDDS data type.
+\item \progref{Logic} --- Performs general two-term logic for SDDS row and column selection operations.
+\item \progref{NumberOfErrors} --- Returns the number of errors recorded since the last call to SDDS\_PrintErrors.
+\item \progref{PrintErrors} --- Prints the errors recorded since the last call to itself.
+\item \progref{PrintTypedValue} --- Prints any SDDS data type.
+\item \progref{Terminate} --- Terminates an SDDS data set, freeing all memory and closing the data set file. 
+\end{itemize}
+
+\section{Two Templates for SDDS Application Organization}
+This section gives pseudo-code templates for two typical SDDS applications. One shows how to access data stored in a SDDS file, while the other shows how to make an SDDS file from data generated internally (or read from another source).
+\subsection{Accessing Data Stored in an SDDS File}
+
+\begin{verbatim}
+SDDS_TABLE SDDS_table;
+
+/* open the file and read the SDDS header */ 
+SDDS_InitializeInput(&SDDS_table, filename)
+
+/* see if arrays that are needed are present */
+if ((SDDS_CheckArray(&SDDS_table, array_I_need, NULL, 
+                    SDDS_ANY_NUMERIC_TYPE, stderr)) != SDDS_CHECK_OKAY) {
+    fprintf(stderr, "array %s is not in the data file", 
+        array_I_need); 
+    exit(1); 
+} 
+...
+
+/* see if parameters that are needed are present */ 
+if ((SDDS_CheckParameter(&SDDS_table, parameter_I_need, NULL, 
+                         SDDS_ANY_NUMERIC_TYPE, stderr)) != SDDS_CHECK_OKAY) {
+    fprintf(stderr, "parameter %s is not in the data file", 
+        parameter_I_need); 
+    exit(1); 
+} 
+...
+
+/* see if columns that are needed are present */ 
+if ((SDDS_CheckColumn(&SDDS_table, column_I_need, NULL, 
+                    SDDS_ANY_NUMERIC_TYPE, stderr)) != SDDS_CHECK_OKAY) {
+    fprintf(stderr, "column %s is not in the data file", 
+        column_I_need); 
+    exit(1); 
+} 
+...
+
+/* read and process each data table in the data set */ 
+while (SDDS_ReadTable(&SDDS_table)>0) { 
+    /* set all rows and all columns to initially be "of interest" */ 
+    SDDS_SetColumnFlags(&SDDS_table, 1); 
+    SDDS_SetRowFlags(&SDDS_table, 1);
+
+    /* access array data */ SDDS_GetArray(...)
+
+    /* access parameter data */ SDDS_GetParameter(...)
+
+    /* optional row and column selection operations */ 
+    SDDS_SetColumnsOfInterest(...); 
+    SDDS_SetRowsOfInterest(...); 
+    SDDS_FilterRowsOfInterest(...);
+
+    /* access tabular data values */ 
+    SDDS_GetValue(...) 
+    SDDS_GetRow(...) 
+    SDDS_GetColumn(...) 
+    ... 
+}
+\end{verbatim}
+
+\subsection{SDDS Output of Internally-Generated Data}
+
+\begin{verbatim}
+SDDS_TABLE SDDS_table;
+
+/* open the file and set a few data set properites */ 
+SDDS_InitializeOutput(&SDDS_table, ...)
+
+/* define columns */ 
+SDDS_DefineColumn(&SDDS_table, column_name, ...); 
+...
+
+/* define arrays */ 
+SDDS_DefineArray(&SDDS_table, array_name, ...);
+...
+
+/* define parameters */ 
+SDDS_DefineParameter(&SDDS_table, parameter_name, ...); 
+...
+
+/* save the header */ 
+SDDS_SaveLayout(&SDDS_table);
+
+/* write the header */ 
+SDDS_WriteLayout(&SDDS_table);
+
+/* generate and output the data */ 
+while (DataGenerated(my_data_structure)) { 
+    /* start a new SDDS data table */ 
+    SDDS_StartTable(&SDDS_table, rows);
+
+    /* put data into SDDS parameters and columns */ 
+    SDDS_SetParameters(&SDDS_table, ...); 
+    ... 
+    SDDS_SetArray(&SDDS_table, ...); 
+    ... 
+    SDDS_SetColumn(&SDDS_table, ...); 
+    ...
+
+    /* write the new data table */ SDDS_WriteTable(&SDDS_table);
+}
+
+SDDS_Terminate(&SDDS_table);
+\end{verbatim}
+
+\section{Manual Pages}
+\label{ManualPages}
+\subsection{SDDS\_ArrayCount}
+\label{SDDS_ArrayCount}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_ArrayCount
+\item {\bf description:}\newline
+Used to retrieve the number of arrays.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_ArrayCount(SDDS\_TABLE *SDDS\_table)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns the number of arrays.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{ColumnCount}
+\item \progref{ParameterCount}
+\item \progref{RowCount}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CastValue}
+\label{SDDS_CastValue}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CastValue
+\item {\bf description:}\newline
+Casts a numeric value from one specified type (presumed to be the actual type) into another specified type.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+ void *SDDS\_CastValue(void *data, int32\_t index, int32\_t data\_type, int32\_t desired\_type, void *memory)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf data:} The reference address of the data to be converted.
+\item {\bf index:} The offset of the address of the item to be converted from the reference address, in units of the size of the declared type.
+\item {\bf data\_type:} The declared type of the data. Must be one of the constants (defined in SDDS.h) SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, or SDDS\_CHARACTER.
+\item {\bf desired\_type:} The desired type to cast the data to.
+\item {\bf memory:} The address of the location in which to store the result. If NULL, space is allocated.
+\end{itemize}
+\item {\bf return value:}\newline
+The address of the location in which the result was stored. Returns NULL on error and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{ConvertToDouble}
+\item \progref{GetColumnInDoubles}
+\item \progref{PrintErrors}
+\item \progref{PrintTypedValue}
+\item \progref{NumberOfErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CheckArray}
+\label{SDDS_CheckArray}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CheckArray
+\item {\bf description:}\newline
+Check to see if an array exists with the specified name, units and type.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CheckArray(SDDS\_TABLE *SDDS\_table, char *name, char *units, int32\_t type, FILE *fp\_message);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} Name of array.
+\item {\bf units:} Units of array, may be NULL.
+\item {\bf type:} Valid types are SDDS\_ANY\_NUMERIC\_TYPE, SDDS\_ANY\_FLOATING\_TYPE, SDDS\_ANY\_INTEGER\_TYPE, and 0. If 0 is used this is ignored.
+\item {\bf fp\_message:} Error messages are sent here. Usually stderr.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns SDDS\_CHECK\_OK on success.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CheckColumn}
+\item \progref{CheckParameter}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CheckColumn}
+\label{SDDS_CheckColumn}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CheckColumn
+\item {\bf description:}\newline
+Check to see if an column exists with the specified name, units and type.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CheckColumn(SDDS\_TABLE *SDDS\_table, char *name, char *units, int32\_t type, FILE *fp\_message);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} Name of column.
+\item {\bf units:} Units of column, may be NULL.
+\item {\bf type:} Valid types are SDDS\_ANY\_NUMERIC\_TYPE, SDDS\_ANY\_FLOATING\_TYPE, SDDS\_ANY\_INTEGER\_TYPE, and 0. If 0 is used this is ignored.
+\item {\bf fp\_message:} Error messages are sent here. Usually stderr.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns SDDS\_CHECK\_OK on success.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CheckArray}
+\item \progref{CheckParameter}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CheckParameter}
+\label{SDDS_CheckParameter}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CheckParameter
+\item {\bf description:}\newline
+Check to see if an parameter exists with the specified name, units and type.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CheckParameter(SDDS\_TABLE *SDDS\_table, char *name, char *units, int32\_t type, FILE *fp\_message);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} Name of parameter.
+\item {\bf units:} Units of parameter, may be NULL.
+\item {\bf type:} Valid types are SDDS\_ANY\_NUMERIC\_TYPE, SDDS\_ANY\_FLOATING\_TYPE, SDDS\_ANY\_INTEGER\_TYPE, and 0. If 0 is used this is ignored.
+\item {\bf fp\_message:} Error messages are sent here. Usually stderr.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns SDDS\_CHECK\_OK on success.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CheckArray}
+\item \progref{CheckColumn}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_ClearErrors}
+\label{SDDS_ClearErrors}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_ClearErrors
+\item {\bf description:}\newline
+Resets the error history.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void SDDS\_ClearErrors(void)
+\item {\bf arguments:}\newline
+None.
+\item {\bf return value:}\newline
+None.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{PrintErrors}
+\item \progref{NumberOfErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_ColumnCount}
+\label{SDDS_ColumnCount}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_ColumnCount
+\item {\bf description:}\newline
+Used to retrieve the number of columns.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_ColumnCount(SDDS\_TABLE *SDDS\_table)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns the number of columns.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{ArrayCount}
+\item \progref{ParameterCount}
+\item \progref{RowCount}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_ConvertToDouble}
+\label{SDDS_ConvertToDouble}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_ConvertToDouble
+\item {\bf description:}\newline
+Converts an item of data from a specified type into a double precision value.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+double SDDS\_ConvertToDouble(int32\_t type, void *data, int32\_t index)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf type:} The type of the data. Must be one of the constants (defined in SDDS.h) SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, or SDDS\_CHARACTER.
+\item {\bf data:} The reference address of the data to be converted.
+\item {\bf index:} The offset of the address of the item to be converted from the reference address, in units of the size of the declared type.
+\end{itemize}
+\item {\bf return value:}\newline
+The double precision value is returned. If an error occurs, zero is returned and an error message is recorded.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CastValue}
+\item \progref{GetColumnInDoubles}
+\item \progref{PrintErrors}
+\item \progref{PrintTypedValue}
+\item \progref{NumberOfErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_ConvertToLong}
+\label{SDDS_ConvertToLong}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_ConvertToLong
+\item {\bf description:}\newline
+Converts an item of data from a specified type into a int32\_t precision value.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_ConvertToLong(int32\_t type, void *data, int32\_t index)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf type:} The type of the data. Must be one of the constants (defined in SDDS.h) SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, or SDDS\_CHARACTER.
+\item {\bf data:} The reference address of the data to be converted.
+\item {\bf index:} The offset of the address of the item to be converted from the reference address, in units of the size of the declared type.
+\end{itemize}
+\item {\bf return value:}\newline
+The int32\_t precision value is returned. If an error occurs, zero is returned and an error message is recorded.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CastValue}
+\item \progref{GetColumnInDoubles}
+\item \progref{PrintErrors}
+\item \progref{PrintTypedValue}
+\item \progref{NumberOfErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_ConvertToLongDouble}
+\label{SDDS_ConvertToLongDouble}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_ConvertToLongDouble
+\item {\bf description:}\newline
+Converts an item of data from a specified type into a long double precision value.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+long double SDDS\_ConvertToLongDouble(int32\_t type, void *data, int32\_t index)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf type:} The type of the data. Must be one of the constants (defined in SDDS.h) SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, or SDDS\_CHARACTER.
+\item {\bf data:} The reference address of the data to be converted.
+\item {\bf index:} The offset of the address of the item to be converted from the reference address, in units of the size of the declared type.
+\end{itemize}
+\item {\bf return value:}\newline
+The long double precision value is returned. If an error occurs, zero is returned and an error message is recorded.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CastValue}
+\item \progref{GetColumnInDoubles}
+\item \progref{PrintErrors}
+\item \progref{PrintTypedValue}
+\item \progref{NumberOfErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CopyArrays}
+\label{SDDS_CopyArrays}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CopyArrays
+\item {\bf description:}\newline
+Copies array values from one structure into another.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CopyArrays(SDDS\_TABLE *SDDS\_target, SDDS\_TABLE *SDDS\_source)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_target:} Address of SDDS\_TABLE structure into which to copy data.
+\item {\bf SDDS\_source:} Address of SDDS\_TABLE structure from which to copy data.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyParameters}
+\item \progref{CopyColumns}
+\item \progref{CopyTable}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CopyColumns}
+\label{SDDS_CopyColumns}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CopyColumns
+\item {\bf description:}\newline
+Copies columns values from one structure into another.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CopyColumns(SDDS\_TABLE *SDDS\_target, SDDS\_TABLE *SDDS\_source)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_target:} Address of SDDS\_TABLE structure into which to copy data.
+\item {\bf SDDS\_source:} Address of SDDS\_TABLE structure from which to copy data.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyArrays}
+\item \progref{CopyParameters}
+\item \progref{CopyRowDirect}
+\item \progref{CopyRowsOfInterest}
+\item \progref{CopyTable}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CopyLayout}
+\label{SDDS_CopyLayout}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CopyLayout
+\item {\bf description:}\newline
+Copies the layout in an SDDS table from one structure into another.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CopyLayout(SDDS\_TABLE *SDDS\_target, SDDS\_TABLE *SDDS\_source)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_target:} Address of SDDS\_TABLE structure into which to copy data.
+\item {\bf SDDS\_source:} Address of SDDS\_TABLE structure from which to copy data.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyTable}
+\item \progref{InitializeCopy}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CopyParameters}
+\label{SDDS_CopyParameters}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CopyParameters
+\item {\bf description:}\newline
+Copies parameter values from one structure into another.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CopyParameters(SDDS\_TABLE *SDDS\_target, SDDS\_TABLE *SDDS\_source)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_target:} Address of SDDS\_TABLE structure into which to copy data.
+\item {\bf SDDS\_source:} Address of SDDS\_TABLE structure from which to copy data.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyArrays}
+\item \progref{CopyColumns}
+\item \progref{CopyTable}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CopyRowDirect}
+\label{SDDS_CopyRowDirect}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CopyRowDirect
+\item {\bf description:}\newline
+Copies row values from one structure into another.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CopyRowDirect(SDDS\_TABLE *SDDS\_target, int32\_t target\_row, SDDS\_TABLE *SDDS\_source, int32\_t source\_row)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_target:} Address of SDDS\_TABLE structure into which to copy data.
+\item {\bf target\_row:} Row to place copied data.
+\item {\bf SDDS\_source:} Address of SDDS\_TABLE structure from which to copy data.
+\item {\bf source\_row:} Row of data to copy.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyColumns}
+\item \progref{CopyRowsOfInterest}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CopyRowsOfInterest}
+\label{SDDS_CopyRowsOfInterest}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CopyRowsOfInterest
+\item {\bf description:}\newline
+Copies row values from one structure into another.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CopyRowsOfInterest(SDDS\_TABLE *SDDS\_target, SDDS\_TABLE *SDDS\_source)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_target:} Address of SDDS\_TABLE structure into which to copy data.
+\item {\bf SDDS\_source:} Address of SDDS\_TABLE structure from which to copy data.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyColumns}
+\item \progref{CopyRowDirect}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CopyTable}
+\label{SDDS_CopyTable}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CopyTable
+\item {\bf description:}\newline
+Copies the data in an SDDS table from one structure into another.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CopyTable(SDDS\_TABLE *SDDS\_target, SDDS\_TABLE *SDDS\_source)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_target:} Address of SDDS\_TABLE structure into which to copy data.
+\item {\bf SDDS\_source:} Address of SDDS\_TABLE structure from which to copy data.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyLayout}
+\item \progref{InitializeCopy}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_CountRowsOfInterest}
+\label{SDDS_CountRowsOfInterest}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CountRowsOfInterest
+\item {\bf description:}\newline
+Counts and returns the number of rows marked as ``of interest'' in a table of data.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CountRowsOfInterest(SDDS\_TABLE *SDDS\_table);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns the number of rows for which the acceptance flags are non-zero. On error, returns -1.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DeleteUnsetRows}
+\item \progref{FilterRowsOfInterest}
+\item \progref{GetMatrixOfRows}
+\item \progref{GetRow}
+\item \progref{SetRowFlags}
+\item \progref{SetRowsOfInterest}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DisconnectFile}
+\label{SDDS_DisconnectFile}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DisconnectFile
+\item {\bf description:}\newline
+Allows "temporarily" closing a file. Updates the present page and flushes the table.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DisconnectFile(SDDS\_TABLE *SDDS\_table)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{ReconnectFile}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DefineArray}
+\label{SDDS_DefineArray}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DefineArray
+\item {\bf description:}\newline
+Processes a definition of a data array.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DefineArray(SDDS\_TABLE *SDDS\_table, char *name, char *symbol, char *units, char *description, char *format\_string, int32\_t type, int32\_t field\_length, int32\_t dimensions, char *group\_name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} A NULL-terminated character string giving the name of the array. Must be supplied.
+\item {\bf symbol:} A NULL-terminated character string giving the symbol to be used to represent the array. If none is desired, pass NULL.
+\item {\bf units:} A NULL-terminated character string giving the units of the array. If none is desired, pass NULL.
+\item {\bf description:} A NULL-terminated character string giving a description of the array. If none is desired, pass NULL.
+\item {\bf format\_string:} A NULL-terminated character string giving a  printf format string to be used to print the data for ASCII output. If NULL is passed, a reasonable default will be chosen.
+\item {\bf type:} An integer value specifying the data type of the array. Must be one of the following constants, defined in  SDDS.h: SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.
+\item {\bf field\_length:} An integer value giving the length of the field allotted to the array for ASCII output. Ignored if zero. If negative, the field length is the absolute value, but leading and trailing white-space are eliminated from data of type SDDS\_STRING upon readin.
+\item {\bf dimensions:} An integer value giving the number of dimensions of the array. Must be greater than 0.
+\item {\bf group\_name:} A NULL-terminated character string giving the name of the array group to which the array belongs. This mechanism allows the user to indicate that different arrays are related (e.g., parallel to one another).
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the index of the newly-defined array. Returns -1 on failure and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetArrayDefinition}
+\item \progref{GetArrayInformation}
+\item \progref{GetArrayNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DefineColumn}
+\label{SDDS_DefineColumn}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DefineColumn
+\item {\bf description:}\newline
+Processes a definition of a data column.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DefineColumn(SDDS\_TABLE *SDDS\_table, char *name, char *symbol, char *units, char *description, char *format\_string, int32\_t type, int32\_t field\_length)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} A NULL-terminated character string giving the name of the column. Must be supplied.
+\item {\bf symbol:} A NULL-terminated character string giving the symbol to be used to represent the column. If none is desired, pass NULL.
+\item {\bf units:} A NULL-terminated character string giving the units of the column. If none is desired, pass NULL.
+\item {\bf description:} A NULL-terminated character string giving a description of the column. If none is desired, pass NULL.
+\item {\bf format\_string:} A NULL-terminated character string giving a  printf format string to be used to print the data for ASCII output. If NULL is passed, a reasonable default will be chosen.
+\item {\bf type:} An integer value specifying the data type of the column. Must be one of the following constants, defined in  SDDS.h: SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.
+\item {\bf field\_length:} An integer value given the length of the field allotted to the column for ASCII output. Ignored if zero. If negative, the field length is the absolute value, but leading and trailing white-space are eliminated from data of type SDDS\_STRING upon readin.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the index of the newly-defined column. Returns -1 on failure and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineSimpleColumn}
+\item \progref{DefineSimpleColumns}
+\item \progref{GetColumnDefinition}
+\item \progref{GetColumnInformation}
+\item \progref{GetColumnNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DefineParameter}
+\label{SDDS_DefineParameter}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DefineParameter
+\item {\bf description:}\newline
+Processes a definition of a data parameter.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DefineParameter(SDDS\_TABLE *SDDS\_table, char *name, char *symbol, char *units, char *description, char *format\_string, int32\_t type, char *fixed\_value)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} A NULL-terminated character string giving the name of the parameter. Must be supplied.
+\item {\bf symbol:} A NULL-terminated character string giving the symbol to be used to represent the parameter. If none is desired, pass NULL.
+\item {\bf units:} A NULL-terminated character string giving the units of the parameter. If none is desired, pass NULL.
+\item {\bf description:} A NULL-terminated character string giving a description of the parameter. If none is desired, pass NULL.
+\item {\bf format\_string:} A NULL-terminated character string giving a  printf format string to be used to print the data for ASCII output. If NULL is passed, a reasonable default will be chosen.
+\item {\bf type:} An integer value specifying the data type of the parameter. Must be one of the following constants, defined in  SDDS.h: SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.
+\item {\bf fixed\_value:} A NULL-terminated character string giving the permanent value of the parameter. For data that is not of type SDDS\_STRING, the string should be prepared using, for example, sprintf.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the index of the newly-defined parameter. Returns -1 on failure and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineParameter1}
+\item \progref{DefineSimpleParameter}
+\item \progref{DefineSimpleParameters}
+\item \progref{GetParameterDefinition}
+\item \progref{GetParameterInformation}
+\item \progref{GetParameterNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DefineParameter1}
+\label{SDDS_DefineParameter1}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DefineParameter1
+\item {\bf description:}\newline
+Processes a definition of a data parameter.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DefineParameter1(SDDS\_TABLE *SDDS\_table, char *name, char *symbol, char *units, char *description, char *format\_string, int32\_t type, void *fixed\_value)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} A NULL-terminated character string giving the name of the parameter. Must be supplied.
+\item {\bf symbol:} A NULL-terminated character string giving the symbol to be used to represent the parameter. If none is desired, pass NULL.
+\item {\bf units:} A NULL-terminated character string giving the units of the parameter. If none is desired, pass NULL.
+\item {\bf description:} A NULL-terminated character string giving a description of the parameter. If none is desired, pass NULL.
+\item {\bf format\_string:} A NULL-terminated character string giving a  printf format string to be used to print the data for ASCII output. If NULL is passed, a reasonable default will be chosen.
+\item {\bf type:} An integer value specifying the data type of the parameter. Must be one of the following constants, defined in  SDDS.h: SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.
+\item {\bf fixed\_value:} A pointer to a numerical variable giving the permanent value of the parameter.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the index of the newly-defined parameter. Returns -1 on failure and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineParameter}
+\item \progref{DefineSimpleParameter}
+\item \progref{DefineSimpleParameters}
+\item \progref{GetParameterDefinition}
+\item \progref{GetParameterInformation}
+\item \progref{GetParameterNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DefineSimpleColumn}
+\label{SDDS_DefineSimpleColumn}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DefineSimpleColumn
+\item {\bf description:}\newline
+Processes a definition of a data column.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DefineSimpleColumn(SDDS\_TABLE *SDDS\_table, char *name, char *units, int32\_t type)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} A NULL-terminated character string giving the name of the column. Must be supplied.
+\item {\bf units:} A NULL-terminated character string giving the units of the column. If none is desired, pass NULL.
+\item {\bf type:} An integer value specifying the data type of the column. Must be one of the following constants, defined in  SDDS.h: SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineColumn}
+\item \progref{DefineSimpleColumns}
+\item \progref{GetColumnDefinition}
+\item \progref{GetColumnInformation}
+\item \progref{GetColumnNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DefineSimpleColumns}
+\label{SDDS_DefineSimpleColumns}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DefineSimpleColumns
+\item {\bf description:}\newline
+Processes a definition of multiple data columns.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DefineColumns(SDDS\_TABLE *SDDS\_table, int32\_t number, char **name, char **units, int32\_t type)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf number:} The number of columns to be defined.
+\item {\bf name:} An array of NULL-terminated character strings giving the names of the columns. Must be supplied.
+\item {\bf units:} An array of NULL-terminated character strings giving the units of the columns. If none is desired, pass NULL.
+\item {\bf type:} An integer value specifying the data type of the columns. Must be one of the following constants, defined in  SDDS.h: SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineColumn}
+\item \progref{DefineSimpleColumn}
+\item \progref{GetColumnDefinition}
+\item \progref{GetColumnInformation}
+\item \progref{GetColumnNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DefineSimpleParameter}
+\label{SDDS_DefineSimpleParameter}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DefineSimpleParameter
+\item {\bf description:}\newline
+Processes a definition of a data parameter.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DefineSimpleParameter(SDDS\_TABLE *SDDS\_table, char *name, char *units, int32\_t type)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} A NULL-terminated character string giving the name of the parameter. Must be supplied.
+\item {\bf units:} A NULL-terminated character string giving the units of the parameter. If none is desired, pass NULL.
+\item {\bf type:} An integer value specifying the data type of the parameter. Must be one of the following constants, defined in  SDDS.h: SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineParameter}
+\item \progref{DefineParameter1}
+\item \progref{DefineSimpleParameters}
+\item \progref{GetParameterDefinition}
+\item \progref{GetParameterInformation}
+\item \progref{GetParameterNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DefineSimpleParameters}
+\label{SDDS_DefineSimpleParameters}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DefineSimpleParameters
+\item {\bf description:}\newline
+Processes a definition of multiple data parameters.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DefineSimpleParameters(SDDS\_TABLE *SDDS\_table, int32\_t number, char **name, char **units, int32\_t type)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf number:} The number of parameters to be defined.
+\item {\bf name:} An array of NULL-terminated character strings giving the names of the parameters. Must be supplied.
+\item {\bf units:} An array of NULL-terminated character strings giving the units of the parameters. If none is desired, pass NULL.
+\item {\bf type:} An integer value specifying the data type of the parameter. Must be one of the following constants, defined in  SDDS.h: SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineParameter}
+\item \progref{DefineParameter1}
+\item \progref{DefineSimpleParameter}
+\item \progref{GetParameterDefinition}
+\item \progref{GetParameterInformation}
+\item \progref{GetParameterNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DeleteColumn}
+\label{SDDS_DeleteColumn}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DeleteColumn
+\item {\bf description:}\newline
+Deletes a named column from the current data table of a data set. If another data table is subsequently read in, the column reappears in the new data table.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DeleteColumn(SDDS\_TABLE *SDDS\_table, char *column\_name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_name:} A NULL-terminated character string giving the name of the column to delete.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. Returns 0 on failure, and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DeleteParameter}
+\item \progref{DeleteUnsetColumns}
+\item \progref{SetColumnFlags}
+\item \progref{SetColumnsOfInterest}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DeleteParameter}
+\label{SDDS_DeleteParameter}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DeleteParameter
+\item {\bf description:}\newline
+Deletes a named parameter from the current data table of a data set. If another data table is subsequently read in, the parameter reappears in the new data table.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DeleteParameter(SDDS\_TABLE *SDDS\_table, char *parameter\_name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf parameter\_name:} A NULL-terminated character string giving the name of the parameter to delete.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. Returns 0 on failure, and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DeleteColumn}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DeleteUnsetColumns}
+\label{SDDS_DeleteUnsetColumns}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DeleteUnsetColumns
+\item {\bf description:}\newline
+Deletes ``unset'' columns from the current data table of a data set. An ``unset'' column is one which has not been declared to be ``of interest'' using SDDS\_SetColumnsOfInterest.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DeleteUnsetColumns(SDDS\_TABLE *SDDS\_table)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetColumnFlags}
+\item \progref{SetColumnsOfInterest}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DeleteUnsetRows}
+\label{SDDS_DeleteUnsetRows}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DeleteUnsetRows
+\item {\bf description:}\newline
+Deletes ``unset'' rows from the current data table of a data set. An ``unset'' row is one which has not been declared to be ``of interest'' using SDDS\_SetRowsOfInterest or SDDS\_FilterRowsOfInterest.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DeleteUnsetRows(SDDS\_TABLE *SDDS\_table)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{FilterRowsOfInterest}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{SetRowFlags}
+\item \progref{SetRowsOfInterest}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_FilterRowsOfInterest}
+\label{SDDS_FilterRowsOfInterest}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_FilterRowsOfInterest
+\item {\bf description:}\newline
+Sets which rows of a data table from a data set are ``of interest''.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_FilterRowsOfInterest(SDDS\_TABLE *SDDS\_table, char *filter\_column, double lower, double upper, int32\_t logic)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf filter\_column:} A NULL-terminated character string giving the name of a column, the values in which will be used to filter the rows of the table.
+\item {\bf lower, upper:} The lower and upper limits of the filter window. A value inside the filter is said to ``match'' the filter.
+\item {\bf logic:} A word of bit flags indicating how to combine the previous status of each row with the acceptance status based on matching to the matching\_string. See the manual entry for SDDS\_Logic for details.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the number of rows that are currently accepted. On failure, returns -1 and records an error message.
+\end{itemize}
+
+\subsection{SDDS\_FindArray}
+\label{SDDS_FindArray}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_FindArray
+\item {\bf description:}\newline
+Determine if an array exists.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+char *SDDS\_FindArray(SDDS\_TABLE *SDDS\_table, int32\_t mode, ...);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} Valid modes are FIND\_SPECIFIED\_TYPE, FIND\_ANY\_TYPE, FIND\_NUMERIC\_TYPE, FIND\_FLOATING\_TYPE, FIND\_INTEGER\_TYPE
+\item {\bf ...:} If mode is FIND\_SPECIFIED\_TYPE it expects an SDDS data type followed by a list of array names followed by NULL. Otherwise it expects a list of array names followed by NULL.
+\end{itemize}
+\item {\bf return value:}\newline
+On success it returns the name of the last array specified. On error it returns a NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{FindColumn}
+\item \progref{FindParameter}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_FindColumn}
+\label{SDDS_FindColumn}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_FindColumn
+\item {\bf description:}\newline
+Determine if a column exists.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+char *SDDS\_FindColumn(SDDS\_TABLE *SDDS\_table, int32\_t mode, ...);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} Valid modes are FIND\_SPECIFIED\_TYPE, FIND\_ANY\_TYPE, FIND\_NUMERIC\_TYPE, FIND\_FLOATING\_TYPE, FIND\_INTEGER\_TYPE
+\item {\bf ...:} If mode is FIND\_SPECIFIED\_TYPE it expects an SDDS data type followed by a list of column names followed by NULL. Otherwise it expects a list of column names followed by NULL.
+\end{itemize}
+\item {\bf return value:}\newline
+On success it returns the name of the last column specified. On error it returns a NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{FindArray}
+\item \progref{FindParameter}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_FindParameter}
+\label{SDDS_FindParameter}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_FindParameter
+\item {\bf description:}\newline
+Determine if a parameter exists.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+char *SDDS\_FindParameter(SDDS\_TABLE *SDDS\_table, int32\_t mode, ...);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} Valid modes are FIND\_SPECIFIED\_TYPE, FIND\_ANY\_TYPE, FIND\_NUMERIC\_TYPE, FIND\_FLOATING\_TYPE, FIND\_INTEGER\_TYPE
+\item {\bf ...:} If mode is FIND\_SPECIFIED\_TYPE it expects an SDDS data type followed by a list of parameter names followed by NULL. Otherwise it expects a list of parameter names followed by NULL.
+\end{itemize}
+\item {\bf return value:}\newline
+On success it returns the name of the last parameter specified. On error it returns a NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{FindArray}
+\item \progref{FindColumn}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetArray}
+\label{SDDS_GetArray}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetArray
+\item {\bf description:}\newline
+Returns a pointer to a structure containing the data and other information about an array in the current data table of a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+SDDS\_ARRAY *SDDS\_GetArray(SDDS\_TABLE *SDDS\_table, char *array\_name, SDDS\_ARRAY *memory);\newline
+\begin{verbatim}
+typedef struct {
+    /* pointer to the internally-stored structure: */
+    ARRAY_DEFINITION *definition; 
+    int32_t *dimension;            /* sizes for each dimension */
+    int32_t elements;              /* total number of elements */
+    /* Address of new copy of array of data values, stored contiguously: */
+    void *data;
+    /* Address of n-dimensional pointer array into the new copy of data: */
+    void *pointer;
+} SDDS_ARRAY;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf array\_name:} A NULL-terminated character string giving the name of the array to return.
+\item {\bf memory:} Address of a SDDS\_ARRAY structure into which to place the information. Preferred usage is to pass back a pointer that was originally returned by SDDS\_GetArray. Otherwise, the user must initialize the pointers in the structure to NULL.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to a SDDS\_ARRAY structure. The contents of the structure point to newly-created copies of the information, with the exception of the  definition field, which points to the internal copy. If  memory is not NULL, the storage pointed to by the  data and  pointer fields of the structure  *memory will be reused. The  data pointer, should be cast to type {\em data-type}*, where {\em data-type} is the data type of the array. The preferred method is to use the  pointer pointer, which should be cast to type {\em data-type}*n, where *n symbolizes a string of n asterisks, n being the number of dimensions of the array. Note that for type SDDS\_STRING, {\em data-type} is char *.\newline
+\newline
+On failure, returns NULL and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{SetArray}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetArrayDefinition}
+\label{SDDS_GetArrayDefinition}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetArrayDefinition
+\item {\bf description:}\newline
+Returns a pointer to a structure describing a named data array.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+ARRAY\_DEFINITION *SDDS\_GetArrayDefinition(SDDS\_TABLE *SDDS\_table, char *name)\newline
+\begin{verbatim}
+typedef struct {
+    char *name, *symbol, *units, *description, *format_string;
+    int32_t type, field_length, dimensions;
+    /* internal data may follow, and should not be accessed by users */
+} ARRAY\_DEFINITION;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} A NULL-terminated character string giving the name of the array for which the definition is desired.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the address of the internally-stored structure containing the definition of the array. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetArrayInformation}
+\item \progref{GetArrayNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetArrayInDoubles}
+\label{SDDS_GetArrayInDoubles}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetArrayInDoubles
+\item {\bf description:}\newline
+Returns a pointer to an array containing the data.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+double *SDDS\_GetArrayInDoubles(SDDS\_TABLE *SDDS\_table, char *array\_name, int32\_t *elements);\newline
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf array\_name:} A NULL-terminated character string giving the name of the array to return.
+\item {\bf elements:} The number of values returned in the array.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer double array containing the values in the SDDS\_ARRAY structure after being cast to the double datatype. On failure, returns NULL and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{SetArray}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetArrayInLong}
+\label{SDDS_GetArrayInLong}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetArrayInLong
+\item {\bf description:}\newline
+Returns a pointer to an array containing the data.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t *SDDS\_GetArrayInLong(SDDS\_TABLE *SDDS\_table, char *array\_name, int32\_t *elements);\newline
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf array\_name:} A NULL-terminated character string giving the name of the array to return.
+\item {\bf elements:} The number of values returned in the array.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer int32\_t array containing the values in the SDDS\_ARRAY structure after being cast to the int32\_t datatype. On failure, returns NULL and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{SetArray}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetArrayIndex}
+\label{SDDS_GetArrayIndex}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetArrayIndex
+\item {\bf description:}\newline
+Returns the index of a named array in the data set. This is used with some routines for faster access to the data or to information about the data.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_GetArrayIndex(SDDS\_TABLE *SDDS\_table, char *array\_name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf array\_name:} A NULL-terminated character string giving the name of the array for which information is desired.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a non-negative integer giving the index of the array. On failure, returns -1 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetArrayDefinition}
+\item \progref{GetArrayInformation}
+\item \progref{GetArrayNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetArrayInformation}
+\label{SDDS_GetArrayInformation}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetArrayInformation
+\item {\bf description:}\newline
+Returns information about a specified array. This routine is the preferred alternative to SDDS\_GetArrayDefinition.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_GetArrayInformation(SDDS\_TABLE *SDDS\_table, char *field\_name, void *memory, int32\_t mode,  name-or-index)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf field\_name:} A NULL terminated string giving the name of the field that information is requested for. These field names are identical to the names used in the namelist commands.
+\item {\bf memory:} The address in which to place the information. Should have type {\em data-type}* in the user's program, where {\em data-type} is the data type of the information. Note that for STRING information, {\em data-type} is char *. If memory is NULL, the existence and type of the information will be verified; the type will be returned as usual.
+\item {\bf mode:} One of the following constants (defined in SDDS.h):
+\begin{itemize}
+\item SDDS\_GET\_BY\_NAME -  Indicates that the next argument is a NULL-terminated character string containing the name of the array for which information is desired.
+\item SDDS\_GET\_BY\_INDEX - Indicates that the next argument is a non-negative integer giving the index of the array for which information is desired. This index is obtained from SDDS\_DefineArray or SDDS\_GetArrayIndex.
+\end{itemize}
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the SDDS data type of the information. This is one of the following constants (defined in SDDS.h): SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.\newline
+\newline
+On failure, returns zero and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetArrayDefinition}
+\item \progref{GetArrayIndex}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{VerifyArrayExists}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetArrayNames}
+\label{SDDS_GetArrayNames}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetArrayNames
+\item {\bf description:}\newline
+Returns an array of character strings giving the names of the arrays for a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+char **SDDS\_GetArrayNames(SDDS\_TABLE *SDDS\_table, int32\_t *number)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf number:} Address of a location in which to place the number of arrays.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns an array of NULL-terminated character strings giving the names of the arrays. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetArrayDefinition}
+\item \progref{GetArrayInformation}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetArrayType}
+\label{SDDS_GetArrayType}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetArrayType
+\item {\bf description:}\newline
+Returns the SDDS data type of a named array in the data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_GetArrayType(SDDS\_TABLE *SDDS\_table, int32\_t array\_index) 
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf array\_index:} The integer index of the array in the data set. Returned by SDDS\_DefineArray or obtained from SDDS\_GetArrayIndex.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a non-negative integer giving the SDDS data type; this will be one of the constants (defined in SDDS.h) SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.\newline
+\newline
+On failure, returns -1 and records an error message. 
+\end{itemize}
+
+\subsection{SDDS\_GetColumn}
+\label{SDDS_GetColumn}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetColumn
+\item {\bf description:}\newline
+Returns a pointer to the data for a named column for the current data table of a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void *SDDS\_GetColumn(SDDS\_TABLE *SDDS\_table, char *column\_name);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_name:} A NULL-terminated character string giving the name of the column to return.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the address of a newly-created copy of the ``rows of interest'' from the named column. This array has type  data-type*, where  data-type is the data type of the column. Note that for type SDDS\_STRING,  data-type is char *. The number of rows is available from SDDS\_CountRowsOfInterest.\newline
+\newline
+On failure, returns NULL and records an error message. 
+\end{itemize}
+
+\subsection{SDDS\_GetColumnDefinition}
+\label{SDDS_GetColumnDefinition}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetColumnDefinition
+\item {\bf description:}\newline
+Returns a pointer to a structure describing a named data column.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+COLUMN\_DEFINITION *SDDS\_GetColumnDefinition(SDDS\_TABLE *SDDS\_table, char *name)\newline
+\begin{verbatim}
+typedef struct {
+    char *name, *symbol, *units, *description, *format_string;
+    int32_t type, field_length;
+    /* internal data follows that should not be accessed by users */
+} COLUMN_DEFINITION;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} A NULL-terminated character string giving the name of the column for which the definition is desired.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the address of the internally-stored structure containing the definition of the column. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetColumnInformation}
+\item \progref{GetColumnNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetColumnInDoubles}
+\label{SDDS_GetColumnInDoubles}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetColumnInDoubles
+\item {\bf description:}\newline
+Returns an array of double-precision values containing the data in a specified column, provided the column contains numerical data. Integer data types are properly cast to double precision.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+double *SDDS\_GetColumnInDoubles(SDDS\_TABLE *SDDS\_table, char *column\_name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_name:} A NULL-terminated character string giving the name of the column for which data is desired.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the address of a newly-allocated array of  double's containing the data. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CastValue}
+\item \progref{ConvertToDouble}
+\item \progref{GetColumn}
+\item \progref{GetColumnInLong}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{PrintTypedValue}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetColumnInFloats}
+\label{SDDS_GetColumnInFloats}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetColumnInFloats
+\item {\bf description:}\newline
+Returns an array of single-precision values containing the data in a specified column, provided the column contains numerical data. Integer data types are properly cast to single precision.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+float *SDDS\_GetColumnInFloats(SDDS\_TABLE *SDDS\_table, char *column\_name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_name:} A NULL-terminated character string giving the name of the column for which data is desired.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the address of a newly-allocated array of float's containing the data. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CastValue}
+\item \progref{ConvertToDouble}
+\item \progref{GetColumn}
+\item \progref{GetColumnInLong}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{PrintTypedValue}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetColumnInLong}
+\label{SDDS_GetColumnInLong}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetColumnInLong
+\item {\bf description:}\newline
+Returns an array of int32\_t values containing the data in a specified column, provided the column contains numerical data. Float data types are cast to int32\_t precision.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t *SDDS\_GetColumnInLong(SDDS\_TABLE *SDDS\_table, char *column\_name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_name:} A NULL-terminated character string giving the name of the column for which data is desired.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the address of a newly-allocated array containing the data. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CastValue}
+\item \progref{ConvertToDouble}
+\item \progref{GetColumn}
+\item \progref{GetColumnInDoubles}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{PrintTypedValue}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetColumnInShort}
+\label{SDDS_GetColumnInShort}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetColumnInShort
+\item {\bf description:}\newline
+Returns an array of short values containing the data in a specified column, provided the column contains numerical data. Float data types are cast to short precision.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+short *SDDS\_GetColumnInShort(SDDS\_TABLE *SDDS\_table, char *column\_name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_name:} A NULL-terminated character string giving the name of the column for which data is desired.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the address of a newly-allocated array containing the data. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CastValue}
+\item \progref{ConvertToDouble}
+\item \progref{GetColumn}
+\item \progref{GetColumnInDoubles}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{PrintTypedValue}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetColumnIndex}
+\label{SDDS_GetColumnIndex}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetColumnIndex
+\item {\bf description:}\newline
+Returns the index of a named column in the data set. This is used with some routines for faster access to the data or to information about the data.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_GetColumnIndex(SDDS\_TABLE *SDDS\_table, char *column\_name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_name:} A NULL-terminated character string giving the name of the column for which information is desired.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a non-negative integer giving the index of the column. On failure, returns -1 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetColumnDefinition}
+\item \progref{GetColumnInformation}
+\item \progref{GetColumnNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetColumnInformation}
+\label{SDDS_GetColumnInformation}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetColumnInformation
+\item {\bf description:}\newline
+Returns information about a specified column. This routine is the preferred alternative to SDDS\_GetColumnDefinition.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_GetColumnInformation(SDDS\_TABLE *SDDS\_table, char *field\_name, void *memory, int32\_t mode,  name-or-index)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf field\_name:} A NULL terminated string giving the name of the field that information is requested for. These field names are identical to the names used in the namelist commands.
+\item {\bf memory:} The address in which to place the information. Should have type {\em data-type}* in the user's program, where {\em data-type} is the data type of the information. Note that for STRING information, {\em data-type} is char *. If memory is NULL, the existence and type of the information will be verified; the type will be returned as usual.
+\item {\bf mode:} One of the following constants (defined in SDDS.h):
+\begin{itemize}
+\item SDDS\_GET\_BY\_NAME -  Indicates that the next argument is a NULL-terminated character string containing the name of the column for which information is desired.
+\item SDDS\_GET\_BY\_INDEX - Indicates that the next argument is a non-negative integer giving the index of the column for which information is desired. This index is obtained from SDDS\_DefineColumn or SDDS\_GetColumnIndex.
+\end{itemize}
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the SDDS data type of the information. This is one of the following constants (defined in SDDS.h): SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.\newline
+\newline
+On failure, returns zero and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetColumnDefinition}
+\item \progref{GetColumnIndex}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{VerifyColumnExists}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetColumnNames}
+\label{SDDS_GetColumnNames}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetColumnNames
+\item {\bf description:}\newline
+Returns an array of character strings giving the names of the columns for a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+char **SDDS\_GetColumnNames(SDDS\_TABLE *SDDS\_table, int32\_t *number)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf number:} Address of a location in which to place the number of columns.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to an array of NULL-terminated character strings giving the names of the columns. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetColumnDefinition}
+\item \progref{GetColumnInformation}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetColumnType}
+\label{SDDS_GetColumnType}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetColumnType
+\item {\bf description:}\newline
+Returns the SDDS data type of a named column in the data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_GetColumnType(SDDS\_TABLE *SDDS\_table, int32\_t column\_index)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_index:} The integer index of the column in the data set. Returned by SDDS\_DefineColumn or obtained from SDDS\_GetColumnIndex.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a non-negative integer giving the SDDS data type; this will be one of the constants (defined in SDDS.h) SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING. On failure, returns -1 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineColumn}
+\item \progref{GetColumnDefinition}
+\item \progref{GetColumnIndex}
+\item \progref{GetColumnInformation}
+\item \progref{GetColumnNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetMatrixFromColumn}
+\label{SDDS_GetMatrixFromColumn}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetMatrixFromColumn
+\item {\bf description:}\newline
+Returns a column of data arranged as a two-dimensional array.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void *SDDS\_GetMatrixFromColumn(SDDS\_TABLE *SDDS\_table, char *column\_name, int32\_t dimension1, int32\_t dimension2, int32\_t mode)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_name:} A NULL-terminated character string giving the name of the column of data to retrieve.
+\item {\bf dimension1, dimension2:} The desired dimensions of the array, the product of which must equal the number of rows in the column. These dimensions are typically stored in parameters of the data table.
+\item {\bf mode:} One of the constants SDDS\_ROW\_MAJOR\_DATA and SDDS\_COLUMN\_MAJOR\_DATA, defined in SDDS.h. These indicate that the items in the column should be considered to be given in row-major or column-major order, respectively.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to the array, which has type {\em data-type}**, where {\em data-type} is the data type of the column. The array is newly-allocated, and may be modified as needed by the caller. Note that for type SDDS\_STRING, {\em data-type} is char **.\newline
+\newline
+On failure, returns NULL and records an error message
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetMatrixOfRows}
+\item \progref{GetColumn}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetMatrixOfRows}
+\label{SDDS_GetMatrixOfRows}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetMatrixOfRows
+\item {\bf description:}\newline
+Returns a two-dimensional array of the rows of interest from the columns of interest, as specified by such functions as SDDS\_SetRowsOfInterest and SDDS\_SetColumnsOfInterest. All selected columns must have the same data type.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void *SDDS\_GetMatrixOfRows(SDDS\_TABLE *SDDS\_table, int32\_t *n\_rows)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf n\_rows:} The address of a location into which the number of rows in the array is written.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to the array, which has type {\em data-type}**, where {\em data-type} is the data type of the columns. The array is newly-allocated, and may be modified as needed by the caller. Note that for type SDDS\_STRING, {\em data-type} is char *.\newline
+\newline
+On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{SetColumnsOfInterest}
+\item \progref{SetRowsOfInterest}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameter}
+\label{SDDS_GetParameter}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameter
+\item {\bf description:}\newline
+Returns the value of a named parameter of the current data table of a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void *SDDS\_GetParameter(SDDS\_TABLE *SDDS\_table, char *parameter\_name, void *memory)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf parameter\_name:} A NULL-terminated character string giving the name of the parameter for which the value is desired.
+\item {\bf memory:} Pointer to memory in which to place the value of the parameter. If NULL, memory is allocated.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to the location in which the data has been placed. The pointer should be cast to {\em data-type}*, where {\em data-type} is the data type of the parameter. Note that for type SDDS\_STRING, {\em data-type} is char *. This data is newly-allocated, and may be modified as needed by the caller. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameterAsDouble}
+\label{SDDS_GetParameterAsDouble}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameterAsDouble
+\item {\bf description:}\newline
+Returns the pointer to a double value of a named parameter of the current data table of a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+double *SDDS\_GetParameterAsDouble(SDDS\_TABLE *SDDS\_table, char *parameter\_name, double *memory)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf parameter\_name:} A NULL-terminated character string giving the name of the parameter for which the value is desired.
+\item {\bf memory:} Pointer to memory in which to place the value of the parameter. If NULL, memory is allocated.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to the location in which the data has been placed. The value will have been cast to a double value if it was not already. This data is newly-allocated, and may be modified as needed by the caller. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameterAsLong}
+\label{SDDS_GetParameterAsLong}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameterAsLong
+\item {\bf description:}\newline
+Returns the pointer to an int32\_t value of a named parameter of the current data table of a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t *SDDS\_GetParameterAsLong(SDDS\_TABLE *SDDS\_table, char *parameter\_name, int32\_t *memory)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf parameter\_name:} A NULL-terminated character string giving the name of the parameter for which the value is desired.
+\item {\bf memory:} Pointer to memory in which to place the value of the parameter. If NULL, memory is allocated.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to the location in which the data has been placed. The value will have been cast to an int32\_t value if it was not already. This data is newly-allocated, and may be modified as needed by the caller. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameterAsLongDouble}
+\label{SDDS_GetParameterAsDouble}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameterAsLongDouble
+\item {\bf description:}\newline
+Returns the pointer to a long double value of a named parameter of the current data table of a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+long double *SDDS\_GetParameterAsDouble(SDDS\_TABLE *SDDS\_table, char *parameter\_name, long double *memory)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf parameter\_name:} A NULL-terminated character string giving the name of the parameter for which the value is desired.
+\item {\bf memory:} Pointer to memory in which to place the value of the parameter. If NULL, memory is allocated.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to the location in which the data has been placed. The value will have been cast to a long double value if it was not already. This data is newly-allocated, and may be modified as needed by the caller. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameterAsString}
+\label{SDDS_GetParameterAsDouble}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameterAsString
+\item {\bf description:}\newline
+Returns a pointer to a string value of a named parameter of the current data table of a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+char *SDDS\_GetParameterAsString(SDDS\_TABLE *SDDS\_table, char *parameter\_name, char **memory)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf parameter\_name:} A NULL-terminated character string giving the name of the parameter for which the value is desired.
+\item {\bf memory:} Pointer to memory in which to place the value of the parameter. If NULL, memory is allocated.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to the location in which the data has been placed. The value will have been converted to a string value if it was not already. This data is newly-allocated, and may be modified as needed by the caller. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameterByIndex}
+\label{SDDS_GetParameterByIndex}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameterByIndex
+\item {\bf description:}\newline
+Returns the value of a parameter of the current data table of a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void *SDDS\_GetParameterByIndex(SDDS\_TABLE *SDDS\_table, int32\_t parameter\_index, void *memory)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf parameter\_index:} The integer index of the parameter in the data set. Returned by SDDS\_DefineParameter or obtained from SDDS\_GetParameterIndex.
+\item {\bf memory:} Pointer to memory in which to place the value of the parameter. If NULL, memory is allocated.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to the location in which the data has been placed. The pointer should be cast to {\em data-type}*, where {\em data-type} is the data type of the parameter. Note that for type SDDS\_STRING, {\em data-type} is char *. This data is newly-allocated, and may be modified as needed by the caller. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameterDefinition}
+\label{SDDS_GetParameterDefinition}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameterDefinition
+\item {\bf description:}\newline
+Returns a pointer to a structure describing a named data parameter.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+PARAMETER\_DEFINITION *SDDS\_GetParameterDefinition(SDDS\_TABLE *SDDS\_table, char *name);\newline
+\begin{verbatim}
+typedef struct {
+    char *name, *symbol, *units, *description, *format_string, *fixed_value;
+    int32_t type;
+    /* internal data follows that should not be accessed by users */
+} PARAMETER_DEFINITION;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf name:} A NULL-terminated character string giving the name of the parameter for which the definition is desired.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the address of the internally-stored structure containing the definition of the parameter. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetParameterInformation}
+\item \progref{GetParameterNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameterIndex}
+\label{SDDS_GetParameterIndex}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameterIndex
+\item {\bf description:}\newline
+Returns the index of a named parameter in the data set. This is used with some routines for faster access to the data or to information about the data.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_GetParameterIndex(SDDS\_TABLE *SDDS\_table, char *parameter\_name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf parameter\_name:} A NULL-terminated character string giving the name of the parameter for which information is desired.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a non-negative integer giving the index of the parameter. On failure, returns -1 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetParameterDefinition}
+\item \progref{GetParameterInformation}
+\item \progref{GetParameterNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameterInformation}
+\label{SDDS_GetParameterInformation}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameterInformation
+\item {\bf description:}\newline
+Returns information about a specified parameter. This routine is the preferred alternative to SDDS\_GetParameterDefinition.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_GetParameterInformation(SDDS\_TABLE *SDDS\_table, char *field\_name, void *memory, int32\_t mode,  name-or-index)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf field\_name:} A NULL terminated string giving the name of the field that information is requested for. These field names are identical to the names used in the namelist commands.
+\item {\bf memory:} The address in which to place the information. Should have type {\em data-type}* in the user's program, where {\em data-type} is the data type of the information. Note that for STRING information, {\em data-type} is char *. If memory is NULL, the existence and type of the information will be verified; the type will be returned as usual.
+\item {\bf mode:} One of the following constants (defined in SDDS.h):
+\begin{itemize}
+\item SDDS\_GET\_BY\_NAME -  Indicates that the next argument is a NULL-terminated character string containing the name of the parameter for which information is desired.
+\item SDDS\_GET\_BY\_INDEX - Indicates that the next argument is a non-negative integer giving the index of the parameter for which information is desired. This index is obtained from SDDS\_DefineParameter or SDDS\_GetParameterIndex.
+\end{itemize}
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the SDDS data type of the information. This is one of the following constants (defined in SDDS.h): SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING.\newline
+\newline
+On failure, returns zero and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetParameterDefinition}
+\item \progref{GetParameterIndex}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{VerifyParameterExists}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameterNames}
+\label{SDDS_GetParameterNames}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameterNames
+\item {\bf description:}\newline
+Returns an array of character strings giving the names of the parameters for a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+char **SDDS\_GetParameterNames(SDDS\_TABLE *SDDS\_table, int32\_t *number)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf number:} Address of a location in which to place the number of parameters.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a pointer to an array of NULL-terminated character strings giving the names of the parameters. On failure, returns NULL and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetParameterDefinition}
+\item \progref{GetParameterInformation}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetParameterType}
+\label{SDDS_GetParameterType}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetParameterType
+\item {\bf description:}\newline
+Returns the SDDS data type of a named parameter in the data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_GetParameterType(SDDS\_TABLE *SDDS\_table, int32\_t parameter\_index)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf parameter\_index:} The integer index of the parameter in the data set. Returned by SDDS\_DefineParameter or obtained from SDDS\_GetParameterIndex.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a non-negative integer giving the SDDS data type; this will be one of the constants (defined in SDDS.h) SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING. On failure, returns -1 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineParameter}
+\item \progref{GetParameterDefinition}
+\item \progref{GetParameterIndex}
+\item \progref{GetParameterInformation}
+\item \progref{GetParameterNames}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_GetRow}
+\label{SDDS_GetRow}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetRow
+\item {\bf description:}\newline
+Returns a pointer to a specified row of homogeneous data values from a table. The columns included are those declared to be ``of interest'' by calling, for example, SDDS\_SetColumnsOfInterest. The rows available are those declared to be of interest by calling, for example, SDDS\_SetRowsOfInterest.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void *SDDS\_GetRow(SDDS\_TABLE *SDDS\_table, int32\_t srow\_index, void *memory);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf srow\_index:} Index of the row desired in the list of selected rows (or ``rows of interest'').
+\item {\bf memory:} Address of location into which to write the data values. If NULL, memory is allocated for this purpose.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the address of the first item of the row. This pointer should be cast to {\em data-type}*, where {\em data-type} is the data type of the columns selected. Note that for type SDDS\_STRING, {\em data-type} is char *. The data is stored in newly-allocated memory (or in the memory passed by the caller), and may be modified as needed by the caller.\newline
+\newline
+On failure, returns NULL and records an error message. 
+\end{itemize}
+
+\subsection{SDDS\_GetTypeSize}
+\label{SDDS_GetTypeSize}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetTypeSize
+\item {\bf description:}\newline
+Returns the size of the data type in bytes.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_GetTypeSize(int32\_t sdds\_type);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf sdds\_type:} The SDDS data type for which the size is wanted. Must be one of the constants (defined in SDDS.h) SDDS\_LONGDOUBLE, SDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, SDDS\_CHARACTER, or SDDS\_STRING
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a positive integer giving the size of the data type in bytes. On failure, returns -1 and records an error message. 
+\end{itemize}
+
+\subsection{SDDS\_GetValue}
+\label{SDDS_GetValue}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_GetValue
+\item {\bf description:}\newline
+Returns a pointer to the data in a specified column and row of the current data table of a data set. Only the rows that are ``of interest'' are returned.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void *SDDS\_GetValue(SDDS\_TABLE *SDDS\_table, char *column\_name, int32\_t srow\_index, void *memory);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_name:} A NULL-terminated string giving the name of the column for which data is desired.
+\item {\bf srow\_index:} Index of the row desired in the list of selected rows (or ``rows of interest'').
+\item {\bf memory:} Address of location into which to write the data. If NULL, memory is allocated for this purpose.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the address into which the data was placed. This pointer should be cast to {\em data-type}*, where {\em data-type} is the data type of the columns selected. Note that for type SDDS\_STRING, {\em data-type} is char *.\newline
+\newline
+On failure, returns NULL and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetMatrixOfRows}
+\item \progref{GetRow}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{SetRowsOfInterest}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_InitializeAppend}
+\label{SDDS_InitializeAppend}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_InitializeAppend
+\item {\bf description:}\newline
+Appends to a file by adding a new page.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_InitializeAppend(SDDS\_TABLE *SDDS\_table, char *filename);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf filename:} A NULL-terminated character string giving the name of the existing file.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{InitializeAppendToPage}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_InitializeAppendToPage}
+\label{SDDS_InitializeAppendToPage}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_InitializeAppendToPage
+\item {\bf description:}\newline
+Appends to a file by adding to the last page.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_InitializeAppendToPage(SDDS\_TABLE *SDDS\_table, char *filename, int32\_t expected\_n\_rows, int32\_t *rowsPresentReturn);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf filename:} A NULL-terminated character string giving the name of the existing file.
+\item {\bf expected\_n\_rows:} The expected number of rows in the data table, used to preallocate memory for storing data values.
+\item {\bf rowsPresentReturn:} Pointer that returns the number or rows in the file.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{InitializeAppend}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_InitializeCopy}
+\label{SDDS_InitializeCopy}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_InitializeCopy
+\item {\bf description:}\newline
+Initializes a SDDS\_TABLE structure in preparation for copying a data table from another SDDS\_TABLE structure.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_InitializeCopy(SDDS\_TABLE *SDDS\_target, SDDS\_TABLE *SDDS\_source, char *filename, char *filemode);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_target:} Address of SDDS\_TABLE structure into which to copy data.
+\item {\bf SDDS\_source:} Address of SDDS\_TABLE structure from which to copy data.
+\item {\bf filename:} A NULL-terminated character string giving a filename to be associated with the new SDDS\_TABLE. Typically, the name of a file to which the copied data will be written after modification. Ignored if NULL.
+\item {\bf filemode:} A NULL-terminated character string giving the fopen file mode to be used to open the file named by filename. Ignored if filename is NULL.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyTable}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_InitializeHeaderlessInput}
+\label{SDDS_InitializeHeaderlessInput}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_InitializeHeaderlessInput
+\item {\bf description:}\newline
+Initializes a SDDS\_TABLE structure for use in reading data from a SDDS file. This involves opening the file but not reading a header. It is assumed that the file contains no header, and that the caller will set up the SDDS\_TABLE structure using calls to the SDDS\_Define X routines. This is way of using SDDS is {\em not} recommended, as it defeats the purpose of having a self-describing file by imbedding the description in a program.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_InitializeHeaderlessInput(SDDS\_TABLE *SDDS\_table, char *filename);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf filename:} A NULL-terminated character string giving the name of the data file.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineArray}
+\item \progref{DefineColumn}
+\item \progref{DefineParameter}
+\item \progref{ReadTable}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{InitializeInput}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_InitializeInput}
+\label{SDDS_InitializeInput}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_InitializeInput
+\item {\bf description:}\newline
+Initializes a SDDS\_TABLE structure for use in reading data from a SDDS file. This involves opening the file and reading the SDDS header.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_InitializeInput(SDDS\_TABLE *SDDS\_table, char *filename);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf filename:} A NULL-terminated character string giving the name of the file to set up for input.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{InitializeHeaderlessInput}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{ReadTable}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_InitializeOutput}
+\label{SDDS_InitializeOutput}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_InitializeOutput
+\item {\bf description:}\newline
+Initializes a SDDS\_TABLE structure for use writing data to a SDDS file. This involves opening zeroing all elements of the structure and opening the file.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_InitializeOutput(SDDS\_TABLE *SDDS\_table, int32\_t data\_mode, int32\_t lines\_per\_row, char *description, char *contents, char *filename)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf data\_mode:} On of the constants SDDS\_ASCII or SDDS\_BINARY, defined in  SDDS.h.
+\item {\bf lines\_per\_row:} A positive integer giving the number of lines to use for each row of data in ASCII output mode.
+\item {\bf description:} A NULL-terminated character string informally describing the data set.
+\item {\bf contents:} A NULL-terminated character string formally specifying the data set. Users are advised to set and/or examine this value in order to uniquely identify different types of data sets, using a set of description keywords chosen by the applications programmer.
+\item {\bf filename:} A NULL-terminated character string giving the name of the file to set up for output.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DefineParameter}
+\item \progref{DefineColumn}
+\item \progref{WriteLayout}
+\item \progref{WriteTable}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_LengthenTable}
+\label{SDDS_LengthenTable}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_LengthenTable
+\item {\bf description:}\newline
+Increasing the number of allocated rows. 
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_LengthenTable(SDDS\_TABLE *SDDS\_table, int32\_t n\_additional\_rows);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf n\_additional\_rows:} Number of additional rows.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{InitializeOutput}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_Logic}
+\label{SDDS_Logic}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_Logic
+\item {\bf description:}\newline
+This manual page describes both the SDDS\_Logic function (which is rarely used by applications) and, more importantly, the method by which selection logic is applied for SDDS\_SetColumnsOfInterest and SDDS\_SetRowsOfInterest.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_Logic(int32\_t previous, int32\_t match, uint32\_t logic);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf previous:} A logical value resulting from a previous logical operation or from an initial condition. As usual in C, non-zero is true and zero is false.
+\item {\bf match:} A logical value resulting from a new matching or selection operation, e.g., matching to a wildcard string or comparing to a numerical selection window.
+\item {\bf logic:} A bitwise combination of the following constants, defined in  SDDS.h:
+\begin{itemize}
+\item SDDS\_NEGATE\_MATCH: Indicates that the logical value of  match should be negated (or inverted). This would correspond, for example, to asking that a string {\em not} match a wildcard sequence or that a value be {\em outside} a numerical selection window.
+\item SDDS\_NEGATE\_PREVIOUS: Indicates that the logical value of  previous should be negated (or inverted).
+\item SDDS\_AND, SDDS\_OR: One or fewer of these may be specified. If neither is specified, the value of  previous is ignored. Otherwise, the indicated logical operation is performed with the  previous and  match values, subject to prior negation as per the last two items.
+\item SDDS\_NEGATE\_EXPRESSION: Indicates that the resultant logical value of the previous three steps should be negated.
+\end{itemize}
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 one if the result is true, 0 if false.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetColumnFlags}
+\item \progref{SetColumnsOfInterest}
+\item \progref{SetRowFlags}
+\item \progref{SetRowsOfInterest}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_NumberOfErrors}
+\label{SDDS_NumberOfErrors}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_NumberOfErrors
+\item {\bf description:}\newline
+Returns the number of errors recorded by SDDS library routines.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_NumberOfErrors()
+\item {\bf arguments:}\newline
+None
+\item {\bf return value:}\newline
+The number of errors recorded by SDDS library routines since the last call to SDDS\_PrintErrors.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{ClearErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_ParameterCount}
+\label{SDDS_ParameterCount}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_ParameterCount
+\item {\bf description:}\newline
+Used to retrieve the number of parameters.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_ParameterCount(SDDS\_TABLE *SDDS\_table)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns the number of parameters.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{ArrayCount}
+\item \progref{ColumnCount}
+\item \progref{RowCount}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_PrintErrors}
+\label{SDDS_PrintErrors}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_PrintErrors
+\item {\bf description:}\newline
+Prints the error history to a specified FILE stream. When an error is encountered by SDDS library routines, most record an error message that may be retrieved with this facility.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void SDDS\_PrintErrors(FILE *fp, int32\_t mode)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf fp:} The stream to which to print the error history.
+\item {\bf mode:} A flag word specifying the actions of SDDS\_PrintErrors. It is composed by or'ing together any of the following constants (defined in SDDS.h):
+\begin{itemize}
+\item SDDS\_VERBOSE\_PrintErrors - Specifies that all errors will be printed out, rather than just the first error.
+\item SDDS\_EXIT\_PrintErrors - Specifies that, if there are errors, the program should exit to the shell after printing the errors.
+\end{itemize}
+\end{itemize}
+\item {\bf return value:}\newline
+None
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{ClearErrors}
+\item \progref{NumberOfErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_PrintTypedValue}
+\label{SDDS_PrintTypedValue}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_PrintTypedValue
+\item {\bf description:}\newline
+Prints a data value of a specified type using an optional  printf format string.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_PrintTypedValue(void *data, int32\_t index, int32\_t type, char *format, FILE *fp)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf data:} The reference address of the data to be printed.
+\item {\bf index:} The offset of the address of the item to be printed from the reference address, in units of the size of the declared type.
+\item {\bf type:} The type of the data, specified by one of the constants (defined in SDDS.h) SDDS\_LONGDOUBLE, SSDDS\_DOUBLE, SDDS\_FLOAT, SDDS\_LONG, SDDS\_ULONG, SDDS\_SHORT, SDDS\_USHORT, or SDDS\_CHARACTER.
+\item {\bf format:} A NULL-terminated character string giving a  printf format specification for printing the data. If NULL, a reasonable default is chosen.
+\item {\bf fp:} The FILE stream to which to print the data.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CastValue}
+\item \progref{ConvertToDouble}
+\item \progref{GetColumnInDoubles}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_ReadTable}
+\label{SDDS_ReadTable}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_ReadTable
+\item {\bf description:}\newline
+Reads a new data table from a data set. The data set must have previously been initialized using SDDS\_InitializeInput.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_ReadTable(SDDS\_TABLE *SDDS\_table);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns a positive integer giving the ``table number'' being returned. This is a value that is 1 for the first table and increments by 1 for each subsequent table. -1 is returned if there are no tables remaining in the data set.\newline
+\newline
+On failure, returns 0 and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{InitializeInput}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_ReconnectFile}
+\label{SDDS_ReconnectFile}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_ReconnectFile
+\item {\bf description:}\newline
+Opens a file closed by SDDS\_Disconnect to the previous position.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_ReconnectFile(SDDS\_TABLE *SDDS\_table)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DisconnectFile}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_RowCount}
+\label{SDDS_RowCount}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_RowCount
+\item {\bf description:}\newline
+Used to retrieve the number of rows.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_RowCount(SDDS\_TABLE *SDDS\_table)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns the number of rows.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{ArrayCount}
+\item \progref{ColumnCount}
+\item \progref{ParameterCount}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SaveLayout}
+\label{SDDS_SaveLayout}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SaveLayout
+\item {\bf description:}\newline
+Saves the SDDS header describing the layout of the data tables that will follow. Usually called before SDDS\_WriteLayout.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SaveLayout(SDDS\_TABLE *SDDS\_table);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{InitializeOutput}
+\item \progref{InitializeCopy}
+\item \progref{WriteLayout}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetArray}
+\label{SDDS_SetArray}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetArray
+\item {\bf description:}\newline
+Accepts a pointer to a structure containing the data and other information to be used for an array in the current data table of a data set.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetArray(SDDS\_TABLE *SDDS\_table, char *array\_name, int32\_t mode, void *pointer, int32\_t dimension-list);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf array\_name:} A NULL-terminated character string giving the name of the array to return.
+\item {\bf mode:} SDDS\_POINTER\_ARRAY or SDDS\_CONTIGUOUS\_DATA.
+\item {\bf pointer:} Address of multidimensional pointer array indexing the data. The type of this pointer in the caller's program is {\em data-type}*n, where {\em data-type} is the data type of the array and *n represents a sequence of n asterisks, n begin the number of dimensions of the array. (Note that for type SDDS\_STRING, {\em data-type} is char *.) This corresponds to the  pointer field of the SDDS\_ARRAY structure (see the manual page for SDDS\_GetArray). The data is copied so that the caller may change it after this call without affecting the behavior of SDDS routines.
+\item {\bf dimension-list:} n arguments of type int32\_t, where n is the number of dimensions. Successive arguments give the size in each dimension.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns 1. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{GetArray}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetColumn}
+\label{SDDS_SetColumn}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetColumn
+\item {\bf description:}\newline
+Sets the values for one data column.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetColumn(SDDS\_TABLE *SDDS\_table, int32\_t mode, void *data, int32\_t rows, ...)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} Valid modes are SDDS\_SET\_BY\_INDEX and SDDS\_SET\_BY\_NAME.
+\item {\bf data:} Pointer to an array of data. The elements of the array must be of the same type as the column type.
+\item {\bf rows:} Number of rows in the column.
+\item {\bf ...:} If the mode is SDDS\_SET\_BY\_INDEX it expects an integer argument for the index. If the mode is SDDS\_SET\_BY\_NAME it expects a NULL-terminated character string giving the name of the column.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns 1. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetColumnFromDoubles}
+\item \progref{SetColumnFromLongs}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetColumnFlags}
+\label{SDDS_SetColumnFlags}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetColumnFlags
+\item {\bf description:}\newline
+Sets initial values of accept/reject flags for the columns of the current data table of a data set. A non-zero flag indicates that a column is ``of interest''.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetColumnFlags(SDDS\_TABLE *SDDS\_table, int32\_t column\_flag\_value);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf column\_flag\_value:} An integer value indicating the status to assign to all columns. A non-zero value indicates acceptance, while a zero value indicates rejection.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetColumnsOfInterest}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetColumnFromDoubles}
+\label{SDDS_SetColumnFromDoubles}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetColumnFromDoubles
+\item {\bf description:}\newline
+Sets the values for one data column.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetColumnFromDoubles(SDDS\_TABLE *SDDS\_table, int32\_t mode, double *data, int32\_t rows, ...)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} Valid modes are SDDS\_SET\_BY\_INDEX and SDDS\_SET\_BY\_NAME.
+\item {\bf data:} Pointer to an array of data.
+\item {\bf rows:} Number of rows in the column.
+\item {\bf ...:} If the mode is SDDS\_SET\_BY\_INDEX it expects an integer argument for the index. If the mode is SDDS\_SET\_BY\_NAME it expects a NULL-terminated character string giving the name of the column.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns 1. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetColumn}
+\item \progref{SetColumnFromLongs}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetColumnFromLongs}
+\label{SDDS_SetColumnFromLongs}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetColumnFromLongs
+\item {\bf description:}\newline
+Sets the values for one data column.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetColumnFromLongs(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t *data, int32\_t rows, ...)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} Valid modes are SDDS\_SET\_BY\_INDEX and SDDS\_SET\_BY\_NAME.
+\item {\bf data:} Pointer to an array of data.
+\item {\bf rows:} Number of rows in the column.
+\item {\bf ...:} If the mode is SDDS\_SET\_BY\_INDEX it expects an integer argument for the index. If the mode is SDDS\_SET\_BY\_NAME it expects a NULL-terminated character string giving the name of the column.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns 1. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetColumn}
+\item \progref{SetColumnFromDoubles}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetColumnsOfInterest}
+\label{SDDS_SetColumnsOfInterest}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetColumnsOfInterest
+\item {\bf description:}\newline
+Modifies the acceptance status of the columns of the current data table of a data set using the column names and information supplied by the caller.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetColumnsOfInterest(SDDS\_TABLE *SDDS\_table, int32\_t mode, ...);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} One of the constants SDDS\_NAME\_ARRAY, SDDS\_NAMES\_STRING, SDDS\_NAME\_STRINGS, or SDDS\_MATCH\_STRING, defined in  SDDS.h. The calling syntax for each of these modes is:
+\begin{itemize}
+\item SDDS\_NAME\_ARRAY - SDDS\_SetColumnsOfInterest(SDDS\_TABLE *SDDS\_table, SDDS\_NAME\_ARRAY, int32\_t n\_entries, char **name), where name is an array of pointers to n\_entries NULL-terminated character strings. The columns named in these strings are added to the list of columns deemed to be ``of interest'' by the caller. The order in which the caller gives the column names is recorded, and calls to SDDS\_GetRow and SDDS\_GetMatrixOfRows return the columns in this order. 
+\item SDDS\_NAMES\_STRING - SDDS\_SetColumnsOfInterest(SDDS\_TABLE *SDDS\_table, SDDS\_NAMES\_STRING, char *string), where string is a NULL-terminated character string giving the names of the columns of interest separated by white-space. The columns named in these strings are added to the list of columns deemed to be ``of interest'' by the caller. The order in which the caller gives the column names is recorded, and calls to SDDS\_GetRow and SDDS\_GetMatrixOfRows return the columns in this order. 
+\item SDDS\_NAME\_STRINGS - SDDS\_SetColumnsOfInterest(SDDS\_TABLE *SDDS\_table, SDDS\_NAME\_STRINGS, char *string, ..., NULL), where string and all following arguments are NULL-terminated character strings, each giving the name of a column. The list is terminated by the value NULL. The columns named in these strings are added to the list of columns deemed to be ``of interest'' by the caller. The order in which the caller gives the column names is recorded, and calls to SDDS\_GetRow and SDDS\_GetMatrixOfRows return the columns in this order. 
+\item SDDS\_MATCH\_STRING - SDDS\_SetColumnsOfInterest(SDDS\_TABLE *SDDS\_table, SDDS\_MATCH\_STRING, char *string, int32\_t logic\_mode), where string is a wildcard-containing, NULL-terminated character string to which column names will be matched. The columns so matched are added to the list of columns deemed to be ``of interest'' by the caller. The order in which the caller gives the column names is recorded, and calls to SDDS\_GetRow and SDDS\_GetMatrixOfRows return the columns in this order. See the manual page for SDDS\_Logic for a discussion of the logic\_mode parameter. 
+\end{itemize}
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DeleteUnsetColumns}
+\item \progref{Logic}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{SetColumnFlags}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetParameter}
+\label{SDDS_SetParameter}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetParameter
+\item {\bf description:}\newline
+Sets the value of one parameters for the current data table of a data set. Must be preceeded by a call to SDDS\_StartTable to initialize the table.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetParameter(SDDS\_TABLE *SDDS\_table, int32\_t mode,  name-or-index,  value-or-pointer)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} A bit-wise combination of the constants SDDS\_SET\_BY\_INDEX, SDDS\_SET\_BY\_NAME, SDDS\_PASS\_BY\_VALUE, and SDDS\_PASS\_BY\_REFERENCE, which are defined in  SDDS.h. One and only one of SDDS\_SET\_BY\_INDEX and SDDS\_SET\_BY\_NAME must be set, indicating that the parameters to be set are indicated by index number or by name, respectively. One and only one of SDDS\_PASS\_BY\_VALUE and SDDS\_PASS\_BY\_REFERENCE must be set, indicating that the values for the parameters are passed by value or by reference, respectively. The syntax for the four possible combinations is:
+\begin{itemize}
+\item mode = SDDS\_SET\_BY\_INDEX | SDDS\_PASS\_BY\_VALUE: int32\_t SDDS\_SetParameter(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t index1,  value1)
+\item mode = SDDS\_SET\_BY\_INDEX | SDDS\_PASS\_BY\_REFERENCE: int32\_t SDDS\_SetParameter(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t index1, void *data1)
+\item mode = SDDS\_SET\_BY\_NAME | SDDS\_PASS\_BY\_VALUE: int32\_t SDDS\_SetParameter(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name1,  value1)
+\item mode = SDDS\_SET\_BY\_NAME | SDDS\_PASS\_BY\_REFERENCE: int32\_t SDDS\_SetParameter(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name1, void *data1)  
+\end{itemize}
+Note that for data of type SDDS\_STRING, pass-by-value means passing an item of type char *, while pass by reference means passing an item of type char **.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetParametersFromDoubles}
+\item \progref{StartTable}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetParameters}
+\label{SDDS_SetParameters}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetParameters
+\item {\bf description:}\newline
+Sets the value of one or more parameters for the current data table of a data set. Must be preceeded by a call to SDDS\_StartTable to initialize the table.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetParameters(SDDS\_TABLE *SDDS\_table, int32\_t mode,  name-or-index,  value-or-pointer, ...,  terminator)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} A bit-wise combination of the constants SDDS\_SET\_BY\_INDEX, SDDS\_SET\_BY\_NAME, SDDS\_PASS\_BY\_VALUE, and SDDS\_PASS\_BY\_REFERENCE, which are defined in  SDDS.h. One and only one of SDDS\_SET\_BY\_INDEX and SDDS\_SET\_BY\_NAME must be set, indicating that the parameters to be set are indicated by index number or by name, respectively. One and only one of SDDS\_PASS\_BY\_VALUE and SDDS\_PASS\_BY\_REFERENCE must be set, indicating that the values for the parameters are passed by value or by reference, respectively. The syntax for the four possible combinations is:
+\begin{itemize}
+\item mode = SDDS\_SET\_BY\_INDEX | SDDS\_PASS\_BY\_VALUE: int32\_t SDDS\_SetParameters(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t index1,  value1, int32\_t index2,  value2, ..., -1)
+\item mode = SDDS\_SET\_BY\_INDEX | SDDS\_PASS\_BY\_REFERENCE: int32\_t SDDS\_SetParameters(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t index1, void *data1, int32\_t index2, void *data2, ..., -1)
+\item mode = SDDS\_SET\_BY\_NAME | SDDS\_PASS\_BY\_VALUE: int32\_t SDDS\_SetParameters(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name1,  value1, char *name2,  value2, ..., NULL)
+\item mode = SDDS\_SET\_BY\_NAME | SDDS\_PASS\_BY\_REFERENCE: int32\_t SDDS\_SetParameters(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name1, void *data1, char *name2, void *data2, ..., NULL)  
+\end{itemize}
+Note that for data of type SDDS\_STRING, pass-by-value means passing an item of type char *, while pass by reference means passing an item of type char **.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetParametersFromDoubles}
+\item \progref{StartTable}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetParametersFromDoubles}
+\label{SDDS_SetParametersFromDoubles}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetParametersFromDoubles
+\item {\bf description:}\newline
+Sets the value of one or more parameters for the current data table of a data set. Must be preceeded by a call to SDDS\_StartTable to initialize the table.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetParametersFromDoubles(SDDS\_TABLE *SDDS\_table, int32\_t mode,  name-or-index,  value-or-pointer, ...,  terminator)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} A bit-wise combination of the constants SDDS\_SET\_BY\_INDEX, SDDS\_SET\_BY\_NAME, SDDS\_PASS\_BY\_VALUE, and SDDS\_PASS\_BY\_REFERENCE, which are defined in  SDDS.h. One and only one of SDDS\_SET\_BY\_INDEX and SDDS\_SET\_BY\_NAME must be set, indicating that the parameters to be set are indicated by index number or by name, respectively. One and only one of SDDS\_PASS\_BY\_VALUE and SDDS\_PASS\_BY\_REFERENCE must be set, indicating that the values for the parameters are passed by value or by reference, respectively. The syntax for the four possible combinations is:
+\begin{itemize}
+\item mode = SDDS\_SET\_BY\_INDEX | SDDS\_PASS\_BY\_VALUE: int32\_t SDDS\_SetParametersFromDoubles(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t index1,  value1, int32\_t index2,  value2, ..., -1)
+\item mode = SDDS\_SET\_BY\_INDEX | SDDS\_PASS\_BY\_REFERENCE: int32\_t SDDS\_SetParametersFromDoubles(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t index1, double *data1, int32\_t index2, double *data2, ..., -1)
+\item mode = SDDS\_SET\_BY\_NAME | SDDS\_PASS\_BY\_VALUE: int32\_t SDDS\_SetParametersFromDoubles(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name1,  value1, char *name2,  value2, ..., NULL)
+\item mode = SDDS\_SET\_BY\_NAME | SDDS\_PASS\_BY\_REFERENCE: int32\_t SDDS\_SetParametersFromDoubles(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name1, double *data1, char *name2, double *data2, ..., NULL)  
+\end{itemize}
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetParameters}
+\item \progref{StartTable}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetRowFlags}
+\label{SDDS_SetRowFlags}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetRowFlags
+\item {\bf description:}\newline
+Sets initial values of acceptance flags for the rows of the current data table of a data set. A non-zero flag indicates that a row is ``of interest''.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetRowFlags(SDDS\_TABLE *SDDS\_table, int32\_t row\_flag\_value);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf row\_flag\_value:} An integer value indicating the status to assign to all rows. A non-zero value indicates acceptance, while a zero value indicates rejection.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetRowsOfInterest}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetRowsOfInterest}
+\label{SDDS_SetRowsOfInterest}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetRowsOfInterest
+\item {\bf description:}\newline
+Modifies the acceptance status of the rows of the current data table of a data set by wildcard matching of a string to the entries in a specified column.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetRowsOfInterest(SDDS\_TABLE *SDDS\_table, char *selection\_column, char *matching\_string, int32\_t logic);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf selection\_column:} A NULL-terminated character string giving the name of the column the values in which will be used for modifying the acceptance status of each row. The column must be of type SDDS\_STRING.
+\item {\bf matching\_string:} A NULL-terminated, optionally wildcard-containing character string to which the entries in the selection column are matched.
+\item {\bf logic:} A word of bit flags indicating how to combine the previous status of each row with the acceptance status based on matching to the matching\_string. See the manual entry for SDDS\_Logic for details.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the total number of rows that are of interest. On failure, returns -1 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DeleteUnsetRows}
+\item \progref{FilterRowsOfInterest}
+\item \progref{GetMatrixOfRows}
+\item \progref{GetRow}
+\item \progref{Logic}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{SetRowFlags}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_SetRowValues}
+\label{SDDS_SetRowValues}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetRowValues
+\item {\bf description:}\newline
+Allows setting the values in a specified row of the current data table of a data set. Must be preceeded by a call to SDDS\_StartTable to initialize the table.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetRowValues(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t row, ...);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} A bit-wise combination of the constants SDDS\_SET\_BY\_INDEX, SDDS\_SET\_BY\_NAME, SDDS\_PASS\_BY\_VALUE, and SDDS\_PASS\_BY\_REFERENCE, which are defined in  SDDS.h. One and only one of SDDS\_SET\_BY\_INDEX and SDDS\_SET\_BY\_NAME must be set, indicating that the values to be set are indicated by index number or by name, respectively. One and only one of SDDS\_PASS\_BY\_VALUE and SDDS\_PASS\_BY\_REFERENCE must be set, indicating that the values for the values are passed by value or by reference, respectively. The syntax for the four possible combinations is:
+\begin{itemize}
+\item mode = SDDS\_SET\_BY\_INDEX | SDDS\_PASS\_BY\_VALUE: int32\_t SDDS\_SetRowValues(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t index1,  value1, int32\_t index2,  value2, ..., -1)
+\item mode = SDDS\_SET\_BY\_INDEX | SDDS\_PASS\_BY\_REFERENCE: int32\_t SDDS\_SetRowValues(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t index1, void *data1, int32\_t index2, void *data2, ..., -1)
+\item mode = SDDS\_SET\_BY\_NAME | SDDS\_PASS\_BY\_VALUE: int32\_t SDDS\_SetRowValues(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name1,  value1, char *name2,  value2, ..., NULL)
+\item mode = SDDS\_SET\_BY\_NAME | SDDS\_PASS\_BY\_REFERENCE: int32\_t SDDS\_SetRowValues(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name1, void *data1, char *name2, void *data2, ..., NULL) Note that for data of type SDDS\_STRING, pass-by-value means passing an item of type char *, while pass by reference means passing an item of type char **.
+\end{itemize}
+\item {\bf rows:} The row of the data table into which the data is to be placed.
+\end{itemize}
+\item {\bf return value:}\newline
+
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{StartTable}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_StartTable}
+\label{SDDS_StartTable}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_StartTable
+\item {\bf description:}\newline
+Initializes a SDDS\_TABLE structure in preparation for placing data into the table. Must be preceeded by a call to SDDS\_InitializeOutput. May be called repeatedly to proceed to the next table in a data set, though the caller is expected to use SDDS\_WriteTable to write each table to the disk
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_StartTable(SDDS\_TABLE *SDDS\_table, int32\_t expected\_n\_rows);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf expected\_n\_rows:} The expected number of rows in the data table, used to preallocate memory for storing data values.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{InitializeOutput}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{WriteTable}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_Terminate}
+\label{SDDS_Terminate}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_Terminate
+\item {\bf description:}\newline
+Erases the data set description and frees all memory being used for a data set. If a file is defined and open for the data set, the file is closed.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_Terminate(SDDS\_TABLE *SDDS\_table)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_VerifyArrayExists}
+\label{SDDS_VerifyArrayExists}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_VerifyArrayExists
+\item {\bf description:}\newline
+Returns the index of a named array if it exists as the specified data type.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_VerifyArrayExists(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name)
+int32\_t SDDS\_VerifyArrayExists(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t type, char *name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} Valid modes are FIND\_SPECIFIED\_TYPE, FIND\_ANY\_TYPE, FIND\_NUMERIC\_TYPE, FIND\_FLOATING\_TYPE, FIND\_INTEGER\_TYPE
+\item {\bf type:} If mode is FIND\_SPECIFIED\_TYPE it expects an SDDS data type.
+\item {\bf name:} Name of the array in question.
+\end{itemize}
+\item {\bf return value:}\newline
+If the desired array exists it returns the index of the SDDS array. Otherwise it returns -1.\newline
+\newline
+On failure, returns zero and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetArrayDefinition}
+\item \progref{GetArrayIndex}
+\item \progref{GetArrayInformation}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_VerifyColumnExists}
+\label{SDDS_VerifyColumnExists}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_VerifyColumnExists
+\item {\bf description:}\newline
+Returns the index of a named column if it exists as the specified data type.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_VerifyColumnExists(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name)
+int32\_t SDDS\_VerifyColumnExists(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t type, char *name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} Valid modes are FIND\_SPECIFIED\_TYPE, FIND\_ANY\_TYPE, FIND\_NUMERIC\_TYPE, FIND\_FLOATING\_TYPE, FIND\_INTEGER\_TYPE
+\item {\bf type:} If mode is FIND\_SPECIFIED\_TYPE it expects an SDDS data type.
+\item {\bf name:} Name of the column in question.
+\end{itemize}
+\item {\bf return value:}\newline
+If the desired column exists it returns the index of the SDDS column. Otherwise it returns -1.\newline
+\newline
+On failure, returns zero and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetColumnDefinition}
+\item \progref{GetColumnIndex}
+\item \progref{GetColumnInformation}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_VerifyParameterExists}
+\label{SDDS_VerifyParameterExists}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_VerifyParameterExists
+\item {\bf description:}\newline
+Returns the index of a named parameter if it exists as the specified data type.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_VerifyParameterExists(SDDS\_TABLE *SDDS\_table, int32\_t mode, char *name)
+int32\_t SDDS\_VerifyParameterExists(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t type, char *name)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf mode:} Valid modes are FIND\_SPECIFIED\_TYPE, FIND\_ANY\_TYPE, FIND\_NUMERIC\_TYPE, FIND\_FLOATING\_TYPE, FIND\_INTEGER\_TYPE
+\item {\bf type:} If mode is FIND\_SPECIFIED\_TYPE it expects an SDDS data type.
+\item {\bf name:} Name of the parameter in question.
+\end{itemize}
+\item {\bf return value:}\newline
+If the desired parameter exists it returns the index of the SDDS parameter. Otherwise it returns -1.\newline
+\newline
+On failure, returns zero and records an error message. 
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{GetParameterDefinition}
+\item \progref{GetParameterIndex}
+\item \progref{GetParameterInformation}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_WriteLayout}
+\label{SDDS_WriteLayout}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_WriteLayout
+\item {\bf description:}\newline
+Writes the SDDS header describing the layout of the data tables that will follow.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_WriteLayout(SDDS\_TABLE *SDDS\_table);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{InitializeOutput}
+\item \progref{InitializeCopy}
+\item \progref{SaveLayout}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_WriteTable}
+\label{SDDS_WriteTable}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_WriteTable
+\item {\bf description:}\newline
+Writes out the current data table (i.e., the parameters and the tabular data). Must be preceeded by a call to SDDS\_WriteLayout at some point.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_WriteTable(SDDS\_TABLE *SDDS\_table);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{WriteLayout}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\tableofcontents
+\end{document}
