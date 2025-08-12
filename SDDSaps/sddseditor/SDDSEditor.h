@@ -80,6 +80,7 @@ private slots:
   void parameterCellMenuRequested(const QPoint &pos);
   void columnHeaderMenuRequested(const QPoint &pos);
   void columnCellMenuRequested(const QPoint &pos);
+  void columnRowMenuRequested(const QPoint &pos);
   void arrayHeaderMenuRequested(const QPoint &pos);
   void arrayCellMenuRequested(const QPoint &pos);
   void plotColumn(int column);

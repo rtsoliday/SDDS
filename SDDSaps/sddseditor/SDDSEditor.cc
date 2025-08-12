@@ -41,6 +41,7 @@
 #include <QEvent>
 #include <QUndoStack>
 #include <QRegularExpression>
+#include <QItemSelectionModel>
 #include <functional>
 #include <cstdlib>
 #include <algorithm>
@@ -301,6 +302,9 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
       QHeaderView::ResizeToContents);
   columnView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   columnView->verticalHeader()->setDefaultSectionSize(18);
+  columnView->verticalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(columnView->verticalHeader(), &QHeaderView::customContextMenuRequested,
+          this, &SDDSEditor::columnRowMenuRequested);
   columnView->horizontalHeader()->setSectionsMovable(true);
   columnView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(columnView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
@@ -2015,6 +2019,27 @@ void SDDSEditor::columnCellMenuRequested(const QPoint &pos) {
                  columnView->viewport()->mapToGlobal(pos));
 }
 
+void SDDSEditor::columnRowMenuRequested(const QPoint &pos) {
+  int row = columnView->verticalHeader()->logicalIndexAt(pos);
+  if (row < 0)
+    return;
+  QMenu menu(columnView);
+  QAction *insAct = menu.addAction(tr("Insert"));
+  QAction *delAct = menu.addAction(tr("Delete"));
+  QAction *chosen = menu.exec(columnView->verticalHeader()->mapToGlobal(pos));
+  if (chosen == insAct) {
+    columnView->setCurrentIndex(columnModel->index(row, 0));
+    insertColumnRows();
+  } else if (chosen == delAct) {
+    QItemSelectionModel *sel = columnView->selectionModel();
+    if (!sel->isRowSelected(row, QModelIndex()))
+      sel->select(columnModel->index(row, 0),
+                  QItemSelectionModel::Rows |
+                      QItemSelectionModel::ClearAndSelect);
+    deleteColumnRows();
+  }
+}
+
 void SDDSEditor::showArrayMenu(QTableView *view, int column,
                                const QPoint &globalPos) {
   if (column < 0 || column >= dataset.layout.n_arrays)
@@ -2988,6 +3013,8 @@ void SDDSEditor::insertColumnRows() {
   }
 
   populateModels();
+  columnView->clearSelection();
+  columnView->setCurrentIndex(QModelIndex());
   markDirty();
 }
 
@@ -3016,6 +3043,8 @@ void SDDSEditor::deleteColumnRows() {
   }
 
   populateModels();
+  columnView->clearSelection();
+  columnView->setCurrentIndex(QModelIndex());
   markDirty();
 }
 
