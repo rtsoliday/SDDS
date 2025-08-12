@@ -15,12 +15,12 @@ Compute the analytic signal of column {\tt signal} as a function of {\tt time}:
 sddsanalyticsignal data.sdds result.sdds -columns=time,signal
 }\end{flushleft}
 \item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddsanalyticsignal [-pipe=[input][,output]] [\em inputfile] [\em outputfile] \\
-  [-columns=\em indep-variable,\em depen-quantity[,...]] \\
-  [-unwrapLimit=\em value] \\
-  [-majorOrder=row|column]
-}\end{flushleft}
+  \begin{flushleft}{\tt
+  sddsanalyticsignal {}[-pipe=[input][,output]] [{\em inputfile}] [{\em outputfile}] \\
+    {}[-columns=\em indep-variable,\em depen-quantity\lbrack,...\rbrack] \\
+    {}[-unwrapLimit=\em value] \\
+    {}[-majorOrder=row|column]
+  }\end{flushleft}
 \item {\bf switches:}
     \begin{itemize}
     \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.

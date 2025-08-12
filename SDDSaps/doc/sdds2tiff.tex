@@ -6,7 +6,7 @@
 
 \begin{itemize}
 \item {\bf description:} Converts an SDDS file to one or more TIFF images.  Each page of the input
-file becomes a separate image named {\tt <output>.####}.  Two styles of input are
+file becomes a separate image named {\tt <output>.\#\#\#\#}.  Two styles of input are
 supported: a single column file with {\tt Variable1Name} and {\tt Variable2Name}
 parameters (plus dimension parameters), or a multi-column file containing
 columns with a common prefix such as {\tt Line1}, {\tt Line2}, and so on.
@@ -17,7 +17,7 @@ sdds2tiff image.sdds image -fromPage=2 -toPage=5 -columnPrefix=Img -maxContrast
 \item {\bf synopsis:}
 \begin{flushleft}{\tt
 sdds2tiff [{\em input}] [{\em output}] [-pipe[=in]] [-fromPage={\em number}]\\
-  [-toPage={\em number}] [-columnPrefix={\em prefix}] [-maxContrast] [-16bit]
+  {}[-toPage={\em number}] [-columnPrefix={\em prefix}] [-maxContrast] [-16bit]
 }\end{flushleft}
 \item {\bf switches:}
   \begin{itemize}

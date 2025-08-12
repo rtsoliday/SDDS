@@ -2,7 +2,7 @@
 all:: SDDStoolkit.ps SDDStoolkit.pdf html
 
 SDDStoolkit.ps:
-	rm -f SDDStoolkit.aux SDDStoolkit.dvi SDDStoolkit.log SDDStoolkit.toc
+	rm -f SDDStoolkit.aux SDDStoolkit.dvi SDDStoolkit.log SDDStoolkit.toc SDDStoolkit.out
 	latex SDDStoolkit
 	latex SDDStoolkit
 	dvips SDDStoolkit -o SDDStoolkit.ps

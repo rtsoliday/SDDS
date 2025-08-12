@@ -11,24 +11,24 @@ number of elements in the converted arrays must match the number of rows in
 existing columns or the number of elements in other converted arrays.
 
 \item {\bf examples:}
-Convert array \verb|A| to column \verb|A_out|:
-\begin{flushleft}{\tt
-sddsarray2column in.sdds out.sdds -convert=A,A_out
-}\end{flushleft}
+  Convert array \verb|A| to column \verb|A\_out|:
+  \begin{flushleft}{\tt
+  sddsarray2column in.sdds out.sdds -convert=A,A\_out
+  }\end{flushleft}
 Convert the first plane of a three--dimensional array \verb|A|:
-\begin{flushleft}{\tt
-sddsarray2column in.sdds out.sdds -convert=A,A_out,d0=0
-}\end{flushleft}
+  \begin{flushleft}{\tt
+  sddsarray2column in.sdds out.sdds -convert=A,A\_out,d0=0
+  }\end{flushleft}
 Select a rectangular region from array \verb|A|:
-\begin{flushleft}{\tt
-sddsarray2column in.sdds out.sdds "-convert=A,A_out,d2=(1,3)"
-}\end{flushleft}
+  \begin{flushleft}{\tt
+  sddsarray2column in.sdds out.sdds "-convert=A,A\_out,d2=(1,3)"
+  }\end{flushleft}
 
 \item {\bf synopsis:}
 \begin{flushleft}{\tt
-sddsarray2column [{\em source}] [{\em target}] [-pipe=[input][,output]]\\
-[-nowarnings] -convert={\em arrayName}[,{\em columnName}][,d<dimension>=<indexList>]...
-}\end{flushleft}
+  sddsarray2column [{\em source}] [{\em target}] [-pipe=[input][,output]]\\
+  {}[-nowarnings] -convert={\em arrayName}[,{\em columnName}][,d<dimension>=<indexList>]...
+  }\end{flushleft}
 
 \item {\bf files:}
 \begin{itemize}
