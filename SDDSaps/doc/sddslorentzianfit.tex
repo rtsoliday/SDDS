@@ -1,0 +1,30 @@
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddslorentzianfit}
+\label{sddslorentzianfit}
+
+\begin{itemize}
+\item {\bf description:} Performs a Lorentzian fit to data in an SDDS file, using
+  the model $y = \verb|baseline| + \verb|height| \gamma^2 /(\gamma^2 + (x - \verb|center|)^2)$.
+\item {\bf examples:}
+\begin{flushleft}{\tt
+sddslorentzianfit beam.sdds fit.sdds -columns=Frequency,Signal,ySigma=Error -fitRange=1e3,2e3 -guesses=baseline=0,center=1.5e3,height=10,gamma=50\\
+sddslorentzianfit -pipe=both -columns=x,y -fixValue=gamma=0.05 -verbosity=2 -fullOutput
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddslorentzianfit [inputfile] [outputfile] [-pipe=[input][,output]]\\
+  -columns=<x-name>,<y-name>[,ySigma=<sy-name>]\\
+  [-fitRange=<lower>|@<parameter-name>,<upper>|@<parameter-name>]\\
+  [-fullOutput] [-verbosity=<integer>] [-stepSize=<factor>]\\
+  [-tolerance=<value>]\\
+  [-guesses=[baseline=<value>|@<parameter-name>][,center=<value>|@<parameter-name>]\\
+           [,height=<value>|@<parameter-name>][,gamma=<value>|@<parameter-name>]]\\
+  [-fixValue=[baseline=<value>|@<parameter-name>][,center=<value>|@<parameter-name>]\\
+            [,height=<value>|@<parameter-name>][,gamma=<value>|@<parameter-name>]]\\
+  [-limits=[evaluations=<number>][,passes=<number>]] [-majorOrder=row|column]
+}\end{flushleft}
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}

@@ -1,0 +1,38 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsfindin2dgrid}
+\label{sddsfindin2dgrid}
+
+\begin{itemize}
+\item {\bf description:} \verb|sddsfindin2dgrid| searches a two-dimensional grid of data and returns the grid coordinates where two specified columns are closest to requested values. The requested values may be supplied directly with \verb|-atValues| or read from an SDDS file with \verb|-valuesFile|. Optional interpolation refines the location, and \verb|-inverse| performs the reverse operation, interpolating data values from supplied grid coordinates.
+\item {\bf examples:}
+
+Find the location where columns \verb|Fx| and \verb|Fy| match the requested values.
+\begin{flushleft}{\tt
+sddsfindin2dgrid data.sdds locations.sdds -gridVariables=x,y -findLocationOf=Fx,Fy -atValues=0.1,0.2 -interpolate
+}\end{flushleft}
+
+Use a file of value pairs and reuse the first page of input data.
+\begin{flushleft}{\tt
+sddsfindin2dgrid grid.sdds out.sdds -gridVariables=Qx,Qy -findLocationOf=R11,R12 -valuesFile=targets.sdds -mode=reuseFirstPage
+}\end{flushleft}
+
+Interpolate data values for given grid positions.
+\begin{flushleft}{\tt
+sddsfindin2dgrid grid.sdds values.sdds -gridVariables=x,y -findLocationOf=Fx,Fy -valuesFile=positions.sdds -inverse
+}\end{flushleft}
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddsfindin2dgrid [\em input] [\em output] [-pipe=[input][,output]] \\
+  -gridVariables=\em gridColumnName1,gridColumnName2 \\
+  -findLocationOf=\em columnName1,columnName2 \\
+  \{-valuesFile=\em filename\ |\ -atValues=\em value1,value2\} \\
+  [-presorted] [-interpolate] \\
+  [-mode=\{onePairPerPage|reuseFirstPage|all\}] \\
+  [-inverse]
+}\end{flushleft}
+
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}

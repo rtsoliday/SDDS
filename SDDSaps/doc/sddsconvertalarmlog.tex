@@ -1,0 +1,24 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsconvertalarmlog}
+\label{sddsconvertalarmlog}
+
+\begin{itemize}
+\item {\bf description:} \verb|sddsconvertalarmlog| converts SDDS alarm log files and offers options for format conversion,
+  time filtering, snapshot extraction, and column selection.
+\item {\bf examples:}
+\begin{flushleft}{\tt
+sddsconvertalarmlog alarmLog.sdds output.sdds -minimumInterval=10\\
+sddsconvertalarmlog alarmLog.sdds snapshot.sdds -snapshot=1700000000 -retain=Time,Value
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddsconvertalarmlog [<input-file>] [<output-file>] [-pipe[=input][,output]] \\
+[-binary | -ascii] [-float | -double] \\
+[-minimumInterval=<seconds>] [-snapshot=<epochtime>] \\
+[-time=[start=<epochtime>][,end=<epochtime>]] \\
+[-delete=<column-names>] [-retain=<column-names>]
+}\end{flushleft}
+\item {\bf author:} R. Soliday, ANL/APS.
+\end{itemize}

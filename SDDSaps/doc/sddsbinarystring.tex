@@ -1,0 +1,32 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsbinarystring}
+\label{sddsbinarystring}
+
+\begin{itemize}
+  \item {\bf description:}
+  Converts integer columns from an SDDS file into binary string representations.
+  For each listed column, a string column named \verb|<name>BinaryString| is appended
+  to the output file.
+
+  \item {\bf examples:}
+  \begin{flushleft}{\tt
+  sddsbinarystring input.sdds output.sdds -column=code\\
+  sddsbinarystring -pipe -column=code < input.sdds | sdds2stream -pipe -columns=codeBinaryString
+  }\end{flushleft}
+
+  \item {\bf synopsis:}
+  \begin{flushleft}{\tt
+  sddsbinarystring [{\em inputFile}] [{\em outputFile}] [-pipe=[input][,output]]\\
+  -column={\em name}[,{\em name}...]
+  }\end{flushleft}
+
+  \item {\bf switches:}
+  \begin{itemize}
+    \item {\tt -column={\em name}[,{\em name}...]} --- Specifies the integer columns to convert. Wildcards are permitted.
+    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+  \end{itemize}
+
+  \item {\bf author:} H. Shang, L. Emery, R. Soliday, ANL/APS.
+\end{itemize}

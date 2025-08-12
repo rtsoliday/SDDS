@@ -1,0 +1,21 @@
+%
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddscombinelogfiles}
+\label{sddscombinelogfiles}
+
+\begin{itemize}
+\item {\bf description:} Combines one-PV-per-file SDDS log files into a single file, retaining only timestamps common to all inputs. Supports pipe output and overwriting existing files.
+\item {\bf examples:}
+\begin{flushleft}{\tt
+sddscombinelogfiles log1.sdds log2.sdds combined.sdds -overwrite\\
+sddscombinelogfiles log*.sdds merged.sdds
+}\end{flushleft}
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddscombinelogfiles [{\em SDDSinputfilelist}] [{\em SDDSoutputfile}] [-pipe[=output]] [-overwrite]
+}\end{flushleft}
+\item {\bf author:} R. Soliday and L. Emery, ANL/APS.
+\end{itemize}
+

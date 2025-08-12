@@ -1,0 +1,19 @@
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{tiff2sdds}
+\label{tiff2sdds}
+
+\begin{itemize}
+  \item {\bf description:} Converts a TIFF image into an SDDS file.  Pixel values are read from the image and stored as integer data.  Options permit selecting a single color channel and choosing between a single-column or multi-column layout.
+  \item {\bf examples:}
+  \begin{flushleft}{\tt
+    tiff2sdds image.tif image.sdds\\
+    tiff2sdds photo.tif photo.sdds -redOnly -singleColumnMode
+  }\end{flushleft}
+  \item {\bf synopsis:}
+  \begin{flushleft}{\tt
+    tiff2sdds {\em input} {\em output} [-redOnly] [-greenOnly] [-blueOnly] [-singleColumnMode]
+  }\end{flushleft}
+  \item {\bf author:} R. Soliday, ANL/APS.
+\end{itemize}
