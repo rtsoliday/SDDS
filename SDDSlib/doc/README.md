@@ -1,6 +1,7 @@
 # SDDS Library Documentation
 
 This directory contains documentation for the core SDDS C/C++ library.
+The materials here correspond to Version 5 of the SDDS library and file protocol.
 
 ## Building
 

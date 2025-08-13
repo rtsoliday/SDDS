@@ -31,20 +31,20 @@
 \setlength{\textheight}{9 in}
 \begin{document}
 
-\title{Application Programmer's Guide for SDDS Version 4}
+\title{Application Programmer's Guide for SDDS Version 5}
 \author{Michael Borland and Robert Soliday\\Advanced Photon Source\\ \date{\today}}
 \maketitle
 
-SDDS is a file protocol for Self Describing Data Sets. This document describes Version 4 of the SDDS protocol and the function library that supports it. It is intended for those who wish to develop programs that use SDDS files.
+SDDS is a file protocol for Self Describing Data Sets. This document describes Version 5 of the SDDS protocol and the function library that supports it. It is intended for those who wish to develop programs that use SDDS files.
 
 \section{Definition of SDDS Protocol}
 
 \subsection{Structure of the SDDS Header}
 \label{sect:header}
 
-The first line of a data set must be of the form ``SDDS{\em n}'', where {\em n} is the integer SDDS version number. This document describes versions 1 through 4.
+The first line of a data set must be of the form ``SDDS{\em n}'', where {\em n} is the integer SDDS version number. This document describes versions 1 through 5.
 
-The SDDS header consists of a series of namelist-like constructs, called namelist commands.  These constructs differ from FORTRAN namelists in that the SDDS routines scan each construct, determine which it is, and use the data appropriately. There are six namelist commands recognized under versions 1 through 4.  Each is listed below along with the data type and default values.
+The SDDS header consists of a series of namelist-like constructs, called namelist commands.  These constructs differ from FORTRAN namelists in that the SDDS routines scan each construct, determine which it is, and use the data appropriately. There are six namelist commands recognized under versions 1 through 5.  Each is listed below along with the data type and default values.
 
 For each command, an example of usage is given.  Several styles of entering the namelist commands are exhibited.  I suggest that the user choose a style that makes it easy to pick out the beginning of each command.  Note that while each namelist command may occupy one or more lines, no two commands may occupy portions of the same line.
 
@@ -249,6 +249,8 @@ SDDS2 adds support for unsigned integer data types: ushort and ulong
 SDDS3 adds support for column major ordering of the column data in binary format: {\tt column\_major\_order}=1
 
 SDDS4 adds support for the long double data type: longdouble
+
+SDDS5 adds support for 64-bit integer data types: long64 and ulong64
 
 The SDDS library will automatically use the lowest version number required when writing SDDS files.
 
