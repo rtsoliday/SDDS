@@ -3,8 +3,8 @@ all:: SDDStoolkit.ps SDDStoolkit.pdf html
 
 SDDStoolkit.ps:
 	rm -f SDDStoolkit.aux SDDStoolkit.dvi SDDStoolkit.log SDDStoolkit.toc SDDStoolkit.out
-	latex SDDStoolkit
-	latex SDDStoolkit
+	latex -interaction=nonstopmode SDDStoolkit || true
+	latex -interaction=nonstopmode SDDStoolkit || true
 	dvips SDDStoolkit -o SDDStoolkit.ps
 	rm -f SDDStoolkit.dvi SDDStoolkit.log SDDStoolkit.toc SDDStoolkit.aux SDDStoolkit.out
 
