@@ -566,6 +566,29 @@ Returns the number of arrays.
 \end{itemize}
 \end{itemize}
 
+\subsection{SDDS\_Bomb}
+\label{SDDS_Bomb}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_Bomb
+\item {\bf description:}\newline
+Prints a termination message and recorded errors, then exits the program.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void SDDS\_Bomb(char *message);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf message:} Termination message to be printed; may be NULL.
+\end{itemize}
+\item {\bf return value:}\newline
+None.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{PrintErrors}
+\item \progref{RegisterProgramName}
+\end{itemize}
+\end{itemize}
+
 \subsection{SDDS\_CastValue}
 \label{SDDS_CastValue}
 
@@ -884,6 +907,20 @@ Returns 1 on success. On failure, returns 0 and records an error message.
 \end{itemize}
 \end{itemize}
 
+\subsection{SDDS\_CopyPage}
+\label{SDDS_CopyPage}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CopyPage
+\item {\bf description:}\newline
+Identical to \progref{CopyTable}.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyTable}
+\end{itemize}
+\end{itemize}
+
 \subsection{SDDS\_CopyParameters}
 \label{SDDS_CopyParameters}
 
@@ -959,6 +996,29 @@ Returns 1 on success. On failure, returns 0 and records an error message.
 \end{itemize}
 \end{itemize}
 
+\subsection{SDDS\_CopyString}
+\label{SDDS_CopyString}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_CopyString
+\item {\bf description:}\newline
+Allocates and copies a string to a new location.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_CopyString(char **target, const char *source);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf target:} Address of a pointer that receives the copied string.
+\item {\bf source:} String to copy; if NULL, target is set to NULL.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success, 0 on memory allocation failure.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{Realloc}
+\end{itemize}
+\end{itemize}
+
 \subsection{SDDS\_CopyTable}
 \label{SDDS_CopyTable}
 
@@ -1009,28 +1069,6 @@ Returns the number of rows for which the acceptance flags are non-zero. On error
 \item \progref{GetRow}
 \item \progref{SetRowFlags}
 \item \progref{SetRowsOfInterest}
-\end{itemize}
-\end{itemize}
-
-\subsection{SDDS\_DisconnectFile}
-\label{SDDS_DisconnectFile}
-
-\begin{itemize}
-\item {\bf name:}\newline
-SDDS\_DisconnectFile
-\item {\bf description:}\newline
-Allows "temporarily" closing a file. Updates the present page and flushes the table.
-\item {\bf synopsis:} \#include "SDDS.h"\newline
-int32\_t SDDS\_DisconnectFile(SDDS\_TABLE *SDDS\_table)
-\item {\bf arguments:}
-\begin{itemize}
-\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
-\end{itemize}
-\item {\bf return value:}\newline
-Returns 1 on success. On failure, returns 0 and records an error message.
-\item {\bf see also:}
-\begin{itemize}
-\item \progref{ReconnectFile}
 \end{itemize}
 \end{itemize}
 
@@ -1403,6 +1441,28 @@ Returns 1 on success. On failure, returns 0 and records an error message.
 \item \progref{PrintErrors}
 \item \progref{SetRowFlags}
 \item \progref{SetRowsOfInterest}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_DisconnectFile}
+\label{SDDS_DisconnectFile}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_DisconnectFile
+\item {\bf description:}\newline
+Allows "temporarily" closing a file. Updates the present page and flushes the table.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_DisconnectFile(SDDS\_TABLE *SDDS\_table)
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success. On failure, returns 0 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{ReconnectFile}
 \end{itemize}
 \end{itemize}
 
@@ -2157,7 +2217,7 @@ On success, returns a pointer to the location in which the data has been placed.
 \end{itemize}
 
 \subsection{SDDS\_GetParameterAsLongDouble}
-\label{SDDS_GetParameterAsDouble}
+\label{SDDS_GetParameterAsLongDouble}
 
 \begin{itemize}
 \item {\bf name:}\newline
@@ -2182,7 +2242,7 @@ On success, returns a pointer to the location in which the data has been placed.
 \end{itemize}
 
 \subsection{SDDS\_GetParameterAsString}
-\label{SDDS_GetParameterAsDouble}
+\label{SDDS_GetParameterAsString}
 
 \begin{itemize}
 \item {\bf name:}\newline
@@ -2773,6 +2833,20 @@ Returns 1 on success. On failure, returns 0 and records an error message.
 \end{itemize}
 \end{itemize}
 
+\subsection{SDDS\_ReadPage}
+\label{SDDS_ReadPage}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_ReadPage
+\item {\bf description:}\newline
+Identical to \progref{ReadTable}.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{ReadTable}
+\end{itemize}
+\end{itemize}
+
 \subsection{SDDS\_ReadTable}
 \label{SDDS_ReadTable}
 
@@ -2799,6 +2873,29 @@ On failure, returns 0 and records an error message.
 \end{itemize}
 \end{itemize}
 
+\subsection{SDDS\_Realloc}
+\label{SDDS_Realloc}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_Realloc
+\item {\bf description:}\newline
+Reallocates a block of memory, guaranteeing a minimum allocation of four bytes.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void *SDDS\_Realloc(void *old\_ptr, size\_t new\_size);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf old\_ptr:} Existing memory block to resize; may be NULL.
+\item {\bf new\_size:} Requested size in bytes.
+\end{itemize}
+\item {\bf return value:}\newline
+Pointer to the reallocated memory block, or NULL on failure.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyString}
+\end{itemize}
+\end{itemize}
+
 \subsection{SDDS\_ReconnectFile}
 \label{SDDS_ReconnectFile}
 
@@ -2818,6 +2915,29 @@ Returns 1 on success. On failure, returns 0 and records an error message.
 \item {\bf see also:}
 \begin{itemize}
 \item \progref{DisconnectFile}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_RegisterProgramName}
+\label{SDDS_RegisterProgramName}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_RegisterProgramName
+\item {\bf description:}\newline
+Registers the executable program name for use in error and warning messages.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void SDDS\_RegisterProgramName(const char *name);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf name:} Name of the program. If NULL, clears the registered program name.
+\end{itemize}
+\item {\bf return value:}\newline
+None.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetError}
+\item \progref{Bomb}
 \end{itemize}
 \end{itemize}
 
@@ -3036,6 +3156,30 @@ Returns 1 on success. On failure, returns 0 and records an error message.
 \end{itemize}
 \end{itemize}
 
+\subsection{SDDS\_SetError}
+\label{SDDS_SetError}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetError
+\item {\bf description:}\newline
+Appends a message to the internal SDDS error stack.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+void SDDS\_SetError(char *error\_text);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf error\_text:} Error message to record.
+\end{itemize}
+\item {\bf return value:}\newline
+None.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{RegisterProgramName}
+\end{itemize}
+\end{itemize}
+
 \subsection{SDDS\_SetParameter}
 \label{SDDS_SetParameter}
 
@@ -3159,38 +3303,6 @@ Returns 1 on success. On failure, returns 0 and records an error message.
 \end{itemize}
 \end{itemize}
 
-\subsection{SDDS\_SetRowsOfInterest}
-\label{SDDS_SetRowsOfInterest}
-
-\begin{itemize}
-\item {\bf name:}\newline
-SDDS\_SetRowsOfInterest
-\item {\bf description:}\newline
-Modifies the acceptance status of the rows of the current data table of a data set by wildcard matching of a string to the entries in a specified column.
-\item {\bf synopsis:} \#include "SDDS.h"\newline
-int32\_t SDDS\_SetRowsOfInterest(SDDS\_TABLE *SDDS\_table, char *selection\_column, char *matching\_string, int32\_t logic);
-\item {\bf arguments:}
-\begin{itemize}
-\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
-\item {\bf selection\_column:} A NULL-terminated character string giving the name of the column the values in which will be used for modifying the acceptance status of each row. The column must be of type SDDS\_STRING.
-\item {\bf matching\_string:} A NULL-terminated, optionally wildcard-containing character string to which the entries in the selection column are matched.
-\item {\bf logic:} A word of bit flags indicating how to combine the previous status of each row with the acceptance status based on matching to the matching\_string. See the manual entry for SDDS\_Logic for details.
-\end{itemize}
-\item {\bf return value:}\newline
-On success, returns the total number of rows that are of interest. On failure, returns -1 and records an error message.
-\item {\bf see also:}
-\begin{itemize}
-\item \progref{DeleteUnsetRows}
-\item \progref{FilterRowsOfInterest}
-\item \progref{GetMatrixOfRows}
-\item \progref{GetRow}
-\item \progref{Logic}
-\item \progref{NumberOfErrors}
-\item \progref{PrintErrors}
-\item \progref{SetRowFlags}
-\end{itemize}
-\end{itemize}
-
 \subsection{SDDS\_SetRowValues}
 \label{SDDS_SetRowValues}
 
@@ -3223,6 +3335,52 @@ int32\_t SDDS\_SetRowValues(SDDS\_TABLE *SDDS\_table, int32\_t mode, int32\_t ro
 \end{itemize}
 \end{itemize}
 
+\subsection{SDDS\_SetRowsOfInterest}
+\label{SDDS_SetRowsOfInterest}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_SetRowsOfInterest
+\item {\bf description:}\newline
+Modifies the acceptance status of the rows of the current data table of a data set by wildcard matching of a string to the entries in a specified column.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_SetRowsOfInterest(SDDS\_TABLE *SDDS\_table, char *selection\_column, char *matching\_string, int32\_t logic);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf SDDS\_table:} Address of the SDDS\_TABLE structure for the data set.
+\item {\bf selection\_column:} A NULL-terminated character string giving the name of the column the values in which will be used for modifying the acceptance status of each row. The column must be of type SDDS\_STRING.
+\item {\bf matching\_string:} A NULL-terminated, optionally wildcard-containing character string to which the entries in the selection column are matched.
+\item {\bf logic:} A word of bit flags indicating how to combine the previous status of each row with the acceptance status based on matching to the matching\_string. See the manual entry for SDDS\_Logic for details.
+\end{itemize}
+\item {\bf return value:}\newline
+On success, returns the total number of rows that are of interest. On failure, returns -1 and records an error message.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{DeleteUnsetRows}
+\item \progref{FilterRowsOfInterest}
+\item \progref{GetMatrixOfRows}
+\item \progref{GetRow}
+\item \progref{Logic}
+\item \progref{NumberOfErrors}
+\item \progref{PrintErrors}
+\item \progref{SetRowFlags}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_StartPage}
+\label{SDDS_StartPage}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_StartPage
+\item {\bf description:}\newline
+Identical to \progref{StartTable}.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{StartTable}
+\end{itemize}
+\end{itemize}
+
 \subsection{SDDS\_StartTable}
 \label{SDDS_StartTable}
 
@@ -3249,6 +3407,28 @@ Returns 1 on success. On failure, returns 0 and records an error message.
 \end{itemize}
 \end{itemize}
 
+\subsection{SDDS\_StringIsBlank}
+\label{SDDS_StringIsBlank}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_StringIsBlank
+\item {\bf description:}\newline
+Determines if a string is NULL or contains only whitespace.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_StringIsBlank(char *s);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf s:} String to be tested.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 if the string is blank or NULL, 0 otherwise.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{CopyString}
+\end{itemize}
+\end{itemize}
+
 \subsection{SDDS\_Terminate}
 \label{SDDS_Terminate}
 
@@ -3269,6 +3449,31 @@ Returns 1 on success. On failure, returns 0 and records an error message.
 \begin{itemize}
 \item \progref{NumberOfErrors}
 \item \progref{PrintErrors}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_TransferColumnDefinition}
+\label{SDDS_TransferColumnDefinition}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_TransferColumnDefinition
+\item {\bf description:}\newline
+Defines a column in a target dataset using the definition from a source dataset.
+\item {\bf synopsis:} \#include "SDDS.h"\newline
+int32\_t SDDS\_TransferColumnDefinition(SDDS\_DATASET *target, SDDS\_DATASET *source, char *name, char *newName);
+\item {\bf arguments:}
+\begin{itemize}
+\item {\bf target:} Dataset receiving the column definition.
+\item {\bf source:} Dataset providing the column definition.
+\item {\bf name:} Column name in the source dataset.
+\item {\bf newName:} Column name in the target dataset; if NULL, the original name is used.
+\end{itemize}
+\item {\bf return value:}\newline
+Returns 1 on success; 0 on failure with an error recorded.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{SetError}
 \end{itemize}
 \end{itemize}
 
@@ -3383,6 +3588,20 @@ Returns 1 on success. On failure, returns 0 and records an error message.
 \item \progref{InitializeOutput}
 \item \progref{InitializeCopy}
 \item \progref{SaveLayout}
+\end{itemize}
+\end{itemize}
+
+\subsection{SDDS\_WritePage}
+\label{SDDS_WritePage}
+
+\begin{itemize}
+\item {\bf name:}\newline
+SDDS\_WritePage
+\item {\bf description:}\newline
+Identical to \progref{WriteTable}.
+\item {\bf see also:}
+\begin{itemize}
+\item \progref{WriteTable}
 \end{itemize}
 \end{itemize}
 
