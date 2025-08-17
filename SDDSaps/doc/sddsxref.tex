@@ -1,77 +1,64 @@
-
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddsxref}
-\label{sddsxref}
-
-\begin{itemize}
-\item {\bf description:}
-\verb|sddsxref| creates a new data set by adding selected rows from one data set to another data set.
-The rows are selected by matching the string or numeric values in a specified column that is present in both of
-two pre-existing data sets.  The user may specify which columns of the second data set to take and which to leave.
-The user may also transfer parameter and array data.
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsxref [-pipe[=input][,output]] [{\em input}] [{\em xRefFile}] [{\em output}]
-[-equate={\em columnName} | -match={\em columnName}]
-[-reuse[=rows][,page]] [-fillIn]
-[-take={\em columnName},...] [-leave={\em columnName},...] 
-[-transfer=\{parameter | array\},{\em name}[,{\em name}...]
-[-ifis=\{column | parameter | array\},{\em name}[,{\em name}...]
-[-ifnot=\{column | parameter | array\},{\em name}[,{\em name}...]
-}\end{flushleft}
-\item {\bf files:}
-        {\em input} is the data set to which data is being added.  {\em xRefFile} is the data set from
-        which data is being taken.  Warning: if {\em output} is not given and if {\tt -pipe=out} is not
-        specified, {\em input} is overwritten.  For pipe input, the first file listed is taken to be
-        {\em xRefFile}.  For pipe input and output, the only file listed is {\em xRefFile}.
-\item {\bf switches:}
+\begin{sddsprog}{sddsxref}
+  \item \textbf{description:}
+  \verb|sddsxref| creates a new data set by adding selected rows from one data set to another.
+  Rows are selected by matching string or numeric values in a column present in both input data sets.
+  Users may specify which columns of the second data set to take or leave and may transfer
+  parameter and array data. \verb|sddsmxref| is a variant that permits multiple \verb|-match|
+  and \verb|-equate| options.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddsxref input.sdds xRef.sdds output.sdds -match=Name -take=Value
+sddsxref data.sdds xRef.sdds -equate=Index -reuse=rows -fillIn
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddsxref [-pipe[=input][,output]] [input] [xRefFile] [output]
+         [-equate=columnName | -match=columnName]
+         [-reuse[=rows][,page]] [-fillIn]
+         [-take=columnName,...] [-leave=columnName,...]
+         [-transfer={parameter | array},name[,name...]]
+         [-ifis={column | parameter | array},name[,name...]]
+         [-ifnot={column | parameter | array},name[,name...]]
+    \end{verbatim}
+  \item \textbf{files:}
+    \emph{input} is the data set to which data is being added. \emph{xRefFile} is the data set from
+    which data is taken. Warning: if \emph{output} is not given and if \verb|-pipe=out| is not
+    specified, \emph{input} is overwritten. For pipe input, the first file listed is taken to be
+    \emph{xRefFile}. For pipe input and output, the only file listed is \emph{xRefFile}.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -equate={\em columnName}}, {\tt -match={\em columnName}}--- 
-        These options specify the name of a column that exists in both
-        {\em input} and {\em xRefFile}.  For \verb|match|, the column must contain string data, while for the 
-        \verb|equate| the column must contain numeric data.  For each row in {\em input}, \verb|sddsxref|
-        searches {\em xRefFile} to find the first row for which the \verb|match| column is identical or
-        the \verb|equate| column is equal, as appropriate.  This
-        row is the one from which any data is taken for addition to the row in {\em input}. If
-        neither of these options is given, then rows are taken sequentially from {\em xRefFile}
-        for each row of {\em input}.
-    \item {\tt -reuse[=rows][,page] } --- By default, each row from {\em xRefFile} is matched to one row in {\em input}.
-        If {\tt -reuse=rows} is given, each row from {\em xRefFile} may be matched to any number of
-        rows in {\em input}.  Also by default, each page of {\em input} is matched with the corresponding
-        {\em page} of {\em xRefFile}.  If {\tt -reuse=page} is given, then each page of {\em input} is
-        matched anew to the first page of {\em xRefFile}.  The two qualifiers may be given together.
-    \item {\tt -fillIn} --- Normally if there is no match in {\em xRefFile} for a row in {\em input},
-        that row will not appear in {\em output}.  If {\tt -fillIn} is given, the row will appear,
-        but the values for the columns that are being transferred from {\em xRefFile} will be filled
-        with zeros and empty strings, as appropriate.
-    \item {\tt -take={\em columnName},...}, {\tt -leave={\em columnName},...}--- 
-        These options specify which columns of {\em xRefFile} to extract from
-        a matching or equal row of {\em xRefFile}
-        for addition to a row of {\em input}.  Wildcards may be given in the column names.
-        By default, all columns not in {\em input}
-        are taken.  If \verb|take| is employed, only the named columns will be taken.  In either case, no
-        column specified under \verb|leave| will be taken.  \verb|-leave=*| causes no columns to be
-        taken.
-    \item {\tt -transfer=\{parameter | array\},{\em name}[,{\em name}...]} --- 
-        This option, which may be given multiple times, specifies the names of
-        parameters and arrays to be transfered.  Wildcards are not presently supported in this option.
-    \item {\tt -ifis=\{column | parameter | array\},{\em name}[,{\em name}...]}, 
-        {\tt -ifnot=\{column | parameter | array\},{\em name}[,{\em name}...]} 
-        --- These options allow conditional execution.  If any column that is named under
-       a \verb|ifis| option is not present, execution aborts.   If any column that is named under 
-       a \verb|ifnot| option is present, execution aborts.
+      \item \verb|-equate=columnName|, \verb|-match=columnName| --- These options specify the name of a column
+        that exists in both \emph{input} and \emph{xRefFile}. For \verb|match| the column must contain
+        string data, while for \verb|equate| the column must contain numeric data. For each row in
+        \emph{input}, \verb|sddsxref| searches \emph{xRefFile} to find the first row for which the
+        \verb|match| column is identical or the \verb|equate| column is equal, as appropriate. If neither
+        option is given, rows are taken sequentially from \emph{xRefFile} for each row of \emph{input}.
+      \item \verb|-reuse[=rows][,page]| --- By default, each row from \emph{xRefFile} is matched to one row in
+        \emph{input}. If \verb|-reuse=rows| is given, each row from \emph{xRefFile} may be matched to any
+        number of rows in \emph{input}. Also by default, each page of \emph{input} is matched with the
+        corresponding page of \emph{xRefFile}. If \verb|-reuse=page| is given, each page of \emph{input}
+        is matched anew to the first page of \emph{xRefFile}. The two qualifiers may be given together.
+      \item \verb|-fillIn| --- Normally if there is no match in \emph{xRefFile} for a row in \emph{input},
+        that row will not appear in \emph{output}. If \verb|-fillIn| is given, the row will appear, but the
+        values for the columns that are being transferred from \emph{xRefFile} will be filled with zeros
+        and empty strings, as appropriate.
+      \item \verb|-take=columnName,...|, \verb|-leave=columnName,...| --- These options specify which columns
+        of \emph{xRefFile} to extract from a matching or equal row for addition to a row of \emph{input}.
+        Wildcards may be given in the column names. By default, all columns not in \emph{input} are taken.
+        If \verb|take| is employed, only the named columns will be taken. In either case, no column
+        specified under \verb|leave| will be taken. \verb|-leave=*| causes no columns to be taken.
+      \item \verb!-transfer={parameter | array},name[,name...]! --- This option, which may be given
+        multiple times, specifies the names of parameters and arrays to be transferred. Wildcards are not
+        presently supported in this option.
+      \item \verb!-ifis={column | parameter | array},name[,name...]!, \verb!-ifnot={column | parameter | array},name[,name...]! --- These options allow conditional execution. If any
+        column named under \verb|ifis| is not present, execution aborts. If any column named under
+        \verb|ifnot| is present, execution aborts.
     \end{itemize}
-\item {\bf sddsmxref} --- {\tt sddsmxref} is a variant of {\tt sddsxref} that permits multiple {\tt -match}
-and {\tt -equate} options for more sophisticated cross-referencing.  In other respects, the program is
-used just like {\tt sddsmxref}.  {\tt sddsxref} is much faster, however, for single-criterion matching or
-equating.
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \hyperref[exampleData]{Data for Examples}
-    \item \progref{sddsselect}
+      \item \hyperref[exampleData]{Data for Examples}
+      \item \progref{sddsselect}
+      \item \progref{sddsmxref}
     \end{itemize}
-\item {\bf author:} M. Borland, L. Emery, H. Shang, R. Soliday ANL/APS.
-\end{itemize}
-
+  \item \textbf{author:} M. Borland, L. Emery, H. Shang, R. Soliday ANL/APS.
+\end{sddsprog}

@@ -1,58 +1,29 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
- 
-\subsection{sddstimeconvert} 
-\label{sddstimeconvert} 
- 
-\begin{itemize} 
-\item {\bf description:} 
-\verb|sddstimeconvert| does conversions between calendar time in 
-terms of (for example) day, month, and year, and ``time-since-epoch''. 
-The latter is the time in seconds since a system-defined reference 
-time (e.g., 0:00 on January 1, 1970). 
- 
-\item {\bf examples:}  
-Convert column data broken down as day, month, year, and hour to seconds-since-epoch:
-\begin{flushleft}{\tt  
-sddstimeconvert input.sdds output.sdds 
- -epoch=column,Time,year=TheYear,month=TheMonth,day=DayOfMonth,hour=HourOfDay
-} 
-\end{flushleft} 
-where \verb|TheYear|, \verb|TheMonth|, \verb|DayOfMonth|, and \verb|HourOfDay|
-are the names of the columns in the input file and \verb|Time| is the 
-column to be created containing the time-since-epoch.
+\begin{sddsprog}{sddstimeconvert}
+  \item \textbf{description:}
+  \verb|sddstimeconvert| does conversions between calendar time in terms of (for example) day, month, and year, and ``time-since-epoch''. The latter is the time in seconds since a system-defined reference time (e.g., 0:00 on January 1, 1970). The hour data as used or created by \verb|sddstimeconvert| contains the floating-point time-of-day in hours. That is, the minutes and seconds are folded into the hour value. Year values must be the full four-digit year; e.g., year 99 is not 1999, but rather 99 AD.
 
-\item {\bf synopsis:}  
- 
-\begin{flushleft}{\tt 
-sddstimeconvert [{\em inputFile}] [{\em outputFile}] [-pipe[=input][,output]] 
-[-breakdown=\{column | parameter\},{\em timeName}[,year={\em newName}]
-\hspace*{5mm}[,julianDay={\em newName}][,month={\em newName}][,day={\em newName}][,hour={\em newName}][,text={\em newName}]]
-[-epoch=\{column | parameter\},{\em newName},year={\em name} \\ \hspace*{5mm}
-[,julianDay={\em name} | month={\em name},day={\em name}],hour={\em name}]
-}\end{flushleft} 
- 
-\item {\bf switches:} 
-    \begin{itemize} 
-    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option. 
-    \item {\tt -breakdown=\{column | parameter\},{\em timeName}[,year={\em newName}]}
-        {\tt [,julianDay={\em newName}][,month={\em newName}][,day={\em newName}][,hour={\em newName}]}
-        {\tt [,text={\em newName}]} ---  
-        Specifies conversion of the column or parameter data named
-        {\em timeName} to year, Julian day, month, day, hour, and/or a text string.  
-        {\em timeName} contains the time expressed as
-        seconds-since-epoch.  Any number of these options may be given. 
-    \item {\tt -epoch=\{column | parameter\},{\em newName},year={\em name},}\\ {\tt [julianDay={\em name} | month={\em name},day={\em name}],hour={\em name}} ---  
-        Specifies conversion of column or parameter data given as year, Julian day or month/day, and hour
-to seconds-since-epoch, with the result being placed in {\em newName}.  
-    \end{itemize} 
+  \item \textbf{examples:}
+  \begin{verbatim}
+  sddstimeconvert input.sdds output.sdds
+    -epoch=column,Time,year=TheYear,month=TheMonth,day=DayOfMonth,hour=HourOfDay
+  \end{verbatim}
 
-\item {\bf notes:}
-The hour data as used or created by \verb|sddstimeconvert| contains the floating-point time-of-day in hours.
-That is, the minutes and seconds are folded into the hour value.
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+  sddstimeconvert [inputFile] [outputFile] [-pipe[=input][,output]]
+    -breakdown={column | parameter},timeName[,year=newName]
+      [,julianDay=newName][,month=newName][,day=newName][,hour=newName][,text=newName]
+    -epoch={column | parameter},newName,year=name
+      [,julianDay=name | month=name,day=name],hour=name
+  \end{verbatim}
 
-Year values must be the full four-digit year; e.g., year 99 is {\em not} 1999, but rather 99 AD.
+  \item \textbf{switches:}
+  \begin{itemize}
+    \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+    \item \verb!-breakdown={column | parameter},timeName[,year=newName][,julianDay=newName][,month=newName][,day=newName][,hour=newName][,text=newName]! --- Specifies conversion of the column or parameter data named \emph{timeName} to year, Julian day, month, day, hour, and/or a text string. \emph{timeName} contains the time expressed as seconds-since-epoch. Any number of these options may be given.
+    \item \verb!-epoch={column | parameter},newName,year=name[,julianDay=name | month=name,day=name],hour=name! --- Specifies conversion of column or parameter data given as year, Julian day or month/day, and hour to seconds-since-epoch, with the result being placed in \emph{newName}.
+  \end{itemize}
 
-\item {\bf author:} M. Borland, ANL/APS. 
-\end{itemize} 
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
+

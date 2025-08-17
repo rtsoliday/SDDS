@@ -1,49 +1,35 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddssnap2grid}
-\label{sddssnap2grid}
-
-\begin{itemize}
-\item {\bf description:}
-\verb|sddssnap2grid| reads data pages from an SDDS file and writes a new SDDS file.
-The output data contains all of the input data, except that one or more columns may be
-modified to ``snap'' the values to a uniform grid.
-\item {\bf examples:} 
-
-Snap x, y, and z values to a grid
-\begin{flushleft}{\tt
+\begin{sddsprog}{sddssnap2grid}
+  \item \textbf{description:}
+    \verb|sddssnap2grid| reads data pages from an SDDS file and writes a new SDDS file.
+    The output data contains all of the input data, except that one or more columns may be
+    modified to ``snap'' the values to a uniform grid.
+  \item \textbf{examples:}
+  \begin{verbatim}
 sddssnap2grid fieldMap.sdds fieldMap1.sdds -column=x -column=y -column=z
-}\end{flushleft}
-
-Snap x, y, and z values to a grid, providing a hint for the z spacing.
-\begin{flushleft}{\tt
 sddssnap2grid fieldMap.sdds fieldMap1.sdds -column=x -column=y -column=z,deltaGuess=5e-4
-}\end{flushleft}
-
-\item {\bf files:}
-{\em inputFile} is the name of an SDDS data set to be snapped.  {\em outputFile} is the result. 
-
-\item {\bf switches:} 
-\begin{itemize}
-        \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
-        \item {\tt -column={\em name}[,\{maximumBins={\em value} | binFactor={\em value}\} | deltaGuess={\em value}]} 
-          --- Specifies a column to be snapped to a grid. The column must contain 
-          numerical data. 
-          The algorithm uses histograms to group the data points into subsets; this grouping is considered valid
-          if there are no adjacent bins in the histogram that have non-zero values.
-          By default, the number of bins is 10 times the number of data points, which seems reliable if data
-          is actually close to a grid.
-          If the algorithm fails, the user can provide additional parameters to attempt to obtain a good result.
-          The first thing to try is providing a guess of the grid spacing using {\tt deltaGuess}; in this
-          case the initial number of bins is based on 10 times the provided spacing.
-          Next, one can try providing a value for {\tt binFactor} parameter that is higher or lower than 10.
-          Finally, the {\tt maximumBins} parameter can be set directly.
-          \item {\tt -verbose} --- Prints grid parameters to standard output.
-\end{itemize}
-
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
-
-
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddssnap2grid [<options>] inputFile outputFile
+  \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb!-column=name[{maximumBins=value | binFactor=value} | deltaGuess=value]! ---
+        Specifies a column to be snapped to a grid. The column must contain numerical data.
+        The algorithm uses histograms to group the data points into subsets; this grouping is
+        considered valid if there are no adjacent bins in the histogram that have non-zero values.
+        By default, the number of bins is 10 times the number of data points, which seems reliable
+        if data is actually close to a grid. If the algorithm fails, the user can provide additional
+        parameters to attempt to obtain a good result. The first thing to try is providing a guess of
+        the grid spacing using \verb|deltaGuess|; in this case the initial number of bins is based on
+        10 times the provided spacing. Next, one can try providing a value for the \verb|binFactor|
+        parameter that is higher or lower than 10. Finally, the \verb|maximumBins| parameter can be set
+        directly.
+      \item \verb|-verbose| --- Prints grid parameters to standard output.
+    \end{itemize}
+  \item \textbf{files:}
+    \emph{inputFile} is the name of an SDDS data set to be snapped. \emph{outputFile} is the result.
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

@@ -1,54 +1,34 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddssplit}
-\label{sddssplit}
-
-\begin{itemize}
-\item {\bf description:} \hspace*{1mm}\\
-{\tt sddssplit} breaks up an SDDS file into one or more separate files, each containing only a single
-page of data.  This may be useful in those instances where a tool or program only processes the first
-page of a file.
-\item {\bf examples:} \\
-Split a Twiss parameter file into separate files:
-\begin{flushleft}{\tt
+\begin{sddsprog}{sddssplit}
+  \item \textbf{description:} \verb|sddssplit| breaks up an SDDS file into one or more separate files, each containing a single page of data. This is useful when a program only processes the first page of an SDDS file.
+  \item \textbf{examples:}
+  \begin{verbatim}
 sddssplit APS.twi
-}\end{flushleft}
-\item {\bf synopsis:} \\
-\begin{flushleft}{\tt
-sddssplit \{-pipe[=input] | {\em inputFile}\}  [\{-binary | -ascii\}] 
-[-digits={\em number}] [-rootname={\em string}] [-extension={\em string}]
-[-nameParameter={\em paramName}]
-[-firstPage={\em number}] [-lastPage={\em number}] [-interval={\em number}] 
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} is an SDDS file to be split.  By default, the output files are created by appending the page number
-to a ``rootname'' and adding an extension.  That is, the output files have names 
-{\em rootname}{\em Page}.{\em extension}.  The default rootname is the name of {\em inputFile}, while
-the default extension is ``sdds''.  By default, {\em Page} is printed using ``%03ld'' format.
-less the extension.  
-\item {\bf switches:}
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddssplit {-pipe[=input] | inputFile} [-binary | -ascii]
+  [-digits=number] [-rootname=string] [-extension=string]
+  [-nameParameter=paramName]
+  [-firstPage=number] [-lastPage=number] [-interval=number]
+  \end{verbatim}
+  \item \textbf{files:} \emph{inputFile} is an SDDS file to be split. By default, the output files are created by appending the page number to a ``rootname'' and adding an extension. That is, the output files have names \emph{rootname}\emph{Page}.\emph{extension}.
+  The default rootname is the name of \emph{inputFile}, while the default extension is ``sdds''. By default, \emph{Page} is printed using ``\%03ld'' format.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -binary}, {\tt -ascii} --- Specifies binary or ASCII output, with binary being the default.
-    \item {\tt -digits={\em number}} --- Specifies the number of digits to be used in creating filenames.
-        Leading zeros are included.
-    \item {\tt -rootname={\em string}} --- Specifies the rootname to be used in creating filenames.
-    \item {\tt -extension={\em string}} --- Specifies the extension to be used in creating filenames.
-    \item {\tt -nameParameter={\em paramName}} --- Specifies that instead of composing names for the output
-        files, {\tt sddssplit} take the names from the string parameter {\em paramName} in the input file.
-        This provides a limited capability to retrieve the original files from a file made with {\tt sddscombine}.
-        Note that if the named parameter takes the same value on two pages, the file created for the first
-        of the pages will be overwritten.
-    \item {\tt -firstPage={\em number}} --- Specifies the first page of data to use.
-    \item {\tt -lastPage={\em number}} --- Specifies the last page of data to use.
-    \item {\tt -interval={\em number}} --- Specifies the interval between pages that are used.
+      \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
+      \item {\tt -binary}, {\tt -ascii} --- Specifies binary or ASCII output, with binary being the default.
+      \item {\tt -digits=\emph{number}} --- Specifies the number of digits used in creating filenames. Leading zeros are included.
+      \item {\tt -rootname=\emph{string}} --- Specifies the rootname used in creating filenames.
+      \item {\tt -extension=\emph{string}} --- Specifies the extension used in creating filenames.
+      \item {\tt -nameParameter=\emph{paramName}} --- Specifies that, instead of composing names for the output files, \verb|sddssplit| takes the names from the string parameter \emph{paramName} in the input file. This provides a limited capability to retrieve the original files from a file made with \verb|sddscombine|. Note that if the named parameter takes the same value on two pages, the file created for the first of the pages will be overwritten.
+      \item {\tt -firstPage=\emph{number}} --- Specifies the first page of data to use.
+      \item {\tt -lastPage=\emph{number}} --- Specifies the last page of data to use.
+      \item {\tt -interval=\emph{number}} --- Specifies the interval between pages that are used.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \progref{sddsbreak}
-    \item \progref{sddscombine}
+      \item \progref{sddsbreak}
+      \item \progref{sddscombine}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
-
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

@@ -1,104 +1,28 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-
-%
-% Substitute the program name for <programName>
-%
-\subsection{sddstranspose}
-\label{sddstranspose}
-
-\begin{itemize}
-\item {\bf description:}
-%
-% Insert text of description (typicall a paragraph) here.
-%
-\verb+sddstranspose+ views the numerical tabular data of the input file
-as though it formed a matrix, and produces an output
-file with data corresponding to the transpose of the input
-file matrix. In other words, the columns of tabular data of the input
-file become rows in the output file. String column data
-are not transposed but are stored as string parameters in the output file.
-Operating on the output file with a second \verb+sddstranpose+ command essentially recovers
-the original input file.
-
-The column names for the output file are generated either from the data in
-a selected string column in the input file,
-from the value of the command line option -root,
-or from an internal default.
-
-The column names of the input file are collected and made into
-a string column in the output file.
-
-\item {\bf examples:} 
-%
-% Insert text of examples in this section.  Examples should be simple and
-% should be preceeded by a brief description.  Wrap the commands for each
-% example in the following construct:
-% 
-%
-The data in file LTP.R12 (matrix of $R_{12}$'s in a beamline called LTP, say)
-is transposed to give file LTP.R12.trans:
-\begin{flushleft}{\tt
-sddstranspose LTP.R12 LTP.R12.trans
-}\end{flushleft}
-\item {\bf synopsis:} 
-%
-% Insert usage message here:
-%
-\begin{flushleft}{\tt
-sddstranspose [-pipe=[input][,output]] {\em inputFile} {\em outputFile}
-     [-oldColumnNames={\em string}] [\{-root={\em string} [-digits={\em integer}] | 
-     -newColumnNames={\em column}\}] 
-     [-symbol={\em string}] [-ascii] [-verbose]
-}\end{flushleft}
-\item {\bf files:}
-% Describe the files that are used and produced
-The input file contains the data for the matrix to be transposed. The output file
-contains the data for the transposed matrix. If only one file is specified,
-then the input file is overwritten by the output.
-
-
-\item {\bf switches:}
-%
-% Describe the switches that are available
-%
+\begin{sddsprog}{sddstranspose}
+  \item \textbf{description:} \verb|sddstranspose| views the numerical tabular data of the input file as though it formed a matrix, and produces an output file with data corresponding to the transpose of the input file matrix. In other words, the columns of tabular data of the input file become rows in the output file. String column data are not transposed but are stored as string parameters in the output file. Operating on the output file with a second \verb|sddstranspose| command essentially recovers the original input file. The column names for the output file are generated either from the data in a selected string column in the input file, from the value of the command line option \verb|-root|, or from an internal default. The column names of the input file are collected and made into a string column in the output file.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    sddstranspose LTP.R12 LTP.R12.trans
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    sddstranspose [-pipe=[input][,output]] inputFile outputFile
+      [-oldColumnNames=string] [{-root=string [-digits=integer] | -newColumnNames=column}]
+      [-symbol=string] [-ascii] [-verbose]
+    \end{verbatim}
+  \item \textbf{files:} The input file contains the data for the matrix to be transposed. The output file contains the data for the transposed matrix. If only one file is specified, then the input file is overwritten by the output.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt  -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt  -oldColumnNames={\em string}} --- 
-        A string column of name {\tt {\em string}} is created in the output file, containing
-        the column names of the input files as string data.
-        If this option is not present, then the default name of ``OldColumnNames''
-        is used for the string column.
-    \item {\tt  -root={\em string}} ---
-        A string used to generate columns names for the output file data. 
-        The first data column is named ``{\tt {\em string}000}'',
-        the second, ``{\tt {\em string}001}'', etc. If the input file has only one
-        row, the the root name alone (with no digits following) is used for the 
-        column name.
-    \item {\tt  -digits={\em integer}} --- minimum number of digits used in the number 
-        appended to {\tt {\em root}} of the output file column names. (Default value is 3).
-    \item {\tt  -newColumnNames={\em string}} --- Specifies a string column
-        of the input file which will be used to define column names
-        of the output file.
-    \item {\tt  -symbol={\em string}} --- The string for the symbol field of data column definitions.
-    \item {\tt  -ascii}  --- Produces an output in ascii mode. Default is binary.
-    \item {\tt  -verbose} --- Prints out incidental information to stderr.
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-oldColumnNames=string| --- A string column of name \verb|string| is created in the output file, containing the column names of the input files as string data. If this option is not present, then the default name of ``\verb|OldColumnNames|'' is used for the string column.
+      \item \verb|-root=string| --- A string used to generate column names for the output file data. The first data column is named ``\verb|string|000'', the second ``\verb|string|001'', etc. If the input file has only one row, the root name alone (with no digits following) is used for the column name.
+      \item \verb|-digits=integer| --- Minimum number of digits used in the number appended to \verb|root| of the output file column names. Default value is 3.
+      \item \verb|-newColumnNames=string| --- Specifies a string column of the input file which will be used to define column names of the output file.
+      \item \verb|-symbol=string| --- The string for the symbol field of data column definitions.
+      \item \verb|-ascii| --- Produces an output in ascii mode. Default is binary.
+      \item \verb|-verbose| --- Prints out incidental information to stderr.
     \end{itemize}
-%\item {\bf see also:}
-%    \begin{itemize}
-%
-% Insert references to other programs by duplicating this line and 
-% replacing {\em prog} with the program to be referenced:
-%
-%    \item \progref{<prog>}
-%    \end{itemize}
-%
-% Insert your name and affiliation after the '}'
-%
-\item {\bf author: L. Emery } ANL
-\end{itemize}
-
-
+  \item \textbf{see also:} \progref{sddsmatrixop}.
+  \item \textbf{author:} L. Emery, ANL.
+\end{sddsprog}
 

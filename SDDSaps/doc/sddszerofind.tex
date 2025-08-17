@@ -1,60 +1,39 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddszerofind}
-\label{sddszerofind}
-
-\begin{itemize}
-\item {\bf description:}
-
-{\tt sddszerofind} finds the locations of zeroes in a single column of an SDDS file.  This is done by finding successive rows
-for which a sign change occurs in the ``dependent column'', or any row for which an exact zero is present in this column.  For
-each of the ``independent columns'', the location of the zero is determined by linear interpolation.  Hence, the program
-is really interpolating multiple columns at locations of zeros in a single column.  This single column is in a sense
-being looked at as a function of each of the interpolated columns.
-
-\item {\bf examples:} 
-Find zeroes of a Bessel function, ${\rm J_0(z)}$:
-\begin{flushleft}{\tt
-sddszerofind J0.sdds J0.zero -zero=J0 -column=z
-}\end{flushleft}
-Find zeroes of a Bessel function, ${\rm J_0(z)}$, and simultaneously interpolate ${\rm J_1(z)}$ at
-the zero locations:
-\begin{flushleft}{\tt
-sddszerofind J0.sdds J0.zero -zero=J0 -column=z,J1
-}\end{flushleft}
-(This isn't the most accurate way to interpolate ${\rm J_1(z)}$, of course.)
-
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddszerofind [-pipe=[input][,output]] [{\em inputfile}] [{\em outputfile}] 
--zeroesOf={\em columnName} [-columns={\em columnNames}] [-slopeOutput]
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} contains the data to be searched for zeroes.  {\em outputFile} contains columns for each of the independent
-quantities and a column for the dependent quantity.  Normally, each dependent quantity is represented by a single column of
-the same name.  If output of slopes is requested, additional columns will be present, having names of the form 
-{\tt {\em columnName}Slope}.  
-
-If {\em inputFile} contains multiple pages, each is treated separately and is delivered to a separate page of {\em
-outputFile}.
-
-\item {\bf switches:}
+\begin{sddsprog}{sddszerofind}
+  \item \textbf{description:}
+    \verb|sddszerofind| finds the locations of zeroes in a single column of an SDDS file. This is done by finding successive rows for which a sign change occurs in the "dependent column", or any row for which an exact zero is present in this column. For each of the "independent columns", the location of the zero is determined by linear interpolation. Hence, the program is really interpolating multiple columns at locations of zeros in a single column. This single column is in a sense being looked at as a function of each of the interpolated columns.
+  \item \textbf{examples:}
+    Find zeroes of a Bessel function, $\mathrm{J_0(z)}$:
+    \begin{verbatim}
+sddszerofind J0.sdds J0.zero -zeroesOf=J0 -columns=z
+    \end{verbatim}
+    Find zeroes of a Bessel function, $\mathrm{J_0(z)}$, and simultaneously interpolate $\mathrm{J_1(z)}$ at the zero locations:
+    \begin{verbatim}
+sddszerofind J0.sdds J0.zero -zeroesOf=J0 -columns=z,J1
+    \end{verbatim}
+    (This isn't the most accurate way to interpolate $\mathrm{J_1(z)}$, of course.)
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddszerofind [-pipe=[input][,output]] [inputfile] [outputfile]
+  -zeroesOf=columnName [-columns=columnNames]
+  [-offset=value] [-slopeOutput]
+  [-majorOrder=row|column]
+    \end{verbatim}
+  \item \textbf{switches:}
     \begin{itemize}
-    \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
-    \item {\tt -zeroesOf={\em columnName}} --- Specifies the name of the dependent quantity, for which zeroes
-        will be found.
-    \item {\tt -columns={\em columnNames}} --- Specifies the names of the independent quantities, for which
-        zero locations will be interpolated.  Generally, there is only one of these.  {\em columnNames}
-        is a comma-separated list of optionally wildcarded names.
-    \item {\tt -slopeOutput} --- Specifies that additional columns will be created containing the slopes of
-        the dependent quantity as a function of each independent quantity.  This can be useful, for example,
-        if one wants to pick out only positive-going zero-crossings.
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-zeroesOf=columnName| --- Specifies the name of the dependent quantity for which zeroes will be found.
+      \item \verb|-columns=columnNames| --- Specifies the names of the independent quantities for which zero locations will be interpolated. Generally, there is only one of these. \emph{columnNames} is a comma-separated list of optionally wildcarded names.
+      \item \verb|-offset=value| --- Specifies a value to add to the values of the \verb|-zeroesOf| column prior to finding the zeroes.
+      \item \verb|-slopeOutput| --- Specifies that additional columns will be created containing the slopes of the dependent quantity as a function of each independent quantity. This can be useful, for example, if one wants to pick out only positive-going zero-crossings.
+      \item \verb|-majorOrder=row| or \verb|-majorOrder=column| --- Specifies the organization of data in the output file.
     \end{itemize}
-\item {\bf see also:}
-    \begin{itemize}
-    \item \progref{sddsinterp}
-    \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \item \textbf{files:}
+    \emph{inputFile} contains the data to be searched for zeroes. \emph{outputFile} contains columns for each of the independent quantities and a column for the dependent quantity. Normally, each dependent quantity is represented by a single column of the same name. If output of slopes is requested, additional columns will be present, having names of the form {\tt columnNameSlope}.
 
+    If \emph{inputFile} contains multiple pages, each is treated separately and is delivered to a separate page of \emph{outputFile}.
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \progref{sddsinterp}
+    \end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

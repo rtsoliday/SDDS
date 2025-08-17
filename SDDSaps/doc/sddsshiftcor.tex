@@ -4,58 +4,41 @@
 \subsection{sddsshiftcor}
 \label{sddsshiftcor}
 
-\begin{itemize}
-\item {\bf description:} 
-{\tt sddsshiftcor} computes correlation coefficients and correlation
-significance between column data as a function of shifting of the data columns
-relative to each other.  The correlation coefficient between
-columns i and j is defined as
-\[ {\rm C_{ij} = \frac{\langle x_i x_j \rangle}{\sqrt{\langle x_i^2\rangle\langle x_j^2 \rangle}}} \]
-If ${\rm C_{ij}=1}$, then the variables are perfectly correlated, whereas if ${\rm C_{ij}=-1}$, they
-are perfectly anticorrelated.
-In some cases, signals are correlated but with a time-lag.  Hence, computing \[ {\rm C_{ij}} \]
-as a function of the shifting of one of the signals may reveal relationships that are not
-apparent in a simple correlation, such as might be done with {\tt sddscorrelate}.
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddsshiftcor [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}] 
--with={\em columnName} 
-[-scan[=start={\em startShift}][,end={\em endShift}][,delta={\em deltaShift}]]
-[-columns={\em columnNames}] [-excludeColumns={\em columnNames}] 
-[-rankOrder] [-stDevOutlier[=limit={\em factor}][,passes={\em integer}]]
-[-verbose]
-}\end{flushleft}
-\item {\bf files:}
-        {\em inputFile} is an SDDS file containing two or more columns of data.  {\em outputFile}
-        contains one column ({\tt ShiftedBy}) for the amount shifted, plus one column for
-        each analyzed column in {\em inputFile}.  The latter each contains the correlation
-        coefficient with the shifted signal for the given shift value.
-\item {\bf switches:}
+\begin{sddsprog}{sddsshiftcor}
+  \item \textbf{description:} \verb|sddsshiftcor| computes correlation coefficients and correlation significance between column data as a function of shifting of the data columns relative to each other. The correlation coefficient between columns i and j is defined as
+  \[
+  {\rm C_{ij} = \frac{\langle x_i x_j \rangle}{\sqrt{\langle x_i^2\rangle\langle x_j^2 \rangle}}}
+  \]
+  If ${\rm C_{ij}=1}$, then the variables are perfectly correlated, whereas if ${\rm C_{ij}=-1}$, they are perfectly anticorrelated. In some cases, signals are correlated but with a time-lag. Hence, computing \[ {\rm C_{ij}} \] as a function of the shifting of one of the signals may reveal relationships that are not apparent in a simple correlation, such as might be done with \verb|sddscorrelate|.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    sddsshiftcor data.sdds result.sdds -with=Signal -columns=Response
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    sddsshiftcor [-pipe=[input][,output]] [inputFile] [outputFile]
+      -with=columnName
+      [-scan[=start=startShift][,end=endShift][,delta=deltaShift]]
+      [-columns=columnNames] [-excludeColumns=columnNames]
+      [-rankOrder] [-stDevOutlier[=limit=factor][,passes=integer]]
+      [-verbose]
+    \end{verbatim}
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe=[input][,output] } --- The standard SDDS Toolkit pipe option.
-    \item {\tt -with={\em columnName}} --- Specifies the column to be shifted, which is correlated
-        with the other columns.
-    \item {\tt -scan[=start={\em startShift}][,end={\em endShift}][,delta={\em deltaShift}]} --- 
-        Specifies the amount to shift and the step size.  The values are all integers.  By
-        default {\em startShift}=-10, {\em endShift}=10, and {\em deltaShift}=1
-    \item {\tt -columns={\em columnNames}} --- Specifies the names of columns to be included in the analysis.
-        A comma-separated list of optionally wildcard-containing names may be given.
-    \item {\tt -excludeColumns={\em columnNames}} --- Specifies the names of columns to be excluded from the
-        analysis.  A comma-separated list of optionally wildcard-containing names may be given.
-    \item {\tt -rankOrder} --- Specifies computing rank-order correlations rather than standard correlations.
-        This is considered more robust that standard correlations.
-    \item {\tt -stDevOutlier[=limit={\em factor}][,passes={\em integer}]} --- Specifies standard-deviation-based
-        outlier elimination on each pair of columns prior to computation of the correlation coefficient.
-        Any pair of values is ignored if one or both values are outliers relative to the column from which they come.
-        The {\tt limit} qualifier specifies the allowed deviation from the mean in standard deviations; the
-        default is 1.  The {\tt passes} qualifier specifies how many times the outlier elimination (including
-        recomputation of the mean and standard deviation) is performed; the default is 1.
+      \item \verb|-pipe=[input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-with=columnName| --- Specifies the column to be shifted, which is correlated with the other columns.
+      \item \verb|-scan[=start=startShift][,end=endShift][,delta=deltaShift]| --- Specifies the amount to shift and the step size. The values are all integers. By default \emph{startShift} = -10, \emph{endShift} = 10, and \emph{deltaShift} = 1.
+      \item \verb|-columns=columnNames| --- Specifies the names of columns to be included in the analysis. A comma-separated list of optionally wildcard-containing names may be given.
+      \item \verb|-excludeColumns=columnNames| --- Specifies the names of columns to be excluded from the analysis. A comma-separated list of optionally wildcard-containing names may be given.
+      \item \verb|-rankOrder| --- Specifies computing rank-order correlations rather than standard correlations. This is considered more robust than standard correlations.
+      \item \verb|-stDevOutlier[=limit=factor][,passes=integer]| --- Specifies standard-deviation-based outlier elimination on each pair of columns prior to computation of the correlation coefficient. Any pair of values is ignored if one or both values are outliers relative to the column from which they come. The \verb|limit| qualifier specifies the allowed deviation from the mean in standard deviations; the default is 1. The \verb|passes| qualifier specifies how many times the outlier elimination (including recomputation of the mean and standard deviation) is performed; the default is 1.
+      \item \verb|-verbose| --- Requests verbose output.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{files:} \emph{inputFile} is an SDDS file containing two or more columns of data. \emph{outputFile} contains one column (\verb|ShiftedBy|) for the amount shifted, plus one column for each analyzed column in \emph{inputFile}. The latter each contains the correlation coefficient with the shifted signal for the given shift value.
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \progref{sddscorrelate}
+      \item \progref{sddscorrelate}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
-
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

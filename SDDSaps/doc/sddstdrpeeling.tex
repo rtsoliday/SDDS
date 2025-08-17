@@ -1,34 +1,24 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
-\subsection{sddstdrpeeling} 
-\label{sddstdrpeeling} 
- 
-\begin{itemize} 
-\item {\bf description:} \hspace*{1mm}\\ 
-{\tt sddstdrpeeling} process the time-domain reflectometry (TRD) data with recursive algorithm to find out the impedance of nonuniform transmission line.
-\item {\bf examples:} 
-\begin{flushleft}
-{\tt sddstdrpeeling <inputfile> <outputfile> -columns=Time,Values -inputVoltage=120 -z0=50 }
-\end{flushleft} 
-\item {\bf synopsis:}  
-\begin{flushleft}
-{\tt 
-sddstdrpeeling [{\em input}] [{\em output}] [-pipe=[input][,output]] \\ \
--col={\em time-col},{\em data-column} \\ \
-{}[-inputVoltage={\em value}|{\em @<parameter>}] \\ \
-{}[-z0={\em value}]}
-\end{flushleft} 
-\item {\bf files:} 
-The input file contains both the time an data columns. The output file contains the additional column {\tt PeeledImpedance}.
-\item {\bf switches:} 
-    \begin{itemize} 
-    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
-    \item {\tt -col={\em time-col},{\em data-column}} --- The names of the time and data columns.
-    \item {\tt -inputVoltage={\em value}|{\em @<parameter>}} --- The input voltage in volts of TDR (default .2V).
-    \item {\tt -z0={\em value}} --- The line impedance (default 50 oms).
-\end{itemize} 
+\begin{sddsprog}{sddstdrpeeling}
+  \item \textbf{description:} \verb|sddstdrpeeling| processes time-domain reflectometry (TDR) data using a recursive algorithm to determine the impedance of a nonuniform transmission line.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddstdrpeeling <inputfile> <outputfile> -columns=Time,Values -inputVoltage=120 -z0=50
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddstdrpeeling [input] [output] [-pipe=[input][,output]]
+  -col=time-col,data-column
+  [-inputVoltage=value|@<parameter>]
+  [-z0=value]
+    \end{verbatim}
+  \item \textbf{files:} The input file contains both the time and data columns. The output file contains the additional column \verb|PeeledImpedance|.
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe=[input][,output]| --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
+      \item \verb|-col=time-col,data-column| --- The names of the time and data columns.
+      \item \verb|-inputVoltage=value| or \verb|@<parameter>| --- The input voltage in volts of TDR (default 0.2 V).
+      \item \verb|-z0=value| --- The line impedance (default 50 ohms).
+    \end{itemize}
+  \item \textbf{author:} H. Shang, R. Soliday, ANL/APS.
+\end{sddsprog}
 
-\item {\bf author:} H. Shang, R. Soliday, ANL/APS. 
-\end{itemize} 
- 

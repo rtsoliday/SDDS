@@ -1,68 +1,46 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddssplinefit}
-\label{sddssplinefit}
-
-\begin{itemize}
-\item {\bf description:} 
-{\tt sddssplinefit} fits splines to column data using the gsl library. The fits are of the form $y = \Sigma_i \{ A[i] * B(x-xOffset, i)\}$, where B(x,i) is the ith basis spline function evaluated at x.  {\tt sddssplinefit} internally computes the A[i], writes the $y$ in the output file and estimates of the errors in the values. One can specify the order of the spline, and the number of breakpoints (or alternatively the number of coefficients).  The options are very similar to those for {\tt sddsmpfit}.
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-usage: sddsmsplinefit [-pipe=[input][,output]] [<inputfile>] [<outputfile>]
-  -independent=<xName> -dependent=<yname1-wildcard>[,<yname2-wildcard>...]
-  [-sigmaIndependent=<xSigma>] [-sigmaDependent=<ySigmaFormatString>]
-  [-order=<number>] [-coefficients=<number>] [-breakpoints=<number>]
+\begin{sddsprog}{sddssplinefit}
+  \item \textbf{description:} \verb|sddssplinefit| fits splines to column data using the gsl library. The fits are of the form $y = \Sigma_i \{ A[i] * B(x-xOffset, i)\}$, where $B(x,i)$ is the $i$th basis spline function evaluated at $x$. \verb|sddssplinefit| internally computes the $A[i]$, writes the $y$ values in the output file and estimates of the errors in the values. One can specify the order of the spline and the number of breakpoints (or alternatively the number of coefficients). The options are very similar to those for \verb|sddsmpfit|.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddssplinefit data.sdds fit.sdds -independent=x -dependent=y -order=3 -breakpoints=10
+sddssplinefit input.sdds output.sdds -independent=t -dependent=z -coefficients=15 -normalize=1
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddssplinefit [-pipe=[input][,output]] [inputfile] [outputfile]
+  -independent=xName -dependent=yname1-wildcard[,yname2-wildcard...]
+  [-sigmaIndependent=xSigma] [-sigmaDependent=ySigmaFormatString]
+  [-order=number] [-coefficients=number] [-breakpoints=number]
   [-xOffset=value] [-xFactor=value]
-  [-sigmas=<value>,{absolute | fractional}] 
+  [-sigmas=value,{absolute | fractional}]
   [-modifySigmas] [-generateSigmas[={keepLargest, keepSmallest}]]
-  [-sparse=<interval>] [-range=<lower>,<upper>[,fitOnly]]
-  [-normalize[=<termNumber>]] [-verbose]
-  [-evaluate=<filename>[,begin=<value>][,end=<value>][,number=<integer>]]
-  [-fitLabelFormat=<sprintf-string>] [-infoFile=<filename>]
+  [-sparse=interval] [-range=lower,upper[,fitOnly]]
+  [-normalize[=termNumber]] [-verbose]
+  [-evaluate=filename[,begin=value][,end=value][,number=integer]]
+  [-fitLabelFormat=sprintf-string] [-infoFile=filename]
   [-copyParameters]
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} is an SDDS file containing columns of data to be fit. 
-If it contains multiple pages, they are processed separately. 
-{\em outputFile} is an SDDS file containing one page for each page of {\em inputFile}. 
-It contains columns of the independent and dependent variable data, plus columns for error bars (``sigmas'') as appropriate. 
-The values of the fit and of the residuals are in a columns named {\em yName}{\tt Fit} and {\em yName}{\tt Residual}.
-In addition, various parameters having names beginning with {\em yName} are created that give reduced chi-squared, slope, intercept, and so on.
-
-\item {\bf switches:}
+    \end{verbatim}
+  \item \textbf{files:} \emph{inputFile} is an SDDS file containing columns of data to be fit. If it contains multiple pages, they are processed separately. \emph{outputFile} is an SDDS file containing one page for each page of \emph{inputFile}. It contains columns of the independent and dependent variable data, plus columns for error bars (``sigmas'') as appropriate. The values of the fit and of the residuals are in columns named \emph{yName}\verb|Fit| and \emph{yName}\verb|Residual|. In addition, various parameters having names beginning with \emph{yName} are created that give reduced chi-squared, slope, intercept, and so on.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -evaluate={\em filename}[,begin={\em value}][,end={\em value}][,number={\em integer}]} ---
-        Specifies creation of an SDDS file called {\em filename} containing points from evaluation of the
-        fit.  The fit is normally evaluated over the range of the input data; this may be changed using
-        the {\tt begin} and {\tt end} qualifiers, though the spline routines do not allow exceeding the
-        range of the fit. Normally, the number of points at which the fit is evaluated is the number of 
-        points in the input data; this may be changed using the {\tt number} qualifier.
-    \item {\tt infoFile={\em filename}} --- Specifies creation of an SDDS file containing results of
-        the fits in columns. Under construction.
-    \item {\tt -order={\em number}} --- Specifies the order of the spline, which is one more than the order
-        of the local polynomials. For example, order 2 would fit straight 
-    \item {\tt [-breakpoints={\em number}]} --- The number of splines pieces the data will be split into for fitting.
-    \item {\tt [-coefficients={\em number}]} --- The number of coefficiencts used in hte spline fitting, which 
-        essentially controls the number of splines, since the number of coefficients = number of splines - 2
-        plus the order.
-    \item {\tt -xOffset={\em value}}, {\tt -xFactor={\em value}} --- Specify offseting and scaling of the independent
-        data prior to fitting.  The transformation is ${\rm x \rightarrow (x - xOffset)/Factor}$.  This feature can
-        be used to make a fit about a point other than x=0, or to scale the data to make high-order fits more
-        accurate. The benefits for spline fitting is unknown, as it is left-over from polynomial fitting. 
-    \item {\tt -sparse={\em interval}} --- Specifies sparsing of the input data prior to fitting.  This can greatly
-        speed computations when the number of data points is large.
-    \item {\tt -range={\em lower},{\em upper}} --- Specifies the range of independent variable over which to do fitting.
-    \item {\tt -verbose} --- Specifies that the results of the fit be printed to the standard error output.
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-evaluate=filename[,begin=value][,end=value][,number=integer]| --- Specifies creation of an SDDS file called \emph{filename} containing points from evaluation of the fit. The fit is normally evaluated over the range of the input data; this may be changed using the \verb|begin| and \verb|end| qualifiers, though the spline routines do not allow exceeding the range of the fit. Normally, the number of points at which the fit is evaluated is the number of points in the input data; this may be changed using the \verb|number| qualifier.
+      \item \verb|-infoFile=filename| --- Specifies creation of an SDDS file containing results of the fits in columns. Under construction.
+      \item \verb|-order=number| --- Specifies the order of the spline, which is one more than the order of the local polynomials.
+      \item \verb|-breakpoints=number| --- The number of spline pieces the data will be split into for fitting.
+      \item \verb|-coefficients=number| --- The number of coefficients used in the spline fitting, which essentially controls the number of splines since the number of coefficients equals the number of splines minus two plus the order.
+      \item \verb|-xOffset=value|, \verb|-xFactor=value| --- Specify offsetting and scaling of the independent data prior to fitting. The transformation is ${\rm x \rightarrow (x - xOffset)/Factor}$. This feature can be used to make a fit about a point other than $x=0$, or to scale the data to make high-order fits more accurate. The benefits for spline fitting are unknown, as it is left over from polynomial fitting.
+      \item \verb|-sparse=interval| --- Specifies sparsing of the input data prior to fitting. This can greatly speed computations when the number of data points is large.
+      \item \verb|-range=lower,upper| --- Specifies the range of independent variable over which to do fitting.
+      \item \verb|-verbose| --- Specifies that the results of the fit be printed to the standard error output.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \hyperref[exampleData]{Data for Examples}
-    \item \progref{sddspfit}
-    \item \progref{sddsmpfit}
-    \item \progref{sddsoutlier}
+      \item \hyperref[exampleData]{Data for Examples}
+      \item \progref{sddspfit}
+      \item \progref{sddsmpfit}
+      \item \progref{sddsoutlier}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

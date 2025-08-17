@@ -1,79 +1,59 @@
-
 %\begin{latexonly}
 \newpage
 %\end{latexonly}
 \subsection{sddsxra}
 \label{sddsxra}
 
-\begin{itemize}
-\item {\bf description:}
-\verb|sddsxra| reads an NIST x-ray data base to obtain x-ray interaction constants for a list of photon energies provided by the user. Depending on the mode selected, the output data may include x-ray cross sections, refractive indices, atomic scattering factors, mirror reflectivity, or absorption / transmission coefficients of a film. 
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsxra <inputFile> <outputFile> -energy=column=<colname>|begin=<value>,end=<value>,points=<integer> 
--mode=<number> -target=material=<string>|formula=<string>,thickness=<value>,density=<value>,angle=<value>
-}\end{flushleft}
-\item {\bf examples} List total photo cross sections for silicon nitride from photon energy 10 keV to 50 keV in 400 points: 
-\begin{flushleft}{\tt
- sddsxra SiliconNitride.sdds -mode=0 -energy=begin=10000,end=50000,points=400 -target=formula=Si3N4,density=3.44 
-}\end{flushleft}
-\begin{flushleft}{\tt
- sddsplot -graph=line,vary -legend -mode=y=log,y=special -col=PhotonEnergy,{TotalCS,PhotoCS,CoherentCS,IncoherentCS} SiliconNitride.sdds 
-}\end{flushleft}
-\item {\bf files:}
-        {\em inputFile} is an SDDS file containing photon energy data in a column or a parameter. 
-        {\em outputFile} is an SDDS file containing the photon energy data in a column and x-ray interaction constants. 
-\item {\bf switches:}
+\begin{sddsprog}{sddsxra}
+\item \textbf{description:}
+\verb|sddsxra| reads an NIST x-ray data base to obtain x-ray interaction constants for a list of photon energies provided by the user. Depending on the mode selected, the output data may include x-ray cross sections, refractive indices, atomic scattering factors, mirror reflectivity, or absorption / transmission coefficients of a film.
+\item \textbf{examples:}
+\begin{verbatim}
+sddsxra SiliconNitride.sdds -mode=0 -energy=begin=10000,end=50000,points=400 -target=formula=Si3N4,density=3.44
+sddsplot -graph=line,vary -legend -mode=y=log,y=special -col=PhotonEnergy,{TotalCS,PhotoCS,CoherentCS,IncoherentCS} SiliconNitride.sdds
+\end{verbatim}
+\item \textbf{synopsis:}
+\begin{verbatim}
+sddsxra <inputFile> <outputFile> -energy=column=<colname>|begin=<value>,end=<value>,points=<integer> -mode=<number> -target=material=<string>|formula=<string>,thickness=<value>,density=<value>,angle=<value>
+\end{verbatim}
+\item \textbf{switches:}
+  \begin{itemize}
+  \item Source of photon energy: only one of the following may be used.
     \begin{itemize}
-    \item Source of photon energy: only one of the following may be used. 
-         \begin{itemize}
-          \item {\tt -energy={column | parameter},{\em columnName}}---
-                  Specifies the column or parameter from the inputFile containing photon energy values. 
-          \item {\tt -energy=begin={\em start},end={\em end},points={\em points}}---
-                  The photon energy array is from start (eV) to end (eV) in npts data points. No input file is needed or used. 
-          \item {\tt -energy=specified={e1[,e2,...]}} ---
-                  The photon energy array is given by a list e1 (eV), e2 (eV), .... No input file is needed or used. 
-         \end{itemize}
-    \item Mode of calculation: 
-        \begin{itemize}
-          \item {\tt -mode=0}  or {\tt -mode=10} ---
-            Retrieve interaction constants of a compound (mode 0) or an element (mode 10). The output contains coulmns of photon energy (PhotonEnergy) in eV, photo-absorption cross sections (PhotoCS), coherent scattering cross sections (CoherentCS), incoherent scattering cross sections (IncoherentCS) and total photo cross sections (TotalCS) in units of cm\^{2}/g. 
-          \item {\tt -mode=1} ---
-            Retrieve index of refraction of target material. The output contains coulmns of photon energy (PhotonEnergy) in eV, and real and imaginary part of the refractive index (RefracIndex\_Re, RefracIndex\_Im). 
-          \item {\tt -mode=2}  or {\tt -mode=12} ---
-            Calculate x-ray attenuation through a compound (mode 2) or an elemental (mode 12) film target. The output contains coulmns of photon energy (PhotonEnergy) in eV, absorption coefficient (Absorption) and transmission coefficient (Transmission) of the target. 
-           \item {\tt -mode=4}  or {\tt -mode=14} ---
-            Calculate total electron yield or quantum efficiency of a compound (mode 4) or an elemental (mode 14) film target. The output contains coulmns of photon energy (PhotonEnergy) in eV, total electron yield from the front surface (TotalElectronYieldFront), from the back surface (TotalElectronYieldBack), and from both surfaces (TotalElectronYield). This calculation is based on Henke model and the user needs to provide the material's TEY coefficient (teyEfficiency) except for Au. 
-            \item {\tt -mode=6} ---
-              Calculate reflectivity of a compound mirror. The output contains coulmns of photon energy (PhotonEnergy) in eV and reflectivity from the front surface (Reflectivity). 
-            \item {\tt -mode=11} ---
-              Retrieve atomic scattering factor of the target element. The output contains coulmns of photon energy (PhotonEnergy) in eV, and real and imaginary part of the scattering factor (F1, F2). 
-             \item {\tt -mode=20} ---
-               Retrieve Kissel partial photoelectric cross sections of the target element. The output contains coulmns of photon energy (PhotonEnergy) in eV, photo-absorption cross sections (PhotoCS), coherent scattering cross sections (CoherentCS), incoherent scattering cross sections (IncoherentCS) and total photo cross sections (TotalCS) in cm\^{2}/g.  
-          \end{itemize}
-     \item Mode of calculation: 
-        \begin{itemize}
-          \item {\tt -target=material={\em name}[,formulat={\em formula}][,density={\em dd}][,thickness={\em tt}][,theta={\em theta}][,teyEfficiency={\em tey}]} ---
-            chemical formula, such as C, target density in g/cm\^{3}, thickness in mm, angle of incidence in degrees, measured from the front surface normal vector of the film, and total electron yield (TEY) efficiency constant in g/cm\^{2}. For materials listed in the build-in material property table, the default density may be provided by the program, but can be overwritten by the value supplied via this option. 
-          \item {\tt -target=formula={\em formula}[,density={\em dd}][,thickness={\em tt}][,theta={\em theta}][,teyEfficiency={\em tey}]} ---
-            Specifies target composition only with chemical formula formula. The formula will also be used as material name if the material is not listed in the material property table. 
-          \item {\tt -target=material={\em name}[,density={\em dd}][,thickness={\em tt}][,theta={\em theta}][,teyEfficiency={\em tey}] } ---
-            Specifies target composition with common name name. This is acceptible only for material listed in the build-in material property table. 
-        \end{itemize}
-    \item {Miscellaneous:}
-        \begin{itemize}
-          \item {\tt -polarization={\em value} } ---
-            Specifies the polarization of the incoming photon for mode 6: 0 = unpolarized (default), +1 = S-polarized, and -1 = P-polarized. 
-          \item {\tt --shell=s1[,s2,...,sn] } ---
-            Specifies shell name for Kissel partial photoelectric cross sections, where sx = K, L1, L2, L3,... 
-        \end{itemize}
+      \item {\tt -energy={column | parameter},{\em columnName}}---Specifies the column or parameter from the inputFile containing photon energy values.
+      \item {\tt -energy=begin={\em start},end={\em end},points={\em points}}---The photon energy array is from start (eV) to end (eV) in npts data points. No input file is needed or used.
+      \item {\tt -energy=specified={e1[,e2,...]}}---The photon energy array is given by a list e1 (eV), e2 (eV), .... No input file is needed or used.
     \end{itemize}
-\item {\bf see also:}
+  \item Mode of calculation:
     \begin{itemize}
-    \item A. Brunetti, et al, A library for x-ray matter interaction cross sections for x-ray fluorescence applications, an update, (2011). 
-    \item B. L. Henke, et al, The characterization of x-ray photocathode in the 0.1-10-keV photon energy region, J. Appl. Phys. 1509 (52) 1981. 
-    \item B. Yang and H. Shang, SDDS-compatible programs for modeling x-ray absorption in film targets, APS/ASD/DIAG Technote DIAG-TN-2013-004, 2013. 
+      \item {\tt -mode=0} or {\tt -mode=10}---Retrieve interaction constants of a compound (mode 0) or an element (mode 10). The output contains columns of photon energy (PhotonEnergy) in eV, photo-absorption cross sections (PhotoCS), coherent scattering cross sections (CoherentCS), incoherent scattering cross sections (IncoherentCS) and total photo cross sections (TotalCS) in units of cm\^{2}/g.
+      \item {\tt -mode=1}---Retrieve index of refraction of target material. The output contains columns of photon energy (PhotonEnergy) in eV, and real and imaginary part of the refractive index (RefracIndex\_Re, RefracIndex\_Im).
+      \item {\tt -mode=2} or {\tt -mode=12}---Calculate x-ray attenuation through a compound (mode 2) or an elemental (mode 12) film target. The output contains columns of photon energy (PhotonEnergy) in eV, absorption coefficient (Absorption) and transmission coefficient (Transmission) of the target.
+      \item {\tt -mode=4} or {\tt -mode=14}---Calculate total electron yield or quantum efficiency of a compound (mode 4) or an elemental (mode 14) film target. The output contains columns of photon energy (PhotonEnergy) in eV, total electron yield from the front surface (TotalElectronYieldFront), from the back surface (TotalElectronYieldBack), and from both surfaces (TotalElectronYield). This calculation is based on Henke model and the user needs to provide the material's TEY coefficient (teyEfficiency) except for Au.
+      \item {\tt -mode=6}---Calculate reflectivity of a compound mirror. The output contains columns of photon energy (PhotonEnergy) in eV and reflectivity from the front surface (Reflectivity).
+      \item {\tt -mode=11}---Retrieve atomic scattering factor of the target element. The output contains columns of photon energy (PhotonEnergy) in eV, and real and imaginary part of the scattering factor (F1, F2).
+      \item {\tt -mode=20}---Retrieve Kissel partial photoelectric cross sections of the target element. The output contains columns of photon energy (PhotonEnergy) in eV, photo-absorption cross sections (PhotoCS), coherent scattering cross sections (CoherentCS), incoherent scattering cross sections (IncoherentCS) and total photo cross sections (TotalCS) in cm\^{2}/g.
     \end{itemize}
-\item {\bf author:}B.Yang, H. Shang, ANL/APS.
-\end{itemize}
+  \item Target specification:
+    \begin{itemize}
+      \item {\tt -target=material={\em name}[,formula={\em formula}][,density={\em dd}][,thickness={\em tt}][,theta={\em theta}][,teyEfficiency={\em tey}]}---Chemical formula, such as C, target density in g/cm\^{3}, thickness in mm, angle of incidence in degrees, measured from the front surface normal vector of the film, and total electron yield (TEY) efficiency constant in g/cm\^{2}. For materials listed in the built-in material property table, the default density may be provided by the program, but can be overwritten by the value supplied via this option.
+      \item {\tt -target=formula={\em formula}[,density={\em dd}][,thickness={\em tt}][,theta={\em theta}][,teyEfficiency={\em tey}]}---Specifies target composition only with chemical formula formula. The formula will also be used as material name if the material is not listed in the material property table.
+      \item {\tt -target=material={\em name}[,density={\em dd}][,thickness={\em tt}][,theta={\em theta}][,teyEfficiency={\em tey}]}---Specifies target composition with common name name. This is acceptable only for material listed in the built-in material property table.
+    \end{itemize}
+  \item Miscellaneous:
+    \begin{itemize}
+      \item {\tt -polarization={\em value}}---Specifies the polarization of the incoming photon for mode 6: 0 = unpolarized (default), +1 = S-polarized, and -1 = P-polarized.
+      \item {\tt --shell=s1[,s2,...,sn]}---Specifies shell name for Kissel partial photoelectric cross sections, where s\_x = K, L1, L2, L3,...
+    \end{itemize}
+  \end{itemize}
+\item \textbf{files:}
+  {\em inputFile} is an SDDS file containing photon energy data in a column or a parameter. {\em outputFile} is an SDDS file containing the photon energy data in a column and x-ray interaction constants.
+\item \textbf{see also:}
+  \begin{itemize}
+  \item A. Brunetti, et al, A library for x-ray matter interaction cross sections for x-ray fluorescence applications, an update, (2011).
+  \item B. L. Henke, et al, The characterization of x-ray photocathode in the 0.1-10-keV photon energy region, J. Appl. Phys. 1509 (52) 1981.
+  \item B. Yang and H. Shang, SDDS-compatible programs for modeling x-ray absorption in film targets, APS/ASD/DIAG Technote DIAG-TN-2013-004, 2013.
+  \end{itemize}
+\item \textbf{author:} B. Yang, H. Shang, ANL/APS.
+\end{sddsprog}
 

@@ -1,19 +1,26 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{tiff2sdds}
-\label{tiff2sdds}
-
-\begin{itemize}
-  \item {\bf description:} Converts a TIFF image into an SDDS file.  Pixel values are read from the image and stored as integer data.  Options permit selecting a single color channel and choosing between a single-column or multi-column layout.
-  \item {\bf examples:}
-  \begin{flushleft}{\tt
-    tiff2sdds image.tif image.sdds\\
+\begin{sddsprog}{tiff2sdds}
+  \item \textbf{description:} \verb|tiff2sdds| converts a TIFF image into an SDDS file. Pixel values are read from the image and stored as integer data. Options permit selecting a single color channel and choosing between a single-column or multi-column layout.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    tiff2sdds image.tif image.sdds
     tiff2sdds photo.tif photo.sdds -redOnly -singleColumnMode
-  }\end{flushleft}
-  \item {\bf synopsis:}
-  \begin{flushleft}{\tt
-    tiff2sdds {\em input} {\em output} [-redOnly] [-greenOnly] [-blueOnly] [-singleColumnMode]
-  }\end{flushleft}
-  \item {\bf author:} R. Soliday, ANL/APS.
-\end{itemize}
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    tiff2sdds input output [-redOnly] [-greenOnly] [-blueOnly] [-singleColumnMode]
+    \end{verbatim}
+  \item \textbf{files:}
+    \begin{itemize}
+      \item \emph{input} --- source TIFF image.
+      \item \emph{output} --- resulting SDDS file.
+    \end{itemize}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-redOnly| --- convert only the red channel.
+      \item \verb|-greenOnly| --- convert only the green channel.
+      \item \verb|-blueOnly| --- convert only the blue channel.
+      \item \verb|-singleColumnMode| --- write data in a single column with pixel coordinates stored as parameters.
+    \end{itemize}
+  \item \textbf{see also:} \progref{sdds2tiff}.
+  \item \textbf{author:} R. Soliday, ANL/APS.
+\end{sddsprog}

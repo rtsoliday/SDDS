@@ -5,22 +5,22 @@
 \subsection{sddsrespmatrixderivative}
 \label{sddsrespmatrixderivative}
 
-\begin{itemize}
-\item {\bf description:} Computes the derivative of a response matrix contained in an SDDS file.  The derivative may be taken with respect to correctors ({\tt cor}), beam position monitors ({\tt bpm}), or quadrupoles ({\tt quad}).  Options are provided to append zero rows before or after the data, or in quadrupole mode to insert diagonal constraints.
-\item {\bf examples:}
-\begin{flushleft}{\tt
-sddsrespmatrixderivative rmat.sdds deriv.sdds -mode=cor\\
-sddsrespmatrixderivative rmat.sdds quad.sdds -mode=quad -addRowsBefore=20 -addRowsAfter=10\\
+\begin{sddsprog}{sddsrespmatrixderivative}
+  \item \textbf{description:} Computes the derivative of a response matrix contained in an SDDS file. The derivative may be taken with respect to correctors (\verb|cor|), beam position monitors (\verb|bpm|), or quadrupoles (\verb|quad|). Options are provided to append zero rows before or after the data, or in quadrupole mode to insert diagonal constraints.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddsrespmatrixderivative rmat.sdds deriv.sdds -mode=cor
+sddsrespmatrixderivative rmat.sdds quad.sdds -mode=quad -addRowsBefore=20 -addRowsAfter=10
 sddsrespmatrixderivative -pipe=out rmat.sdds -mode=bpm > deriv.sdds
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddsrespmatrixderivative [{\em inputfile}] [{\em outputfile}]\\
-{}[-pipe=[input][,output]]\\
-                        -mode={<string>}\\
-{}[-addRowsBefore={<number>}]\\
-{}[-addRowsAfter={<number>}]\\
-{}[-verbose]
-}\end{flushleft}
-\item {\bf author:} R. Soliday, ANL/APS.
-\end{itemize}
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddsrespmatrixderivative [inputfile] [outputfile]
+  [-pipe=[input][,output]]
+  -mode=<string>
+  [-addRowsBefore=<number>]
+  [-addRowsAfter=<number>]
+  [-verbose]
+    \end{verbatim}
+  \item \textbf{author:} R. Soliday, ANL/APS.
+\end{sddsprog}

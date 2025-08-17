@@ -1,36 +1,30 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddssortcolumn}
-\label{sddssortcolumn}
-
-\begin{itemize}
-\item {\bf description:} \verb|sddssortcolumn| rearrage the columns of the input file in a specified order. 
-
-\item {\bf synopsis:} 
-%
-% Insert usage message here:
-%
-\begin{flushleft}{\tt
-sddssortcolumn [SDDSinput] [SDDSoutput] [-pipe=[input][,output]
-  [-sortList=<list of columns in order>] [-decreasing] 
+\begin{sddsprog}{sddssortcolumn}
+  \item \textbf{description:}
+    \verb|sddssortcolumn| rearranges the columns of the input file in a specified order.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddssortcolumn data.sdds sorted.sdds -sortList=col3,col1,col2
+sddssortcolumn data.sdds -pipe=out -sortWith=order.sdds,column=Name
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddssortcolumn [SDDSinput] [SDDSoutput] [-pipe=[input][,output]]
+  [-sortList=<list of columns in order>] [-decreasing]
   [-bpmOrder] [-sortWith=<filename>,column=<string>]
-}\end{flushleft} 
-
-\item {\bf files:}
-{\em inputFile} is an SDDS file whose columns will be rearranges.  The {\em outputFile} argument is
-optional.  If it is not given, and if an output pipe is not selected, then the input file will be
-replaced.
-\item {\bf switches:}
+    \end{verbatim}
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -sortList=<column1>,<column2>,....} ---
-          specifiy the order of column names in a list. 
-    \item {\tt -pipe=[input][,output]} --pipe flages.
-    \item {\tt -sortWith=<filename>,column=<string>} --- sort the columns of input by the order in the column of <filename> provided by sortWith option. It overwrites other sorting order. 
-    \item {\tt -bpmOrder} --- sort the columns by the assumed bpm position in storage ring.
-    \item {\tt -decreasing} --- sort the columns in decreasing order, default is increasing.
+      \item \verb|-sortList=<column1>,<column2>,...| --- specify the order of column names in a list.
+      \item \verb|-pipe=[input][,output]| --- the standard SDDS Toolkit pipe option.
+      \item \verb|-sortWith=<filename>,column=<string>| --- sort columns by the order in column \verb|<string>| of \verb|<filename>|; overrides other sorting.
+      \item \verb|-bpmOrder| --- sort columns by the assumed BPM position in the storage ring.
+      \item \verb|-decreasing| --- sort columns in decreasing order; default is increasing.
     \end{itemize}
-\item {\bf author:}H. Shang ANL/APS.
-\end{itemize}
-
-
+  \item \textbf{files:}
+    \emph{inputFile} is an SDDS file whose columns will be rearranged. The \emph{outputFile} argument is optional. If it is not given and an output pipe is not selected, then the input file will be replaced.
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \progref{sddssort}
+    \end{itemize}
+  \item \textbf{author:} H. Shang, ANL/APS.
+\end{sddsprog}

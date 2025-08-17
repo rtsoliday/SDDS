@@ -5,54 +5,52 @@
 \subsection{sddsspotanalysis}
 \label{sddsspotanalysis}
 
-\begin{itemize}
-\item {\bf description:} Used to locate and give details about spots in multi-column SDDS image files.
-\item {\bf example:} 
-\begin{flushleft}{\tt
-sddsspotanalysis image.input image.output 
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddsspotanalysis [{\em Inputfile}] [{\em Outputfile}] [-pipe[=in][,out]] 
-[-ROI=[\{xy\}\{01\}value={\em value}][,\{xy\}{01}parameter={\em name}]]
-[-spotROIsize=[\{xy\}value={\em value}][,\{xy\}parameter={\em name}]]
-[-centerOn=\{\{xy\}centroid|\{xy\}peak\}]
-[-imageColumns={\em listOfNames}] 
-[-singleSpot]
-[-levels=[intensity={\em integer}][,saturation={\em integer}]]
-[-blankOut=[\{xy\}\{01\}value={\em value}][,\{xy\}\{01\}parameter={\em name}]]
-[-sizeLines=[\{xy\}value={\em value}][,\{xy\}parameter={\em name}]]
-[-background=[halfwidth={\em value}][,symmetric][,antihalo][,antiloner]]
-[-despike=[=neighbors={\em integer}][,passes={\em integer}][,averageOf={\em integer}][,threshold={\em value}]]
-[-spotImage={\em filename}]
-}\end{flushleft}
-\item {\bf files: }
-
-{\em Inputfile} is the multi-column SDDS input image file.
-
-{\em Outputfile} contains spot property information.
-
-\item {\bf switches:}
+\begin{sddsprog}{sddsspotanalysis}
+  \item \textbf{description:} \verb|sddsspotanalysis| locates and provides details about spots in multi-column SDDS image files.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddsspotanalysis image.input image.output
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddsspotanalysis [Inputfile] [Outputfile] [-pipe[=in][,out]]
+  [-ROI=[{xy}{01}value=value][,{xy}{01}parameter=name]]
+  [-spotROIsize=[{xy}value=value][,{xy}parameter=name]]
+  [-centerOn={xycentroid|xypeak}]
+  [-imageColumns=listOfNames]
+  [-singleSpot]
+  [-levels=[intensity=integer][,saturation=integer]]
+  [-blankOut=[{xy}{01}value=value][,{xy}{01}parameter=name]]
+  [-sizeLines=[{xy}value=value][,{xy}parameter=name]]
+  [-background=[halfwidth=value][,symmetric][,antihalo][,antiloner]]
+  [-despike[=neighbors=integer][,passes=integer][,averageOf=integer][,threshold=value]]
+  [-spotImage=filename]
+    \end{verbatim}
+  \item \textbf{files:}
+    \emph{Inputfile} is the multi-column SDDS input image file.
+    \emph{Outputfile} contains spot property information.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe[=in][,out]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -ROI=[\{xy\}\{01\}value={\em value}][,\{xy\}{01}parameter={\em name}]} --- Used to give the region of interest in pixel units. All data outside this region is ignored.
-    \item {\tt -spotROIsize=[\{xy\}value={\em value}][,\{xy\}parameter={\em name}]} --- Used to give the full size in pixel units of the region of interest (ROI) around the spot. This ROI is used for computing spot properties.
-    \item {\tt -centerOn=\{\{xy\}centroid|\{xy\}peak\}} --- Choose whether to center the spot analysis region on the peak value or the centroid value for x and y.
-    \item {\tt -imageColumns={\em listOfNames}} --- Give a list of names of columns containing image data. Wildcards may be used.
-    \item {\tt -singleSpot} --- Used to eliminate multiple spots.  All pixels not connected to the most intense pixel by a path through nonzero pixels are set to zero.
-    \item {\tt -levels=[intensity={\em integer}][,saturation={\em integer}]} --- Use intensity to give the number of intensity levels in the data; 256 is the default, with values from 0 to 255. Use saturation to give the level at which saturation is considered to occur; 254 is the default.
-    \item {\tt -sizeLines=[\{xy\}value={\em value}][,\{xy\}parameter={\em name}]} --- Specify the number of lines to use for analysis of the beam size.  The default is 3.
-    \item {\tt -background=[halfwidth={\em value}][,symmetric][,antihalo][,antiloner]} --- Use halfwidth to specify the number of intensity levels on either side of the most populous intensity to include for computation of the background. The default is 3.  Setting this to zero means that the background level is equal to the intensity of the most populous level. If symmetric is given, then pixels within this width of 0 after background subtraction are set to zero if the intensity of all but one adjacent pixel is less than this level; this symmetrizes the background removal and avoids leaving positive noise.  If antihalo is given, then each line of the spot ROI is scanned from the outer edge toward the center.  Pixels within the halfwidth of 0 after background subtraction are set to zero, until the first pixel is reached which fails this criterion, after which the next line is processed. If antiloner is given, then after background subtraction, the program removes any pixel that is surrounded by all zero pixels.
-    \item {\tt -despike=[=neighbors={\em integer}][,passes={\em integer}][,averageOf={\em integer}][,threshold={\em value}]} --- Enter despiking parameters for smoothing the data for purposes of finding the spot center.  If this isn't used then the program may pick a noise pixel as the spot center. Default equivalent to -despike=neighbors=4,passes=2,averageOf=4.
-    \item {\tt -spotImage={\em filename}} --- Provide the name of a file to which images of the spots will be written. The file can be plotted with sddscontour.
+      \item \verb|-pipe[=in][,out]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-ROI=[{xy}{01}value=|{\em value}\verb|][,{xy}{01}parameter=|{\em name}\verb|]| --- Used to give the region of interest in pixel units. All data outside this region is ignored.
+      \item \verb|-spotROIsize=[{xy}value=|{\em value}\verb|][,{xy}parameter=|{\em name}\verb|]| --- Used to give the full size in pixel units of the region of interest (ROI) around the spot. This ROI is used for computing spot properties.
+      \item \verb!-centerOn={xycentroid|xypeak}! --- Choose whether to center the spot analysis region on the peak value or the centroid value for x and y.
+      \item \verb|-imageColumns=listOfNames| --- Give a list of names of columns containing image data. Wildcards may be used.
+      \item \verb|-singleSpot| --- Used to eliminate multiple spots. All pixels not connected to the most intense pixel by a path through nonzero pixels are set to zero.
+      \item \verb|-levels=[intensity=|{\em integer}\verb|][,saturation=|{\em integer}\verb|]| --- Use intensity to give the number of intensity levels in the data; 256 is the default, with values from 0 to 255. Use saturation to give the level at which saturation is considered to occur; 254 is the default.
+      \item \verb|-blankOut=[{xy}{01}value=|{\em value}\verb|][,{xy}{01}parameter=|{\em name}\verb|]| --- Pixels within the specified region are set to zero.
+      \item \verb|-sizeLines=[{xy}value=|{\em value}\verb|][,{xy}parameter=|{\em name}\verb|]| --- Specify the number of lines to use for analysis of the beam size. The default is 3.
+      \item \verb|-background=[halfwidth=|{\em value}\verb|][,symmetric][,antihalo][,antiloner]| --- Use halfwidth to specify the number of intensity levels on either side of the most populous intensity to include for computation of the background. The default is 3. Setting this to zero means that the background level is equal to the intensity of the most populous level. If \verb|symmetric| is given, then pixels within this width of 0 after background subtraction are set to zero if the intensity of all but one adjacent pixel is less than this level; this symmetrizes the background removal and avoids leaving positive noise. If \verb|antihalo| is given, then each line of the spot ROI is scanned from the outer edge toward the center. Pixels within the halfwidth of 0 after background subtraction are set to zero, until the first pixel is reached which fails this criterion, after which the next line is processed. If \verb|antiloner| is given, then after background subtraction, the program removes any pixel that is surrounded by all zero pixels.
+      \item \verb|-despike[=neighbors=|{\em integer}\verb|][,passes=|{\em integer}\verb|][,averageOf=|{\em integer}\verb|][,threshold=|{\em value}\verb|]| --- Enter despiking parameters for smoothing the data for purposes of finding the spot center. If this isn't used then the program may pick a noise pixel as the spot center. Default equivalent to \verb|-despike=neighbors=4,passes=2,averageOf=4|.
+      \item \verb|-spotImage=|{\em filename} --- Provide the name of a file to which images of the spots will be written. The file can be plotted with \verb|sddscontour|.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \progref{sddscongen}
-    \item \progref{sddscontour}
-    \item \progref{sddsimageconvert}
-    \item \progref{sddsimageprofiles}
+      \item \progref{sddscongen}
+      \item \progref{sddscontour}
+      \item \progref{sddsimageconvert}
+      \item \progref{sddsimageprofiles}
     \end{itemize}
-\item {\bf author:} R. Soliday, ANL/APS.
-\end{itemize}
+  \item \textbf{author:} R. Soliday, ANL/APS.
+\end{sddsprog}
 

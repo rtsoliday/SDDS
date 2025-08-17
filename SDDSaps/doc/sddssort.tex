@@ -4,52 +4,36 @@
 \subsection{sddssort}
 \label{sddssort}
 
-\begin{itemize}
-\item {\bf description:} \hspace*{1mm}\\
-\verb|sddssort| sorts the tabular data section of a data set by the values in named columns.
-Any number of columns may be involved in the sort, and sorting order may be individually specified.
-\item {\bf examples:} \\
-Sort the APS Twiss file into alphabetical order by element name:
-\begin{flushleft}{\tt
-sddssort APS.twi APS.twi.sorted -column=ElementName
-}\end{flushleft}
-Same, but keep only one instance of each row with the same element name:
-\begin{flushleft}{\tt
-sddssort APS.twi APS.twi.sorted -column=ElementName -unique
-}\end{flushleft}
-\item {\bf synopsis:} \\
-\begin{flushleft}{\tt
-sddssort [-pipe=[input][,output]] [{\em SDDSinput}] [{\em SDDSoutput}] 
--column={\em name}[,\{increasing | decreasing\}] [-column...] 
-[-parameter=<name>[,{increasing|decreasing}]...]
-[-numericHigh] [-nonDominateSort] 
-[-unique[=count]] [-noWarnings]
-}\end{flushleft}
-\item {\tt files:}\\
-{\em SDDSinput} is an SDDS file to be sorted.  If it contains multiple data pages, they
-are treated separately.  {\em Warning: } if {\em SDDSoutput} is not given and {\tt -pipe=output}  is not
-specified, then {\em SDDSinput} will be replaced.
-\item {\bf switches:}
+\begin{sddsprog}{sddssort}
+  \item \textbf{description:} \verb|sddssort| sorts the tabular data section of a data set by the values in named columns.
+    Any number of columns may be involved in the sort, and sorting order may be individually specified.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    sddssort APS.twi APS.twi.sorted -column=ElementName
+    sddssort APS.twi APS.twi.sorted -column=ElementName -unique
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    sddssort [-pipe=[input][,output]] [SDDSinput] [SDDSoutput]
+      -column=name[, {increasing | decreasing}] [-column...]
+      [-parameter=name[, {increasing | decreasing}] ...]
+      [-numericHigh] [-nonDominateSort]
+      [-unique[=count]] [-noWarnings]
+    \end{verbatim}
+  \item \textbf{files:} \emph{SDDSinput} is an SDDS file to be sorted. If it contains multiple data pages, they are treated
+    separately. \emph{Warning:} if \emph{SDDSoutput} is not given and \verb|-pipe=output| is not specified, then
+    \emph{SDDSinput} will be replaced.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe=[input][,output]} --- The standard SDDS pipe option.
-    \item {\tt -column={\em name}[,\{increasing | decreasing\}]} --- Requests that the column 
-        {\em name} be used to order the rows of each tabular
-        data section.  Each subsequent \verb|column| request specifies a subsort of the ordering produced
-        by the previous requests.  The \verb|increasing| and \verb|decreasing| keywords may be given to
-        specify the desired ordering of the (sub)sort, with increasing order being the default.
-     \item {\tt -parameter={\em name}[,\{increasing | decreasing\}]} --- similar to column requests, but sort
-        the data pages by parameters.
-    \item {\tt -unique[=count]} --- Specifies that for any rows that are identical in the sort column values,
-        only the first should be included in the output file.  If the {\tt count} qualifier is given,
-        then a count of the number of identical rows is supplied in
-        a column called IdenticalCount.
-    \item {\tt -nonDominateSort} --- perform non-dominated-sort when multiply sorting columns supplied.
-        non-dominated-sort only works for numeric columns. 
-    \item {\tt -numericHigh} --- works for string sorting which rank the numeric characters higher than 
-       other characters in a string comparison. It also ranks numeric character sets with fewer characters 
-       below numeric character sets with more characters.
-    \item {\tt -noWarnings} --- Suppresses warning messages.
+      \item \verb|-pipe=[input][,output]| --- The standard SDDS pipe option.
+      \item \verb!-column=name[, {increasing | decreasing}]! --- Requests that the column \emph{name} be used to order the rows of each tabular data section. Each subsequent \verb|column| request specifies a subsort of the ordering produced by the previous requests. The \verb|increasing| and \verb|decreasing| keywords may be given to specify the desired ordering of the (sub)sort, with increasing order being the default.
+      \item \verb!-parameter=name[, {increasing | decreasing}]! --- Similar to column requests, but sort the data pages by parameters.
+      \item \verb|-unique[=count]| --- Specifies that for any rows that are identical in the sort column values, only the first should be included in the output file. If the \verb|count| qualifier is given, then a count of the number of identical rows is supplied in a column called \verb|IdenticalCount|.
+      \item \verb|-nonDominateSort| --- Perform non-dominated-sort when multiply sorting columns supplied. Non-dominated-sort only works for numeric columns.
+      \item \verb|-numericHigh| --- Works for string sorting which rank the numeric characters higher than other characters in a string comparison. It also ranks numeric character sets with fewer characters below numeric character sets with more characters.
+      \item \verb|-noWarnings| --- Suppresses warning messages.
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \item \textbf{see also:} \progref{sddssortcolumn}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 
