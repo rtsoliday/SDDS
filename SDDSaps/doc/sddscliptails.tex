@@ -1,50 +1,45 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddscliptails}
-\label{sddscliptails}
-
-\begin{itemize}
-\item {\bf description:}
-\verb|sddscliptails| removes the tails from functions, where a tail is a dubious feature
-extending to the left or right of a peak.
-\item {\bf examples:}
-Remove tails from profiles of beam spots after baseline removal and prior to determining
-rms spot properties.  This command clips the tails when the function falls to 1\% of
-its peak value.
-\begin{flushleft}{\tt
+\begin{sddsprog}{sddscliptails}
+  \item {\bf description:}
+  \verb|sddscliptails| removes the tails from functions, where a tail is a dubious feature
+  extending to the left or right of a peak.
+  \item {\bf examples:}
+  Remove tails from profiles of beam spots after baseline removal and prior to determining
+  rms spot properties. This command clips the tails when the function falls to 1\% of
+  its peak value.
+  \begin{verbatim}
 sddscliptails input.sdds output.sdds -columns=VideoLine* -fractional=0.01
-}\end{flushleft}
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddscliptails [{\em input}] [{\em output}] [-pipe=[in][,out]]
-[-columns={\em listOfNames}] [-fractional={\em value}] [-absolute={\em value}] [-fwhm={\em multiplier}]
-[-afterzero[={\em bufferWidth}]]
-}\end{flushleft}
-\item {\bf files:}
-{\em input} is an SDDS file containing one or more pages of data to be processed.
-{\em output} is an SDDS file in which the result is placed.  The output file will
-generally have fewer rows than the input file, corresponding the the number of
-rows clipped.
-\item {\bf switches:}
+  \end{verbatim}
+  \item {\bf synopsis:}
+  \begin{verbatim}
+sddscliptails [input] [output] [-pipe=[in][,out]]
+  [-columns=listOfNames] [-fractional=value] [-absolute=value] [-fwhm=multiplier]
+  [-afterzero[=bufferWidth]]
+  \end{verbatim}
+  \item {\bf files:}
+  {\em input} is an SDDS file containing one or more pages of data to be processed.
+  {\em output} is an SDDS file in which the result is placed. The output file will
+  generally have fewer rows than the input file, corresponding to the number of
+  rows clipped.
+  \item {\bf switches:}
     \begin{itemize}
     \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
     \item {\tt -columns={\em listOfNames}} --- Specifies an optionally-wildcarded list
-        of names of columns from which to remove tails.
+      of names of columns from which to remove tails.
     \item {\tt -fractional={\em value}} --- Clip a tail if it falls below this fraction of the peak
-        value of the column.
-    \item {\tt -absolute={\em value}} --- Clip a tail if it falls below this absolute value.  This
-        value might correspond, say, to a known noise level.
+      value of the column.
+    \item {\tt -absolute={\em value}} --- Clip a tail if it falls below this absolute value. This
+      value might correspond, say, to a known noise level.
     \item {\tt -fwhm={\em multiplier}} --- Clip a tail if it is beyond {\em multiplier} times
-        the full-width-at-half-maximum (FWHM) from the peak of the column.
-    \item {\tt -afterzero[={\em bufferWidth}]} --- Clip a tail if it is separated from the 
-        peak by values equal to zero.
-        If {\em bufferWidth} is specified, then a region {\em bufferWidth} wide is kept
-        on either side of the peak, if possible.
+      the full-width-at-half-maximum (FWHM) from the peak of the column.
+    \item {\tt -afterzero[={\em bufferWidth}]} --- Clip a tail if it is separated from the
+      peak by values equal to zero.
+      If {\em bufferWidth} is specified, then a region {\em bufferWidth} wide is kept
+      on either side of the peak, if possible.
     \end{itemize}
-\item {\bf see also:}
+  \item {\bf see also:}
     \begin{itemize}
     \item \progref{sddsbaseline}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \item {\bf author:} M. Borland, ANL/APS.
+\end{sddsprog}
+

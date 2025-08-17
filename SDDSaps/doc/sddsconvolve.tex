@@ -1,59 +1,31 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddsconvolve}
-\label{sddsconvolve}
-
-\begin{itemize}
-\item {\bf description:} 
-{\tt sddsconvolve} performs discrete Fourier convolution/deconvolution/correlation of
-signals in two files.  It assumes that spacing of points is the same in both input files.
-\item {\bf example:}
-Compute the result of a signal applied to a system with a known impulse response.
-\begin{flushleft}{\tt
-sddsconvolve signal.sdds impulseResponse.sdds signalResponse.sdds
--signalColumns=t,VSignal -responseColumns=t,VImpulse -outputColumns=t,VOutput
-}\end{flushleft}
-
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddsconvolve  {\em signal-file} {\em response-file} {\em output} [-pipe[=in][,out]]
- -signalColumns={\em indepColumn},{\em dataName}
- -responseColumns={\em indepColumn},{\em dataName} [-reuse]
- -outputColumns={\em indepColumn},{\em dataName}  
-[{-deconvolve [-noiseFraction={\em value}] | -correlate}]
-}\end{flushleft}
-\item {\bf files:}
-The meaning of the files depends on whether the {\tt -deconvolve} or {\tt -correlate}
-options are given.
-If neither option is given, then
-{\em signal-file} is the file containing the signal that is imposed on the system,
-{\em response-file} is the impulse response of the system, and 
-{\em output} is the computed response of the system to the signal.If {\tt -deconvolve} is given, then {\em signal-file} is the response of the
-system to the signal, {\em response-file} is the impulse response of the system, and
-{\em output} is the computed signal imposed on the system.
-If {\tt -correlate} is given, then {\em signal-file} and {\em response-file} contain
-two equivalent signals, while {\em output} contains the computed Fourier correlation;
-physically, this tells over what time scale the two functions have correlated values.
-\item {\bf switches:}
+\begin{sddsprog}{sddsconvolve}
+  \item \textbf{description:} \verb|sddsconvolve| performs discrete Fourier convolution, deconvolution, or correlation of signals in two files. It assumes that spacing of points is the same in both input files.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddsconvolve signal.sdds impulseResponse.sdds signalResponse.sdds \
+  -signalColumns=t,VSignal -responseColumns=t,VImpulse \
+  -outputColumns=t,VOutput
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddsconvolve signal-file response-file output [-pipe[=in][,out]]
+  -signalColumns=indepColumn,dataName
+  -responseColumns=indepColumn,dataName [-reuse]
+  -outputColumns=indepColumn,dataName
+  [-deconvolve [-noiseFraction=value] | -correlate]
+    \end{verbatim}
+  \item \textbf{files:} The meaning of the files depends on whether the \verb|-deconvolve| or \verb|-correlate| options are given. If neither option is given, then \emph{signal-file} is the file containing the signal that is imposed on the system, \emph{response-file} is the impulse response of the system, and \emph{output} is the computed response of the system to the signal. If \verb|-deconvolve| is given, then \emph{signal-file} is the response of the system to the signal, \emph{response-file} is the impulse response of the system, and \emph{output} is the computed signal imposed on the system. If \verb|-correlate| is given, then \emph{signal-file} and \emph{response-file} contain two equivalent signals, while \emph{output} contains the computed Fourier correlation; physically, this tells over what time scale the two functions have correlated values.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe=[input][,output] } --- The standard SDDS Toolkit pipe option.
-        \item {\tt -signalColumns={\em indepColumn},{\em dataName}} --- Specifies the
-        names of the data columns from {\em signal-file} (the first data file).
-        \item {\tt -responseColumns={\em indepColumn},{\em dataName}} --- Specifies the
-        names of the data columns from {\em response-file} (the second data file).
-        \item {\tt -reuse} --- Specifies that the first page of the response file will
-          be used with all pages of the signal file. Particularly useful if the
-          response file has one page but the signal file has many.
-        \item {\tt -outputColumns={\em indepColumn},{\em dataName}} --- Specifies the
-        desired names of the result in the file {\em output}.
-        \item {\tt -deconvolve} --- Specifies deconvolution instead of convolution.
-        \item {\tt -noiseFraction={\em value}} --- Specifies the amount of noise to
-        allow in the deconvolution to prevent division by zero, as a fraction of the
-        maximum power in the impulse response function.
-        \item {\tt -correlate} --- Specifies correlation instead of convolution.
+      \item \verb|-pipe=[input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-signalColumns=indepColumn,dataName| --- Specifies the names of the data columns from \emph{signal-file} (the first data file).
+      \item \verb|-responseColumns=indepColumn,dataName| --- Specifies the names of the data columns from \emph{response-file} (the second data file).
+      \item \verb|-reuse| --- Specifies that the first page of the response file will be used with all pages of the signal file. Particularly useful if the response file has one page but the signal file has many.
+      \item \verb|-outputColumns=indepColumn,dataName| --- Specifies the desired names of the result in the file \emph{output}.
+      \item \verb|-deconvolve| --- Specifies deconvolution instead of convolution.
+      \item \verb|-noiseFraction=value| --- Specifies the amount of noise to allow in the deconvolution to prevent division by zero, as a fraction of the maximum power in the impulse response function.
+      \item \verb|-correlate| --- Specifies correlation instead of convolution.
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
-
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

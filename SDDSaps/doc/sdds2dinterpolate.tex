@@ -4,52 +4,51 @@
 \subsection{sdds2dinterpolate}
 \label{sdds2dinterpolate}
 
-\begin{itemize}
-\item {\bf description:}
-{\tt sdds2dinterpolate} interpolates scalar data on a two--dimensional grid.  The program reads an SDDS file containing coordinates and one or more dependent quantities.  Data are interpolated using either natural--neighbour or cubic spline algorithms at a regular grid or at locations supplied in another file.
+\begin{sddsprog}{sdds2dinterpolate}
+  \item \textbf{description:}
+    \verb|sdds2dinterpolate| interpolates scalar data on a two--dimensional grid. The program reads an SDDS file containing coordinates and one or more dependent quantities. Data are interpolated using either natural--neighbour or cubic spline algorithms at a regular grid or at locations supplied in another file.
 
-\item {\bf example:}
-Interpolate column {\tt field} onto a 40~by~40 grid covering the range of the input data using natural neighbours:
-\begin{flushleft}{\tt
-sdds2dinterpolate input.sdds output.sdds -independentColumn=xcolumn=x,ycolumn=y \\
-  -dependentColumn=field -outDimension=xdimension=40,ydimension=40 \\
+  \item \textbf{examples:}
+  \begin{verbatim}
+sdds2dinterpolate input.sdds output.sdds -independentColumn=xcolumn=x,ycolumn=y \
+  -dependentColumn=field -outDimension=xdimension=40,ydimension=40 \
   -algorithm=nn -npoints=10 -weight=1e-6
-}\end{flushleft}
+  \end{verbatim}
 
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sdds2dinterpolate [{\em input}] [{\em output}] [-pipe[=input][,output]] \\
-  {}[-independentColumn=xcolumn={\em xName},ycolumn={\em yName}[,errorColumn={\em name}]] \\
-  {}[-dependentColumn={\em zName}[,{\em zName}...]] \\
-  {}[-scale=circle|square] [-outDimension=xdimension={\em nx},ydimension={\em ny}] \\
-  {}[-range=xminimum={\em xmin},xmaximum={\em xmax},yminimum={\em ymin},ymaximum={\em ymax}] \\
-  {}[-zoom={\em factor}] [-dimensionThin=xdimension={\em nx},ydimension={\em ny}] \\
-  {}[-clusterThin={\em distance}] [-preprocess] \\
-  {}[-algorithm=nn|csa[,linear|sibson|nonSibson][,average={\em nppc}][,sensitivity={\em value}]] \\
-  {}[-weight={\em value}] [-vertex={\em id}] [-npoints={\em number}] [-verbose] [-merge] \\
-  {}[-file={\em pointsFile}[,{\em xName},{\em yName}]] [-majorOrder=row|column]
-}\end{flushleft}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sdds2dinterpolate [<input>] [<output>] [-pipe[=input][,output]] \
+  [-independentColumn=xcolumn=<xName>,ycolumn=<yName>[,errorColumn=<name>]] \
+  [-dependentColumn=<zName>[,<zName>...]] \
+  [-scale=circle|square] [-outDimension=xdimension=<nx>,ydimension=<ny>] \
+  [-range=xminimum=<xmin>,xmaximum=<xmax>,yminimum=<ymin>,ymaximum=<ymax>] \
+  [-zoom=<factor>] [-dimensionThin=xdimension=<nx>,ydimension=<ny>] \
+  [-clusterThin=<distance>] [-preprocess] \
+  [-algorithm=nn|csa[,linear|sibson|nonSibson][,average=<nppc>][,sensitivity=<value>]] \
+  [-weight=<value>] [-vertex=<id>] [-npoints=<number>] [-verbose] [-merge] \
+  [-file=<pointsFile>[,<xName>,<yName>]] [-majorOrder=row|column]
+  \end{verbatim}
 
-\item {\bf switches:}
-  \begin{itemize}
-  \item {\tt -pipe[=input][,output]} --- Standard SDDS Toolkit pipe option.
-  \item {\tt -independentColumn=xcolumn={\em name},ycolumn={\em name}[,errorColumn={\em name}]} --- Names of the columns containing the independent variables and, optionally, a column of errors.
-  \item {\tt -dependentColumn={\em name}[,{\em name}...]} --- Dependent columns to be interpolated.
-  \item {\tt -scale=circle|square} --- Scale the interpolation region to a unit circle or unit square.
-  \item {\tt -outDimension=xdimension={\em nx},ydimension={\em ny}} --- Number of grid points in the x and y directions.
-  \item {\tt -range=xminimum={\em xmin},xmaximum={\em xmax},yminimum={\em ymin},ymaximum={\em ymax}} --- Explicit limits of the interpolation grid.
-  \item {\tt -zoom={\em factor}} --- Multiply the automatically determined grid range by the given factor.
-  \item {\tt -dimensionThin=xdimension={\em nx},ydimension={\em ny}} --- Average data within the specified cell dimensions before interpolation.
-  \item {\tt -clusterThin={\em distance}} --- Replace clusters of points closer than the given distance by a single point.
-  \item {\tt -preprocess} --- Output thinned data without performing interpolation.
-  \item {\tt -algorithm=nn|csa[,linear|sibson|nonSibson][,average={\em nppc}][,sensitivity={\em value}]} --- Select the interpolation algorithm and its parameters.  The {\tt nn} method uses natural neighbours with optional {\tt linear}, {\tt sibson} or {\tt nonSibson} weighting rules.  The {\tt csa} method performs cubic spline approximation and accepts the {\tt average} and {\tt sensitivity} qualifiers.
-  \item {\tt -weight={\em value}} --- Minimum interpolation weight allowed.
-  \item {\tt -vertex={\em id}} --- Output diagnostic information for the specified vertex.
-  \item {\tt -npoints={\em number}} --- Number of points used by the interpolator.
-  \item {\tt -verbose} --- Produce additional diagnostic output.
-  \item {\tt -merge} --- Merge all input pages before processing.
-  \item {\tt -file={\em pointsFile}[,{\em xName},{\em yName}]} --- Read interpolation locations from an external SDDS file.  Optional names specify the x and y columns.
-  \item {\tt -majorOrder=row|column} --- Set the output data order.
-  \end{itemize}
-\item {\bf author:} H. Shang, R. Soliday, L. Emery, M. Borland, ANL/APS.
-\end{itemize}
+  \item \textbf{switches:}
+    \begin{itemize}
+    \item \verb|-pipe[=input][,output]| --- Standard SDDS Toolkit pipe option.
+    \item \verb|-independentColumn=xcolumn=<name>,ycolumn=<name>[,errorColumn=<name>]| --- Names of the columns containing the independent variables and, optionally, a column of errors.
+    \item \verb|-dependentColumn=<name>[,<name>...]| --- Dependent columns to be interpolated.
+    \item \verb+-scale=circle|square+ --- Scale the interpolation region to a unit circle or unit square.
+    \item \verb|-outDimension=xdimension=<nx>,ydimension=<ny>| --- Number of grid points in the x and y directions.
+    \item \verb|-range=xminimum=<xmin>,xmaximum=<xmax>,yminimum=<ymin>,ymaximum=<ymax>| --- Explicit limits of the interpolation grid.
+    \item \verb|-zoom=<factor>| --- Multiply the automatically determined grid range by the given factor.
+    \item \verb|-dimensionThin=xdimension=<nx>,ydimension=<ny>| --- Average data within the specified cell dimensions before interpolation.
+    \item \verb|-clusterThin=<distance>| --- Replace clusters of points closer than the given distance by a single point.
+    \item \verb|-preprocess| --- Output thinned data without performing interpolation.
+    \item \verb+-algorithm=nn|csa[,linear|sibson|nonSibson][,average=<nppc>][,sensitivity=<value>]+ --- Select the interpolation algorithm and its parameters. The \verb|nn| method uses natural neighbours with optional \verb|linear|, \verb|sibson| or \verb|nonSibson| weighting rules. The \verb|csa| method performs cubic spline approximation and accepts the \verb|average| and \verb|sensitivity| qualifiers.
+    \item \verb|-weight=<value>| --- Minimum interpolation weight allowed.
+    \item \verb|-vertex=<id>| --- Output diagnostic information for the specified vertex.
+    \item \verb|-npoints=<number>| --- Number of points used by the interpolator.
+    \item \verb|-verbose| --- Produce additional diagnostic output.
+    \item \verb|-merge| --- Merge all input pages before processing.
+    \item \verb|-file=<pointsFile>[,<xName>,<yName>]| --- Read interpolation locations from an external SDDS file. Optional names specify the x and y columns.
+    \item \verb+-majorOrder=row|column+ --- Set the output data order.
+    \end{itemize}
+  \item \textbf{author:} H. Shang, R. Soliday, L. Emery, M. Borland, ANL/APS.
+\end{sddsprog}

@@ -4,59 +4,45 @@
 \subsection{sddschanges}
 \label{sddschanges}
 
-\begin{itemize}
-\item {\bf description:} {\tt sddschanges} analyzes changes in column data from page to page in a file,
-relative to reference data in a baseline file or from the first page.  It requires that every page in the file have
-the same number of rows.  It produces a multipage output file containing the row-by-row difference between the
-reference data and the data each page in the input file.
+\begin{sddsprog}{sddschanges}
+  \item \textbf{description:}
+    \verb|sddschanges| analyzes changes in column data from page to page in a file, relative to reference data in a baseline file or from the first page. It requires that every page in the file have the same number of rows. It produces a multipage output file containing the row-by-row difference between the reference data and the data on each page in the input file.
 
-\item {\bf examples:} 
-Compute the changes in the dispersion function for several APS lattices:
-\begin{flushleft}{\tt
+  \item \textbf{examples:}
+  Compute the changes in the dispersion function for several APS lattices:
+  \begin{verbatim}
 sddschanges APS.twi APS.changes -copy=s -changesIn=betax,betay,etax
-}\end{flushleft}
-The output file in this example would have one fewer pages than the input
-file.  Each page would contain the column s from the first page, along with
-the differences from the first page for betax, betay, and etax.
-One could also compute the changes relative to the nominal lattice:
-\begin{flushleft}{\tt
-sddschanges APS.twi -baseline=APS0.twi APS.changes -copy=s -changeIn=betax,betay,etax
-}\end{flushleft}
-The output file would have one page for every page in the input.
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddschanges [-pipe[=input][,output]] [{\em inputFile}] [{\em outputFile}]
-[-copy={\em columnNames}] [-changesIn={\em columnNames}]
-[-baseline={\em referenceFileName} [-parallelPages]] 
-}\end{flushleft}
-\item {\bf files:}
-      {\em inputFile} is a multipage file containing the data for which changes are
-      desired.  {\em outputFile} is a multipage file containing the changes.  The
-      column names in {\em outputFile} for the changes are created from those in
-      {\em inputFile} by prepending the string ``ChangeIn''.
-\item {\bf switches:}
-    \begin{itemize}
-    \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -copy={\em columnNames}}--- Specifies that the named columns should be transferred
-        to the output file without alteration.  These data come from the baseline
-        file or from the first page of the input file.  A comma-separated list of optionally wildcard-containing
-        strings may be given.
-    \item {\tt -changesIn={\em columnNames}} --- Specifies that the named columns should be
-        transferred to the output file after subtracting the corresponding values
-        from the baseline file or from the first page of the input file.
-        A comma-separated list of optionally wildcard-containing
-        strings may be given.
-    \item {\tt -baseline={\em referenceFileName}} --- Specifies the name of an SDDS file from which
-        the reference data for changes should be taken.
-    \item {\tt -parallelPages} --- Valid only with {\tt -baseline}.   Specifies that the ``baseline''
-        data for each page of the input file shall be taken from the corresponding page of the
-        baseline file.  This results in page-by-page subtraction of the two files.
-    \end{itemize}
-\item {\bf see also:}
-    \begin{itemize}
-    \item \hyperref[exampleData]{Data for Examples}
-    \item \progref{sddsenvelope}
-    \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \end{verbatim}
+  The output file in this example would have one fewer pages than the input file. Each page would contain the column s from the first page, along with the differences from the first page for betax, betay, and etax. One could also compute the changes relative to the nominal lattice:
+  \begin{verbatim}
+sddschanges APS.twi -baseline=APS0.twi APS.changes -copy=s -changesIn=betax,betay,etax
+  \end{verbatim}
+  The output file would have one page for every page in the input.
 
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddschanges [-pipe[=input][,output]] [inputFile] [outputFile]
+            [-copy=columnNames] [-changesIn=columnNames]
+            [-baseline=referenceFileName [-parallelPages]]
+  \end{verbatim}
+
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe=[input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-copy=columnNames| --- Specifies that the named columns should be transferred to the output file without alteration. These data come from the baseline file or from the first page of the input file. A comma-separated list of optionally wildcard-containing strings may be given.
+      \item \verb|-changesIn=columnNames| --- Specifies that the named columns should be transferred to the output file after subtracting the corresponding values from the baseline file or from the first page of the input file. A comma-separated list of optionally wildcard-containing strings may be given.
+      \item \verb|-baseline=referenceFileName| --- Specifies the name of an SDDS file from which the reference data for changes should be taken.
+      \item \verb|-parallelPages| --- Valid only with \verb|-baseline|. Specifies that the baseline data for each page of the input file shall be taken from the corresponding page of the baseline file. This results in page-by-page subtraction of the two files.
+    \end{itemize}
+
+  \item \textbf{files:}
+    \emph{inputFile} is a multipage file containing the data for which changes are desired. \emph{outputFile} is a multipage file containing the changes. The column names in \emph{outputFile} for the changes are created from those in \emph{inputFile} by prepending the string \verb|ChangeIn|.
+
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \hyperref[exampleData]{Data for Examples}
+      \item \progref{sddsenvelope}
+    \end{itemize}
+
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

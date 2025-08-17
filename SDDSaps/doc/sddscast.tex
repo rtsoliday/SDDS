@@ -1,46 +1,36 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddscast}
-\label{sddscast}
-
-\begin{itemize}
-\item {\bf description:} \verb|sddscast| can be ussed to change the data type of the
-elements in an SDDS file. 
-\item {\bf example:}
-Convert the double columns of {\tt APS.twi} to float (note that col1, col2,col3
-are the column names in APS.twi file):
-\begin{flushleft}{\tt
+\begin{sddsprog}{sddscast}
+  \item \textbf{description:} \verb|sddscast| converts numeric columns, parameters, or arrays from one data type to another within an SDDS file.
+  \item \textbf{examples:}
+\begin{verbatim}
 sddscast APS.twi -cast=col,*,double,float
-}\end{flushleft}
-\begin{flushleft}{\tt
 sddscast APS.twi -cast=col,'(col1,col2,col3)',double,float
-}\end{flushleft}
-\begin{flushleft}{\tt
 sddscast APS.twi -cast=col,'(col1,col4,col5)','(double,float,float)',long
-}\end{flushleft}
-\begin{flushleft}{\tt
-or:
-}\end{flushleft}
-\begin{flushleft}{\tt
 sddscast APS.twi '-cast=col,(col1,col4,col5),(double,float,float),long'
-}\end{flushleft}
-
-\item {\bf files:}
-{\em inputFile} is an SDDS file containing data to be processed.  The {\em outputFile} argument is
-optional.  If it is not given, and if an output pipe is not selected, then the input file will be
-replaced.
-\item {\bf switches:}
-    \begin{itemize}
-    \item {\tt -cast={column|parameter|array},<names>,<typeNames>,<newType>}
-          names is of the form 'name' (with optional wildcards) or
-                     '(name,name,....)'; 
-          typeNames is of the form '(long,short,double,float,*)' ;
-          newType is long, short,double, or float.
-    \item {\tt -pipe=[input][,output]} --pipe flages.
-    \item {\tt -noWarnings} --- Suppresses warning messages, such as file replacement warnings.
-    \end{itemize}
-\item {\bf author:}H. Shang ANL/APS.
-\end{itemize}
-
-
+\end{verbatim}
+  \item \textbf{synopsis:}
+\begin{verbatim}
+sddscast [inputFile] [outputFile]
+         [-pipe=[input][,output]]
+         [-noWarnings]
+         [-majorOrder={row|column}]
+         -cast={column|parameter|array},<names>,<typeNames>,<newType>
+\end{verbatim}
+  \item \textbf{files:}
+  \begin{itemize}
+    \item \emph{inputFile} \textendash{} SDDS file containing data to be cast.
+    \item \emph{outputFile} \textendash{} SDDS file to receive the result; if omitted and no output pipe is given, the input is replaced.
+  \end{itemize}
+  \item \textbf{switches:}
+  \begin{itemize}
+    \item \verb+-cast={column|parameter|array},<names>,<typeNames>,<newType>+ \textendash{} Cast data types of specified entities.
+    \item \verb|-pipe[=input][,output]| \textendash{} Use pipes for input and/or output.
+    \item \verb|-noWarnings| \textendash{} Suppress warning messages.
+    \item \verb+-majorOrder=row|column+ \textendash{} Set column data ordering.
+  \end{itemize}
+  \item \textbf{see also:}
+  \begin{itemize}
+    \item \progref{sddsprocess}
+    \item \progref{sddsconvert}
+  \end{itemize}
+  \item \textbf{author:} H. Shang, ANL/APS.
+\end{sddsprog}

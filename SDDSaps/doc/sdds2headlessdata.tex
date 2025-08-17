@@ -1,24 +1,27 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sdds2headlessdata}
-\label{sdds2headlessdata}
-
-\begin{itemize}
-\item {\bf description:} Converts selected columns from an SDDS file into a raw binary stream with no header. Data may be written in row-major or column-major order.
-\item {\bf example:}
-\begin{flushleft}{\tt
+\begin{sddsprog}{sdds2headlessdata}
+  \item \textbf{description:} Converts selected columns from an SDDS file into a raw binary stream with no header. Data may be written in row-major or column-major order.
+  \item \textbf{examples:}
+    \begin{verbatim}
 sdds2headlessdata data.sdds output.bin -column=Col1,Col2 -order=rowMajor
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sdds2headlessdata [{\em input}] [{\em output}] [-pipe[=in][,out]] -column={\em name}[,{\em name}...] [-order={\em rowMajor|columnMajor}]
-}\end{flushleft}
-\item {\bf switches:}
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sdds2headlessdata [input] [output] [-pipe[=in][,out]] -column=name[,name...] [-order=rowMajor|columnMajor]
+    \end{verbatim}
+  \item \textbf{files:}
+    \begin{itemize}
+    \item \verb|input| --- SDDS file providing column data.
+    \item \verb|output| --- Raw binary file receiving selected columns.
+    \end{itemize}
+  \item \textbf{switches:}
     \begin{itemize}
     \item {\tt -pipe[=in][,out]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -column={\em name}[,{\em name}...]} --- Specifies one or more columns to write to the output file. This option is required.
-    \item {\tt -order={\em rowMajor|columnMajor}} --- Determines the order in which column data are written. Row-major order (default) writes one element from each column per row; column-major order writes each column sequentially.
+    \item {\tt -column=\emph{name}[,\emph{name}...]} --- Specifies one or more columns to write to the output file. This option is required.
+    \item {\tt -order=\emph{rowMajor|columnMajor}} --- Determines the order in which column data are written. Row-major order (default) writes one element from each column per row; column-major order writes each column sequentially.
     \end{itemize}
-\item {\bf author:} H. Shang, ANL/APS.
-\end{itemize}
+  \item \textbf{see also:}
+    \begin{itemize}
+    \item \progref{sdds2plaindata}
+    \end{itemize}
+  \item \textbf{author:} H. Shang, ANL/APS.
+\end{sddsprog}

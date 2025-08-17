@@ -1,1 +1,29 @@
-
+\begin{sddsprog}{hpif2sdds}
+  \item \textbf{description:} Converts Hewlett-Packard HP54542 scope internal format to SDDS.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    hpif2sdds capture.hpif output.sdds
+    hpif2sdds capture.hpif -pipe=out | sddsplot -column=Time,Voltage
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    hpif2sdds [options] input.hpif output.sdds
+    \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+    \item \verb|-pipe[=out]| --- Write output to standard output.
+    \item \verb|-ascii| or \verb|-binary| --- Specify SDDS output format.
+    \item \verb|-verbose| --- Print progress messages.
+    \end{itemize}
+  \item \textbf{files:}
+    \begin{itemize}
+    \item \verb|input.hpif| --- HP54542 internal file to convert.
+    \item \verb|output.sdds| --- Resulting SDDS file. If omitted, output goes to standard output.
+    \end{itemize}
+  \item \textbf{see also:}
+    \begin{itemize}
+    \item \progref{hdf2sdds}
+    \item \progref{mpl2sdds}
+    \end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

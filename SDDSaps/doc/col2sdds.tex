@@ -1,27 +1,28 @@
-\newpage
-\subsection{col2sdds}
-\label{col2sdds}
-
-\begin{itemize}
-\item {\bf description:}
-Converts a file in \verb|column| self-describing format to SDDS.  This is of interest to
-APS users only, some of whom still have programs that generate \verb|column|-format files.
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-col2sdds {\em inputFile} {\em outputFile} [-fixMplNames]
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} is a {\tt column}-format file, the SDDS equivalent of which is written to {\em outputFile}.
-The ``auxiliary values'' of the {\tt columns} file are converted into SDDS parameters.  The {\tt column} table
-is converted into SDDS tabular data, all columns begin double precision except the ``row label'', which
-becomes a string column.
-\item {\bf switches:}
+\begin{sddsprog}{col2sdds}
+  \item \textbf{description:}
+  Converts a file in \verb|column| self-describing format to SDDS. This is of interest to
+  APS users only, some of whom still have programs that generate \verb|column|-format files.
+  \item \textbf{examples:}
+    \begin{verbatim}
+col2sdds input.col output.sdds
+col2sdds data.col data.sdds -fixMplNames
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+col2sdds inputFile outputFile [-fixMplNames]
+    \end{verbatim}
+  \item \textbf{files:}
+  \emph{inputFile} is a \verb|column|-format file, the SDDS equivalent of which is written to
+  \emph{outputFile}. The ``auxiliary values'' of the \verb|column| file are converted into SDDS
+  parameters. The \verb|column| table is converted into SDDS tabular data, all columns being
+  double precision except the ``row label'', which becomes a string column.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item \verb|-fixMplNames| --- Requests that any column or parameter names in the input file that contain
-        \verb|mpl| character set escape sequences be ``fixed''.  This results in simpler names.  The escape sequences
-        are always retained in definition of the symbol for each column or parameter, and hence will appear on
-        graphs as expected.
+      \item \verb|-fixMplNames| --- Requests that any column or parameter names in the input file
+      that contain \verb|mpl| character set escape sequences be ``fixed''. This results in simpler
+      names. The escape sequences are always retained in definition of the symbol for each column
+      or parameter, and hence will appear on graphs as expected.
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

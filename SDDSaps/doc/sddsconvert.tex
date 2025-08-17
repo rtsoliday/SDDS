@@ -1,91 +1,54 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddsconvert}
-\label{sddsconvert}
+\begin{sddsprog}{sddsconvert}
+  \item \textbf{description:} \verb|sddsconvert| converts SDDS files between ASCII and binary and allows wildcard-based filtering out of unwanted columns and/or rows, as well as renaming of columns. N.B.: it is \emph{not} recommended to use \verb|sddsconvert| to convert a binary SDDS file to ASCII, then strip the header off and read the ASCII file. This completely bypasses the self-describing aspects of the SDDS file and is not robust. If the program that creates the SDDS file is changed so that the columns are created in a different order, the program that reads the ASCII file will produce unexpected results. Use \progref{sdds2plaindata}, \progref{sddsprintout}, or \progref{sdds2stream} for conversion to non-self-describing files. In this way, you can assure the order of the data is fixed.
 
-\begin{itemize}
-\item {\bf description:} \verb|sddsconvert| converts SDDS files between ASCII and binary, and allows wildcard-based 
-filtering-out of unwanted columns and/or rows, as well as renaming of columns.
-N.B.: it is {\em not} recommended to use \verb|sddsconvert| to
-convert a binary SDDS file to ASCII, then strip the header off and read the ASCII file.  This completely
-bypasses the self-describing aspects of the SDDS file and is not robust.  If the program that creates the
-SDDS file is changed so that the columns are created in a different order, the program that reads the ASCII file
-will produce unexpected results. Use \progref{sdds2plaindata}, \progref{sddsprintout}, or \progref{sdds2stream}
-for conversion to non-self-describing files.  In this way, you can assure the order of the data is fixed.
-\item {\bf example:}
-Convert {\tt APS.twi} to binary:
-\begin{flushleft}{\tt
-sddsconvert -binary APS.twi
-}\end{flushleft}
-Convert {\tt APS.twi} to binary and delete the {\tt alphax} and {\tt alphay} columns:
-\begin{flushleft}{\tt
-sddsconvert -binary APS.twi -delete=column,'alpha?'
-}\end{flushleft}
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsconvert [{\em inputFile}] [{\em outputFile}] [-pipe[=input][,output]] \\ \ 
-[\{-binary | -ascii\}] [-fromPage={\em number}] [-toPage={\em number}]  \\ \ 
-[-delete=\{columns | parameters | arrays\},{\em matchingString}[,{\em matchingString}...]] \\ \ 
-[-retain=\{columns | parameters | arrays\},{\em matchingString}[,{\em matchingString}...] \\ \ 
-[-rename=\{columns | parameters | arrays\},{\em oldname}={\em newname} \\ \ 
-\hspace*{10mm}[,{\em oldname}={\em newname}...]] \\ \ 
-[-editNames=\{columns | parameters | arrays\},{\em matchingString},{\em editString} \\ \ 
-[-description={\em text},{\em contents}] \\ \ 
-[-recover[=clip]] [-linesPerRow={\rm number}] [-nowarnings] [-acceptAllNames]\\ \ 
-[-xzLevel={\em integer}] \
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} is an SDDS file containing data to be processed.  The {\em outputFile} argument is
-optional.  If it is not given, and if an output pipe is not selected, then the input file will be
-replaced.
-\item {\bf switches:}
+  \item \textbf{examples:}
+  Convert \verb|APS.twi| to binary:
+  \begin{verbatim}
+  sddsconvert -binary APS.twi
+  \end{verbatim}
+  Convert \verb|APS.twi| to binary and delete the \verb|alphax| and \verb|alphay| columns:
+  \begin{verbatim}
+  sddsconvert -binary APS.twi -delete=column,'alpha?'
+  \end{verbatim}
+
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+  sddsconvert [inputFile] [outputFile] [-pipe[=input][,output]] \
+    [-binary | -ascii] [-fromPage=number] [-toPage=number] \
+    [-delete={columns | parameters | arrays},matchingString[,matchingString...]] \
+    [-retain={columns | parameters | arrays},matchingString[,matchingString...]] \
+    [-rename={columns | parameters | arrays},oldname=newname[,oldname=newname...]] \
+    [-editNames={columns | parameters | arrays},matchingString,editString] \
+    [-description=text,contents] \
+    [-recover[=clip]] [-linesPerRow=number] [-nowarnings] [-acceptAllNames] \
+    [-xzLevel=integer]
+  \end{verbatim}
+
+  \item \textbf{files:}
+  \emph{inputFile} is an SDDS file containing data to be processed. The \emph{outputFile} argument is optional. If it is not given, and if an output pipe is not selected, then the input file will be replaced.
+
+  \item \textbf{switches:}
     \begin{itemize}
     \item {\tt \{-binary | -ascii\}} --- Requests that the output be binary or ASCII.
-    \item {\tt fromPage={\em number}} --- Specifies the first data page of the file that will appear in the output.
-        By default, the output starts with data page 1.
-    \item {\tt toPage={\em number}} --- Specifies the last page of the file that will appear in the output.
-        By default, the output ends with the last data page in the file.
-    \item {\tt -delete=\{columns | parameters | arrays\},{\em matchingString}[,{\em matchingString}...]},\\
-        {\tt -retain=\{columns | parameters | arrays\},{\em matchingString}[,{\em matchingString}...]}
-         --- These options specify wildcard strings to be used to select entities
-        (i.e., columns, parameters, or arrays) that will respectively be deleted or retained (i.e., that will not or
-        will appear in the output).   
-        The selection is performed by determining which input entities have names matching any of the strings.
-        If \verb|retain| is given but \verb|delete| is not, only those entities matching one of the
-        strings given with \verb|retain| are retained.  If both \verb|delete| and \verb|retain|
-        are given, then all entities are retained except those that match a \verb|delete| string without
-        matching any of the \verb|retain| strings.
-    \item {\tt -rename=\{columns | parameters | arrays\},{\em oldname}={\em newname}}\\
-        {\tt [,{\em oldname}={\em newname}...]} 
-        --- Specifies new names for entities in the output data set.  The entities must still
-        be referred to by their old names in the other commandline options.
-    \item {\tt -editNames=\{columns | parameters | arrays\},{\em matchingString},{\em editString}} 
-        --- Specifies creation of new names for entities of the specified type
-        with names matching the specified wildcard string.  Editing is performed using commands
-        reminiscent of {\tt emacs} keystrokes.  For details on editing commands, see
-        \progref{SDDS editing}.
-    \item {\tt -description={\em text},{\em contents}} --- Sets the description fields for the output.
-    \item {\tt -recover[=clip]} --- Asks for attempted recovery of corrupted data.  If the 
-        qualifier is given, then all data from a corrupted page is ignored.  Otherwise, {\tt sddsconvert}
-        tries to save as much data from the corrupted page as it can; typically, it is able to save part of
-        the tabular data and all of the array and parameter data.
-    \item {\tt -linesPerRow={\rm number}} --- Sets the number of lines of text output per row of the tabular data,
-        for ASCII output only.
+    \item {\tt fromPage=\emph{number}} --- Specifies the first data page of the file that will appear in the output. By default, the output starts with data page~1.
+    \item {\tt toPage=\emph{number}} --- Specifies the last page of the file that will appear in the output. By default, the output ends with the last data page in the file.
+    \item {\tt -delete=\{columns | parameters | arrays\},\emph{matchingString}[,\emph{matchingString}...]}, {\tt -retain=\{columns | parameters | arrays\},\emph{matchingString}[,\emph{matchingString}...]} --- These options specify wildcard strings to be used to select entities (i.e., columns, parameters, or arrays) that will respectively be deleted or retained (i.e., that will not or will appear in the output). The selection is performed by determining which input entities have names matching any of the strings. If \verb|retain| is given but \verb|delete| is not, only those entities matching one of the strings given with \verb|retain| are retained. If both \verb|delete| and \verb|retain| are given, then all entities are retained except those that match a \verb|delete| string without matching any of the \verb|retain| strings.
+    \item {\tt -rename=\{columns | parameters | arrays\},\emph{oldname}=\emph{newname}[,\emph{oldname}=\emph{newname}...]} --- Specifies new names for entities in the output data set. The entities must still be referred to by their old names in the other commandline options.
+    \item {\tt -editNames=\{columns | parameters | arrays\},\emph{matchingString},\emph{editString}} --- Specifies creation of new names for entities of the specified type with names matching the specified wildcard string. Editing is performed using commands reminiscent of \verb|emacs| keystrokes. For details on editing commands, see \progref{SDDS editing}.
+    \item {\tt -description=\emph{text},\emph{contents}} --- Sets the description fields for the output.
+    \item {\tt -recover[=clip]} --- Asks for attempted recovery of corrupted data. If the qualifier is given, then all data from a corrupted page is ignored. Otherwise, \verb|sddsconvert| tries to save as much data from the corrupted page as it can; typically, it is able to save part of the tabular data and all of the array and parameter data.
+    \item {\tt -linesPerRow=\rm number} --- Sets the number of lines of text output per row of the tabular data, for ASCII output only.
     \item {\tt -noWarnings} --- Suppresses warning messages, such as file replacement warnings.
     \item {\tt -xzLevel} --- Sets the LZMA compression level when writing .xz files.
-    \item {\tt -acceptAllNames} --- Forces acceptance of any name for an SDDS data element (e.g., a column).
-        This can be used with the \verb|rename| or \verb|editNames| options to fix invalid names in SDDS
-        files.  This option is provided for backward compatibility to the original version of SDDS,
-        which allowed arbitrary characters in element names.
+    \item {\tt -acceptAllNames} --- Forces acceptance of any name for an SDDS data element (e.g., a column). This can be used with the \verb|rename| or \verb|editNames| options to fix invalid names in SDDS files. This option is provided for backward compatibility to the original version of SDDS, which allowed arbitrary characters in element names.
     \end{itemize}
-\item {\bf see also:}
+
+  \item \textbf{see also:}
     \begin{itemize}
     \item \hyperref[exampleData]{Data for Examples}
     \item \progref{sddsprocess}
     \item \progref{SDDS editing}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
 
-
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

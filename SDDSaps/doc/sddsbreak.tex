@@ -1,65 +1,31 @@
-
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddsbreak}
-\label{sddsbreak}
-
-\begin{itemize}
-\item {\bf description:}
-\verb|sddsbreak| reads pages from an SDDS file and writes a new SDDS file containing the same data,
-but with each of the input pages potentially separated into several output pages.  The separation
-involves breaking each input page at one or more locations as determined by one of several
-user-defined criteria.
-\item {\bf examples:}
-Limit the length of pages to 500 rows so that data may be viewed more easily:
-\begin{flushleft}{\tt
+\begin{sddsprog}{sddsbreak}
+  \item \textbf{description:} \verb|sddsbreak| reads pages from an SDDS file and writes a new SDDS file containing the same data, but with each of the input pages potentially separated into several output pages. The separation involves breaking each input page at one or more locations as determined by one of several user-defined criteria.
+  \item \textbf{examples:}
+  \begin{verbatim}
 sddsbreak par.bpm par.bpm1 -rowlimit=500
-}\end{flushleft}
-Break the page whenever a gap of more than 15 seconds is seen:
-\begin{flushleft}{\tt
 sddsbreak par.bpm par.bpm1 -gapin=Time,amount=15
-}\end{flushleft}
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsbreak [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}]\\
-\{ -gapIn={\em columnName}[,\{amount={\em value} | factor={\em value}\}] |\\
- -increaseOf={\em columnName}  | -decreaseOf={\em columnName} \\
- -changeOf={\em columnName}[,amount={\em value}[,base={\em value}]] \\
-  -rowLimit={\em integer} \}
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} is an SDDS file containing one or more pages of data to be broken up.
-{\em outputFile} is an SDDS file in which the result is placed.  Each page of 
-{\em outputFile} contains the parameter and array values from the page of {\em inputFile}
-that is its source.
-\item {\bf switches:}
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddsbreak [-pipe=[input][,output]] [inputFile] [outputFile]
+  { -gapIn=columnName[, {amount=value | factor=value}] |
+    -increaseOf=columnName | -decreaseOf=columnName |
+    -changeOf=columnName[,amount=value[,base=value]] |
+    -rowLimit=integer }
+  \end{verbatim}
+  \item \textbf{files:} \emph{inputFile} is an SDDS file containing one or more pages of data to be broken up. \emph{outputFile} is an SDDS file in which the result is placed. Each page of \emph{outputFile} contains the parameter and array values from the page of \emph{inputFile} that is its source.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -gapIn={\em columnName}[,\{amount={\em value} | factor={\em value}\}]  } --- 
-        Breaks the page when the value in the named column has a gap.
-        If the \verb|amount| qualifier is given, then a gap is defined as any occurence of
-        successive values different by more than {\em value}.  If this qualifier is not given,
-        then the {\em value} is computed as follows: the mean absolute difference (MAD) between successive
-        values for the first page which has more than 1 row is computed; if the {\tt factor}
-        qualifier is given, then the gap amount is the MAD times the given value;
-        otherwise, it is the MAD times two.
-    \item {\tt -increaseOf={\em columnName}}, {\tt -decreaseOf={\em columnName}}--- 
-        These options cause a page break
-        whenever the value in the named column increases or decreases, respectively.
-    \item {\tt -changeOf={\em columnName}[,amount={\em value}[,base={\em value}]]} --- 
-        Breaks the page when the value in the named column changes.
-        If the {\tt amount} qualifier is not given, then any change is sufficient to
-        break the page.  Otherwise, the page is broken whenever the quantity
-        ${\rm \lfloor (V - B)/A \rfloor}$ changes, where V is the value in the column,
-        A is the value given for {\tt amount}, and B is the value given for {\tt base}.
-        If {\tt base} is not given, then the value in first row for the column is used.
-    \item {\tt -rowLimit={\em integer} } --- Breaks the page after the specified number of rows.
+      \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
+      \item {\tt -gapIn=\emph{columnName}[,\{amount=\emph{value} | factor=\emph{value}\}]} --- Breaks the page when the value in the named column has a gap. If the \verb|amount| qualifier is given, then a gap is defined as any occurrence of successive values different by more than \emph{value}. If this qualifier is not given, then the \emph{value} is computed as follows: the mean absolute difference (MAD) between successive values for the first page which has more than 1 row is computed; if the {\tt factor} qualifier is given, then the gap amount is the MAD times the given value; otherwise, it is the MAD times two.
+      \item {\tt -increaseOf=\emph{columnName}}, {\tt -decreaseOf=\emph{columnName}} --- These options cause a page break whenever the value in the named column increases or decreases, respectively.
+      \item {\tt -changeOf=\emph{columnName}[,amount=\emph{value}[,base=\emph{value}]]} --- Breaks the page when the value in the named column changes. If the {\tt amount} qualifier is not given, then any change is sufficient to break the page. Otherwise, the page is broken whenever the quantity ${\rm \lfloor (V - B)/A \rfloor}$ changes, where V is the value in the column, A is the value given for {\tt amount}, and B is the value given for {\tt base}. If {\tt base} is not given, then the value in first row for the column is used.
+      \item {\tt -rowLimit=\emph{integer}} --- Breaks the page after the specified number of rows.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \hyperref[exampleData]{Data for Examples}
-    \item \progref{sddscombine}
+      \item \hyperref[exampleData]{Data for Examples}
+      \item \progref{sddscombine}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

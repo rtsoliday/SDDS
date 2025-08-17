@@ -1,73 +1,48 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
-\subsection{sdds2stream} 
-\label{sdds2stream} 
- 
-\begin{itemize} 
-\item {\bf description:} \hspace*{1mm}\\ 
-{\tt sdds2stream} provides stream output to the standard output of data values from a group of columns or parameters.  
-Each line of the output contains a different row of the tabular data or a different parameter.   
-Values from different columns are separated by the delimiter string. 
-If -page is not employed, all data pages are output sequentially.  
-If multiple filenames are given, the files are processed sequentially in the order given. 
-\item {\bf examples:} 
-To output values of tunes for each page, one line per page: 
-\begin{flushleft}{\tt 
-sdds2stream APS.twi -parameters=nux,nuy -delimiter=" " 
-}\end{flushleft} 
-To output values of columns {\tt ElementName} and {\tt betax} for the first data page: 
-\begin{flushleft}{\tt 
-sdds2stream APS.twi -column=ElementName,betax -page=1 
-}\end{flushleft} 
-\item {\bf synopsis:}  
-\begin{flushleft}{\tt 
-sdds2stream \{{\em inputFileList} | -pipe[=input]\} 
-[-page={\em pageNumber}] [-delimiter={\em delimitingString}]  
-\{ -columns={\em columnName}[,{\em columnName}...] 
-| -parameters={\em parameterName}[,{\em parameterName}...] 
-| -arrays={\em arrayName}[,{\em arrayName}...] \} 
-[-filenames] [-rows[=bare]] [-npages[=bare]] [-noquotes] [-ignoreFormats] [-description]
-}\end{flushleft} 
-\item {\bf files:} 
-{\em inputFileList} is a space-separated list of SDDS filenames.   
-\item {\bf switches:} 
-    \begin{itemize} 
-    \item {\tt -pipe[=input]} --- The standard SDDS Toolkit pipe option. 
-    \item {\tt -page={\em page-number} } --- Specifies the number of the data page for which output is desired.   
-        Recall that pages are numbered sequentially beginning with 1.  More complete control of which pages 
-        are output may be obtained using {\tt sddsconvert} or {\tt sddsprocess} as a filter. 
-    \item {\tt -delimiter={\em delimitingString}} --- Specifies the delimiting string to be printed to  
-        separate row entries or parameters. The 
-        delimiter is printed with \verb|printf|, so that any of the usual escape sequences may be employed. 
-    \item {\tt columns={\em columnName}[,{\em columnName}...]} ---  
-        Specifies the names of the columns for which output is desired.  For each row of each 
-        data page, the specified columns are printed on a single line, separated by the delimiting string.  The 
-        default delimiting string is a single space. 
-    \item {\tt -parameters={\em parameterName}[,{\em parameterName}...] } 
-        --- Specifies the names of the parameters for which output is desired.  For each row of each 
-        data page, the specified parameters are printed on a single line, separated by the delimiting string.  However, 
-        since the default delimiting string is a newline, the parameters end up on separate lines. 
-    \item {\tt arrays={\em arrayName}[,{\em arrayName}...]} ---  
-        Specifies the names of the arrays for which output is desired.  
-    \item {\tt filenames} --- Specifies that the filename will be printed out as each file is processed. 
-    \item \verb|rows[=bare]| --- Specifies that the number of rows per page for the tabular data section will 
-        be printed out. If the 'bare' qualifier is given, only the numerical values are printed, without the work ``rows.''
-    \item \verb|npages[=bare]| --- Specifies that the number pages will 
-        be printed out. If the 'bare' qualifier is given, only the numerical values are printed, without the work ``pages.''
-    \item \verb|noquotes| --- Specifies that whitespace-containing string data will be printed without 
-        the default double-quotes.  
-    \item \verb|ignoreFormats| --- Specifies that the format data supplied in the file is to be
-        ignored.  Guarantees printing of floating point data to full precision.
-    \item \verb|description| --- Specifies printing of the description data for the data set.
-    \end{itemize} 
-\item {\bf see also:} 
-        \begin{itemize} 
-        \item \hyperref[exampleData]{Data for Examples}
-        \item \progref{sddsprintout} 
-        \item \progref{sddsconvert} 
-        \item \progref{sddsprocess} 
-        \end{itemize} 
-\item {\bf author:} M. Borland, ANL/APS. 
-\end{itemize} 
- 
+\begin{sddsprog}{sdds2stream}
+  \item \textbf{description:}
+    {\tt sdds2stream} provides stream output to the standard output of data values from a group of columns or parameters.
+    Each line of the output contains a different row of the tabular data or a different parameter.
+    Values from different columns are separated by the delimiter string.
+    If \verb|-page| is not employed, all data pages are output sequentially.
+    If multiple filenames are given, the files are processed sequentially in the order given.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sdds2stream APS.twi -parameters=nux,nuy -delimiter=" "
+sdds2stream APS.twi -column=ElementName,betax -page=1
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sdds2stream {inputFileList | -pipe[=input]} [-page=pageNumber] [-delimiter=delimitingString]
+            { -columns=columnName[,columnName...] |
+              -parameters=parameterName[,parameterName...] |
+              -arrays=arrayName[,arrayName...] }
+            [-filenames] [-rows[=bare]] [-npages[=bare]] [-noquotes]
+            [-ignoreFormats] [-description]
+    \end{verbatim}
+  \item \textbf{files:}
+    {\tt inputFileList} is a space-separated list of SDDS filenames.
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item {\tt -pipe[=input]} --- The standard SDDS Toolkit pipe option.
+      \item {\tt -page=pageNumber} --- Specifies the number of the data page for which output is desired. Recall that pages are numbered sequentially beginning with 1. More complete control of which pages are output may be obtained using {\tt sddsconvert} or {\tt sddsprocess} as a filter.
+      \item {\tt -delimiter=delimitingString} --- Specifies the delimiting string to be printed to separate row entries or parameters. The delimiter is printed with \verb|printf|, so that any of the usual escape sequences may be employed.
+      \item {\tt -columns=columnName[,columnName...]} --- Specifies the names of the columns for which output is desired. For each row of each data page, the specified columns are printed on a single line, separated by the delimiting string. The default delimiting string is a single space.
+      \item {\tt -parameters=parameterName[,parameterName...]} --- Specifies the names of the parameters for which output is desired. For each row of each data page, the specified parameters are printed on a single line, separated by the delimiting string. However, since the default delimiting string is a newline, the parameters end up on separate lines.
+      \item {\tt -arrays=arrayName[,arrayName...]} --- Specifies the names of the arrays for which output is desired.
+      \item {\tt -filenames} --- Specifies that the filename will be printed out as each file is processed.
+      \item \verb|-rows[=bare]| --- Specifies that the number of rows per page for the tabular data section will be printed out. If the \verb|bare| qualifier is given, only the numerical values are printed, without the word ``rows.''
+      \item \verb|-npages[=bare]| --- Specifies that the number of pages will be printed out. If the \verb|bare| qualifier is given, only the numerical values are printed, without the word ``pages.''
+      \item \verb|-noquotes| --- Specifies that whitespace-containing string data will be printed without the default double-quotes.
+      \item \verb|-ignoreFormats| --- Specifies that the format data supplied in the file is to be ignored. Guarantees printing of floating point data to full precision.
+      \item \verb|-description| --- Specifies printing of the description data for the data set.
+    \end{itemize}
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \hyperref[exampleData]{Data for Examples}
+      \item \progref{sddsprintout}
+      \item \progref{sddsconvert}
+      \item \progref{sddsprocess}
+    \end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
+

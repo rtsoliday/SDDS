@@ -1,51 +1,28 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddsarray2column}
-\label{sddsarray2column}
-
-\begin{itemize}
-\item {\bf description:} \hspace*{1mm}\\
-{\tt sddsarray2column} converts one or more arrays in an SDDS file into columns. The
-number of elements in the converted arrays must match the number of rows in
-existing columns or the number of elements in other converted arrays.
-
-\item {\bf examples:}
-  Convert array \verb|A| to column \verb|A\_out|:
-  \begin{flushleft}{\tt
-  sddsarray2column in.sdds out.sdds -convert=A,A\_out
-  }\end{flushleft}
-Convert the first plane of a three--dimensional array \verb|A|:
-  \begin{flushleft}{\tt
-  sddsarray2column in.sdds out.sdds -convert=A,A\_out,d0=0
-  }\end{flushleft}
-Select a rectangular region from array \verb|A|:
-  \begin{flushleft}{\tt
-  sddsarray2column in.sdds out.sdds "-convert=A,A\_out,d2=(1,3)"
-  }\end{flushleft}
-
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-  sddsarray2column [{\em source}] [{\em target}] [-pipe=[input][,output]]\\
-  {}[-nowarnings] -convert={\em arrayName}[,{\em columnName}][,d<dimension>=<indexList>]...
-  }\end{flushleft}
-
-\item {\bf files:}
-\begin{itemize}
-  \item {\em source} --- SDDS file containing arrays to be converted.
-  \item {\em target} --- SDDS file that will contain the converted columns.
-\end{itemize}
-
-\item {\bf switches:}
+\begin{sddsprog}{sddsarray2column}
+  \item {\bf description:} \verb|sddsarray2column| converts one or more arrays in an SDDS file into columns. The number of elements in the converted arrays must match the number of rows in existing columns or the number of elements in other converted arrays.
+  \item {\bf examples:}
+    \begin{verbatim}
+    sddsarray2column in.sdds out.sdds -convert=A,A_out
+    sddsarray2column in.sdds out.sdds -convert=A,A_out,d0=0
+    sddsarray2column in.sdds out.sdds "-convert=A,A_out,d2=(1,3)"
+    \end{verbatim}
+  \item {\bf synopsis:}
+    \begin{verbatim}
+    sddsarray2column [source] [target] [-pipe=[input][,output]]
+      [-nowarnings] -convert=arrayName[,columnName][,d<dimension>=<indexList>]...
+    \end{verbatim}
+  \item {\bf files:}
     \begin{itemize}
-    \item {\tt -pipe=[input][,output]} --- Standard SDDS Toolkit pipe option.
-    \item {\tt -nowarnings} --- Suppress warning messages about overwriting files.
-    \item {\tt -convert={\em arrayName}[,{\em columnName}][,d<dimension>=<indexList>]} ---
-          Specifies an array to convert to a column. The optional {\em columnName}
-          gives the name of the new column. Qualifiers \verb|d0|, \verb|d1| and
-          \verb|d2| select indices from dimensions 0, 1 and 2 respectively. Each
-          qualifier may contain a single index or a parenthesized list of
-          indices.
+      \item {\em source} --- SDDS file containing arrays to be converted.
+      \item {\em target} --- SDDS file that will contain the converted columns.
     \end{itemize}
-\item {\bf author:} R. Soliday, M. Borland, ANL/APS.
-\end{itemize}
+  \item {\bf switches:}
+    \begin{itemize}
+      \item \verb|-pipe=[input][,output]| --- Standard SDDS Toolkit pipe option.
+      \item \verb|-nowarnings| --- Suppress warning messages about overwriting files.
+      \item \verb|-convert=\emph{arrayName}[,\emph{columnName}][,d<dimension>=<indexList>]| --- Specifies an array to convert to a column. The optional \emph{columnName} gives the name of the new column. Qualifiers \verb|d0|, \verb|d1| and \verb|d2| select indices from dimensions 0, 1 and 2 respectively. Each qualifier may contain a single index or a parenthesized list of indices.
+    \end{itemize}
+  \item {\bf see also:} \progref{sddsmatrix2column}
+  \item {\bf author:} R. Soliday, M. Borland, ANL/APS.
+\end{sddsprog}
+

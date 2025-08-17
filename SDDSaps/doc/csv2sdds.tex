@@ -1,83 +1,74 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{csv2sdds}
-\label{csv2sdds}
+\begin{sddsprog}{csv2sdds}
+  \item {\bf description:} Converts Comma-Separated-Values (CSV) data and similar data to SDDS. CSV data is commonly used by spreadsheet programs.
+  \item {\bf examples:}
+    \begin{verbatim}
+    csv2sdds data.csv -columnData=name=x,type=float,units=m -columnData=name=Name,type=string data.sdds
+    \end{verbatim}
+  \item {\bf synopsis:}
+    \begin{verbatim}
+    csv2sdds [CSVfile] [SDDSfile] [-pipe[=in][,out]]
+      [-asciiOutput] [-spanLines] [-maxRows=integer]
+      [-schFile=SCHfilename] [-skiplines=integer]
+      [-delimiters=start=character,end=character] [-separator=character]
+      [-columnData=name=string,type=string[,units=string] ...]
+      [-uselabels[=units]] [-majorOrder=<row|column>]
+    \end{verbatim}
+  \item {\bf files:}
+    {\em CSVfile} is a comma-separated-values file. Such a file consists of M rows each containing
+    N items of data, forming N columns. The items on each row are separated by commas (or by a
+    specified separator). The items may also be delimited by double quotation marks (or by specified
+    delimiters).
 
-\begin{itemize}
-\item {\bf description:} Converts Comma-Separated-Values (CSV) data and similar data to SDDS. CSV data
-is commonly used by spreadsheet programs.
-\item {\bf example:} 
-\begin{flushleft}{\tt
-csv2sdds data.csv -columnData=name=x,type=float,units=m -columnData=name=Name,type=string data.sdds
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-csv2sdds [{\em CSVfile}] [{\em SDDSfile}] [-pipe[=in][,out]] 
-[-asciiOutput] [-spanLines] [-maxRows={\em integer}]
-[-schFile={\em SCHfilename}] [-skiplines={\em integer}]
-[-delimiters=start={\em character},end={\em character}] [-separator={\em character}] 
-[-columnData=name={\em string},type={\em string}[,units={\em string}] ...]
-[-uselabels[=units]] [-majorOrder=<row|column>]
-}\end{flushleft}
-\item {\bf files: }
-{\em CSVfile} is a comma-separated-values file.  Such a file consists of M rows each containing
-N items of data, forming N columns.  The items on each row are separated by commas (or by a 
-specified separator).  The items may also be delimited by double quotation marks (or by specified
-delimiters).
+    {\em SDDSfile} is the SDDS output that is created.
 
-{\em SDDSfile} is the SDDS output that is created.
-
-The optional {\em SCHfilename} is a way of specifying the column headers.  The file is
-expected to contain a series of lines of the form {\em tag}={\em valueList}, where {\em
-valueList} is a comma-separated list of one or more items.  Lines not matching this format are
-ignored.  The {\em tag} may be one of the following:
-\begin{itemize}
-\item {\tt Filetype}: optional.  If given, must have {\em valueList} of {\tt Delimited}.
-\item {\tt Delimiter}: optional.  If given, the first character of {\em valueList} is used for
-the start and end delimiters.
-\item {\tt Separator}: optional.  If given, the first character of {\em valueList} is used for
-the separator.
-\item {\tt CharSet}: optional.  If given, must have {\em valueList} of {\tt ascii}.
-\item {\tt Field}{\em N}, where {\em N} is an integer: one or more required.  The integers {\em N}
-must be consecutive.  The first item in {\em valueList} is taken as the column name.  
-The second item is interpreted as the data type.  At present, only the {\tt Float} data type is actually
-interpreted as anything other than character data.  All others are
-treated as character string types.  If needed, {\tt sddsprocess} may be used to process the
-resulting string columns to produce other data types.
-\end{itemize}
-
-\item {\bf switches:}
+    The optional {\em SCHfilename} is a way of specifying the column headers. The file is
+    expected to contain a series of lines of the form {\em tag}={\em valueList}, where {\em
+    valueList} is a comma-separated list of one or more items. Lines not matching this format are
+    ignored. The {\em tag} may be one of the following:
     \begin{itemize}
-    \item {\tt -pipe[=in][,out]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -asciiOutput} --- Specifies ASCII output.
-    \item {\tt -spanLines} --- Specifies that the program should ignore line breaks in parsing the 
+      \item \verb|Filetype|: optional. If given, must have {\em valueList} of \verb|Delimited|.
+      \item \verb|Delimiter|: optional. If given, the first character of {\em valueList} is used for
+        the start and end delimiters.
+      \item \verb|Separator|: optional. If given, the first character of {\em valueList} is used for
+        the separator.
+      \item \verb|CharSet|: optional. If given, must have {\em valueList} of \verb|ascii|.
+      \item \verb|FieldN|, where {\em N} is an integer: one or more required. The integers {\em N}
+        must be consecutive. The first item in {\em valueList} is taken as the column name.
+        The second item is interpreted as the data type. At present, only the \verb|Float| data type is actually
+        interpreted as anything other than character data. All others are
+        treated as character string types. If needed, \verb|sddsprocess| may be used to process the
+        resulting string columns to produce other data types.
+    \end{itemize}
+  \item {\bf switches:}
+    \begin{itemize}
+      \item \verb|-pipe[=in][,out]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-asciiOutput| --- Specifies ASCII output.
+      \item \verb|-spanLines| --- Specifies that the program should ignore line breaks in parsing the
         input data.
-    \item {\tt -maxRows={\em integer}} --- The maximum number of rows expected.  This allows
+      \item \verb|-maxRows=integer| --- The maximum number of rows expected. This allows
         optimization of the program, but isn't essential.
-    \item {\tt -schFile={\em filename} } --- Specifies the name of a SCH file specifying the
-        format of the CSV file.  I don't know what SCH stands for, but apparently some PC
+      \item \verb|-schFile=filename| --- Specifies the name of a SCH file specifying the
+        format of the CSV file. I don't know what SCH stands for, but apparently some PC
         programs generate such files.
-    \item {\tt -skiplines={\em integer}} --- Skip the specified number of lines at the beginning 
+      \item \verb|-skiplines=integer| --- Skip the specified number of lines at the beginning
         of the input file.
-    \item {\tt -delimiters=start={\em character},end={\em character}} --- Specifies start and end
-        delimiters for data.  The default is to use a double-quotation mark for both.
-    \item {\tt -separator={\em character}} --- Specifies separator to use.  The default is a comma.
-    \item {\tt -columnData=name={\em string},type={\em string}[,units={\em string}] } --- 
+      \item \verb|-delimiters=start=character,end=character| --- Specifies start and end
+        delimiters for data. The default is to use a double-quotation mark for both.
+      \item \verb|-separator=character| --- Specifies separator to use. The default is a comma.
+      \item \verb|-columnData=name=string,type=string[,units=string]| ---
         Specifies the name and data
-        type of a column of data in the CSV file.  One of these options should be given for each
-        column in the input file, in the same order as the columns appear in that file. 
-    \item {\tt -uselabels[=units]} --- The column names and optionally the units are defined in the
+        type of a column of data in the CSV file. One of these options should be given for each
+        column in the input file, in the same order as the columns appear in that file.
+      \item \verb|-uselabels[=units]| --- The column names and optionally the units are defined in the
         file prior to the data.
-    \item {\tt -majorOrder=<row|column>} --- Writes output file in row or column major order.
+      \item \verb!-majorOrder=<row|column>! --- Writes output file in row or column major order.
     \end{itemize}
-\item {\bf see also:}
+  \item {\bf see also:}
     \begin{itemize}
-    \item \progref{sdds2stream}
-    \item \progref{sddsprocess}
-    \item \progref{plaindata2sdds}
+      \item \progref{sdds2stream}
+      \item \progref{sddsprocess}
+      \item \progref{plaindata2sdds}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \item {\bf author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

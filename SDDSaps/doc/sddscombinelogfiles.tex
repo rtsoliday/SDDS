@@ -1,21 +1,19 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddscombinelogfiles}
-\label{sddscombinelogfiles}
-
-\begin{itemize}
-\item {\bf description:} Combines one-PV-per-file SDDS log files into a single file, retaining only timestamps common to all inputs. Supports pipe output and overwriting existing files.
-\item {\bf examples:}
-\begin{flushleft}{\tt
-sddscombinelogfiles log1.sdds log2.sdds combined.sdds -overwrite\\
-sddscombinelogfiles log*.sdds merged.sdds
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddscombinelogfiles [{\em SDDSinputfilelist}] [{\em SDDSoutputfile}] [-pipe[=output]] [-overwrite]
-}\end{flushleft}
-\item {\bf author:} R. Soliday and L. Emery, ANL/APS.
-\end{itemize}
-
+\begin{sddsprog}{sddscombinelogfiles}
+  \item \textbf{description:} \verb|sddscombinelogfiles| combines one-PV-per-file SDDS log files into a single file, retaining only timestamps common to all inputs. Supports pipe output and overwriting existing files.
+  \item \textbf{examples:}
+  \begin{verbatim}
+  sddscombinelogfiles log1.sdds log2.sdds combined.sdds -overwrite
+  sddscombinelogfiles log*.sdds merged.sdds
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+  sddscombinelogfiles [SDDSinputfilelist] [SDDSoutputfile] [-pipe[=output]] [-overwrite]
+  \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe[=output]| --- Writes output to a pipe.
+      \item \verb|-overwrite| --- Replaces the output file if it exists.
+    \end{itemize}
+  \item \textbf{files:} Input is one or more SDDS log files containing a single process variable each. Output is a single SDDS file with only timestamps common to all inputs.
+  \item \textbf{author:} R. Soliday and L. Emery, ANL/APS.
+\end{sddsprog}

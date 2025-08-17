@@ -1,55 +1,49 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{image2sdds}
-\label{image2sdds}
+\begin{sddsprog}{image2sdds}
+  \item \textbf{description:} \verb|image2sdds| converts raw binary image files to SDDS format. It can
+    produce single column or multi-column image files and supports both
+    binary and ASCII output. Options are provided to transpose the image,
+    write data as a 2D array, and generate headers compatible with
+    \verb|sddscontour|.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    image2sdds camera.raw image.sdds -2d -xdim 640 -ydim 480 -xmax 10 -ymax 10
+    image2sdds camera.raw image.sdds -multicolumnmode -transpose -ascii
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    image2sdds <IMAGE infile> <SDDS outfile> [-2d] [-ascii] [-contour]
+        [-multicolumnmode] [-transpose] [-xdim value] [-ydim value]
+        [-xmin value] [-xmax value] [-ymin value]
+        [-ymax value] [-debug] [-help]
+    \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+    \item {\tt -2d} --- Write the image as a single SDDS 2D array. May not be used
+      with \verb|-multicolumnmode|.
+    \item {\tt -ascii} --- Produce ASCII SDDS output rather than binary.
+    \item {\tt -contour} --- Add parameters expected by \progref{sddscontour}.
+    \item {\tt -multicolumnmode} --- Write image data in multiple columns. Incompatible
+      with \verb|-2d|.
+    \item {\tt -transpose} --- Transpose the image about its diagonal prior to output.
+    \item {\tt -xdim {\em value}} --- Number of pixels in the horizontal dimension
+      (default {\tt 482}).
+    \item {\tt -ydim {\em value}} --- Number of pixels in the vertical dimension
+      (default {\tt 512}).
+    \item {\tt -xmin {\em value}} --- Minimum x value for the image data (default 0).
+    \item {\tt -xmax {\em value}} --- Maximum x value for the image data. If not given
+      the spacing is determined from {\tt -xdim}.
+    \item {\tt -ymin {\em value}} --- Minimum y value for the image data (default 0).
+    \item {\tt -ymax {\em value}} --- Maximum y value for the image data. If not given
+      the spacing is determined from {\tt -ydim}.
+    \item {\tt -debug {\em level}} --- Enable debugging output at the specified level.
+    \item {\tt -help} or {\tt -?} --- Print command usage information.
+    \end{itemize}
+  \item \textbf{see also:}
+    \begin{itemize}
+    \item \progref{sddscontour}
+    \item \progref{sddsimageconvert}
+    \item \progref{sddsimageprofiles}
+    \end{itemize}
+  \item \textbf{author:} J. Stein, J. Anderson, R. Soliday, ANL/APS.
+\end{sddsprog}
 
-\begin{itemize}
-\item {\bf description:} \verb|image2sdds| converts raw binary image files to SDDS format. It can
-  produce single column or multi-column image files and supports both
-  binary and ASCII output.  Options are provided to transpose the image,
-  write data as a 2D array, and generate headers compatible with
-  \verb|sddscontour|.
-\item {\bf example:}
-\begin{flushleft}{\tt
-image2sdds camera.raw image.sdds -2d -xdim 640 -ydim 480 -xmax 10 -ymax 10\\
-image2sdds camera.raw image.sdds -multicolumnmode -transpose -ascii
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-image2sdds <IMAGE infile> <SDDS outfile> [-2d] [-ascii] [-contour]\\
-    {}[-multicolumnmode] [-transpose] [-xdim {\em value}] [-ydim {\em value}]\\
-    {}[-xmin {\em value}] [-xmax {\em value}] [-ymin {\em value}]\\
-    {}[-ymax {\em value}] [-debug] [-help]
-}\end{flushleft}
-\item {\bf switches:}
-  \begin{itemize}
-  \item {\tt -2d} --- Write the image as a single SDDS 2D array. May not be used
-    with \verb|-multicolumnmode|.
-  \item {\tt -ascii} --- Produce ASCII SDDS output rather than binary.
-  \item {\tt -contour} --- Add parameters expected by \progref{sddscontour}.
-  \item {\tt -multicolumnmode} --- Write image data in multiple columns. Incompatible
-    with \verb|-2d|.
-  \item {\tt -transpose} --- Transpose the image about its diagonal prior to output.
-  \item {\tt -xdim {\em value}} --- Number of pixels in the horizontal dimension
-    (default {\tt 482}).
-  \item {\tt -ydim {\em value}} --- Number of pixels in the vertical dimension
-    (default {\tt 512}).
-  \item {\tt -xmin {\em value}} --- Minimum x value for the image data (default 0).
-  \item {\tt -xmax {\em value}} --- Maximum x value for the image data. If not given
-    the spacing is determined from {\tt -xdim}.
-  \item {\tt -ymin {\em value}} --- Minimum y value for the image data (default 0).
-  \item {\tt -ymax {\em value}} --- Maximum y value for the image data. If not given
-    the spacing is determined from {\tt -ydim}.
-  \item {\tt -debug {\em level}} --- Enable debugging output at the specified level.
-  \item {\tt -help} or {\tt -?} --- Print command usage information.
-  \end{itemize}
-\item {\bf see also:}
-  \begin{itemize}
-  \item \progref{sddscontour}
-  \item \progref{sddsimageconvert}
-  \item \progref{sddsimageprofiles}
-  \end{itemize}
-\item {\bf author:} J. Stein, J. Anderson, R. Soliday, ANL/APS.
-\end{itemize}

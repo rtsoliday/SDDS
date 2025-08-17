@@ -1,50 +1,33 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
-\subsection{sdds2spreadsheet} 
-\label{sdds2spreadsheet} 
- 
-\begin{itemize} 
-\item {\bf description:} 
-\verb|sdds2spreadsheet| converts an SDDS file to a file that can be read into most spreadsheet programs. 
-You need to consult your particular spreadsheet program to see how it reads ASCII files.  For Wingz, the 
-conversion is automatic.  Excel 5.0 will bring up its Text Import Wizard. 
- 
-Notes:  
-\begin{enumerate} 
-\item Excel lines must be shorter than 255 characters.   
-The Wingz delimiter can only be \verb|\t|. 
-\item The program \verb|sddsprintout| with the \verb|-spreadSheet|  
-option is intended to replace the function of \verb|sdds2spreadsheet|. 
-It allows greater control of what data is output and how it is 
-formatted. 
-\end{enumerate} 
- 
-\item {\bf examples:}  
-Convert a snapshot to a Wingz spreadsheet. 
-\begin{flushleft}{\tt 
-sdds2spreadsheet par.050695.snap par.050695.wkz 
-}\end{flushleft} 
-Convert a snapshot to an Excel text file. 
-\begin{flushleft}{\tt 
-sdds2spreadsheet par.050695.snap p050695.txt 
-}\end{flushleft} 
-\item {\bf synopsis:}  
-\begin{flushleft}{\tt 
-sdds2spreadsheet [{\em SDDSfilename}] [{\em outputname}]  
-  [-pipe[=input][,output]] [-delimiter={\em string}] 
- [-all] [-verbose] 
-}\end{flushleft} 
-\item {\bf switches:} 
-    \begin{itemize} 
-    \item \verb|pipe| --- The standard SDDS Toolkit pipe option. 
-    \item \verb|delimiter| --- Delimiter string (Default is "\t"). 
-    \item \verb|all| --- Write parameter, column, and array information.
-               (Default is data and parameters only) 
-    \item \verb|verbose| --- Write header information to the terminal like sddsquery. 
-    \end{itemize} 
-\item {\bf author:} K. Evans, Jr., ANL/APS. 
-\end{itemize} 
- 
- 
- 
+\begin{sddsprog}{sdds2spreadsheet}
+\item \textbf{description:} \verb|sdds2spreadsheet| converts an SDDS file to a file that can be read into most spreadsheet programs. You need to consult your particular spreadsheet program to see how it reads ASCII files. For Wingz, the conversion is automatic. Excel 5.0 will bring up its Text Import Wizard.
+
+  Notes:
+  \begin{enumerate}
+    \item Excel lines must be shorter than 255 characters. The Wingz delimiter can only be \verb|\t|.
+    \item The program \verb|sddsprintout| with the \verb|-spreadSheet| option is intended to replace the function of \verb|sdds2spreadsheet|. It allows greater control of what data is output and how it is formatted.
+  \end{enumerate}
+
+\item \textbf{examples:}
+  \begin{verbatim}
+sdds2spreadsheet par.050695.snap par.050695.wkz
+sdds2spreadsheet par.050695.snap p050695.txt
+  \end{verbatim}
+
+\item \textbf{synopsis:}
+  \begin{verbatim}
+sdds2spreadsheet [SDDSfilename] [outputname] [-pipe[=input][,output]] [-delimiter=string] [-all] [-verbose]
+  \end{verbatim}
+
+\item \textbf{switches:}
+  \begin{itemize}
+    \item \verb|pipe| --- The standard SDDS Toolkit pipe option.
+    \item \verb|delimiter| --- Delimiter string (Default is \verb|\t|).
+    \item \verb|all| --- Write parameter, column, and array information (Default is data and parameters only).
+    \item \verb|verbose| --- Write header information to the terminal like sddsquery.
+  \end{itemize}
+
+\item \textbf{see also:} \progref{sddsprintout}
+
+\item \textbf{author:} K. Evans, Jr., ANL/APS.
+\end{sddsprog}
+

@@ -1,62 +1,47 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{plaindata2sdds}
-\label{plaindata2sdds}
-
-\begin{itemize}
-\item {\bf description:} Converts plain data files with a simple format to SDDS.
-\item {\bf example:} 
-\begin{flushleft}{\tt
+\begin{sddsprog}{plaindata2sdds}
+  \item \textbf{description:} Converts plain data files with a simple format to SDDS.
+  \item \textbf{examples:}
+    \begin{verbatim}
 plaindata2sdds data.input data.output -inputMode=ascii "-separator= " -parameter=time,long -column=x,double -column=y,double
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-plaindata2sdds [{\em Inputfile}] [{\em Outputfile}] [-pipe[=in][,out]] 
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+plaindata2sdds [Inputfile] [Outputfile] [-pipe[=in][,out]]
 [-inputMode=<ascii|binary>]
 [-outputMode=<ascii|binary>]
-[-separator={\em character}]
-[-commentCharacters={\em characters}]
+[-separator=character]
+[-commentCharacters=characters]
 [-noRowCount]
 [-order=<rowMajor|columnMajor>]
-[-parameter={\em name},{\em type}[,units={\em string}][,desc={\em string}][,symbol={\em string}] ...]
-[-column={\em name},{\em type}[,units={\em string}][,desc={\em string}][,symbol={\em string}] ...]
-[-skipcolumn={\em type}]
+[-parameter=name,type[,units=string][,desc=string][,symbol=string] ...]
+[-column=name,type[,units=string][,desc=string][,symbol=string] ...]
+[-skipcolumn=type]
 [-nowarnings]
 [-majorOrder=<row|column>]
-}\end{flushleft}
-\item {\bf files: }
-{\em Inputfile} is a file that is similar to SDDS files in that it contains parameter and column data. However this file does not contain SDDS header information. The column data does not need to be preceded by a row count but it is recommended. Also the column data can be separated by a user supplied character. White space on either side of the separator is allowed. Binary plaindata files are also allowed.
-
-{\em Outputfile} is the SDDS output that is created.
-
-\item {\bf switches:}
+    \end{verbatim}
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe[=in][,out]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -inputMode=<ascii|binary>} --- The plain data file can be read in ascii or binary format.
-    \item {\tt -outputMode=<ascii|binary>} --- The SDDS data file can be written in ascii or binary format.
-    \item {\tt -separator={\em character}} --- In ascii mode the columns of the plain data file are separated 
-	by the given character.
-    \item {\tt -commentCharacters={\em characters}} --- In ascii mode the rows beginning with any comment characters are ignored.
-    \item {\tt -noRowCount} --- The row count is not included prior to the beginning of the column data. 
-	If the plain data file is a binary file then the row count must be included.
-    \item {\tt -order=<rowMajor|columnMajor>} --- Row major order is the default. Here each row of the 
-	plain data file consists of one element from each column. In column major order each column 
-	is located entirely on one row.
-    \item {\tt -parameter={\em name},{\em type}[,units={\em string}][,description={\em string}][,symbol={\em string}]} --- 
-	Add this option for each parameter in the plain data file.
-    \item {\tt -column={\em name},{\em type}[,units={\em string}][,description={\em string}][,symbol={\em string}]} --- 
-	Add this option for each column in the plain data file.
-    \item {\tt -skipcolumn={\em type}} --- Skip a column in the plain data file. It may be used multiple times.
-    \item {\tt -nowarnings} --- Do not print warning messages.
-    \item {\tt -majorOrder=<row|column>} --- Writes output file in row or column major order.
+      \item {\tt -pipe[=in][,out]} --- The standard SDDS Toolkit pipe option.
+      \item {\tt -inputMode=<ascii|binary>} --- The plain data file can be read in ascii or binary format.
+      \item {\tt -outputMode=<ascii|binary>} --- The SDDS data file can be written in ascii or binary format.
+      \item {\tt -separator={\em character}} --- In ascii mode the columns of the plain data file are separated by the given character.
+      \item {\tt -commentCharacters={\em characters}} --- In ascii mode the rows beginning with any comment characters are ignored.
+      \item {\tt -noRowCount} --- The row count is not included prior to the beginning of the column data. If the plain data file is a binary file then the row count must be included.
+      \item {\tt -order=<rowMajor|columnMajor>} --- Row major order is the default. Here each row of the plain data file consists of one element from each column. In column major order each column is located entirely on one row.
+      \item {\tt -parameter={\em name},{\em type}[,units={\em string}][,description={\em string}][,symbol={\em string}]} --- Add this option for each parameter in the plain data file.
+      \item {\tt -column={\em name},{\em type}[,units={\em string}][,description={\em string}][,symbol={\em string}]} --- Add this option for each column in the plain data file.
+      \item {\tt -skipcolumn={\em type}} --- Skip a column in the plain data file. It may be used multiple times.
+      \item {\tt -nowarnings} --- Do not print warning messages.
+      \item {\tt -majorOrder=<row|column>} --- Writes output file in row or column major order.
     \end{itemize}
-\item {\bf see also:}
-    \begin{itemize}
-    \item \progref{sdds2plaindata}
-    \item \progref{csv2sdds}
-    \end{itemize}
-\item {\bf author:} R. Soliday, ANL/APS.
-\end{itemize}
+  \item \textbf{files:}
+    {\em Inputfile} is a file that is similar to SDDS files in that it contains parameter and column data. However this file does not contain SDDS header information. The column data does not need to be preceded by a row count but it is recommended. Also the column data can be separated by a user supplied character. White space on either side of the separator is allowed. Binary plaindata files are also allowed.
 
+    {\em Outputfile} is the SDDS output that is created.
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \progref{sdds2plaindata}
+      \item \progref{csv2sdds}
+    \end{itemize}
+  \item \textbf{author:} R. Soliday, ANL/APS.
+\end{sddsprog}

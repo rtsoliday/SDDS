@@ -1,37 +1,24 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sdds2tiff}
-\label{sdds2tiff}
+\begin{sddsprog}{sdds2tiff}
+  \item \textbf{description:} Converts an SDDS file to one or more TIFF images. Each page of the input file becomes a separate image named \verb|<output>.####|. Two styles of input are supported: a single column file with parameters \verb|Variable1Name| and \verb|Variable2Name| (plus dimension parameters), or a multi-column file containing columns with a common prefix such as \verb|Line1|, \verb|Line2|, and so on.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    sdds2tiff image.sdds image -fromPage=2 -toPage=5 -columnPrefix=Img -maxContrast
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    sdds2tiff [input] [output] [-pipe[=in]] [-fromPage=number]
+      [-toPage=number] [-columnPrefix=prefix] [-maxContrast] [-16bit]
+    \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe[=in]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-fromPage=number| --- Begin conversion with the specified page of the input file.
+      \item \verb|-toPage=number| --- Stop conversion after the specified page of the input file.
+      \item \verb|-columnPrefix=prefix| --- Prefix used to identify columns that contain image lines when the input has multiple columns. The default is \verb|Line|.
+      \item \verb|-maxContrast| --- Scale the output so the largest data value maps to the maximum gray level (255 or 65535).
+      \item \verb|-16bit| --- Write 16-bit TIFF images rather than 8-bit images.
+    \end{itemize}
+  \item \textbf{see also:} \progref{tiff2sdds}.
+  \item \textbf{author:} R. Soliday, ANL/APS.
+\end{sddsprog}
 
-\begin{itemize}
-\item {\bf description:} Converts an SDDS file to one or more TIFF images.  Each page of the input
-file becomes a separate image named {\tt <output>.\#\#\#\#}.  Two styles of input are
-supported: a single column file with {\tt Variable1Name} and {\tt Variable2Name}
-parameters (plus dimension parameters), or a multi-column file containing
-columns with a common prefix such as {\tt Line1}, {\tt Line2}, and so on.
-\item {\bf example:}
-\begin{flushleft}{\tt
-sdds2tiff image.sdds image -fromPage=2 -toPage=5 -columnPrefix=Img -maxContrast
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sdds2tiff [{\em input}] [{\em output}] [-pipe[=in]] [-fromPage={\em number}]\\
-  {}[-toPage={\em number}] [-columnPrefix={\em prefix}] [-maxContrast] [-16bit]
-}\end{flushleft}
-\item {\bf switches:}
-  \begin{itemize}
-  \item {\tt -pipe[=in]} --- The standard SDDS Toolkit pipe option.
-  \item {\tt -fromPage={\em number}} --- Begin conversion with the specified page
-    of the input file.
-  \item {\tt -toPage={\em number}} --- Stop conversion after the specified page
-    of the input file.
-  \item {\tt -columnPrefix={\em prefix}} --- Prefix used to identify columns that
-    contain image lines when the input has multiple columns.  The default is
-    {\tt Line}.
-  \item {\tt -maxContrast} --- Scale the output so the largest data value maps to
-    the maximum gray level (255 or 65535).
-  \item {\tt -16bit} --- Write 16-bit TIFF images rather than 8-bit images.
-  \end{itemize}
-\item {\bf author:} R. Soliday, ANL/APS.
-\end{itemize}
