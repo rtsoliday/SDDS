@@ -7,30 +7,27 @@ This directory contains LaTeX source files describing each SDDS command line too
 - File names use the command name, e.g. `sddsplot.tex`.
 
 ## Structure
-Each file begins with the new-page preamble and a subsection heading:
+Each program is documented using the `sddsprog` environment defined in `sddstoolkit.sty`:
 
 ```
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{<toolName>}
-\label{<toolName>}
-
-\begin{itemize}
+\begin{sddsprog}{<toolName>}
+\item \textbf{description:} one or more paragraphs describing the program.
+\item \textbf{examples:}
+\begin{verbatim}
+command examples...
+\end{verbatim}
+\item \textbf{synopsis:}
+\begin{verbatim}
+usage: <toolName> [options]
+\end{verbatim}
+\item \textbf{switches:} optional `itemize` block describing command-line switches.
+\item \textbf{files:} optional block describing input or output files.
+\item \textbf{see also:} optional references using `\progref{otherTool}`.
+\item \textbf{author:} Name, ANL/APS.
+\end{sddsprog}
 ```
 
-Within the `itemize` block include, in order:
-1. `\item {\bf description:}` – One or more paragraphs describing the program.
-2. `\item {\bf examples:}` – Example commands wrapped in `\begin{flushleft}{\tt ... }\end{flushleft}` with line breaks using `\\`.
-3. `\item {\bf synopsis:}` – Usage text in a `flushleft` block.
-4. Optional items such as `\item {\bf files:}`, `\item {\bf switches:}`, and `\item {\bf see also:}`. Cross references use `\progref{otherTool}`.
-5. `\item {\bf author:} Name, ANL/APS.`
-
-End each document with:
-
-```
-\end{itemize}
-```
+Use the `verbatim` environment for both examples and synopsis sections to ensure consistent formatting.
 
 ## Formatting
 - Indent using two spaces; do not use tabs.
@@ -45,7 +42,8 @@ apt-get update
 apt-get install -y --no-install-recommends \
   texlive-base texlive-latex-base texlive-latex-extra \
   texlive-fonts-recommended texlive-plain-generic \
-  texlive-extra-utils tex4ht ghostscript
+  texlive-extra-utils tex4ht ghostscript latex2html \
+  texlive-font-utils
 ```
 
 If an error related to `ca-certificates-java` appears, remove the OpenJDK packages:
