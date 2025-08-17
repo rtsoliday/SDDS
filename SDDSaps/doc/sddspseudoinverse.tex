@@ -1,161 +1,63 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
+\begin{sddsprog}{sddspseudoinverse}
+  \item {\bf description:} \verb|sddspseudoinverse| views the numerical tabular data of the input file as though it formed a matrix and produces an output file containing the pseudo-inverse of this matrix. At present the pseudo-inversion is done using a singular value decomposition. Other methods may be made available in the future.
 
-%
-% Substitute the program name for <programName>
-%
-\subsection{sddspseudoinverse}
-\label{sddspseudoinverse}
+  Command line options specify the number of singular values to be used in the inversion process.
 
-\begin{itemize}
-\item {\bf description:}
-%
-% Insert text of description (typicall a paragraph) here.
-%
-\verb|sddspseudoinverse| views the numerical tabular data of the input file
-as though it formed a matrix, and produces an output
-file with data corresponding to the pseudo-inverse of the input
-file matrix. At present the pseudo-inversion is done using
-a singular value decomposition. Other methods may be made available in the future.
+  The column names for the output file are generated either from the data in a selected string column in the input file, from the value of the command line option \verb|-root|, or from an internal default.
 
-Command line options specifies the number of singular values to be
-used in the inversion process.
+  The column names of the input file are collected and made into a string column in the output file.
 
-The column names for the output file are generated either from the data in
-a selected string column in the input file,
-from the value of the command line option -root,
-or from an internal default.
+  \item {\bf examples:}
+    \begin{verbatim}
+    sddspseudoinverse LTP.R12 LTP.InvR12
+    \end{verbatim}
+  \item {\bf synopsis:}
+    \begin{verbatim}
+    sddspseudoinverse [<input>] [<output>] [-pipe[=input][,output]]
+      [{-minimumSingularValueRatio=<value> | -largestSingularValues=<number>}]
+      [-smallestSingularValues=<number>]
+      [-deleteVectors=<list of vectors separated by comma>]
+      [-economy] [-printPackage]
+      [-oldColumnNames=<string>] [{-root=<string> [-digits=<integer>] |
+      -newColumnNames=<column>}] [-sFile=<file>[,matrix]] [-uMatrix=<file>] [-vMatrix=<file>]
+      [-weights=<file>,name=<columnname>,value=<columnname>]
+      [-reconstruct=<file>] [-symbol=<string>] [-ascii] [-verbose] [-noWarnings]
+      [-multiplyMatrix=<file>[,invert]]
+    \end{verbatim}
+  \item {\bf files:}
+    The input file contains the data for the matrix to be inverted. The output file contains the data for the inverted matrix. If only one file is specified, then the input file is overwritten by the output.
 
-The column names of the input file are collected and made into
-a string column in the output file.
+    Multiple data pages of the input file will be processed and written to the output file if all the data pages of the input file have the same number of rows. The processing will stop at the first data page which does not have the same number of rows as that of the first page.
 
-\item {\bf examples:} 
-%
-% Insert text of examples in this section.  Examples should be simple and
-% should be preceeded by a brief description.  Wrap the commands for each
-% example in the following construct:
-% 
-%
-The matrix of $R_{12}$ values for some accelerator beamline called LTP
-is stored in file LTP.R12.
-The pseudo-inverse (useful for trajectory correction), named
-LTP.InvR12, is created with:
+    If applicable, the string column selected to generate column names for the output file is assumed to be the same in all input data sets. The string columns of only the first data set are read.
 
-\begin{flushleft}{\tt
-sddspseudoinverse LTP.R12 LTP.InvR12
-}\end{flushleft}
-\item {\bf synopsis:} 
-%
-% Insert usage message here:
-%
-\begin{flushleft}{\tt
-sddspseudoinverse [<input>] [<output>] [-pipe=[input][,output]]
-    [{-minimumSingularValueRatio=<value> | -largestSingularValues=<number>}] 
-    [-smallestSingularValues=<number>] 
-    [-deleteVectors=<list of vectors separated by comma>] 
-    [-economy] [-printPackage] 
-    [-oldColumnNames=<string>] [{-root=<string> [-digits=<integer>] | 
-    -newColumnNames=<column>}] [-sFile=<file>[,matrix]] [-uMatrix=<file>] [-vMatrix=<file>] 
-    [-weights=<file>,name=<columnname>,value=<columnname>]
-    [-reconstruct=<file>] [-symbol=<string>] [-ascii] [-verbose] [-noWarnings]
-    [-multiplyMatrix=<file>[,invert]]
-}\end{flushleft}
-\item {\bf files:}
-% Describe the files that are used and produced
-The input file contains the data for the matrix to be inverted. The output file
-contains the data for the inverted matrix. If only one file is specified,
-then the input file is overwritten by the output.
-
-Multiple data pages of the input file will be processed and written to the
-outptu file if all the data pages of the input file
-have the same number of rows.
-The processing will stop at the first data page
-which doesn't have the same number of rows as that of the first page.
-If applicable, the string column selected to generate column names for the
-output file is assumed to be the same in all input data sets. The
-string columns of only the first data set are read.
-\item {\bf switches:}
-%
-% Describe the switches that are available
-%
+  \item {\bf switches:}
     \begin{itemize}
-%
-%   \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
-%
-    \item {\tt  -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt  -minimumSingularValueRatio={\em realValue}} ---  Used to remove
-        small singular values from the calculation. The smallest singular value retained
-        for the inverse calculation
-        is determined by multiplying this ratio value with the largest singular
-        value of the input matrix.
-    \item {\tt  -largestSingularValues={\em integer}} ---  Used to remove
-        small singular values from the calculation. The largest 
-        {\tt {\em integer}} singular values are kept.
-    \item {\tt -deleteVectors}  -deleteVectors=n1,n2,n3,... which will set the inverse singular values 
-                  of modes n1,n2,n3, ect to zero. 
-               The order in which the SV removal options are processed is 
-               minimumSingularValueRatio, largestSingularValues and then deleteVectors.
-    \item {\tt -economy} --- If given,  only the first min(m,n) columns for the U matrix are calculated or returned 
-               where m is the number of rows and n is the number of columns. This 
-               can potentially reduce the computation time with no loss of useful information.
-               economy option is highly recommended for most pratical applications since it uses
-               less memory and runs faster. If economy option is not give, a full m by m U matrix 
-               will be internally computated no matter whether -uMatrix is provided. 
-    \item {\tt  -oldColumnNames={\em string}} --- 
-        A string column  of name {\tt {\em string}} is created in the output file, containing
-        the column names of the input files as string data.
-        If this option is not present, then the default name of ``OldColumnNames''
-        is used for the string column.
-    \item {\tt -multiplyMatrix={\em file}[,invert]} --- if invert is not provided,  then the output matrix is the inverse of the input
-               matrix multiplying by this matrix; otherwise, the output matrix is the product of 
-               multiply matrix and the inverse of the input matrix.
-    \item {\tt  -root={\em string}} ---
-        A string used to generate columns names for the output file data. 
-        The first data column is named ``{\tt {\em string}000}'',
-        the second, ``{\tt {\em string}001}'', etc.
-    \item {\tt  -digits={\em integer}} --- minimum number of digits used in the number 
-        appended to {\tt {\em root}} of the output file column names. (Default value is 3).
-    \item {\tt -sFile={\em file}} --- writes the singular values vector to file.
-    \item {\tt  -newColumnNames={\em string}} --- Specifies a string column
-        of the input file which will be used to define column names
-        of the output file.
-    \item {\tt  -umatrix={\em file}} --- writes the $u$ column-orthogonal matrix 
-       to a file. The SVD decomposition follows the convention 
-       $A = u S v^T$. The ``transformed'' $x$ are $v^T x$, and 
-        the ``transformed'' $y$ are $u^T y$. 
-    \item {\tt  -vmatrix={\em file}} --- writes the $v$ column-orthogonal matrix to a file.
-    \item {\tt  -removeDCVectors} --- Removes the eigenvectors which have an overall DC component.
-    \item {\tt  -weights={\em file},name={\em columnName},value={\em columnName}]} 
-        --- Specifies a file which contains weights for each of 
-        the rows of the matrix, thus giving different weights for solving the 
-        linear equations of the pseudoinverse problem.
-        The equation that is solved is $wAx = wy$ where $w$ is the weight vector
-        turned into a diagonal matrix and $A$ is the input matrix.
-        The matrix solution returned is $(wA)^I w$ where $()^I$ means taking 
-        the pseudoinverse. The u matrix now has a different interpretation:
-        the ``transformed'' $x$ are $v^T x$, as before, but the 
-         ``transformed'' $y$ are $u^T w y$.
-    \item {\tt  -symbol={\em string}} --- The string for the symbol 
-   field of data column definitions.
-    \item {\tt -reconstruct} --- speficy a file which will reconstruct the original matrix with only the
-               singular values retained in the inversion.
-    \item {\tt -printPackage} --- prints out the linear algebra package that was compiled.
-    \item {\tt  -ascii}  --- Produces an output in ascii mode. Default is binary.
-    \item {\tt  -verbose} --- Prints out incidental information to stderr.
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-minimumSingularValueRatio=value| --- Used to remove small singular values from the calculation. The smallest singular value retained for the inverse calculation is determined by multiplying this ratio value with the largest singular value of the input matrix.
+      \item \verb|-largestSingularValues=number| --- Used to remove small singular values from the calculation. The largest \verb|number| singular values are kept.
+      \item \verb|-deleteVectors=n1,n2,n3,...| --- Sets the inverse singular values of modes n1, n2, n3, etc. to zero. The order in which the singular value removal options are processed is \verb|minimumSingularValueRatio|, \verb|largestSingularValues| and then \verb|deleteVectors|.
+      \item \verb|-economy| --- If given, only the first \verb|min(m,n)| columns for the \verb|U| matrix are calculated or returned, where \verb|m| is the number of rows and \verb|n| is the number of columns. This can potentially reduce computation time with no loss of useful information. The \verb|economy| option is highly recommended for most practical applications since it uses less memory and runs faster. If \verb|economy| is not given, a full \verb|m| by \verb|m| \verb|U| matrix will be internally computed whether or not \verb|-uMatrix| is provided.
+      \item \verb|-oldColumnNames=string| --- A string column of name {\tt string} is created in the output file containing the column names of the input files as string data. If this option is not present, then the default name of \verb|OldColumnNames| is used for the string column.
+      \item \verb|-multiplyMatrix=file[,invert]| --- If \verb|invert| is not provided, then the output matrix is the inverse of the input matrix multiplied by this matrix. Otherwise, the output matrix is the product of the multiply matrix and the inverse of the input matrix.
+      \item \verb|-root=string| --- A string used to generate column names for the output file data. The first data column is named \verb|string000|, the second \verb|string001|, etc.
+      \item \verb|-digits=integer| --- Minimum number of digits used in the number appended to \verb|root| of the output file column names. The default value is 3.
+      \item \verb|-sFile=file| --- Writes the singular values vector to file.
+      \item \verb|-newColumnNames=string| --- Specifies a string column of the input file which will be used to define column names of the output file.
+      \item \verb|-uMatrix=file| --- Writes the $u$ column-orthogonal matrix to a file. The SVD decomposition follows the convention $A = u S v^T$. The ``transformed'' $x$ are $v^T x$, and the ``transformed'' $y$ are $u^T y$.
+      \item \verb|-vMatrix=file| --- Writes the $v$ column-orthogonal matrix to a file.
+      \item \verb|-removeDCVectors| --- Removes the eigenvectors which have an overall DC component.
+      \item \verb|-weights=file,name=columnName,value=columnName| --- Specifies a file which contains weights for each of the rows of the matrix, thus giving different weights for solving the linear equations of the pseudoinverse problem. The equation that is solved is $wAx = wy$ where $w$ is the weight vector turned into a diagonal matrix and $A$ is the input matrix. The matrix solution returned is $(wA)^I w$ where $()^I$ means taking the pseudoinverse. The $u$ matrix now has a different interpretation: the ``transformed'' $x$ are $v^T x$, as before, but the ``transformed'' $y$ are $u^T w y$.
+      \item \verb|-symbol=string| --- The string for the symbol field of data column definitions.
+      \item \verb|-reconstruct=file| --- Specifies a file which will reconstruct the original matrix with only the singular values retained in the inversion.
+      \item \verb|-printPackage| --- Prints out the linear algebra package that was compiled.
+      \item \verb|-ascii| --- Produces an output in ASCII mode. Default is binary.
+      \item \verb|-verbose| --- Prints out incidental information to stderr.
+      \item \verb|-noWarnings| --- Suppresses warning messages.
     \end{itemize}
-%\item {\bf see also:}
-%    \begin{itemize}
-%
-% Insert references to other programs by duplicating this line and 
-% replacing <prog> with the program to be referenced:
-%
-%    \item \progref{<prog>}
-%    \end{itemize}
-%
-% Insert your name and affiliation after the '}'
-%
-\item {\bf author: L. Emery } ANL
-\end{itemize}
-
+  \item {\bf see also:}
+    \begin{itemize}
+      \item \progref{sddsmatrixop}
+    \end{itemize}
+  \item {\bf author:} L. Emery, ANL.
+\end{sddsprog}

@@ -1,144 +1,83 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddspfit}
-\label{sddspfit}
-
-\begin{itemize}
-\item {\bf description:} 
-{\tt sddspfit} does ordinary and Chebyshev polynomial fits to column data, including error analysis.
-It will do fits to with specified number of terms, with specific terms only, and with specific symmetry
-only.  It will also eliminate spurious terms.
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddspfit [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}]
-  [-evaluate={\em filename}[,begin={\em value}][,end={\em value}][,number={\em integer}]]
-  -columns={\em xName},{\em yName}[,xSigma={\em name}][,ySigma={\em name}]
-  {-terms={\em number} [-symmetry=\{none | odd | even\}] | -orders={\em number}[,{\em number}...] }
-  [-reviseOrders[=threshold={\em chiValue}][,verbose][,complete=<chiThreshold>][,goodEnough=<chiValue>]]
+\begin{sddsprog}{sddspfit}
+  \item \textbf{description:} \verb|sddspfit| does ordinary and Chebyshev polynomial fits to column data, including error analysis. It will do fits with a specified number of terms, with specific terms only, and with specific symmetry only. It will also eliminate spurious terms.
+  \item \textbf{examples:}
+  \begin{verbatim}
+sddspfit data.sdds fit.sdds -columns=x,y -terms=3
+sddspfit par.bpm par.bpm1 -pipe=out -columns=P1P2x,P1P1x
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddspfit [-pipe=[input][,output]] [inputFile] [outputFile]
+  [-evaluate=filename[,begin=value][,end=value][,number=integer]]
+  -columns=xName,yName[,xSigma=name][,ySigma=name]
+  {-terms=number [-symmetry={none | odd | even}] | -orders=number[,number...]}
+  [-reviseOrders[=threshold=chiValue][,verbose][,complete=<chiThreshold>][,goodEnough=<chiValue>]]
   [-chebyshev[=convert]]
-  [-xOffset={\em value}] [-xFactor={\em value}]
-  [-sigmas=\{absolute={\em value} | fractional={\em value}\}] 
+  [-xOffset=value] [-xFactor=value]
+  [-sigmas={absolute=value | fractional=value}]
   [-modifySigmas] [-generateSigmas[={keepLargest | keepSmallest}]]
-  [-sparse={\em interval}] [-range={\em lower},{\em upper}]
-  [-normalize[={\em termNumber}]] [-verbose]
-  [-fitLabelFormat={\em sprintfString}]
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} is an SDDS file containing columns of data to be fit.  If it contains multiple pages, they are processed
-separately.  {\em outputFile} is an SDDS file containing one page for each page of {\em inputFile}.  It contains columns of
-the independent and dependent variable data, plus columns for error bars (``sigmas'') as appropriate.  The values of the fit
-and of the residuals are in a columns named {\em yName}{\tt Fit} and {\em yName}{\tt Residual}.  {\em outputFile} also contains the
-following one-dimensional arrays:
-\begin{itemize}
-\item {\tt Order}: a long integer array of the polynomial orders used in the fit.
-\item {\tt Coefficient}: a double-precision array of fit coefficients.
-\item {\tt CoefficientSigma}: a double-precision array of fit coefficient errors.  Present only
-        if errors are present for data.
-\item {\tt CoefficientUnits}: a string array of fit coefficient units.
-\end{itemize}
-{\em outputFile also contains the following parameters}:
-\begin{itemize}
-\item {\tt Basis}: a string identifying the type of polynomials use.
-\item {\tt ReducedChiSquared}: the reduced chi-squared of the fit:
-$$ \chi^2_\nu = \frac{\chi^2}{\nu} = \frac{1}{N-T}\sum_{i=0}^{N-1} \left(\frac{y_i - y(x_i)}{\sigma_i}\right)^2 $$,
-where $\nu = N-T$ is the number of degrees of freedom for a fit of N points with T terms.
-\item {\tt rmsResidual}
-\item {\em xName}{\tt Offset}, {\em xName}{\tt Factor}
-\item {\tt FitIsValid}: a character having values {\tt y} and {\tt n} if the page contains a valid fit or not.
-\item {\tt Terms}: the number of terms in the fit.
-\item {\tt sddspfitLabel}: a string containing an equation showing the fit, suitable for use with {\tt sddsplot}.
-\item {\tt Intercept}, {\tt Slope}, {\tt Curvature}: the three lowest order coefficients for ordinary polynomial fits.
-These are present only if orders 0, 1, and 2 respectively are requested in fitting.  If error analysis is valid,
-then the errors for these quantities appear as {\em quantityName}{\tt Sigma}.
-\end{itemize}
-
-\item {\bf switches:}
+  [-sparse=interval] [-range=lower,upper]
+  [-normalize[=termNumber]] [-verbose]
+  [-fitLabelFormat=sprintfString]
+  \end{verbatim}
+  \item \textbf{files:} \emph{inputFile} is an SDDS file containing columns of data to be fit. If it contains multiple pages, they are processed separately. \emph{outputFile} is an SDDS file containing one page for each page of \emph{inputFile}. It contains columns of the independent and dependent variable data, plus columns for error bars (``sigmas'') as appropriate. The values of the fit and of the residuals are in columns named \emph{yName}\verb|Fit| and \emph{yName}\verb|Residual|. \emph{outputFile} also contains the following one-dimensional arrays:
     \begin{itemize}
-    \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -evaluate={\em filename}[,begin={\em value}][,end={\em value}][,number={\em integer}]} ---
-        Specifies creation of an SDDS file called {\em filename} containing points from evaluation of the
-        fit.  The fit is normally evaluated over the range of the input data; this may be changed using
-        the {\tt begin} and {\tt end} qualifiers.  Normally, the number of points at which the fit is
-        evaluated is the number of points in the input data; this may be changed using the {\tt number}
-        qualifier.
-    \item {\tt -columns={\em xName},{\em yName}[,xSigma={\em name}][,ySigma={\em name}]} --- Specifies
-        the names of the columns to use for the independent and dependent data, respectively.
-        {\tt xSigma} and {\tt ySigma} can be used to specify the errors for the independent and dependent
-        data, respectively.
-    \item By default, an ordinary polynomial fit is done using a constant and linear term.  Control of what fit terms are used is
-        provided by the following switches:
-        \begin{itemize}
-        \item {\tt -terms={\em number}} --- Specifies the number of terms to be used in fitting. 2 terms is
-         linear fit, 3 is quadratic, etc.
-        \item {\tt -symmetry=\{none | odd | even\}} --- When used with {\tt -terms}, allows specifying the
-        symmetry of the N terms used.  {\tt none} is the default.  {\tt odd} implies using linear, cubic, etc.,
-        while  {\tt even} implies using constant, quadratic, etc.
-        \item {\tt -orders={\em number}[,{\em number}...]} --- Specifies the polynomial orders to be used in
-        fitting.  The default is equivalent to {\em -orders=0,1}.
-        \item {\tt -reviseOrders[=threshold={\em chiValue1}][,verbose]}
-        {\tt [,complete={\em chiThreshold}][,goodEnough={\em chiValue2}]} ---
-        Specifies adaptive fitting to eliminate spurious terms.     
-        When invoked, this switch causes {\tt sddspfit} to repeatedly fit the first page of data 
-        with different numbers of terms in an attempt to find a minimal number of terms that gives
-        an acceptable fit.  This is done in up to three stages:
-        \begin{enumerate}
-        \item The process starts by making a fit with all terms.  Then, each term is eliminated individually
-        and a new fit is made.  If the new fit has a smaller reduced chi-squared by an amount of at least
-        {\em chiValue1}, then the term is permanently eliminated and the process is repeated for
-        each remaining term.  By default, the criterion for an improvement is a change of 0.1 in
-        the reduced chi-squared.  This step eliminates terms that result in a bad fit
-        due to numerical problems.
-        If the {\tt goodEnough={\em chiValue2}} qualifier is given, then the first fit that has
-        reduced chi-squared less than {\em chiValue2} is used.
-        \item Next, the individual terms are tested for how well they improve reduced chi-squared.  Any term 
-        that does not improve the reduced chi-squared by at least {\em chiValue1} is eliminated.  This stage
-        eliminates terms that do not sufficiently improve the fit to merit inclusion.
-        Again, if the {\tt goodEnough={\em chiValue2}} qualifier is given, then the first fit that has
-        reduced chi-squared less than {\em chiValue2} is used.
-        \item Finally, if {\tt complete={\em chiThreshold}} is given, then next stage involves repeating the
-        above procedure with the remaining terms, but instead of eliminating one term at a time, the
-        program tests each possible combination of terms.  This can be very time consuming, especially
-        if the {\tt goodEnough={\em chiValue2}} qualifier is not given.
-        \end{enumerate}
-        \item {\tt [-chebyshev[=convert]] } --- Asks that Chebyshev T polynomials be used in fitting.  If {\tt convert} is
-        given, the output contains the coeffients for the equivalent ordinary polynomials.
-        \end{itemize}
-    \item {\tt -xOffset={\em value}}, {\tt -xFactor={\em value}} --- Specify offseting and scaling of the independent
-        data prior to fitting.  The transformation is ${\rm x \rightarrow (x - Offset)/Factor}$.  This feature can
-        be used to make a fit about a point other than x=0, or to scale the data to make high-order fits more
-        accurate.
-    \item {\tt sddspfit} will compute error bars (``sigmas'') for fit coefficients if it has knowledge of 
-        the sigmas for the data points.  These can be supplied using the {\tt -columns} switch, or generated
-        internally in several ways:
-        \begin{itemize}
-        \item {\tt -sigmas={absolute={\em value} | fractional={\em value}}} --- Specifies that independent-variable
-        errors be generated using a specified value for all points, or a specified fraction for all points.
-        \item {\tt -modifySigmas} --- Specifies that independent-variable sigmas be modified to include the effect
-        of uncertainty in the dependent variable values.  If this option is not given, any x sigmas specified
-        with {\tt -columns} are ignored.
-        \item {\tt -generateSigmas[=\{keepLargest | keepSmallest\}]} --- Specifies that independent-variable errors
-        be generated from the variance of an initial equal-weights fit. If errors are already given (via {\em -column}),
-        one may request that for every point {\tt sddspfit} retain the larger or smaller of the sigma in the data
-        and the one given by the variance.
-        \end{itemize}
-    \item {\tt -sparse={\em interval}} --- Specifies sparsing of the input data prior to fitting.  This can greatly
-        speed computations when the number of data points is large.
-    \item {\tt -range={\em lower},{\em upper}} --- Specifies the range of independent variable over which to do fitting.
-    \item {\tt -normalize[={\em termNumber}]} --- Specifies that coefficients be normalized so that the coefficient
-        for the indicated order is unity.  By default, the 0-order term (i.e., the constant term) is normalized to unity.
-    \item {\tt -verbose} --- Specifies that the results of the fit be printed to the standard error output.
-    \item {\tt -fitLabelFormat={\em sprintfString}} --- Specifies the format to use for printing numbers in the
-        fit label.  The default is ``\%g''.
+      \item \verb|Order|: a long integer array of the polynomial orders used in the fit.
+      \item \verb|Coefficient|: a double-precision array of fit coefficients.
+      \item \verb|CoefficientSigma|: a double-precision array of fit coefficient errors. Present only if errors are present for data.
+      \item \verb|CoefficientUnits|: a string array of fit coefficient units.
     \end{itemize}
-\item {\bf see also:}
+    \emph{outputFile also contains the following parameters:}
     \begin{itemize}
-    \item \hyperref[exampleData]{Data for Examples}
-    \item \progref{sddsexpfit}
-    \item \progref{sddsgfit}
-    \item \progref{sddsplot}
-    \item \progref{sddsoutlier}
+      \item \verb|Basis|: a string identifying the type of polynomials used.
+      \item \verb|ReducedChiSquared|: the reduced chi-squared of the fit:
+      $$ \chi^2_\nu = \frac{\chi^2}{\nu} = \frac{1}{N-T}\sum_{i=0}^{N-1} \left(\frac{y_i - y(x_i)}{\sigma_i}\right)^2 $$,
+      where $\\nu = N-T$ is the number of degrees of freedom for a fit of N points with T terms.
+      \item \verb|rmsResidual|
+      \item \emph{xName}\verb|Offset|, \emph{xName}\verb|Factor|
+      \item \verb|FitIsValid|: a character having values \verb|y| and \verb|n| if the page contains a valid fit or not.
+      \item \verb|Terms|: the number of terms in the fit.
+      \item \verb|sddspfitLabel|: a string containing an equation showing the fit, suitable for use with \verb|sddsplot|.
+      \item \verb|Intercept|, \verb|Slope|, \verb|Curvature|: the three lowest order coefficients for ordinary polynomial fits. These are present only if orders 0, 1, and 2 respectively are requested in fitting. If error analysis is valid, then the errors for these quantities appear as \emph{quantityName}\verb|Sigma|.
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
-
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-evaluate=filename[,begin=value][,end=value][,number=integer]| --- Specifies creation of an SDDS file called \emph{filename} containing points from evaluation of the fit. The fit is normally evaluated over the range of the input data; this may be changed using the \verb|begin| and \verb|end| qualifiers. Normally, the number of points at which the fit is evaluated is the number of points in the input data; this may be changed using the \verb|number| qualifier.
+      \item \verb|-columns=xName,yName[,xSigma=name][,ySigma=name]| --- Specifies the names of the columns to use for the independent and dependent data, respectively. \verb|xSigma| and \verb|ySigma| can be used to specify the errors for the independent and dependent data, respectively.
+      \item By default, an ordinary polynomial fit is done using a constant and linear term. Control of what fit terms are used is provided by the following switches:
+        \begin{itemize}
+          \item \verb|-terms=number| --- Specifies the number of terms to be used in fitting. 2 terms is linear fit, 3 is quadratic, etc.
+          \item \verb!-symmetry={none | odd | even}! --- When used with \verb|-terms|, allows specifying the symmetry of the N terms used. \verb|none| is the default. \verb|odd| implies using linear, cubic, etc., while \verb|even| implies using constant, quadratic, etc.
+          \item \verb|-orders=number[,number...]| --- Specifies the polynomial orders to be used in fitting. The default is equivalent to \emph{-orders=0,1}.
+          \item \verb|-reviseOrders[=threshold=chiValue][,verbose][,complete=<chiThreshold>][,goodEnough=<chiValue>]| --- Specifies adaptive fitting to eliminate spurious terms. When invoked, this switch causes \verb|sddspfit| to repeatedly fit the first page of data with different numbers of terms in an attempt to find a minimal number of terms that gives an acceptable fit. This is done in up to three stages:
+            \begin{enumerate}
+              \item The process starts by making a fit with all terms. Then, each term is eliminated individually and a new fit is made. If the new fit has a smaller reduced chi-squared by an amount of at least \emph{chiValue}, then the term is permanently eliminated and the process is repeated for each remaining term. By default, the criterion for an improvement is a change of 0.1 in the reduced chi-squared. This step eliminates terms that result in a bad fit due to numerical problems. If the \verb|goodEnough=chiValue| qualifier is given, then the first fit that has reduced chi-squared less than \emph{chiValue} is used.
+              \item Next, the individual terms are tested for how well they improve reduced chi-squared. Any term that does not improve the reduced chi-squared by at least \emph{chiValue} is eliminated. This stage eliminates terms that do not sufficiently improve the fit to merit inclusion. Again, if the \verb|goodEnough=chiValue| qualifier is given, then the first fit that has reduced chi-squared less than \emph{chiValue} is used.
+              \item Finally, if \verb|complete=chiThreshold| is given, then next stage involves repeating the above procedure with the remaining terms, but instead of eliminating one term at a time, the program tests each possible combination of terms. This can be very time consuming, especially if the \verb|goodEnough=chiValue| qualifier is not given.
+            \end{enumerate}
+          \item \verb|[-chebyshev[=convert]]| --- Asks that Chebyshev T polynomials be used in fitting. If \verb|convert| is given, the output contains the coefficients for the equivalent ordinary polynomials.
+        \end{itemize}
+      \item \verb|-xOffset=value|, \verb|-xFactor=value| --- Specify offsetting and scaling of the independent data prior to fitting. The transformation is ${\\rm x \\rightarrow (x - Offset)/Factor}$. This feature can be used to make a fit about a point other than $x=0$, or to scale the data to make high-order fits more accurate.
+      \item \verb|sddspfit| will compute error bars (``sigmas'') for fit coefficients if it has knowledge of the sigmas for the data points. These can be supplied using the \verb|-columns| switch, or generated internally in several ways:
+        \begin{itemize}
+          \item \verb!-sigmas={absolute=value | fractional=value}! --- Specifies that independent-variable errors be generated using a specified value for all points, or a specified fraction for all points.
+          \item \verb|-modifySigmas| --- Specifies that independent-variable sigmas be modified to include the effect of uncertainty in the dependent variable values. If this option is not given, any x sigmas specified with \verb|-columns| are ignored.
+          \item \verb!-generateSigmas[={keepLargest | keepSmallest}]! --- Specifies that independent-variable errors be generated from the variance of an initial equal-weights fit. If errors are already given (via \emph{-column}), one may request that for every point \verb|sddspfit| retain the larger or smaller of the sigma in the data and the one given by the variance.
+        \end{itemize}
+      \item \verb|-sparse=interval| --- Specifies sparsing of the input data prior to fitting. This can greatly speed computations when the number of data points is large.
+      \item \verb|-range=lower,upper| --- Specifies the range of independent variable over which to do fitting.
+      \item \verb|-normalize[=termNumber]| --- Specifies that coefficients be normalized so that the coefficient for the indicated order is unity. By default, the 0-order term (i.e., the constant term) is normalized to unity.
+      \item \verb|-verbose| --- Specifies that the results of the fit be printed to the standard error output.
+      \item \verb|-fitLabelFormat=sprintfString| --- Specifies the format to use for printing numbers in the fit label. The default is ``\%g''.
+    \end{itemize}
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \hyperref[exampleData]{Data for Examples}
+      \item \progref{sddsexpfit}
+      \item \progref{sddsgfit}
+      \item \progref{sddsplot}
+      \item \progref{sddsoutlier}
+    \end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

@@ -5,42 +5,40 @@
 \subsection{sddsimageconvert}
 \label{sddsimageconvert}
 
-\begin{itemize}
-\item {\bf description:} Converts a single-column SDDS image file into a multi-column SDDS image file and vice versa.
-\item {\bf example:} 
-\begin{flushleft}{\tt
-sddsimageconvert image.input image.output 
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddsimageconvert [{\em Inputfile}] [{\em Outputfile}] [-pipe[=in][,out]] 
-[-ascii] [-binary]
-[-multicolumn=[indexName={\em name}][,prefix={\em name}]]
-[-singlecolumn=[imageColumn={\em name}][,xVariableName={\em name}][,yVariableName={\em name}]]
-[-nowarnings]
-}\end{flushleft}
-\item {\bf files: }
+\begin{sddsprog}{sddsimageconvert}
+  \item \textbf{description:} \verb|sddsimageconvert| converts a single-column SDDS image file into a multi-column SDDS image file and vice versa.
+  \item \textbf{examples:}
+  \begin{verbatim}
+sddsimageconvert image.input image.output
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddsimageconvert [Inputfile] [Outputfile] [-pipe[=in][,out]]
+  [-ascii] [-binary]
+  [-multicolumn=[indexName=name][,prefix=name]]
+  [-singlecolumn=[imageColumn=name][,xVariableName=name][,yVariableName=name]]
+  [-nowarnings]
+  \end{verbatim}
+  \item \textbf{files:}
+  \emph{Inputfile} is the SDDS input image file. This file can be either a single-column image file or a multi-column image file.
 
-{\em Inputfile} is the SDDS input image file. This file can be either a single-column image file or a multi-column image file.
-
-{\em Outputfile} is a single-column SDDS image file if the {\em Inputfile} is a multi-column SDDS image file, or it is a multi-column SDDS image file if the {\em Inputfile} is a single-column SDDS image file.
-
-\item {\bf switches:}
+  \emph{Outputfile} is a single-column SDDS image file if the \emph{Inputfile} is a multi-column SDDS image file, or it is a multi-column SDDS image file if the \emph{Inputfile} is a single-column SDDS image file.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe[=in][,out]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -ascii} --- The {\em Outputfile} is written in ascii format.
-    \item {\tt -binary} --- The {\em Outputfile} is written in binary format.
-    \item {\tt -multicolumn=[indexName={\em name}][,prefix={\em name}]} --- The multi-column SDDS image file will have or does have an index column with the name given by indexName={\em name}. The default name is Index. It also will have or does have multiple columns with the prefix given by prefix={\em name}. For an input file this defaults to the prefix of the first column found that is not the index column and that ends with a number. For an output file this defaults to the same name as the image column name in the single-column SDDS image file.
-    \item {\tt -singlecolumn=[imageColumn={\em name}][,xVariableName={\em name}][,yVariableName={\em name}]} --- The single-column SDDS image file will have or does have an image column with the name given by imageColumn={\em name}. The default is the name of only column that exists in the single-column input file or the image prefix in the multi-column input file. If the output file is a single-column image file the xVariableName={\em name} and yVariableName={\em name} options will be used to define the x and y variable names. These default to x and y.
-    \item {\tt -nowarnings} --- No warnings will be issued when the input file is overwritten.
+      \item {\tt -pipe[=in][,out]} --- The standard SDDS Toolkit pipe option.
+      \item {\tt -ascii} --- The \emph{Outputfile} is written in ascii format.
+      \item {\tt -binary} --- The \emph{Outputfile} is written in binary format.
+      \item {\tt -multicolumn=[indexName=name][,prefix=name]} --- The multi-column SDDS image file will have or does have an index column with the name given by \verb|indexName|=\emph{name}. The default name is Index. It also will have or does have multiple columns with the prefix given by \verb|prefix|=\emph{name}. For an input file this defaults to the prefix of the first column found that is not the index column and that ends with a number. For an output file this defaults to the same name as the image column name in the single-column SDDS image file.
+      \item {\tt -singlecolumn=[imageColumn=name][,xVariableName=name][,yVariableName=name]} --- The single-column SDDS image file will have or does have an image column with the name given by \verb|imageColumn|=\emph{name}. The default is the name of only column that exists in the single-column input file or the image prefix in the multi-column input file. If the output file is a single-column image file the \verb|xVariableName|=\emph{name} and \verb|yVariableName|=\emph{name} options will be used to define the x and y variable names. These default to x and y.
+      \item {\tt -nowarnings} --- No warnings will be issued when the input file is overwritten.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \progref{sddscongen}
-    \item \progref{sddscontour}
-    \item \progref{sddsimageprofiles}
-    \item \progref{sddsspotanalysis}
+      \item \progref{sddscongen}
+      \item \progref{sddscontour}
+      \item \progref{sddsimageprofiles}
+      \item \progref{sddsspotanalysis}
     \end{itemize}
-\item {\bf author:} R. Soliday, ANL/APS.
-\end{itemize}
+  \item \textbf{author:} R. Soliday, ANL/APS.
+\end{sddsprog}
 

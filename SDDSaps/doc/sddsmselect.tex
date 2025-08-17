@@ -1,37 +1,36 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
-\subsection{sddsmselect} 
-\label{sddsmselect} 
- 
-\begin{itemize} 
-\item {\bf description:} \hspace*{1mm}\\ 
-{\tt sddsmselect} selects data from {\em input1} for writing to {\em output} based on the presence or absence of matching data in {\em input2}. If {\em output} is not given, {\em input1} is replaced.
-\item {\bf examples:} 
-\begin{flushleft}
-{\tt sddsmselect <input1> <input2> <output> -match=ControlName }
-\end{flushleft} 
-\item {\bf synopsis:}  
-\begin{flushleft}
-{\tt 
-sddsmselect [{\em input1}] [{\em input2}] [{\em output}] [-pipe=[input][,output]] \\ \
-{}[-match={\em column-name}[={\em column-name}][,...]] \\ \
-{}[-equate={\em column-name}[={\em column-name}][,...]] \\ \
-{}[-invert] \\ \
-{}[-reuse[=[rows][,page]]] \\ \
-{}[-nowarnings] \\ \
-{}[-majorOrder=row|column]}
-\end{flushleft} 
-\item {\bf switches:} 
-    \begin{itemize} 
-    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
-    \item {\tt -match} --- Specifies names of columns to match between {\em input1} and {\em input2} for selection and placement of data taken from {\em input1}.
-    \item {\tt -equate} --- Specifies names of columns to equate between {\em input1} and {\em input2} for selection and placement of data taken from {\em input1}.
-    \item {\tt -invert} --- Specifies that only non-matched rows are to be kept..
-    \item {\tt -reuse} --- Specifies that rows of {\em input2} may be reused, i.e., matched with more than one row of {\em input1}.  Also, -reuse=page specifies that only the first page of {\em input2} is used.
-    \item {\tt -nowarnings} --- Specifies that warning messages should be suppressed.
-    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout.
-\end{itemize} 
+\begin{sddsprog}{sddsmselect}
+  \item \textbf{description:}
+    \verb|sddsmselect| selects data from \emph{input1} for writing to \emph{output} based on the presence or absence of matching data in \emph{input2}. If \emph{output} is not given, \emph{input1} is replaced.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddsmselect <input1> <input2> <output> -match=ControlName
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddsmselect [input1] [input2] [output] [-pipe=[input][,output]] \\
+  [-match=column-name[=column-name][,...]] \\
+  [-equate=column-name[=column-name][,...]] \\
+  [-invert] \\
+  [-reuse[=[rows][,page]]] \\
+  [-nowarnings] \\
+  [-majorOrder=row|column]
+    \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe=[input][,output]| --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
+      \item \verb|-match| --- Specifies names of columns to match between \emph{input1} and \emph{input2} for selection and placement of data taken from \emph{input1}.
+      \item \verb|-equate| --- Specifies names of columns to equate between \emph{input1} and \emph{input2} for selection and placement of data taken from \emph{input1}.
+      \item \verb|-invert| --- Specifies that only non-matched rows are to be kept.
+      \item \verb|-reuse| --- Specifies that rows of \emph{input2} may be reused, i.e., matched with more than one row of \emph{input1}. Also, \verb|-reuse=page| specifies that only the first page of \emph{input2} is used.
+      \item \verb!-nowarnings! --- Specifies that warning messages should be suppressed.
+      \item \verb!-majorOrder=row|column! --- Specifies the binary SDDS layout.
+    \end{itemize}
+  \item \textbf{files:}
+    Input and output are SDDS files.
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \progref{sddsselect}
+    \end{itemize}
+  \item \textbf{author:} C. Saunders, M. Borland, R. Soliday, H. Shang, ANL/APS.
+\end{sddsprog}
 
-\item {\bf author:} C. Saunders, M. Borland, R. Soliday, H. Shang, ANL/APS. 
-\end{itemize} 

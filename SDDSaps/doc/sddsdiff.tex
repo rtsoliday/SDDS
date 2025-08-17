@@ -1,45 +1,38 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-
-%
-% Substitute the program name for <programName>
-%
-\subsection{sddsdiff}
-\label{sddsdiff}
-
-\begin{itemize}
-\item {\bf description:}
-%
-% Insert text of description (typicall a paragraph) here.
-%
-\verb+sddsdiff + compares two SDDS files and print out message of comparison results.
-\item {\bf examples:} 
-%
-% Insert text of examples in this section.  Examples should be simple and
-% should be preceeded by a brief description.  Wrap the commands for each
-% example in the following construct:
-% 
-%
-{\tt }
-\begin{flushleft}{\tt
-\bf sddsdiff file1 file2
-}\end{flushleft}
-{\tt}If two files are the same, message {``file1 and file2 are identical''} will be printed to the standard output:
-file1 and file2 are identical.
-If two files are different, the differences will be printed to the standard error output.
-
-\item {\bf synopsis:} 
-%
-% Insert usage message here:
-%
-\begin{flushleft}{\tt
-sddsdiff <file1> <file2>        
-}\end{flushleft}
-
-\item {\bf author: H. Shang } ANL
-\end{itemize}
-
-
-
+\begin{sddsprog}{sddsdiff}
+  \item \textbf{description:}
+    \verb|sddsdiff| compares two SDDS files and reports differences in definitions and data.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddsdiff file1 file2
+sddsdiff data1.sdds data2.sdds -compareCommon=column -tolerance=1e-6
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddsdiff <file1> <file2>
+  [-compareCommon[=column|parameter|array]]
+  [-columns=<col1>[,<col2>...]]
+  [-parameters=<par1>[,<par2>...]]
+  [-arrays=<array1>[,<array2>...]]
+  [-tolerance=<value>] [-precision=<integer>]
+  [-format=float=<string>|double=<string>|longdouble=<string>|string=<string>]
+  [-exact] [-absolute] [-rowlabel=<column>[,nocomparison]] [-ignoreUnits]
+    \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb!-compareCommon[=column|parameter|array]! --- Compare only items present in both files.
+      \item \verb|-columns=<col1>[,<col2>...]| --- Limit comparison to the listed columns.
+      \item \verb|-tolerance=<value>| --- Set numerical comparison tolerance.
+      \item \verb|-precision=<integer>| --- Set precision for floating-point comparisons.
+      \item \verb|-exact| --- Require exact equality of values.
+      \item \verb|-absolute| --- Compare absolute values, ignoring signs.
+      \item \verb|-rowlabel=<column>[,nocomparison]| --- Use a column to label rows.
+      \item \verb|-ignoreUnits| --- Ignore units during comparison.
+    \end{itemize}
+  \item \textbf{files:}
+    \verb|file1| and \verb|file2| are SDDS files to be compared.
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \progref{sddsquery}
+    \end{itemize}
+  \item \textbf{author:} H. Shang, ANL/APS.
+\end{sddsprog}

@@ -1,29 +1,23 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddsendian}
-\label{sddsendian}
-
-\begin{itemize}
-\item {\bf description:}
-
-\verb|sddsendian| converts numerical data in an SDDS file from
-big-endian to little-endian or vice versa.  This is needed prior to
-transferring binary data from one computer to another if the two
-computers have different endianess.
-
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsendian [{\em inputFile}] [{\em outputFile}] [-pipe[=input][,output]]
-}\end{flushleft}
-
-\item {\bf switches:} 
-\begin{itemize}
-        \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option.
-\end{itemize}
-
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
-
-
+\begin{sddsprog}{sddsendian}
+  \item \textbf{description:} \verb|sddsendian| converts numerical data in an SDDS file between big-endian and little-endian formats. Use this tool before transferring binary data between computers with different endianness.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    sddsendian input.sdds output.sdds
+    sddsendian input.sdds -pipe=output > output.sdds
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    sddsendian [inputFile] [outputFile] [-pipe[=input][,output]]
+    \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+    \end{itemize}
+  \item \textbf{files:} \emph{inputFile} is the source SDDS data set and \emph{outputFile} is the converted data set.
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \progref{sddsconvert}
+    \end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

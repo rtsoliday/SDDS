@@ -1,48 +1,36 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
-\subsection{sddsinterpset} 
-\label{sddsinterpset} 
- 
-\begin{itemize} 
-\item {\bf description:} \hspace*{1mm}\\ 
-{\tt sddsinterpset} is used to perform multiple interpolations.
-
-\item {\bf synopsis:}  
-\begin{flushleft}
-{\tt 
-sddsinterpset [{\em input}] [{\em output}] [-pipe=[input],[output]] \\ \
-{}[-order={\em number}] \\ \
-{}[-data=fileColumn={\em colName},interpolate={\em colName}, \\ \
- functionOf={\em colName},[column={\em colName}|atValue={\em value}]] \\ \
-{}[-belowRange={value={\em value}|skip|saturate|extrapolate|wrap}[,{abort|warn}]] \\ \
-{}[-aboveRange={value={\em value}|skip|saturate|extrapolate|wrap}[,{abort|warn}]] \\ \
-{}[-verbose] \\ \
-{}[-majorOrder=row|column]}
-\end{flushleft} 
-
-\item {\bf files:}
-    \begin{itemize} 
-    \item {\em input} Each row contains the name of an SDDS file used as the source of an interpolation table.
-    \end{itemize} 
-
-\item {\bf switches:} 
-    \begin{itemize} 
-    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
-    \item {\tt -order} --- The order of the polynomials to use for interpolation. The default is 1, indicating linear interpolation.
-    \item {\tt -data} --- 
-      \begin{itemize} 
-        \item {\tt fileColumn} --- Gives the name of a column in {\em input} that contains the names of files with tables of data.
-        \item {\tt interpolate} --- Gives the name of a column that must exist in all the files named in fileColumn.  This column will exist in the output file.
-        \item {\tt functionOf} --- Gives the name of a column that must exist in all the files named in fileColumn.  The 'interpolate' column is viewed as a function of this column:  I(F).
-        \item {\tt column} --- Gives the name of a column in {\em input}.  The primary output is I(C).
-        \item {\tt atValue} --- Gives a number at which to perform the interpolations.
-      \end{itemize} 
-    \item {\tt -belowRange}
-    \item {\tt -aboveRange} --- They have the same options, which specify the behavior in the event that an interpolation point is, respectively, below or above the range of the independent data. If such an out-of-range point occurs, the default behavior is to assign the value at the nearest endpoint of the data; this is identical to specifying saturate. One may specify use of a specific value with value=value. skip specifies that offending points should be discarded. extrapolate specifies extrapolation beyond the limits of the data. wrap specifies that the data should be treated as periodic. abort specifies that the program should terminate. warn requests warnings for out-of-bounds points.
-    \item {\tt -verbose} --- Errors are printed to stdout.
-    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout.
-    \end{itemize} 
-
-\item {\bf author:} H. Shang, R. Soliday, X. Jiao, ANL/APS. 
-\end{itemize} 
+\begin{sddsprog}{sddsinterpset}
+  \item \textbf{description:}
+    \verb|sddsinterpset| performs multiple interpolations using data from a set of SDDS tables.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddsinterpset list.sdds results.sdds -data=fileColumn=tableFile,interpolate=I,functionOf=E,column=s,atValue=5 -order=2
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddsinterpset [input] [output] [-pipe=[input][,output]]
+  [-order=number]
+  [-data=fileColumn=colName,interpolate=colName,functionOf=colName,
+        column=colName | atValue=value]
+  [-belowRange={value=value|skip|saturate|extrapolate|wrap}[,{abort|warn}]]
+  [-aboveRange={value=value|skip|saturate|extrapolate|wrap}[,{abort|warn}]]
+  [-verbose]
+  [-majorOrder=row|column]
+    \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe=[input][,output]| --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
+      \item \verb|-order=number| --- Order of the polynomials to use for interpolation; default is 1 for linear interpolation.
+      \item \verb|-data=fileColumn=colName,interpolate=colName,functionOf=colName,column=colName| --- Specifies the column in \emph{input} containing file names (\verb|fileColumn|), the column to interpolate (\verb|interpolate|), and the independent variable column (\verb|functionOf|). Use \verb|column| to take interpolation points from a column in \emph{input} or \verb|atValue| for a single value.
+      \item \verb!-belowRange={value=value|skip|saturate|extrapolate|wrap}[,{abort|warn}]! --- Behavior when an interpolation point is below the data range.
+      \item \verb!-aboveRange={value=value|skip|saturate|extrapolate|wrap}[,{abort|warn}]! --- Behavior when an interpolation point is above the data range.
+      \item \verb|-verbose| --- Prints progress messages.
+      \item \verb!-majorOrder=row|column! --- Specifies the binary SDDS layout.
+    \end{itemize}
+  \item \textbf{files:}
+    \emph{input} contains one row per interpolation, with a column listing SDDS data files. \emph{output} receives the interpolated results.
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \progref{sddsinterp}
+    \end{itemize}
+  \item \textbf{author:} H. Shang, R. Soliday, X. Jiao, ANL/APS.
+\end{sddsprog}

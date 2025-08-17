@@ -1,32 +1,23 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
-\subsection{sddspoly} 
-\label{sddspoly} 
- 
-\begin{itemize} 
-\item {\bf description:} \hspace*{1mm}\\ 
-{\tt sddspoly} evaluates polynomials for N-dimensional input.
-\item {\bf examples:} 
-\begin{flushleft}
-{\tt sddspoly <inputfile> <outputfile> -evaluate=filename=<polyFilename>,output=y,coefficients=coef,input0=x,power0=power }
-\end{flushleft} 
-\item {\bf synopsis:}  
-\begin{flushleft}
-{\tt 
-sddspoly [{\em inputfile}] [{\em outputfile}] [-pipe=[input][,output]] \\ \
--evaluate=filename={\em polyFilename},output={\em column},coefficients={\em column}, \\ \
-input0={\em inputColumn},power0={\em powerColumn} \\ \
-{}[,input1={\em inputColumn},power1={\em polyColumn}][,...] \\ \
-{}[-evaluate=...]}
-\end{flushleft} 
-\item {\bf files:} 
-The input file contains the {\em inputColumns}. The polynomial file contains the coefficient column as well asl the {\em powerColumns}. The output file contains the {\em inputColumns} and evaluated output columns.
-\item {\bf switches:} 
-    \begin{itemize} 
-    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
-    \item {\tt -evaluate=...} --- Specifies evaluation of polynomial, specified in file {\em polyFilename}.  The results of the evaluation are in the {\em outputfile} under the name given with output={\em column}. The polynomial coefficients are in the column named with coefficients={\em column}.  The input$<$n$>$ qualifiers give the names of columns in {\em inputfile} that are inputs to the polynomial.  The power$<$n$>$ qualifiers give the names of columns in the {\em polyFilename} file that give the powers of the input$<$n$>$ columns to use for each coefficient.
-\end{itemize} 
+\begin{sddsprog}{sddspoly}
+  \item \textbf{description:} \verb|sddspoly| evaluates polynomials for N-dimensional input.
+  \item \textbf{examples:}
+    \begin{verbatim}
+  sddspoly <inputfile> <outputfile> -evaluate=filename=<polyFilename>,output=y,coefficients=coef,input0=x,power0=power
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+  sddspoly [inputfile] [outputfile] [-pipe=[input][,output]]
+    -evaluate=filename=polyFilename,output=column,coefficients=column,
+    input0=inputColumn,power0=powerColumn
+    [input1=inputColumn,power1=powerColumn][,...]
+    [-evaluate=...]
+    \end{verbatim}
+  \item \textbf{files:} The input file contains the \emph{inputColumns}. The polynomial file contains the coefficient column as well as the \emph{powerColumns}. The output file contains the \emph{inputColumns} and evaluated output columns.
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe=[input][,output]| --- Standard SDDS pipe options for reading or writing files from stdin or stdout.
+      \item \verb|-evaluate=...| --- Specifies evaluation of polynomial, specified in file \emph{polyFilename}. The results of the evaluation are in the \emph{outputfile} under the name given with \verb|output=column|. The polynomial coefficients are in the column named with \verb|coefficients=column|. The \verb|input<n>| qualifiers give the names of columns in \emph{inputfile} that are inputs to the polynomial. The \verb|power<n>| qualifiers give the names of columns in the \emph{polyFilename} file that give the powers of the \verb|input<n>| columns to use for each coefficient.
+    \end{itemize}
+  \item \textbf{author:} M. Borland, H. Shang, R. Soliday, ANL/APS.
+\end{sddsprog}
 
-\item {\bf author:} M. Borland, H. Shang, R. Soliday, ANL/APS. 
-\end{itemize} 

@@ -1,65 +1,42 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddsexpfit}
-\label{sddsexpfit}
-
-\begin{itemize}
-\item {\bf description:}
-{\tt sddsexpfit} does exponential fits to a single column of an SDDS file as a function of another column (the independent 
-variable).  The fitting function is
-\[ E(x) = C + F * e {R*x}, \]
-where x is the independent variable, C is the {\em constant} term, F is the {\em factor}, and R is the {\rm rate}.
-\item {\bf examples:} 
-Fit an  exponential decay to vacuum pressure versus time during a pumpdown:
-\begin{flushleft}{\tt
+\begin{sddsprog}{sddsexpfit}
+  \item \textbf{description:}
+    \verb|sddsexpfit| does exponential fits to a single column of an SDDS file as a function of another column, the independent variable. The fitting function is
+    \[
+      E(x) = C + F * e^{R*x},
+    \]
+    where $x$ is the independent variable, $C$ is the \emph{constant} term, $F$ is the \emph{factor}, and $R$ is the rate.
+  \item \textbf{examples:}
+  \begin{verbatim}
 sddsexpfit vacDecay.sdds -columns=Time,Pressure vacDecay.fit
-}\end{flushleft}
-Same, but give the program a hint and force it to get a better fit
-\begin{flushleft}{\tt
-sddsexpfit vacDecay.sdds -columns=Time,Pressure vacDecay.fit -clue=decays -tolerance=1e-12
-}\end{flushleft}
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsexpfit [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}]
-[-columns={\em xName},{\em yName}] [-tolerance={\em value}] 
-[-clue=\{grows | decays\}] [-guess={\em constant},{\em factor},{\em rate}] 
-[-verbosity={\em integer}] [-fullOutput] 
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} contains the columns of data to be fit.  If {\em inputFile} contains multiple
-pages, each page of data is fit separately.  {\em outputFile} has columns containing the
-independent variable data and the corresponding values of the fit.  The name of the latter
-column is constructed by appending the string {\tt Fit} to the name of the dependent variable.
-In addition, if {\tt -fullOutput} is given, {\em outputFile} includes a column with the dependent values and
-the residual (dependent values minus fit values).  The name of the residual column is
-constructed by appending the string {\tt Residual} to the name of the dependent variable.  {\em
-outputFile} contains four parameters: {\tt expfitConstant}, {\tt expfitFactor}, {\tt expfitRate},
-and {\tt expfitRmsResidual}.  The first three parameters are respectively C, F, and R from the above
-equation.  The last is the rms residual of the fit.
-\item {\bf switches:}
+sddsexpfit vacDecay.sdds -columns=Time,Pressure \
+  vacDecay.fit -clue=decays -tolerance=1e-12
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddsexpfit [-pipe=[input][,output]] [inputFile] [outputFile]
+  [-columns=xName,yName] [-tolerance=value]
+  [-clue={grows|decays}] [-guess=constant,factor,rate]
+  [-verbosity=integer] [-fullOutput]
+  \end{verbatim}
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -columns={\em xName},{\em yName}} --- Specifies the names of the independent and dependent columns of data.
-    \item {\tt -tolerance={\em value}} --- Specifies how close {\tt sddsexpfit} will attempt to come to the optimum fit,
-        in terms of the mean squared residual.  The default is ${\rm 10 {-8}}$.
-    \item {\tt -clue=\{grows | decays\}} --- Helps {\tt sddsexpfit} decide whether the data is a decaying or growing exponential,
-        i.e., whether R is negative or positive, respectively.  If {\tt sddsexpfit} is having trouble, this
-        will often help.
-    \item {\tt -guess={\em constant},{\em factor},{\em rate}} --- Gives {\tt sddsexpfit} a stating point for each of the three fit parameters.
-    \item {\tt -fullOutput} --- Specifies that {\em outputFile} will contain the original dependent variable
-        data and the fit residuals, in addition to the independent variable data and the fit values.
-    \item {\tt -verbosity={\em integer}} --- Specifies that informational printouts are desired during fitting.  A larger
-        integer produces more output.
+      \item \verb|-pipe=[input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-columns=xName,yName| --- Specifies the names of the independent and dependent columns of data.
+      \item \verb|-tolerance=value| --- Specifies how close \verb|sddsexpfit| will attempt to come to the optimum fit in terms of the mean squared residual. The default is $10^{-8}$.
+      \item \verb!-clue={grows|decays}! --- Helps \verb|sddsexpfit| decide whether the data is a decaying or growing exponential, i.e., whether $R$ is negative or positive. If \verb|sddsexpfit| is having trouble, this often helps.
+      \item \verb|-guess=constant,factor,rate| --- Gives \verb|sddsexpfit| a starting point for each of the three fit parameters.
+      \item \verb|-fullOutput| --- Specifies that \emph{outputFile} will contain the original dependent variable data and the fit residuals, in addition to the independent variable data and the fit values.
+      \item \verb|-verbosity=integer| --- Requests informational printouts during fitting. A larger integer produces more output.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{files:}
+    \emph{inputFile} contains the columns of data to be fit. If \emph{inputFile} contains multiple pages, each page is fit separately. \emph{outputFile} has columns containing the independent variable data and the corresponding values of the fit, named by appending the string \verb|Fit| to the name of the dependent variable. If \verb|-fullOutput| is given, \emph{outputFile} includes a column with the dependent values and the residual (dependent values minus fit values), named by appending \verb|Residual| to the dependent variable name. \emph{outputFile} contains four parameters: \verb|expfitConstant|, \verb|expfitFactor|, \verb|expfitRate|, and \verb|expfitRmsResidual|. The first three parameters are respectively $C$, $F$, and $R$ from the above equation. The last is the rms residual of the fit.
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \hyperref[exampleData]{Data for Examples}
-    \item \progref{sddspfit}
-    \item \progref{sddsgfit}
-    \item \progref{sddsoutlier}
+      \item \hyperref[exampleData]{Data for Examples}
+      \item \progref{sddspfit}
+      \item \progref{sddsgfit}
+      \item \progref{sddsoutlier}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
-
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

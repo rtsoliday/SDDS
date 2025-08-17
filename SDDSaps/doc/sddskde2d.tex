@@ -1,23 +1,30 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddskde2d}
-\label{sddskde2d}
+\begin{sddsprog}{sddskde2d}
+  \item \textbf{description:} \verb|sddskde2d| performs two-dimensional kernel density estimation (KDE) on two columns of an SDDS file. It creates a regular grid of points and computes a Gaussian KDE using Silverman's rule of thumb for bandwidth selection. The results are written to a new SDDS file containing the original column names and an additional \verb|PDF| column giving the estimated probability density.
 
-\begin{itemize}
-\item {\bf description:} \hspace*{1mm}\\
-{\tt sddskde2d} performs two-dimensional kernel density estimation (KDE) on two columns of an SDDS file. It creates a regular grid of points and computes a Gaussian KDE using Silverman's rule of thumb for bandwidth selection. The results are written to a new SDDS file containing the original column names and an additional {\tt PDF} column giving the estimated probability density.
-\item {\bf examples:}
-\begin{flushleft}{\tt
-   sddskde2d input.sdds output.sdds -column=x,y\\
-   sddskde2d data.sdds kde.sdds -column=x,y -samescales -margin=0.1
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}
-\begin{verbatim}
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddskde2d input.sdds output.sdds -column=x,y
+sddskde2d data.sdds kde.sdds -column=x,y -samescales -margin=0.1
+    \end{verbatim}
+
+  \item \textbf{synopsis:}
+    \begin{verbatim}
 sddskde2d [<inputfile>] [<outputfile>] [-pipe=[input][,output]]
   -column=<column1,column2> [-samescales] [-margin=<value>]
-\end{verbatim}
-\end{flushleft}
-\item {\bf author:} Yipeng Sun, M. Borland, R. Soliday, ANL/APS.
-\end{itemize}
+    \end{verbatim}
+
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-column=<column1,column2>| --- Specify column names for KDE.
+      \item \verb|-samescales| --- Use identical scales for both axes.
+      \item \verb|-margin=<value>| --- Add a fractional margin around the data range.
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+    \end{itemize}
+
+  \item \textbf{files:} \emph{inputfile} is an SDDS file supplying two columns of data. \emph{outputfile} is an SDDS file containing the original columns and a \verb|PDF| column with the estimated density.
+
+  \item \textbf{see also:} \progref{sddshist2d}, \progref{sddslocaldensity}
+
+  \item \textbf{author:} Yipeng Sun, M. Borland, R. Soliday, ANL/APS.
+\end{sddsprog}
+

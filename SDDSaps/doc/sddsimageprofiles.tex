@@ -1,48 +1,39 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddsimageprofiles}
-\label{sddsimageprofiles}
-
-\begin{itemize}
-\item {\bf description:} Extracts the profile from a multi-column SDDS image file.
-\item {\bf example:} 
-\begin{flushleft}{\tt
+\begin{sddsprog}{sddsimageprofiles}
+  \item \textbf{description:} Extracts the profile from a multi-column SDDS image file.
+  \item \textbf{examples:}
+    \begin{verbatim}
 sddsimageprofiles image.input image.output -profileType=x -method=peak
-}\end{flushleft}
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddsimageprofiles [{\em Inputfile}] [{\em Outputfile}] [-pipe[=in][,out]] 
-[-columnPrefix={\em prefix}]
-[-profileType=<x|y>]
-[-method=<centerLine|integrated|averaged|peak>]
-[-background={\em filename}]
-[-aVector={\em ax},{\em ay}]
-[-bVector={\em bx},{\em by}]
-[-offset={\em x},{\em y}]
-}\end{flushleft}
-\item {\bf files: }
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddsimageprofiles [Inputfile] [Outputfile] [-pipe[=in][,out]]
+ [-columnPrefix=prefix]
+ [-profileType=<x|y>]
+ [-method=<centerLine|integrated|averaged|peak>]
+ [-background=filename]
+ [-aVector=ax,ay]
+ [-bVector=bx,by]
+ [-offset=x,y]
+    \end{verbatim}
+  \item \textbf{files:}
+    \emph{Inputfile} is the multi-column SDDS input image file.
 
-{\em Inputfile} is the multi-column SDDS input image file.
-
-{\em Outputfile} is a simple SDDS file containing x and y columns which can be plotted with sddsplot to show the image profile.
-
-\item {\bf switches:}
+    \emph{Outputfile} is a simple SDDS file containing x and y columns which can be plotted with \progref{sddsplot} to show the image profile.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item {\tt -pipe[=in][,out]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -columnPrefix={\em prefix}} --- The prefix for the image columns in the multi-column SDDS image file.
-    \item {\tt -profileType=<x|y>} --- Used to select the profile along the X or Y axis.
-    \item {\tt -method=<centerLine|integrated|averaged|peak>} --- If this option is not specified it is a real profile. If centerLine is specified it will find the row with the greatest integrated profile and display that line only. If integrated is specified it will sum all the profiles together. If averaged is specified it will divide the sum of all the profiles by the number of profiles. If peak is specified it will find the peak point and display the profile for that row.
-    \item {\tt -background={\em filename}} --- Used to specify a background image file which will be subtracted from the input image file.
+      \item {\tt -pipe[=in][,out]} --- The standard SDDS Toolkit pipe option.
+      \item {\tt -columnPrefix=prefix} --- The prefix for the image columns in the multi-column SDDS image file.
+      \item {\tt -profileType=<x|y>} --- Used to select the profile along the X or Y axis.
+      \item {\tt -method=<centerLine|integrated|averaged|peak>} --- If this option is not specified it is a real profile. If centerLine is specified it will find the row with the greatest integrated profile and display that line only. If integrated is specified it will sum all the profiles together. If averaged is specified it will divide the sum of all the profiles by the number of profiles. If peak is specified it will find the peak point and display the profile for that row.
+      \item {\tt -background=filename} --- Used to specify a background image file which will be subtracted from the input image file.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \progref{sddscongen}
-    \item \progref{sddscontour}
-    \item \progref{sddsimageconvert}
-    \item \progref{sddsspotanalysis}
+      \item \progref{sddscongen}
+      \item \progref{sddscontour}
+      \item \progref{sddsimageconvert}
+      \item \progref{sddsspotanalysis}
     \end{itemize}
-\item {\bf author:} R. Soliday, ANL/APS.
-\end{itemize}
+  \item \textbf{author:} R. Soliday, ANL/APS.
+\end{sddsprog}
 

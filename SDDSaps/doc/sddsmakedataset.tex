@@ -1,102 +1,59 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-
-%
-% Substitute the program name for <programName>
-%
-\subsection{sddsmakedataset}
-\label{sddsmakedataset}
-
-\begin{itemize}
-\item {\bf description:}
-%
-% Insert text of description (typicall a paragraph) here.
-%
-\verb+sddsmakedataset + writes the input data into a file or 
-pipe in SDDS format. It can be used to make add SDDS file consisting of
-a small amount of data from the script. It is more convenient than {``sdds save''}.
-
-\item {\bf examples:} 
-%
-% Insert text of examples in this section.  Examples should be simple and
-% should be preceeded by a brief description.  Wrap the commands for each
-% example in the following construct:
-% 
-%
-{\tt }
-\begin{flushleft}{\tt
-\bf sddsmakedataset mydata.sdds -parameter=pi,type=double -data=3.1415926 -parameter=UserName,type=string -data=somebody 
-\bf  -column=index,type=short -data=1,2,3,4,5,6,7,8,9,10 -column=primeNumbers,type=long -data=1,2,3,5,7,11,13,17,19,23
-\bf -column=lettersOfAlphabet,type=character -data=a,b,c,d,e,f,g,h,i,j -ascii
-}\end{flushleft}
-{\tt}An ascii file mydata.sdds is created by this command. The printout of mydata.sdds is as following: (used sddsprintout to get the prinout).
-\begin{flushleft}
+\begin{sddsprog}{sddsmakedataset}
+\item {\bf description:} \verb|sddsmakedataset| writes input data into an SDDS file or pipe. It can be used to create a small SDDS file from a script, and is more convenient than \verb|sddssave|.
+\item {\bf examples:}
+\begin{verbatim}
+sddsmakedataset mydata.sdds \
+  -parameter=pi,type=double -data=3.1415926 \
+  -parameter=UserName,type=string -data=somebody \
+  -column=index,type=short -data=1,2,3,4,5,6,7,8,9,10 \
+  -column=primeNumbers,type=long -data=1,2,3,5,7,11,13,17,19,23 \
+  -column=lettersOfAlphabet,type=character -data=a,b,c,d,e,f,g,h,i,j \
+  -ascii
+\end{verbatim}
+An ASCII file \verb|mydata.sdds| is created by this command. The printout using \progref{sddsprintout} is:
 \begin{verbatim}
 Printout for SDDS file mydata.sdds
 
 pi =           3.141593e+00  UserName =         somebody
 
- index  primeNumbers  lettersOfAlphabet 
+ index  primeNumbers  lettersOfAlphabet
 ----------------------------------------
-     1             1                  a 
-     2             2                  b 
-     3             3                  c 
-     4             5                  d 
-     5             7                  e 
-     6            11                  f 
-     7            13                  g 
-     8            17                  h 
-     9            19                  i 
-    10            23                  j 
+     1             1                  a
+     2             2                  b
+     3             3                  c
+     4             5                  d
+     5             7                  e
+     6            11                  f
+     7            13                  g
+     8            17                  h
+     9            19                  i
+    10            23                  j
 \end{verbatim}
-\end{flushleft}
-
-\item {\bf synopsis:} 
-%
-% Insert usage message here:
-%
-\begin{flushleft}{\tt
-sddsmakedataset [<oututFile> | -pipe=out] 
-[-defaultType={double|float|long|short|string|character}] [-parameter=<name>[,type=<string>][,units=<string>][,symbol=<string>][,description=<string>]]
-[-data=<value>] -parameter=.... -data=...
-[-column=<name>[,type=<string>][,units=<string>][,symbol=<string>][,description=<string>]]
-[-data=<listOfCommaSeparatedValue>] -column=... -data=... 
-[-noWarnings] [-description=<string>] [-contents=<string>] [-mode=<string>]        
-}\end{flushleft}
-
+\item {\bf synopsis:}
+\begin{verbatim}
+sddsmakedataset [<outputFile> | -pipe=out] \
+  [-defaultType={double|float|long|short|string|character}] \
+  [-parameter=<name>[,type=<string>][,units=<string>][,symbol=<string>][,description=<string>]] \
+  [-data=<value>] -parameter=... -data=... \
+  [-column=<name>[,type=<string>][,units=<string>][,symbol=<string>][,description=<string>]] \
+  [-data=<listOfCommaSeparatedValue>] -column=... -data=... \
+  [-noWarnings] [-description=<string>] [-contents=<string>] [-mode=<string>]
+\end{verbatim}
 \item {\bf switches:}
-%
-% Describe the switches that are available
-%
-    \begin{itemize}
-    \item {\tt  outputFile} --- SDDS output file for writing the data to.
-    \item {\tt  -pipe=out}  --- output the data in SDDS format to the pipe instead of to a file.
-    \item {\tt  -defaultType} --- specify the default data type for paparemeters and columns 
-                                  if not specified in the parameter or column definition.
-    \item {\tt  -parameter}   --- specify the parameter name, data type, units, 
-                                  symbol and description.
-    \item {\tt  -column} --- specify the column name, data type, units, symbol and/or description.
-    \item {\tt  -noWarnings} --- do not print out warning messages.
-    \item {\tt  -ascii} --- output file in ascii mode, the default is binary. 
-    \item {\tt  -description} --- description of output file.
-    \item {\tt  -contents} --- contents of the description.
-    \end{itemize}
-
-%\item {\bf see also:}
-%    \begin{itemize}
-%
-% Insert references to other programs by duplicating this line and 
-% replacing {\em prog} with the program to be referenced:
-%
-%    \item \progref{<prog>}
-%    \end{itemize}
-%
-% Insert your name and affiliation after the '}'
-%
-\item {\bf author: H. Shang } ANL
+\begin{itemize}
+  \item \verb|outputFile| --- SDDS output file for writing the data.
+  \item \verb|-pipe=out| --- Output the data in SDDS format to the pipe instead of to a file.
+  \item \verb|-defaultType| --- Specify the default data type for parameters and columns if not specified in the parameter or column definition.
+  \item \verb|-parameter| --- Specify the parameter name, data type, units, symbol and description.
+  \item \verb|-column| --- Specify the column name, data type, units, symbol and description.
+  \item \verb|-noWarnings| --- Do not print warning messages.
+  \item \verb|-ascii| --- Output the file in ASCII mode; default is binary.
+  \item \verb|-description| --- Description of output file.
+  \item \verb|-contents| --- Contents of the description.
 \end{itemize}
-
-
-
+\item {\bf see also:}
+\begin{itemize}
+  \item \progref{sddsprintout}
+\end{itemize}
+\item {\bf author:} H. Shang, ANL/APS.
+\end{sddsprog}

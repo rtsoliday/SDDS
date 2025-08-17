@@ -1,38 +1,30 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
-\subsection{sddsremoveoffsets} 
-\label{sddsremoveoffsets} 
- 
-\begin{itemize} 
-\item {\bf description:} \hspace*{1mm}\\ 
-{\tt sddsremoveoffsets} removes the offset from bpm waveform data with ``commutation'' on.
-\item {\bf examples:} 
-\begin{flushleft}
-{\tt sddsremoveoffsets <input-file> <output-file> -column=BPMValues }
-\end{flushleft} 
-\item {\bf synopsis:}  
-\begin{flushleft}
-{\tt 
-sddsremoveoffsets [{\em input-file}] [{\em output-file}] [-pipe=[input][,output]] \\ \
--column={\em name} \\ \
-{}[-removeCommutationOffsetOnly] \\ \
-{}[-fhead={\em value}] \\ \
-{}[-majorOrder=row|column] \\ \
-{}[-verbose]}
-\end{flushleft} 
-\item {\bf files:} 
-The input file contains bpm waveform data. The output file contains a bpm waveform data with a zero average. 
-\item {\bf switches:} 
-    \begin{itemize} 
-    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
-    \item {\tt -column={\em name}} --- The data column to be adjusted.
-    \item {\tt -removeCommutationOffsetOnly} --- Removes only the commutation offset, leaving the average offset.
-    \item {\tt -fhead={\em value}} --- Fraction of rows at the head which will be used to determine the offsets.
-    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout.
-    \item {\tt -verbose} --- Verbose output to stdout.
-\end{itemize} 
+\begin{sddsprog}{sddsremoveoffsets}
+  \item \textbf{description:}
+    \verb|sddsremoveoffsets| removes the offset from BPM waveform data with "commutation" on.
+  \item \textbf{examples:}
+  \begin{verbatim}
+sddsremoveoffsets input-file output-file -column=BPMValues
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddsremoveoffsets [input-file] [output-file] [-pipe=[input][,output]]
+  -column=name
+  [-removeCommutationOffsetOnly]
+  [-fhead=value]
+  [-majorOrder=row|column]
+  [-verbose]
+  \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe=[input][,output]| --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
+      \item \verb|-column=name| --- The data column to be adjusted.
+      \item \verb|-removeCommutationOffsetOnly| --- Removes only the commutation offset, leaving the average offset.
+      \item \verb|-fhead=value| --- Fraction of rows at the head which will be used to determine the offsets.
+      \item \verb!-majorOrder=row|column! --- Specifies the binary SDDS layout.
+      \item \verb|-verbose| --- Verbose output to stdout.
+    \end{itemize}
+  \item \textbf{files:}
+    The input file contains BPM waveform data. The output file contains BPM waveform data with a zero average.
+  \item \textbf{author:} L. Emery, J. Luo, M. Borland, R. Soliday, ANL/APS.
+\end{sddsprog}
 
-\item {\bf author:} L. Emery, J. Luo, M. Borland, R. Soliday, ANL/APS. 
-\end{itemize} 
- 

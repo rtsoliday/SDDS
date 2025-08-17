@@ -1,64 +1,31 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
- 
-\subsection{sddsderef} 
-\label{sddsderef} 
- 
-\begin{itemize} 
-\item {\bf description:} 
-\verb|sddsderef| allows array and column dereferencing based on constants 
-or on data in parameters and columns. 
- 
-\item {\bf examples:}  
-Let \verb|arrayData| be a file containing a string array named  
-\verb|MessageText| 
-and a column named \verb|MessageIndex| containing integers. 
-The integers are indices into the string array.  To create a new column 
-called \verb|Message| giving the message text for each index, the 
-following command would be used: 
-\begin{flushleft}{\tt  
-sddsderef arrayData -column=Message,arraySource=MessageText,MessageIndex 
-} 
-\end{flushleft} 
-\item {\bf synopsis:}  
-\begin{flushleft}{\tt 
-sddsderef [{\em input}] [{\em output}] [-pipe[=input][,output]] 
-\\ -column={\em newName},\{columnSource | arraySource\}={\em name},{\em indexName}[,{\em indexName1}...] 
-\\ -parameter={\em newName},\{columnSource | arraySource\}={\em name},
-\hspace*{10mm}{\em indexName}[,{\em indexName1}...] 
-\\ -constant={\em newName},\{columnSource | arraySource\}={\em name},
-\hspace*{10mm} {\em indexValue}[,{\em indexValue}...] 
-\\ \hspace*{0.1mm} [-outOfBounds=\{exit | delete\}]
-}\end{flushleft} 
- 
-\item {\bf switches:} 
-    \begin{itemize} 
-   \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe option. 
-    \item {\tt -column={\em newName},\{columnSource | arraySource\}={\em name},{\em indexName}} \\
-        {\tt [,{\em indexName1}...]}
-    --- Creates a new column named {\em newName} containing values 
-    found by dereferencing the array (or column) {\em name} 
-    using the index or indices in the named columns. 
-    \item {\tt -parameter={\em newName},\{columnSource | arraySource\}={\em name},{\em indexName}}\\
-         {\tt [,{\em indexName1}...]}
-    --- Creates a new parameter named {\em newName} containing values 
-    found by dereferencing the array (or column) {\em name} 
-    using the index or indices in the named parameters.  A new value 
-    is thus generated for the parameter for each page. 
-    \item {\tt -constant={\em newName},\{columnSource | arraySource\}={\em name},{\em indexValue}}\\
-         {\tt [,{\em indexValue}...]}  
-    --- Creates a new parameter named {\em newName} containing values 
-    found by dereferencing the array (or column) {\em name} using 
-    the index or indices given (as explicit values).  Unless the array (or 
-    column) varies from page to page, the new parameter will have the 
-    same value on each page. 
-    \item {\tt -outOfBounds=\{exit | delete\}} --- Specifies behavior in the event
-        that an index value is out of bounds (i.e., less than 0, or greater than
-        or equal to the number of array elements or rows).  If {\tt exit} is given,
-        the program aborts with an error; this is the default behavior.
-        If {\tt delete} is given, then the source row or page for the index
-        is omitted from the output.
-    \end{itemize} 
-\item {\bf author:} M. Borland, ANL/APS. 
-\end{itemize} 
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+
+\subsection{sddsderef}
+\label{sddsderef}
+
+\begin{sddsprog}{sddsderef}
+  \item \textbf{description:} \verb|sddsderef| allows array and column dereferencing based on constants or on data in parameters and columns.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    sddsderef arrayData -column=Message,arraySource=MessageText,MessageIndex
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    sddsderef [input] [output] [-pipe[=input][,output]]
+      -column=newName,{columnSource | arraySource}=name,indexName[,indexName1...]
+      -parameter=newName,{columnSource | arraySource}=name,indexName[,indexName1...]
+      -constant=newName,{columnSource | arraySource}=name,indexValue[,indexValue...]
+      [-outOfBounds={exit | delete}]
+    \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb!-column=newName,{columnSource | arraySource}=name,indexName! \verb|[,indexName1...]| --- Creates a new column named \emph{newName} containing values found by dereferencing the array (or column) \emph{name} using the index or indices in the named columns.
+      \item \verb!-parameter=newName,{columnSource | arraySource}=name,indexName! \verb|[,indexName1...]| --- Creates a new parameter named \emph{newName} containing values found by dereferencing the array (or column) \emph{name} using the index or indices in the named parameters. A new value is thus generated for the parameter for each page.
+      \item \verb!-constant=newName,{columnSource | arraySource}=name,indexValue! \verb|[,indexValue...]| --- Creates a new parameter named \emph{newName} containing values found by dereferencing the array (or column) \emph{name} using the index or indices given (as explicit values). Unless the array (or column) varies from page to page, the new parameter will have the same value on each page.
+      \item \verb!-outOfBounds={exit | delete}! --- Specifies behavior in the event that an index value is out of bounds (i.e., less than 0, or greater than or equal to the number of array elements or rows). If \verb|exit| is given, the program aborts with an error; this is the default behavior. If \verb|delete| is given, then the source row or page for the index is omitted from the output.
+    \end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

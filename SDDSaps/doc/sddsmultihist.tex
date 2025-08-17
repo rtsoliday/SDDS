@@ -1,77 +1,59 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddsmultihist}
-\label{sddsmultihist}
-
-\begin{itemize}
-\item {\bf description:} 
-{\tt sddsmultihist} does one-dimensional histograms of multiple columns of data from an SDDS file.
-All columns are histogrammed on the same  interval and with the same number of bins.
-It is similar to {\tt sddshist}, except that the latter program only histograms a single
-column at a time.  Unlike {\tt sddshist}, {\tt sddsmultihist} does not presently do
-statistical analyses or filtering.
-
-\item {\bf examples:} 
-Make 20-bin histogram of a group of PAR x beam-position-monitor readouts:
-\begin{flushleft}{\tt
-sddshist par.bpm par.bpmhis -column=P?P?x -bins=20 -abscissa=xReadout
-}\end{flushleft}
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsmultihist [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}]
--columns={\em columnName}[,{\em columnName}...] -abscissa={\em newName} 
-[-separate]
-[-exclude={\em columnName}[,{\em columnName}...]]
-[{-bins={\em integer} | -sizeOfBins={\em value} | -autobins=target={\em number}[,minimum={\em integer}][,maximum={\em integer}]}]
-[-lowerLimit={\em value}] [-upperLimit={\em value}] 
-[-sides] 
-}\end{flushleft}
-\item {\bf files:} {\em inputFile} is the name of an SDDS file
-containing data to be histogrammed. If {\em inputFile} contains
-multiple data pages, each is treated separately.  The histograms are
-placed in {\em outputFile}, which has one column of histogram
-frequencies for each histogrammed input column, plus a column giving
-the abscissa values for the frequency distributions.  The former
-columns have names of the form {\em columnName}{\tt Frequency},
-containing the number of points in each bin.  The latter column has a
-name given by the user.
-
-\item {\bf switches:}
+\begin{sddsprog}{sddsmultihist}
+  \item \textbf{description:} \verb|sddsmultihist| does one-dimensional histograms of multiple columns of data from an SDDS file.
+    All columns are histogrammed on the same interval and with the same number of bins. It is similar to \verb|sddshist|,
+    except that the latter program only histograms a single column at a time. Unlike \verb|sddshist|, \verb|sddsmultihist|
+    does not presently do statistical analyses or filtering.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddsmultihist par.bpm par.bpmhis -columns=P?P?x -bins=20 -abscissa=xReadout
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddsmultihist [-pipe=[input][,output]] [inputFile] [outputFile]
+  -columns=columnName[,columnName...] -abscissa=newName
+  [-separate]
+  [-exclude=columnName[,columnName...]]
+  [{-bins=integer | -sizeOfBins=value | -autobins=target=number[,minimum=integer][,maximum=integer]}]
+  [-lowerLimit=value] [-upperLimit=value]
+  [-sides]
+    \end{verbatim}
+  \item \textbf{files:} \emph{inputFile} is the name of an SDDS file containing data to be histogrammed. If \emph{inputFile}
+    contains multiple data pages, each is treated separately. The histograms are placed in \emph{outputFile}, which has one
+    column of histogram frequencies for each histogrammed input column, plus a column giving the abscissa values for the frequency
+    distributions. The former columns have names of the form \emph{columnName}\verb|Frequency|, containing the number of points
+    in each bin. The latter column has a name given by the user.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
-    \item {\tt -columns={\em columnName}[,{\em columnName}...]} --- Specifies the names
-         of the data columns to be histogrammed.
-        The {\em columnName} items may contain wildcards.
-    \item {\tt -separate} --- Specifies that a separate abscissa shall be created for each histogrammed
-        column.  If {\tt -abscissa} is not given, then the abscissa names are the names of the columns
-        being histogrammed. 
-    \item {\tt -abscissa={\em newName}[,{\em newName}...]} --- Specifies the name or names of the 
-        abscissa columns for the histogram output.  If {\tt -separate} is not given, then only
-        one name is permitted.
-        The units taken from the units of the columns being histogrammed.
-    \item {\tt -exclude={\em columnName}[,{\em columnName}...]} --- Specifies the names of data columns to
-        exclude from histogramming.  The {\em columnName} items may contain wildcards.
-    \item {\tt -bins={\em number}} --- Specifies the number of bins to use.  The default is 20.
-    \item {\tt -sizeOfBins={\em value}} --- Specifies the size of bins to use.  The number of bins is
-        computed from the range of the data.
-    \item {\tt -autoBins=target={\em number}[,minimum={\em integer}][,maximum={\em integer}]} --- Specifies
-      that the number of bins should be chosen to attempt to give a target number of samples per bin on average.
-      If {\tt minimum} is given, then no fewer than the specified number of bins will be used (default: 5).
-      If {\tt maximum} is given, then no more than the specified number of bins will be used (default: number of samples).
-    \item {\tt -lowerLimit={\em value}} --- Specifies the lower limit of the histogram.  By default,
-        the lower limit is the minimum value in the data.
-    \item {\tt -upperLimit={\em value}} --- Specifies the upper limit of the histogram.  By default,
-        the upper limit is the maximum value in the data.
-    \item {\tt -sides} --- Specifies that zero-height bins should be attached to the lower
-        and upper ends of the histogram.  Many prefer the way this looks on a graph.
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-columns=columnName[,columnName...]| --- Specifies the names of the data columns to be histogrammed. The
+        \emph{columnName} items may contain wildcards.
+      \item \verb|-separate| --- Specifies that a separate abscissa shall be created for each histogrammed column. If
+        \verb|-abscissa| is not given, then the abscissa names are the names of the columns being histogrammed.
+      \item \verb|-abscissa=newName[,newName...]| --- Specifies the name or names of the abscissa columns for the histogram
+        output. If \verb|-separate| is not given, then only one name is permitted. The units are taken from the units of the
+        columns being histogrammed.
+      \item \verb|-exclude=columnName[,columnName...]| --- Specifies the names of data columns to exclude from histogramming. The
+        \emph{columnName} items may contain wildcards.
+      \item \verb|-bins=number| --- Specifies the number of bins to use. The default is 20.
+      \item \verb|-sizeOfBins=value| --- Specifies the size of bins to use. The number of bins is computed from the range of the
+        data.
+      \item \verb|-autoBins=target=number[,minimum=integer][,maximum=integer]| --- Specifies that the number of bins should be
+        chosen to attempt to give a target number of samples per bin on average. If \verb|minimum| is given, then no fewer than
+        the specified number of bins will be used (default: 5). If \verb|maximum| is given, then no more than the specified number
+        of bins will be used (default: number of samples).
+      \item \verb|-lowerLimit=value| --- Specifies the lower limit of the histogram. By default, the lower limit is the minimum
+        value in the data.
+      \item \verb|-upperLimit=value| --- Specifies the upper limit of the histogram. By default, the upper limit is the maximum
+        value in the data.
+      \item \verb|-sides| --- Specifies that zero-height bins should be attached to the lower and upper ends of the histogram.
+        Many prefer the way this looks on a graph.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \hyperref[exampleData]{Data for Examples}
-    \item \progref{sddshist}
-    \item \progref{sddshist2d}
+      \item \hyperref[exampleData]{Data for Examples}
+      \item \progref{sddshist}
+      \item \progref{sddshist2d}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

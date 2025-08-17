@@ -1,67 +1,61 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
-\subsection{sddslocaldensity} 
-\label{sddslocaldensity} 
- 
-\begin{itemize} 
-\item {\bf description:} \hspace*{1mm}\\ 
-{\tt sddslocaldensity} the local density of points in n-dimensional space for each point in the space.
-\item {\bf examples:} 
-\begin{flushleft}{\tt
-   sddslocaldensity <inputFile> <outputFile> -columns=none,x,y -kde=bins=40 -threads=20
-}\end{flushleft} 
-\item {\bf synopsis:}  
-\begin{flushleft}
-\begin{verbatim}
-sddslocaldensity [<inputfile>] [<outputfile>] [-pipe=[input][,output]] [-threads=<number>]
-\{-fraction=<value> | -spread=<value> | 
- -kde=bins=<number>[,gridoutput=<filename>][,nsigma=<value>][,explimit=<value>]
-      [,sample=<fraction>|use=<number>]\}
--columns=<normalizationMode>,<name>[,...] [-output=<columnName>] [-verbose]
-\end{verbatim}
-\end{flushleft} 
-\item {\bf files:} 
-The input file contains a collection of points in n-dimensional space, defined by named columns.
-The output file contains the same data, but with an additional column {\tt LocalDensity} that gives 
-the density of points in the vicinity of each point.
-\item {\bf switches:} 
-  \begin{itemize} 
-  \item {\tt -pipe[=input]} --- The standard SDDS Toolkit pipe option. 
-  \item {\tt -columns={none|range|rms},{\em column1Name},{\em column2Name ...}} --- 
-    Specifies the normalization mode and column names for analysis.
-    Note that the normalization mode is irrelevant when fraction, spread, or kde options are used.
-  \item {-fraction | -spread | -kde} --- Specify the calculation mode, if different from the default.
-    Note that all methods except the KDE method show $N^2$ growth in run time, where $N$ is the number of points.
-    \begin{itemize}
-      \item By default, the ``local density'' for each point is the inverse of the mean distance to all other points.
-      \item For {\tt -fraction=f} mode, the ``local density'' for each point is the number of points inside a distance $d_i$
-        in dimension $i$, where $d_i = f*(\max(x_i) - \min(x_i))$.
-      \item For {\tt -spread=f} mode, the ``local density'' for each point is the sum over all other points
-        of the product of unnormalized gaussian pread functions in each dimensional, where the gaussian parameter
-        is $\sigma = f*(\max(x_i) - \min(x_i))$. Since the gaussians are unnormalized, the result is roughly the
-        number of nearby points.
-      \item {\tt -kde=bins=<number>[,gridoutput=<filename>][,nsigma=<value>]}
-        {\tt [,explimit=<value>][,sample=<fraction>|use=<number>]} ---
-        Performs Kernel Density Estimation in n dimensions using the given number of bins in all dimensions, using
-        Silverman's method to estimate the bandwidth in each dimension.
-        The {\tt gridOutput} qualifier results in writing the density map to the named file.
-        The {\tt nsigma} qualifier specifies truncation of contributions to the density outside the given number of
-        bandwidths; it defaults to 5. The {\tt explimit} qualifier specifies a cutoff in the magnitude of $e^{-z^2/2}$ 
-        for including contributions to the density; it defaults to $10^{-16}$. Setting {\tt nsigma} to a smaller value
-        and {\tt explimit} to a larger value can significantly reduce run time with little impact on accuracy.
-        The {\tt sample} and {\tt use} qualifiers allow reducing the number of input points used for computing the
-        density map; this again can significantly reduce run time and may have little impact on results 
-        if the number of input points is large; regardless of this setting, the estimated local density is output for
-        every input point.
-    \end{itemize}
-  \item {\tt -threads={\em number}} --- Specify the number of threads to use for KDE-based computations. Defaults to 1.
-    The speed-up is best when the number of KDE bins is relatively small or the number of dimensions is relatively small.
-  \item {\tt -outputColumn={\em name}} --- Gives the name of the output column containing the ``local density.''
-    Defaults to {\tt LocalDensity}.
-  \item {\tt -verbose} --- If given, provides informational output during execution.
-  \end{itemize} 
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddslocaldensity}
+\label{sddslocaldensity}
 
-\item {\bf author:} M. Borland, ANL/APS. 
-\end{itemize} 
- 
+\begin{sddsprog}{sddslocaldensity}
+  \item \textbf{description:}
+  \verb|sddslocaldensity| computes the local density of points in n-dimensional space for each point in the space.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddslocaldensity <inputFile> <outputFile> -columns=none,x,y -kde=bins=40 -threads=20
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddslocaldensity [<inputfile>] [<outputfile>] [-pipe=[input][,output]] [-threads=<number>]
+{-fraction=<value> | -spread=<value> |
+ -kde=bins=<number>[,gridoutput=<filename>][,nsigma=<value>][,explimit=<value>]
+      [,sample=<fraction>|use=<number>]}
+-columns=<normalizationMode>,<name>[,...] [-output=<columnName>] [-verbose]
+    \end{verbatim}
+  \item \textbf{files:}
+  The input file contains a collection of points in n-dimensional space, defined by named columns.
+  The output file contains the same data, but with an additional column \verb|LocalDensity| that gives
+  the density of points in the vicinity of each point.
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe[=input]| --- The standard SDDS Toolkit pipe option.
+      \item \verb!-columns={none|range|rms},<column1Name>,<column2Name>...! ---
+        Specifies the normalization mode and column names for analysis.
+        Note that the normalization mode is irrelevant when \verb|-fraction|, \verb|-spread|, or \verb|-kde| options are used.
+      \item \verb|-fraction|, \verb|-spread|, \verb|-kde| --- Specify the calculation mode, if different from the default.
+        Note that all methods except the KDE method show $N^2$ growth in run time, where $N$ is the number of points.
+        \begin{itemize}
+          \item By default, the ``local density'' for each point is the inverse of the mean distance to all other points.
+          \item For \verb|-fraction=f| mode, the ``local density'' for each point is the number of points inside a distance $d_i$
+            in dimension $i$, where $d_i = f*(\max(x_i) - \min(x_i))$.
+          \item For \verb|-spread=f| mode, the ``local density'' for each point is the sum over all other points
+            of the product of unnormalized gaussian spread functions in each dimension, where the gaussian parameter
+            is $\sigma = f*(\max(x_i) - \min(x_i))$. Since the gaussians are unnormalized, the result is roughly the
+            number of nearby points.
+          \item \verb|-kde=bins=<number>[,gridoutput=<filename>][,nsigma=<value>][,explimit=<value>][,sample=<fraction>|use=<number>]| ---
+            Performs Kernel Density Estimation in n dimensions using the given number of bins in all dimensions, using
+            Silverman's method to estimate the bandwidth in each dimension.
+            The \verb|gridOutput| qualifier results in writing the density map to the named file.
+            The \verb|nsigma| qualifier specifies truncation of contributions to the density outside the given number of
+            bandwidths; it defaults to 5. The \verb|explimit| qualifier specifies a cutoff in the magnitude of $e^{-z^2/2}$
+            for including contributions to the density; it defaults to $10^{-16}$. Setting \verb|nsigma| to a smaller value
+            and \verb|explimit| to a larger value can significantly reduce run time with little impact on accuracy.
+            The \verb|sample| and \verb|use| qualifiers allow reducing the number of input points used for computing the
+            density map; this again can significantly reduce run time and may have little impact on results
+            if the number of input points is large; regardless of this setting, the estimated local density is output for
+            every input point.
+        \end{itemize}
+      \item \verb|-threads=<number>| --- Specify the number of threads to use for KDE-based computations. Defaults to 1.
+        The speed-up is best when the number of KDE bins is relatively small or the number of dimensions is relatively small.
+      \item \verb|-outputColumn=<name>| --- Gives the name of the output column containing the ``local density.'' Defaults to \verb|LocalDensity|.
+      \item \verb|-verbose| --- If given, provides informational output during execution.
+    \end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

@@ -1,37 +1,36 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
-\subsection{sddsmatrix2column} 
-\label{sddsmatrix2column} 
- 
-\begin{itemize} 
-\item {\bf description:} \hspace*{1mm}\\ 
-{\tt sddsmatrix2column} transfers matrix into a column.
+%\begin{latexonly}
+\newpage
+%\end{latexonly}
+\subsection{sddsmatrix2column}
+\label{sddsmatrix2column}
 
-\item {\bf synopsis:}  
-\begin{flushleft}
-{\tt 
-sddsmatrix2column [{\em inputfile}] [{\em outputfile}] [-pipe=[input],[output]] \\ \
-{}[-rowNameColumn={\em string}] \\ \
-{}[-dataColumnName={\em string}] \\ \
-{}[-rootnameColumnName={\em string}] \\ \
-{}[-majorOrder=row|column]}
-\end{flushleft} 
+\begin{sddsprog}{sddsmatrix2column}
+  \item {\bf description:} \verb|sddsmatrix2column| transfers a matrix into a single-column SDDS file.
+  \item {\bf examples:}
+    \begin{verbatim}
+    sddsmatrix2column matrix.sdds column.sdds
+    sddsmatrix2column matrix.sdds column.sdds -rowNameColumn=Label -dataColumnName=Value -rootnameColumnName=ID -majorOrder=row
+    \end{verbatim}
+  \item {\bf synopsis:}
+    \begin{verbatim}
+    sddsmatrix2column [inputfile] [outputfile] [-pipe=[input][,output]]
+      [-rowNameColumn=string] [-dataColumnName=string]
+      [-rootnameColumnName=string] [-majorOrder=row|column]
+    \end{verbatim}
+  \item {\bf files:}
+    \begin{itemize}
+      \item {\em inputfile} Contains an optional string column and multiple numerical columns. If the string column or \verb|-rowNameColumn| is not provided, Row$<$row\_index$>$ will be used as row names in the output file.
+      \item {\em outputfile} Contains two columns: a string column and a data column. The string column combines the input string column (or Row$<$row\_index$>$) and the input data column names.
+    \end{itemize}
+  \item {\bf switches:}
+    \begin{itemize}
+      \item \verb|-pipe=[input][,output]| --- Standard SDDS pipe option for reading/writing from stdin/stdout.
+      \item \verb|-rowNameColumn=<string>| --- Column name for row names in the input file. If not provided, Row$<$row\_index$>$ will be used.
+      \item \verb|-dataColumnName=<string>| --- Column name of the data column in the output file. Defaults to \verb|Rootname|.
+      \item \verb|-rootnameColumnName=<string>| --- Column name of the string column in the output file.
+      \item \verb+-majorOrder=row|column+ --- Specifies the binary SDDS layout.
+    \end{itemize}
+  \item {\bf see also:} \progref{sddsarray2column}
+  \item {\bf author:} H. Shang, R. Soliday, ANL/APS.
+\end{sddsprog}
 
-\item {\bf files:}
-    \begin{itemize} 
-    \item {\em inputfile} Contains a string column (not required) and multiple numerical columns. If string column not provided or rowNameColumn not provided, Row$<$row\_index$>$ will be used as row names in the output file.
-    \item {\em outputfile} The output file contain 2 columns: string column and data column. String column would be combination of input string column (or Row$<$row\_index$>$) and input data column names.
-    \end{itemize} 
-
-\item {\bf switches:} 
-    \begin{itemize} 
-    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
-    \item {\tt -rowNameColumn} --- The column name of row names (each row has a name) in the input file. If not provided, Row$<$row\_index$>$ will be used instead. 
-    \item {\tt -dataColumnName} --- The column name of the data in the output file, if not provided, ``Rootname'' will be used
-    \item {\tt -rootnameColumnName} --- The column name of the String column in output file.
-    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout.
-    \end{itemize} 
-
-\item {\bf author:} H. Shang, R. Soliday, ANL/APS. 
-\end{itemize} 

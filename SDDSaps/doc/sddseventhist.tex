@@ -1,61 +1,39 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddseventhist}
-\label{sddseventhist}
-
-\begin{itemize}
-\item {\bf description:} 
-{\tt sddseventhist} analyzes labeled events in a dataset to provide
-histograms of the occurences of each type of event.  It can also
-histogram the overlap off all types of events with a single type of
-event.
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddseventhist [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}]
--dataColumn={\em columnName} -eventIdentifier={\em columnName} [-overlapEvent={\em eventValue}]
-[{-bins={\em number} | -sizeOfBins={\em value}}] 
-[-lowerLimit={\em value}] [-upperLimit={\em value}] 
-[-sides] [-normalize[=\{sum | area | peak\}]] 
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} is a file containing at least two columns of data.
-One column must contain string entries that serve as ``event
-identifiers''; for example, these might be the names of channels that
-issued an alarm.  The other column must contain numerical data that
-will be histogrammed; for example, these might be the times at which
-alarms occured.  The {\em outputFile} contains one histogram of this
-numerical data for each unique value in of the event identifier; the
-histogram contains only the data that matches that identifier.
-\item {\bf switches:}
+\begin{sddsprog}{sddseventhist}
+  \item \textbf{description:}
+  \verb|sddseventhist| analyzes labeled events in a dataset to provide histograms of the occurrences of each type of event. It can also histogram the overlap of all types of events with a single type of event.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddseventhist events.sdds hist.sdds -dataColumn=Time -eventIdentifier=Event -bins=50
+sddseventhist events.sdds hist.sdds -dataColumn=Time -eventIdentifier=Event -overlapEvent=Alarm
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddseventhist [-pipe=[input][,output]] [inputFile] [outputFile]
+  -dataColumn=columnName -eventIdentifier=columnName [-overlapEvent=eventValue]
+  [-bins=number | -sizeOfBins=value]
+  [-lowerLimit=value] [-upperLimit=value]
+  [-sides] [-normalize={sum | area | peak}]
+    \end{verbatim}
+  \item \textbf{files:}
+  \emph{inputFile} is a file containing at least two columns of data. One column must contain string entries that serve as ``event identifiers''; for example, these might be the names of channels that issued an alarm. The other column must contain numerical data that will be histogrammed; for example, these might be the times at which alarms occurred. The \emph{outputFile} contains one histogram of this numerical data for each unique value of the event identifier; the histogram contains only the data that matches that identifier.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
-    \item {\tt -dataColumn={\em columnName}} --- Specifies the name of the data column to be histogrammed.
-    \item {\tt -eventIdentifier={\em columnName}} --- Specifies the name of the string column that
-        identifies events.
-    \item {\tt -overlapEvent={\em eventValue}} --- Requests computation of the overlap of the
-        histograms of each event with the histogram of event {\em eventValue}.  Useful in determining
-        which events always occur at the same time as event {\em eventValue}.
-    \item {\tt -bins={\em number}} --- Specifies the number of bins to use.  The default is 20.
-    \item {\tt -sizeOfBins={\em value}} --- Specifies the size of bins to use.  The number of bins is
-        computed from the range of the data.
-    \item {\tt -lowerLimit={\em value}} --- Specifies the lower limit of the histogram.  By default,
-        the lower limit is the minimum value in the data.
-    \item {\tt -upperLimit={\em value}} --- Specifies the upper limit of the histogram.  By default,
-        the upper limit is the maximum value in the data.
-    \item {\tt -sides} --- Specifies that zero-height bins should be attached to the lower
-        and upper ends of the eventhistogram.  Many prefer the way this looks on a graph.
-    \item {\tt -normalize[=\{sum | area | peak\}]} --- Specifies that the histogram should be normalized, and how.
-        The default is {\tt sum}.  {\tt sum} normalization means that the sum of the heights will be 1.
-        {\tt area} normalization means that the area under the histogram will be 1.
-        {\tt peak} normalization means that the maximum height will be 1.
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item \verb|-dataColumn=columnName| --- Specifies the name of the data column to be histogrammed.
+      \item \verb|-eventIdentifier=columnName| --- Specifies the name of the string column that identifies events.
+      \item \verb|-overlapEvent=eventValue| --- Requests computation of the overlap of the histograms of each event with the histogram of event \emph{eventValue}. Useful in determining which events always occur at the same time as event \emph{eventValue}.
+      \item \verb|-bins=number| --- Specifies the number of bins to use. The default is 20.
+      \item \verb|-sizeOfBins=value| --- Specifies the size of bins to use. The number of bins is computed from the range of the data.
+      \item \verb|-lowerLimit=value| --- Specifies the lower limit of the histogram. By default, the lower limit is the minimum value in the data.
+      \item \verb|-upperLimit=value| --- Specifies the upper limit of the histogram. By default, the upper limit is the maximum value in the data.
+      \item \verb|-sides| --- Specifies that zero-height bins should be attached to the lower and upper ends of the event histogram. Many prefer the way this looks on a graph.
+      \item \verb!-normalize={sum | area | peak}! --- Specifies that the histogram should be normalized, and how. The default is \verb|sum|. \verb|sum| normalization means that the sum of the heights will be 1. \verb|area| normalization means that the area under the histogram will be 1. \verb|peak| normalization means that the maximum height will be 1.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \progref{sddscorrelate}
-    \item \progref{sddshist}
-    \item \progref{sddshist2d}
+      \item \progref{sddscorrelate}
+      \item \progref{sddshist}
+      \item \progref{sddshist2d}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
-
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

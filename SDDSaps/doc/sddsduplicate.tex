@@ -1,22 +1,16 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddsduplicate}
-\label{sddsduplicate}
-
-\begin{itemize}
-  \item {\bf description:}
-  Duplicates rows in an SDDS file. The number of duplicates may come from a weight column or a fixed duplication factor. Weight values can be scaled to a minimum or maximum factor, and fractional values may be treated probabilistically.
-  \item {\bf examples:}
-  \begin{flushleft}{\tt
-sddsduplicate data.sdds dup.sdds -weight=Particles -maxFactor=5\\
+\begin{sddsprog}{sddsduplicate}
+  \item \textbf{description:}
+  \verb|sddsduplicate| duplicates rows in an SDDS file. The number of duplicates may come from a weight column or a fixed duplication factor. Weight values can be scaled to a minimum or maximum factor, and fractional values may be treated probabilistically.
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddsduplicate data.sdds dup.sdds -weight=Particles -maxFactor=5
 sddsduplicate data.sdds dup.sdds -factor=3
-}\end{flushleft}
-  \item {\bf synopsis:}
-  \begin{flushleft}{\tt
-sddsduplicate [{\em input}] [{\em output}] [-pipe[=input][,output]] [-weight={\em column}] [-minFactor={\em integer}] [-maxFactor={\em integer}]
-    [-factor={\em integer}] [-probabilistic] [-seed={\em integer}] [-verbosity[={\em level}]]
-}\end{flushleft}
-  \item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddsduplicate [input] [output] [-pipe[=input][,output]] [-weight=column] [-minFactor=integer] [-maxFactor=integer]
+  [-factor=integer] [-probabilistic] [-seed=integer] [-verbosity[=level]]
+    \end{verbatim}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
+

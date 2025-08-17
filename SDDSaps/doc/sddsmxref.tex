@@ -1,51 +1,42 @@
-%\begin{latexonly} 
-\newpage 
-%\end{latexonly} 
-\subsection{sddsmxref} 
-\label{sddsmxref} 
- 
-\begin{itemize} 
-\item {\bf description:} \hspace*{1mm}\\ 
-{\tt sddsmxref} takes columns, parameters, and arrays from succesive pages from file {\em input2} and adds them to successive pages from {\em input1}. If {\em output} is given, the result is placed there; otherwise, {\em input1} is replaced. By default, all columns are taken from {\em input2}.
-\item {\bf examples:} 
-\begin{flushleft}
-{\tt sddsmxref <input1> <input2> <output> -take=Values }
-\end{flushleft} 
-\item {\bf synopsis:}  
-\begin{flushleft}
-{\tt 
-sddsmxref [{\em input1}] [{\em input2}] [{\em output}] [-pipe=[input][,output]] \\ \
-{}[-ifis={column|parameter},{\em name}[,...]] \\ \
-{}[-ifnot={parameter|column|array},{\em name}[,...]] \\ \
-{}[-transfer={parameter|array},{\em name}[,...]] \\ \
-{}[-take={\em column-name}[,...]]  \\ \
-{}[-leave={\em column-name}[,...]] \\ \
-{}[-fillIn] \\ \
-{}[-match={\em column-name}[={\em column-name}][,...]] \\ \
-{}[-equate={\em column-name}[={\em column-name}]]  \\ \
-{}[-reuse[=[rows][,page]]] \\ \
-{}[-rename={column|parameter|array},{\em oldname}={\em newname}[,...]] \\ \
-{}[-editnames={column|parameter|array},{\em wildcard-string},{\em edit-string}] \\ \
-{}[-nowarnings] \\ \
-{}[-majorOrder=row|column]}
-\end{flushleft} 
-\item {\bf switches:} 
-    \begin{itemize} 
-    \item {\tt -pipe=[input][,output]} --- Standard SDDS pipe options for reading/writing files from stdin/stdout.
-    \item {\tt -ifis} --- Specifies names of parameters, arrays, and columns that must exist in {\em input1} if the program is to run as asked.
-    \item {\tt -ifnot} --- Specifies names of parameters, arrays, and columns that may not exist in {\em input1} if the program is to run as asked.
-    \item {\tt -transfer} --- Specifies names of parameters or arrays to transfer from {\em input2}.
-    \item {\tt -take} --- Specifies names of columns to take from {\em input2}.
-    \item {\tt -leave} --- Specifies names of columns not to take from {\em input2}. Overrides -take if both name a given column. -leave=* results in no columns being taken.
-    \item {\tt -fillIn} --- Specifies filling in NULL and 0 values in rows for which no match is found.  By default, such rows are omitted.
-    \item {\tt -match} --- Specifies names of columns to match between {\em input1} and {\em input2} for selection and placement of data taken from {\em input2}.
-    \item {\tt -equate} --- Specifies names of columns to equate between {\em input1} and {\em input2} for selection and placement of data taken from {\em input2}.
-    \item {\tt -reuse} --- Specifies that rows of {\em input2} may be reused, i.e., matched with more than one row of {\em input1}.  Also, -reuse=page specifies that only the first page of {\em input2} is used.
-    \item {\tt -rename} --- Specifies new names for entities in the output data set. The entities must still be referred to by their old names in the other commandline options.
-    \item {\tt -editnames} --- Specifies creation of new names for entities of the specified type with names matching the specified wildcard string. Editing is performed using commands reminiscent of emacs keystrokes. if -editnames=<entity>{column|parameter|array},wildcard,ei/\%ld/ is specified, the entity names will be changed to <name>N, N is the position of input files in the command line.
-    \item {\tt -nowarnings} --- Specifies that warning messages should be suppressed.
-    \item {\tt -majorOrder=row|column} --- Specifies the binary SDDS layout.
-\end{itemize} 
-
-\item {\bf author:} C. Saunders, M. Borland, R. Soliday, H. Shang, ANL/APS. 
-\end{itemize} 
+\begin{sddsprog}{sddsmxref}
+  \item \textbf{description:} \verb|sddsmxref| takes columns, parameters, and arrays from successive pages of file \emph{input2} and adds them to successive pages of \emph{input1}. If \emph{output} is given, the result is placed there; otherwise, \emph{input1} is replaced. By default, all columns are taken from \emph{input2}.
+  \item \textbf{examples:}
+  \begin{verbatim}
+sddsmxref <input1> <input2> <output> -take=Values
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddsmxref [input1] [input2] [output] [-pipe=[input][,output]]
+          [-ifis={column|parameter},name[,...]]
+          [-ifnot={parameter|column|array},name[,...]]
+          [-transfer={parameter|array},name[,...]]
+          [-take=column-name[,...]]
+          [-leave=column-name[,...]]
+          [-fillIn]
+          [-match=column-name[=column-name][,...]]
+          [-equate=column-name[=column-name]]
+          [-reuse[=[rows][,page]]]
+          [-rename={column|parameter|array},oldname=newname[,...]]
+          [-editnames={column|parameter|array},wildcard-string,edit-string]
+          [-nowarnings]
+          [-majorOrder=row|column]
+  \end{verbatim}
+  \item \textbf{switches:}
+  \begin{itemize}
+    \item \verb|-pipe=[input][,output]| -- Standard SDDS pipe options for reading/writing files from stdin/stdout.
+    \item \verb|-ifis| -- Specifies names of parameters, arrays, and columns that must exist in \emph{input1} if the program is to run as asked.
+    \item \verb|-ifnot| -- Specifies names of parameters, arrays, and columns that may not exist in \emph{input1} if the program is to run as asked.
+    \item \verb|-transfer| -- Specifies names of parameters or arrays to transfer from \emph{input2}.
+    \item \verb|-take| -- Specifies names of columns to take from \emph{input2}.
+    \item \verb|-leave| -- Specifies names of columns not to take from \emph{input2}. Overrides \verb|-take| if both name a given column. \verb|-leave=*| results in no columns being taken.
+    \item \verb|-fillIn| -- Specifies filling in NULL and 0 values in rows for which no match is found. By default, such rows are omitted.
+    \item \verb|-match| -- Specifies names of columns to match between \emph{input1} and \emph{input2} for selection and placement of data taken from \emph{input2}.
+    \item \verb|-equate| -- Specifies names of columns to equate between \emph{input1} and \emph{input2} for selection and placement of data taken from \emph{input2}.
+    \item \verb|-reuse| -- Specifies that rows of \emph{input2} may be reused, i.e., matched with more than one row of \emph{input1}. Also, \verb|-reuse=page| specifies that only the first page of \emph{input2} is used.
+    \item \verb|-rename| -- Specifies new names for entities in the output data set. The entities must still be referred to by their old names in the other command-line options.
+    \item \verb|-editnames| -- Specifies creation of new names for entities of the specified type with names matching the specified wildcard string. Editing is performed using commands reminiscent of emacs keystrokes. If \verb+-editnames=<entity>{column|parameter|array},wildcard,ei/%ld/+ is specified, the entity names will be changed to \emph{name}N, where N is the position of input files in the command line.
+    \item \verb|-nowarnings| -- Specifies that warning messages should be suppressed.
+    \item \verb+-majorOrder=row|column+ -- Specifies the binary SDDS layout.
+  \end{itemize}
+  \item \textbf{author:} C. Saunders, M. Borland, R. Soliday, H. Shang, ANL/APS.
+\end{sddsprog}

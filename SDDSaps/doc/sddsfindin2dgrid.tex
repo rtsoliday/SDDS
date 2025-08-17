@@ -4,35 +4,44 @@
 \subsection{sddsfindin2dgrid}
 \label{sddsfindin2dgrid}
 
-\begin{itemize}
-\item {\bf description:} \verb|sddsfindin2dgrid| searches a two-dimensional grid of data and returns the grid coordinates where two specified columns are closest to requested values. The requested values may be supplied directly with \verb|-atValues| or read from an SDDS file with \verb|-valuesFile|. Optional interpolation refines the location, and \verb|-inverse| performs the reverse operation, interpolating data values from supplied grid coordinates.
-\item {\bf examples:}
-
-Find the location where columns \verb|Fx| and \verb|Fy| match the requested values.
-\begin{flushleft}{\tt
-sddsfindin2dgrid data.sdds locations.sdds -gridVariables=x,y -findLocationOf=Fx,Fy -atValues=0.1,0.2 -interpolate
-}\end{flushleft}
-
-Use a file of value pairs and reuse the first page of input data.
-\begin{flushleft}{\tt
-sddsfindin2dgrid grid.sdds out.sdds -gridVariables=Qx,Qy -findLocationOf=R11,R12 -valuesFile=targets.sdds -mode=reuseFirstPage
-}\end{flushleft}
-
-Interpolate data values for given grid positions.
-\begin{flushleft}{\tt
-sddsfindin2dgrid grid.sdds values.sdds -gridVariables=x,y -findLocationOf=Fx,Fy -valuesFile=positions.sdds -inverse
-}\end{flushleft}
-
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddsfindin2dgrid [\em input] [\em output] [-pipe=[input][,output]] \\
-  -gridVariables=\em gridColumnName1,gridColumnName2 \\
-  -findLocationOf=\em columnName1,columnName2 \\
-  \{-valuesFile=\em filename\ |\ -atValues=\em value1,value2\} \\
-   {}[-presorted] [-interpolate] \\
-   {}[-mode=\{onePairPerPage|reuseFirstPage|all\}] \\
-   {}[-inverse]
-}\end{flushleft}
-
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+\begin{sddsprog}{sddsfindin2dgrid}
+  \item \textbf{description:} \verb|sddsfindin2dgrid| searches a two-dimensional grid of data and returns the grid coordinates where two specified columns are closest to requested values. The requested values may be supplied directly with \verb|-atValues| or read from an SDDS file with \verb|-valuesFile|. Optional interpolation refines the location, and \verb|-inverse| performs the reverse operation, interpolating data values from supplied grid coordinates.
+  \item \textbf{examples:}
+  \begin{verbatim}
+  sddsfindin2dgrid data.sdds locations.sdds -gridVariables=x,y -findLocationOf=Fx,Fy -atValues=0.1,0.2 -interpolate
+  sddsfindin2dgrid grid.sdds out.sdds -gridVariables=Qx,Qy -findLocationOf=R11,R12 -valuesFile=targets.sdds -mode=reuseFirstPage
+  sddsfindin2dgrid grid.sdds values.sdds -gridVariables=x,y -findLocationOf=Fx,Fy -valuesFile=positions.sdds -inverse
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+  sddsfindin2dgrid [input] [output] [-pipe=[input][,output]]
+    -gridVariables=gridColumnName1,gridColumnName2
+    -findLocationOf=columnName1,columnName2
+    {-valuesFile=filename | -atValues=value1,value2}
+    [-presorted] [-interpolate]
+    [-mode={onePairPerPage|reuseFirstPage|all}]
+    [-inverse]
+  \end{verbatim}
+  \item \textbf{switches:}
+  \begin{itemize}
+    \item \verb|-gridVariables=gridColumnName1,gridColumnName2| \textendash{} names of columns giving grid coordinates.
+    \item \verb|-findLocationOf=columnName1,columnName2| \textendash{} columns for which to locate or interpolate values.
+    \item \verb+{-valuesFile=filename | -atValues=value1,value2}+ \textendash{} supply target pairs directly or from a file.
+    \item \verb|-presorted| \textendash{} declare that grid variables are sorted to speed the search.
+    \item \verb|-interpolate| \textendash{} interpolate within grid cells for sub-grid accuracy.
+    \item \verb+-mode={onePairPerPage|reuseFirstPage|all}+ \textendash{} control how value pairs are used for multipage data.
+    \item \verb|-inverse| \textendash{} interpolate data values for supplied grid coordinates.
+    \item \verb+-pipe[=input][,output]+ \textendash{} standard SDDS Toolkit pipe option.
+  \end{itemize}
+  \item \textbf{files:}
+  \begin{itemize}
+    \item \emph{input} \textendash{} SDDS file containing the grid data.
+    \item \emph{output} \textendash{} SDDS file receiving the resulting coordinates or values.
+  \end{itemize}
+  \item \textbf{see also:}
+  \begin{itemize}
+    \item \progref{sdds2dinterpolate}
+    \item \progref{sddssnap2grid}
+  \end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}

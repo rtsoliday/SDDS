@@ -4,76 +4,75 @@
 \subsection{sddsgfit}
 \label{sddsgfit}
 
-\begin{itemize}
-\item {\bf description:}
-{\tt sddsgfit} does gaussian fits to a single column of an SDDS file as a function of another column (the independent 
-variable).  The fitting function is
-\[ G(x) = B + H * e \frac{-(x-\mu) 2}{2 \sigma 2}, \]
-where x is the independent variable, B is the baseline, H is the height, ${\rm \mu}$ is the mean,
-and ${\rm \sigma}$ is the width.
+\begin{sddsprog}{sddsgfit}
+  \item \textbf{description:}
+  \verb|sddsgfit| does gaussian fits to a single column of an SDDS file as a function of another column
+  (the independent variable). The fitting function is
+  \[
+    G(x) = B + H e^{-(x-\mu)^2/(2\sigma^2)}
+  \]
+  where $x$ is the independent variable, $B$ is the baseline, $H$ is the height, $\mu$ is the mean, and
+  $\sigma$ is the width.
 
-\item {\bf examples:} 
-Fit a gaussian to a beam profile to get the rms beam size:
-\begin{flushleft}{\tt
-sddsgfit beamProfile.sdds beamProfile.gfit -column=x,Intensity 
-}\end{flushleft}
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsgfit [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}] 
--columns={\em x-name},{\em y-name}[,{\em sy-name}] 
-[-fitRange={\em lower},{\em upper}] [-fullOutput] 
-[-guesses=[baseline={\em value}][,mean={\em value}][,height={\em value}][,sigma={\em value}]] 
-[-fixValue=[baseline={\em value}][,mean={\em value}][,height={\em value}][,sigma={\em value}]] 
-[-stepSize={\em factor}] [-tolerance={\em value}] 
-[-limits=[evaluations={\em number}][,passes={\em number}]
-[-verbosity={\em integer}] 
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} contains the columns of data to be fit.  If {\em inputFile} contains multiple
-pages, each page of data is fit separately.  {\em outputFile} has columns containing the
-independent variable data and the corresponding values of the fit.  The name of the latter
-column is constructed by appending the string {\tt Fit} to the name of the dependent variable.
-In addition, if {\tt -fullOutput} is given, it includes a column with the dependent values and
-the residual (dependent values minus fit values).  The name of the residual column is
-constructed by appending the string {\tt Residual} to the name of the dependent variable.  {\em
-outputFile} contains five parameters: {\tt gfitBaseline}, {\tt gfitHeight}, {\tt gfitMean},
-{\tt gfitSigma}, and {\tt gfitRmsResidual}.  The first four parameters are respectively B, H,
-$\mu$, and $\sigma$ from the equation above.  The last is the rms residual of the fit.
+  \item \textbf{examples:}
+  Fit a gaussian to a beam profile to get the rms beam size:
+  \begin{verbatim}
+  sddsgfit beamProfile.sdds beamProfile.gfit -column=x,Intensity
+  \end{verbatim}
 
-\item {\bf switches:}
-    \begin{itemize}
-    \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
-    \item {\tt -columns={\em x-name},{\em y-name}} 
-        --- Specifies the names of the independent and dependent columns of data.
-    \item {\tt -fitRange={\em lower},{\em upper}} --- Specifies the range of independent variable
-        values to use in the fit.
-    \item {\tt -guesses=[baseline={\em value}][,mean={\em value}][,height={\em value}][,sigma={\em value}]} 
-        --- Gives {\tt sddsgfit} a starting point for one or more parameters.
-    \item {\tt -fixValue=[baseline={\em value}][,mean={\em value}][,height={\em value}][,sigma={\em value}]} 
-        --- Gives {\tt sddsgfit} a fixed value for one or more parameters.  If given, then {\tt sddsgfit}
-        will not attempt to fit the parameters in question.
-    \item {\tt -stepSize={\em factor}} --- Specifies the starting stepsize for optimization as a fraction
-        of the starting values.  The default is 0.01.
-    \item {\tt -tolerance={\em value}} --- Specifies how close {\tt sddsgfit} will attempt to come to the optimum fit,
-        in terms of the mean squared residual.  The default is ${\rm 10 {-8}}$.
-    \item {\tt -limits=[evaluations={\em number}][,passes={\em number}} ---
-        Specifies limits on how many fit function evaluations and how many minimization passes will be done
-        in the fitting.    The defaults are 5000 and 100, respectively.  If the fit is not converging,
-        try increasing one or both of these.  If the number of evaluations is too small, you may get
-        warning messages about optimization failures.
-    \item {\tt -fullOutput} --- Specifies that {\em outputFile} will contain the original dependent variable
-        data and the fit residuals, in addition to the independent variable data and the fit values.
-    \item {\tt -verbosity={\em integer}} --- Specifies that informational printouts are desired during fitting.  A larger
-        integer produces more output.
-    \end{itemize}
-\item {\bf see also:}
-    \begin{itemize}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+  sddsgfit [-pipe=[input][,output]] [inputFile] [outputFile]
+    -columns=x-name,y-name[,sy-name]
+    [-fitRange=lower,upper] [-fullOutput]
+    [-guesses=[baseline=value][,mean=value][,height=value][,sigma=value]]
+    [-fixValue=[baseline=value][,mean=value][,height=value][,sigma=value]]
+    [-stepSize=factor] [-tolerance=value]
+    [-limits=[evaluations=number][,passes=number]]
+    [-verbosity=integer]
+  \end{verbatim}
+
+  \item \textbf{switches:}
+  \begin{itemize}
+    \item \verb|-pipe=[input][,output]| --- The standard SDDS Toolkit pipe option.
+    \item \verb|-columns=x-name,y-name| --- Specifies the names of the independent and dependent columns of data.
+    \item \verb|-fitRange=lower,upper| --- Specifies the range of independent variable values to use in the fit.
+    \item \verb|-guesses=[baseline=value][,mean=value][,height=value][,sigma=value]| --- Gives \verb|sddsgfit| a starting
+    point for one or more parameters.
+    \item \verb|-fixValue=[baseline=value][,mean=value][,height=value][,sigma=value]| --- Gives \verb|sddsgfit| a fixed
+    value for one or more parameters. If given, then \verb|sddsgfit| will not attempt to fit the parameters in question.
+    \item \verb|-stepSize=factor| --- Specifies the starting stepsize for optimization as a fraction of the starting
+    values. The default is 0.01.
+    \item \verb|-tolerance=value| --- Specifies how close \verb|sddsgfit| will attempt to come to the optimum fit, in
+    terms of the mean squared residual. The default is $10^{-8}$.
+    \item \verb|-limits=[evaluations=number][,passes=number]| --- Specifies limits on how many fit function
+    evaluations and how many minimization passes will be done in the fitting. The defaults are 5000 and 100,
+    respectively. If the fit is not converging, try increasing one or both of these. If the number of evaluations is
+    too small, you may get warning messages about optimization failures.
+    \item \verb|-fullOutput| --- Specifies that \verb|outputFile| will contain the original dependent variable data and
+    the fit residuals, in addition to the independent variable data and the fit values.
+    \item \verb|-verbosity=integer| --- Specifies that informational printouts are desired during fitting. A larger
+    integer produces more output.
+  \end{itemize}
+
+  \item \textbf{files:}
+  \emph{inputFile} contains the columns of data to be fit. If \emph{inputFile} contains multiple pages, each page of
+  data is fit separately. \emph{outputFile} has columns containing the independent variable data and the corresponding
+  values of the fit. The name of the latter column is constructed by appending the string \verb|Fit| to the name of the
+  dependent variable. In addition, if \verb|-fullOutput| is given, it includes a column with the dependent values and
+  the residual (dependent values minus fit values). The name of the residual column is constructed by appending the
+  string \verb|Residual| to the name of the dependent variable. \emph{outputFile} contains five parameters:
+  \verb|gfitBaseline|, \verb|gfitHeight|, \verb|gfitMean|, \verb|gfitSigma|, and \verb|gfitRmsResidual|. The first four
+  parameters are respectively $B$, $H$, $\mu$, and $\sigma$ from the equation above. The last is the rms residual of the
+  fit.
+
+  \item \textbf{see also:}
+  \begin{itemize}
     \item \progref{sddspfit}
     \item \progref{sddsexpfit}
     \item \progref{sddsoutlier}
-    \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \end{itemize}
 
-
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

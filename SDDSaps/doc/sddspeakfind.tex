@@ -1,68 +1,57 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddspeakfind}
-\label{sddspeakfind}
+\begin{sddsprog}{sddspeakfind}
+  \item \textbf{description:}
+  \verb|sddspeakfind| finds the locations and values of peaks in a single column of an SDDS file.  It incorporates
+  various features to help reject spurious peaks.  The column is considered a function of the row index for the
+  purpose of finding peaks.  Hence, the data should be sorted if necessary using \verb|sddssort| prior to using this
+  program.  I.e., if the data contains columns x and y, and one wants x values of peaks in y, then one should
+  ensure that the rows are sorted into increasing or decreasing x order.
 
-\begin{itemize}
-\item {\bf description:}
-
-{\tt sddspeakfind} finds the locations and values of peaks in a single column of an SDDS file.  It incorporates
-various features to help reject spurious peaks.  The column is considered a function of the row index for the
-purpose of finding peaks.  Hence, the data should be sorted if necessary using {\tt sddssort} prior to using this
-program.  I.e., if the data contains columns x and y, and one wants x values of peaks in y, then one should
-ensure that the rows are sorted into increasing or decreasing x order.
-
-It may also be helpful to smooth the data using {\tt sddssmooth} in order to eliminate spurious peaks due to
-noisy data.
-
-\item {\bf examples:} 
-Find peaks in a Fourier transform:
-\begin{flushleft}{\tt
-sddspeakfind data.fft data.peaks -column=FFTamplitude 
-}\end{flushleft}
-Sort and smooth the data first:
-\begin{flushleft}{\tt
-sddssort data.fft -column=f,increasing -pipe=out \\
-| sddssmooth -pipe -columns=FFTamplitude \\
-| sddspeakfind -pipe=in data.peaks -column=FFTamplitude 
-}\end{flushleft}
-
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddspeakfind [-pipe=[input][,output]] [{\em inputFile}] [{\em outputFile}] 
--column={\em columnName} [-fivePoints] [-threshold={\em value}]
-[-exclusionZone={\em fractionalInterval}] [-changeThreshold={\em fractionalChange}]
-}\end{flushleft}
-\item {\bf files:}
-{\em inputFile} contains the data to be searched for peaks.  {\em outputFile} contains all of the array and
-parameter data from {\em inputFile}, plus data from all rows that contain a peak in the named column.  No new
-data elements are created.  If {\em inputFile} contains multiple pages, each is treated separately and is
-delivered to a separate page of {\em outputFile}.
-
-\item {\bf switches:}
+  It may also be helpful to smooth the data using \verb|sddssmooth| in order to eliminate spurious peaks due to
+  noisy data.
+  \item \textbf{examples:}
+    Find peaks in a Fourier transform:
+    \begin{verbatim}
+sddspeakfind data.fft data.peaks -column=FFTamplitude
+    \end{verbatim}
+    Sort and smooth the data first:
+    \begin{verbatim}
+sddssort data.fft -column=f,increasing -pipe=out |
+  sddssmooth -pipe -columns=FFTamplitude |
+  sddspeakfind -pipe=in data.peaks -column=FFTamplitude
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddspeakfind [-pipe=[input][,output]] [inputFile] [outputFile]
+  -column=columnName [-fivePoints] [-threshold=value]
+  [-exclusionZone=fractionalInterval] [-changeThreshold=fractionalChange]
+    \end{verbatim}
+  \item \textbf{files:}
+  \emph{inputFile} contains the data to be searched for peaks.  \emph{outputFile} contains all of the array and
+  parameter data from \emph{inputFile}, plus data from all rows that contain a peak in the named column.  No new
+  data elements are created.  If \emph{inputFile} contains multiple pages, each is treated separately and is
+  delivered to a separate page of \emph{outputFile}.
+  \item \textbf{switches:}
     \begin{itemize}
-    \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
-    \item {\tt -column={\em columnName}} --- Specifies the name of the column to search for peaks. 
-    \item {\tt -fivePoints} --- Specifies peak analysis using five adjacent data points, rather than
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item {\tt -column={\em columnName}} --- Specifies the name of the column to search for peaks.
+      \item \verb|-fivePoints| --- Specifies peak analysis using five adjacent data points, rather than
         the default three.  For three-point mode, a peak is any point which is larger than both of
         its two nearest neighbors.  For five-point mode, the candidate point's nearest neighbors must in turn
         be higher than their nearest neighbors on the side away from the candidate point.
-    \item {\tt -threshold={\em value}} --- Specifies a minimum value that a peak value must exceed in order
+      \item {\tt -threshold={\em value}} --- Specifies a minimum value that a peak value must exceed in order
         to be included in the output.  By default, no threshold is applied.
-    \item {\tt -exclusionZone={\em fractionalInterval}} --- Specifies elimination of smaller peaks within a given interval
+      \item {\tt -exclusionZone={\em fractionalInterval}} --- Specifies elimination of smaller peaks within a given interval
         around a larger peak.  {\em fractionalInterval} is the width of the interval in units of the length of the data table.
-    \item {\tt -changeThreshold={\em fractionalChange}} --- Specifies elimination of peaks for which the fractional
-        change between the peak value and the nearest neighbor points is less than the given amount.  If 
-        {\tt -fivePoints} is given, the nearest neighbors in question are those 2 rows above and below the
+      \item {\tt -changeThreshold={\em fractionalChange}} --- Specifies elimination of peaks for which the fractional
+        change between the peak value and the nearest neighbor points is less than the given amount.  If
+        \verb|-fivePoints| is given, the nearest neighbors in question are those 2 rows above and below the
         peak.
     \end{itemize}
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \progref{sddsfft}
-    \item \progref{sddssmooth}
-    \item \progref{sddspeakfind}
+      \item \progref{sddsfft}
+      \item \progref{sddssmooth}
     \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
-\end{itemize}
+  \item \textbf{author:} M. Borland, ANL/APS.
+\end{sddsprog}
 

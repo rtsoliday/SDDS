@@ -1,146 +1,84 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
+\begin{sddsprog}{sddsdigfilter}
+  \item \textbf{description:}
+    \verb|sddsdigfilter| performs time-domain digital filtering of columns of data. Filters can be combined in series and/or
+    cascade to produce complex filter characteristics. In addition to allowing simple 1-pole lowpass and highpass filters,
+    filter characteristics can be defined using either digital \verb|Z| or analog \verb|S| domain transfer functions.
 
-\subsection{sddsdigfilter}
-\label{sddsdigfilter}
-
-\begin{itemize}
-\item {\bf description:}
-
-{\tt sddsdigfilter} performs time-domain digital filtering of columns of data. Filters can
-be combined in series and/or cascade to produce complex filter characteristics. In
-addition to allowing simple 1-pole lowpass and highpass filters, filter charateristics can
-be defined using either digital 'Z' or analog 'S' domain transfer functions.
-
-A digital filter has a Z transform given by
-\[
-\frac{b_0 + b_1 z^{-1} + \ldots + b_n z^{-n}}{a_0 + a_1 z^{-1} + \ldots + a_n z^{-n}},
-\]
-while an analog filter has a Laplace transform given by
-\[
-\frac{d_0 + d_1 s^{1} + \ldots + d_n s^{n}}{c_0 + c_1 s^{1} + \ldots + c_n s^{n}},
-\]
-
-\item {\bf examples:} 
-These examples assume the existence of a file {\tt data.wf} containing a waveform
-stored as a column {\tt value} that is a function of a column {\tt time} that has
-units of seconds.
-
- Pass data through lowpass filter with a -3dB cutoff of 0.01 Hz:
-
-  \begin{flushleft}{\tt
-  sddsdigfilter data.wf -col=time,value result.wf -low=1,0.01.
-  }\end{flushleft}
-
-  Bandstop filter between 10 Hz and 100 Hz:
-
-  \begin{flushleft}{\tt
-  sddsdigfilter data.wf -col=time,value result.wf -low=1,10 -high=1,100
-  }\end{flushleft}
-
-  Bandpass filter between 10 Hz and 100 Hz:
-
-  \begin{flushleft}{\tt
-  sddsdigfilter data.wf -col=time,value result.wf -low=1,100 -cascade -high=1,10
-  }\end{flushleft}
-
-  Analog transfer function:
-
-  \begin{flushleft}{\tt
-  sddsdigfilter data.wf -col=time,value result.wf -analog=D,1.0,0.01,C,0.1,0.3,1.6
-  }\end{flushleft}
-
-  Five-sample digital delay:
-
-  \begin{flushleft}{\tt
-  sddsdigfilter data.wf -col=time,value result.wf -digital=B,0,0,0,0,0,1
-  }\end{flushleft}
- 
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsdigfilter [{\em inputFile}] [{\em outputFile}] [-pipe=[input][,output]]
-  -columns={\em xName},{\em yName}
- [-proportional={\em gain}]
- [-lowpass={\em gain},{\em cutoffFrequency}]
- [-highpass={\em gain},{\em cutoffFrequency}]
- [-digitalfilter={\em sddsfile},{\em aCoeffName},{\em bCoeffName}
- [-digitalfilter=[A,{\em a0},{\em a1},..,{\em am}][,B,{\em b0},{\em b1},..,{\em bn}]
- [-analogfilter={\em sddsfile},{\em cCoeffName},{\em dCoeffName}
- [-analogfilter=[C,{\em c0},{\em c1},..,{\em cm}][,D,{\em d0},{\em d1},..,{\em dn}]
- [-cascade]
- [-verbose]
-
-}\end{flushleft}
-\item {\bf files:}
- Two file names are required: the name of the existing input file,
- and the name of the output file to be produced. The input file must
- contain at least two columns: one containing to data to be filtered
- ({\em yName}) and the other giving time information ({\em xName}). A linear time
- scale is assumed for {\em xName}.
- The output file is a copy of the input file with an additional column
- called {\tt DigFiltered{\em yName}} where {\em yName} would be the name of the
- original y-column.
-
-\item {\bf switches:}
-%
-% Describe the switches that are available
-%
+    A digital filter has a Z transform given by
+    \[
+    \frac{b_0 + b_1 z^{-1} + \ldots + b_n z^{-n}}{a_0 + a_1 z^{-1} + \ldots + a_n z^{-n}},
+    \]
+    while an analog filter has a Laplace transform given by
+    \[
+    \frac{d_0 + d_1 s^{1} + \ldots + d_n s^{n}}{c_0 + c_1 s^{1} + \ldots + c_n s^{n}},
+    \]
+  \item \textbf{examples:}
+    These examples assume the existence of a file \verb|data.wf| containing a waveform stored as a column \verb|value| that is a
+    function of a column \verb|time| with units of seconds.
+    \begin{verbatim}
+    sddsdigfilter data.wf -col=time,value result.wf -low=1,0.01
+    sddsdigfilter data.wf -col=time,value result.wf -low=1,10 -high=1,100
+    sddsdigfilter data.wf -col=time,value result.wf -low=1,100 -cascade -high=1,10
+    sddsdigfilter data.wf -col=time,value result.wf -analog=D,1.0,0.01,C,0.1,0.3,1.6
+    sddsdigfilter data.wf -col=time,value result.wf -digital=B,0,0,0,0,0,1
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    sddsdigfilter [inputFile] [outputFile] [-pipe=[input][,output]]
+      -columns=xName,yName
+      [-proportional=gain]
+      [-lowpass=gain,cutoffFrequency]
+      [-highpass=gain,cutoffFrequency]
+      [-digitalfilter=sddsfile,aCoeffName,bCoeffName]
+      [-digitalfilter=[A,a0,a1,..,am][,B,b0,b1,..,bn]]
+      [-analogfilter=sddsfile,cCoeffName,dCoeffName]
+      [-analogfilter=[C,c0,c1,..,cm][,D,d0,d1,..,dn]]
+      [-cascade]
+      [-verbose]
+    \end{verbatim}
+  \item \textbf{files:}
+    Two file names are required: the name of the existing input file and the name of the output file to be produced. The input
+    file must contain at least two columns: one containing the data to be filtered ({\em yName}) and the other giving time
+    information ({\em xName}). A linear time scale is assumed for {\em xName}. The output file is a copy of the input file with
+    an additional column called {\tt DigFiltered}{\em yName} where {\em yName} would be the name of the original y-column.
+  \item \textbf{switches:}
     \begin{itemize}
-
-   \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe switch.
-   \item {\tt -columns={\em xName},{\em yName}} --- The names of the input file data columns.
-   \item {\tt -proportional={\em gain}} --- Defines a gain stage, where {\em gain} is the multiplier applied to the data.
-
-   \item {\tt -lowpass={\em gain},{\em cutoffFrequency}} --- Defines a lowpass filter stage, where
-{\em gain} is the mutiplier applied to the data and {\em cutoffFrequency} is the -3dB point of the
-filter in units appropriate to the supplied {\em xName}.
-
-   \item {\tt -highpass={\em gain},{\em cutoffFrequency}} --- Defines a highpass filter stage,
-where {\em gain} is the multiplier applied to the data and {\em cutoffFrequency} is the -3dB point
-of the filter in units appropriate to the supplied {\em xName}.
-
-   \item {\tt -digitalfilter={\em sddsfile},{\em aCoeffName},{\em bCoeffName}} --- Defines a digital
-filter with coefficients in the supplied SDDS coefficient file. This file must cointain two
-columns containing the A and B coefficients of a digital 'Z' transfer function. Note that
-control theory convention assumes that the A0 coefficient is always 1.0. To ensure
-consistency with the SDDS file, the a0 coefficient is the first row in the A-column and
-must be implicitly supplied. Although there is little benefit to setting a0
-to anything other than 1.0, it is allowed.
-
- \item {\tt -digitalfilter=[A,{\em a0},{\em a1},...,{\em am}][,B,{\em b0},{\em b1},...,{\em bn}]} --- Defines a
-digital filter with the A and B coefficients of the digital 'Z' transfer function supplied
-on the command line. Either A or B or both coefficients can be supplied. If no A
-coefficients are supplied, a0 is set to 1.0. Equally, if no B coefficients are supplied,
-b0 is set to 1.0. If different numbers of A and B coefficients are suppied, the filter
-order is determined from the largest order.
-
-   \item {\tt -analogfilter={\em sddsfile},{\em cCoeffName},{\em dCoeffName}} --- Defines an analog
-filter with coefficients in the supplied sdds cefficient file. This file must cointain two
-columns containing the C and D coefficients of an analog 's' transfer function. Conversion
-to the digital domain is done using a bilinear transform. Note that the user must ensure
-adequate data sampled, since the general format does not allow frequency warping based on
-the filter cutoff frequency.
-
- \item {\tt -analogfilter=[A,{\em a0},{\em a1},...,{\em am}][,B,{\em b0},{\em b1},...,{\em bn}]} --- Defines an
-analog filter with the C and D coefficients of the analog 'S' transfer function supplied
-on the command line. Either C or D or both coefficients can be supplied. If no C
-coefficients are supplied, then c0 is set to 1.0. Equally, if no D coefficients are
-supplied, then d0 is set to 1.0. Conversion to the digital domain is done using a bilinear
-transform. Note that the user must ensure adequate data sampled, since the general format
-does not allow frequency warping based on the filter cutoff frequency.
-
-   \item {\tt -cascade} --- Defines the start of a new filter stage. Any number of filter
-stages can be supplied for a single data set. If more than one filter is defined, then the
-outputs are summed unless the {\tt -cascade} switch is supplied between the filter definitions
-in which case the output of the first filter stage is fed into the input of the subsequent
-filter stage.
-
-   \item {\tt -verbose} --- Prints the filter coefficients for each filter stage.
-   \end{itemize}
-\item {\bf references} --- 
-	The digital filtering routines were adapted from Stearns and David, {\em Signal Processing Algorithms in Fortran and C}, Prentice Hall, 1993
-
-\item {\bf author}: John Carwardine, Argonne National Laboratory
-\end{itemize}
+      \item {\tt -pipe[=input][,output]} --- The standard SDDS Toolkit pipe switch.
+      \item {\tt -columns={\em xName},{\em yName}} --- The names of the input file data columns.
+      \item {\tt -proportional={\em gain}} --- Defines a gain stage, where {\em gain} is the multiplier applied to the data.
+      \item {\tt -lowpass={\em gain},{\em cutoffFrequency}} --- Defines a lowpass filter stage, where {\em gain} is the
+        multiplier applied to the data and {\em cutoffFrequency} is the -3dB point of the filter in units appropriate to the
+        supplied {\em xName}.
+      \item {\tt -highpass={\em gain},{\em cutoffFrequency}} --- Defines a highpass filter stage, where {\em gain} is the
+        multiplier applied to the data and {\em cutoffFrequency} is the -3dB point of the filter in units appropriate to the
+        supplied {\em xName}.
+      \item {\tt -digitalfilter={\em sddsfile},{\em aCoeffName},{\em bCoeffName}} --- Defines a digital filter with
+        coefficients in the supplied SDDS coefficient file. This file must contain two columns containing the A and B
+        coefficients of a digital \verb|Z| transfer function. Control theory convention assumes that the A0 coefficient is
+        always 1.0. To ensure consistency with the SDDS file, the a0 coefficient is the first row in the A-column and must be
+        implicitly supplied. Although there is little benefit to setting a0 to anything other than 1.0, it is allowed.
+      \item {\tt -digitalfilter=[A,{\em a0},{\em a1},...,{\em am}][,B,{\em b0},{\em b1},...,{\em bn}]} --- Defines a digital
+        filter with the A and B coefficients of the digital \verb|Z| transfer function supplied on the command line. Either A or
+        B or both coefficients can be supplied. If no A coefficients are supplied, a0 is set to 1.0. Equally, if no B
+        coefficients are supplied, b0 is set to 1.0. If different numbers of A and B coefficients are supplied, the filter order
+        is determined from the largest order.
+      \item {\tt -analogfilter={\em sddsfile},{\em cCoeffName},{\em dCoeffName}} --- Defines an analog filter with
+        coefficients in the supplied SDDS coefficient file. This file must contain two columns containing the C and D
+        coefficients of an analog \verb|S| transfer function. Conversion to the digital domain is done using a bilinear
+        transform. Note that the user must ensure adequate data sampling, since the general format does not allow frequency
+        warping based on the filter cutoff frequency.
+      \item {\tt -analogfilter=[C,{\em c0},{\em c1},...,{\em cm}][,D,{\em d0},{\em d1},...,{\em dn}]} --- Defines an analog
+        filter with the C and D coefficients of the analog \verb|S| transfer function supplied on the command line. Either C or
+        D or both coefficients can be supplied. If no C coefficients are supplied, then c0 is set to 1.0. Equally, if no D
+        coefficients are supplied, then d0 is set to 1.0. Conversion to the digital domain is done using a bilinear transform.
+        Note that the user must ensure adequate data sampling, since the general format does not allow frequency warping based on
+        the filter cutoff frequency.
+      \item {\tt -cascade} --- Defines the start of a new filter stage. Any number of filter stages can be supplied for a single
+        data set. If more than one filter is defined, then the outputs are summed unless the {\tt -cascade} switch is supplied
+        between the filter definitions, in which case the output of the first filter stage is fed into the input of the
+        subsequent filter stage.
+      \item {\tt -verbose} --- Prints the filter coefficients for each filter stage.
+    \end{itemize}
+  \item \textbf{author:} John Carwardine, ANL/APS.
+\end{sddsprog}
 
