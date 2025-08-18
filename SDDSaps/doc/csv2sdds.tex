@@ -1,10 +1,10 @@
 \begin{sddsprog}{csv2sdds}
-  \item {\bf description:} Converts Comma-Separated-Values (CSV) data and similar data to SDDS. CSV data is commonly used by spreadsheet programs.
-  \item {\bf examples:}
+  \item \textbf{description:} Converts Comma-Separated-Values (CSV) data and similar data to SDDS. CSV data is commonly used by spreadsheet programs.
+  \item \textbf{examples:}
     \begin{verbatim}
     csv2sdds data.csv -columnData=name=x,type=float,units=m -columnData=name=Name,type=string data.sdds
     \end{verbatim}
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
     \begin{verbatim}
     csv2sdds [CSVfile] [SDDSfile] [-pipe[=in][,out]]
       [-asciiOutput] [-spanLines] [-maxRows=integer]
@@ -13,7 +13,7 @@
       [-columnData=name=string,type=string[,units=string] ...]
       [-uselabels[=units]] [-majorOrder=<row|column>]
     \end{verbatim}
-  \item {\bf files:}
+  \item \textbf{files:}
     {\em CSVfile} is a comma-separated-values file. Such a file consists of M rows each containing
     N items of data, forming N columns. The items on each row are separated by commas (or by a
     specified separator). The items may also be delimited by double quotation marks (or by specified
@@ -39,7 +39,7 @@
         treated as character string types. If needed, \verb|sddsprocess| may be used to process the
         resulting string columns to produce other data types.
     \end{itemize}
-  \item {\bf switches:}
+  \item \textbf{switches:}
     \begin{itemize}
       \item \verb|-pipe[=in][,out]| --- The standard SDDS Toolkit pipe option.
       \item \verb|-asciiOutput| --- Specifies ASCII output.
@@ -63,12 +63,12 @@
         file prior to the data.
       \item \verb!-majorOrder=<row|column>! --- Writes output file in row or column major order.
     \end{itemize}
-  \item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
       \item \progref{sdds2stream}
       \item \progref{sddsprocess}
       \item \progref{plaindata2sdds}
     \end{itemize}
-  \item {\bf author:} M. Borland, ANL/APS.
+  \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
 

@@ -1,28 +1,28 @@
 \begin{sddsprog}{sddsarray2column}
-  \item {\bf description:} \verb|sddsarray2column| converts one or more arrays in an SDDS file into columns. The number of elements in the converted arrays must match the number of rows in existing columns or the number of elements in other converted arrays.
-  \item {\bf examples:}
+  \item \textbf{description:} \verb|sddsarray2column| converts one or more arrays in an SDDS file into columns. The number of elements in the converted arrays must match the number of rows in existing columns or the number of elements in other converted arrays.
+  \item \textbf{examples:}
     \begin{verbatim}
     sddsarray2column in.sdds out.sdds -convert=A,A_out
     sddsarray2column in.sdds out.sdds -convert=A,A_out,d0=0
     sddsarray2column in.sdds out.sdds "-convert=A,A_out,d2=(1,3)"
     \end{verbatim}
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
     \begin{verbatim}
     sddsarray2column [source] [target] [-pipe=[input][,output]]
       [-nowarnings] -convert=arrayName[,columnName][,d<dimension>=<indexList>]...
     \end{verbatim}
-  \item {\bf files:}
+  \item \textbf{files:}
     \begin{itemize}
       \item {\em source} --- SDDS file containing arrays to be converted.
       \item {\em target} --- SDDS file that will contain the converted columns.
     \end{itemize}
-  \item {\bf switches:}
+  \item \textbf{switches:}
     \begin{itemize}
       \item \verb|-pipe=[input][,output]| --- Standard SDDS Toolkit pipe option.
       \item \verb|-nowarnings| --- Suppress warning messages about overwriting files.
       \item \verb|-convert=\emph{arrayName}[,\emph{columnName}][,d<dimension>=<indexList>]| --- Specifies an array to convert to a column. The optional \emph{columnName} gives the name of the new column. Qualifiers \verb|d0|, \verb|d1| and \verb|d2| select indices from dimensions 0, 1 and 2 respectively. Each qualifier may contain a single index or a parenthesized list of indices.
     \end{itemize}
-  \item {\bf see also:} \progref{sddsmatrix2column}
-  \item {\bf author:} R. Soliday, M. Borland, ANL/APS.
+  \item \textbf{see also:} \progref{sddsmatrix2column}
+  \item \textbf{author:} R. Soliday, M. Borland, ANL/APS.
 \end{sddsprog}
 

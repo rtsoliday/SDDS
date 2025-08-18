@@ -1,40 +1,30 @@
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-\subsection{sddseditor}
-\label{sddseditor}
+\begin{sddsprog}{sddseditor}
+  \item \textbf{description:} \verb|sddseditor| is a Qt graphical application for viewing
+  and modifying SDDS files. Multiple pages of parameters, columns and arrays can be
+  edited using familiar table widgets. Standard shortcuts such as
+  \verb|Ctrl+O| for opening files, \verb|Ctrl+S| for saving, \verb|Ctrl+C| and
+  \verb|Ctrl+V| for copy and paste, and \verb|Ctrl+Z|/\verb|Ctrl+Shift+Z| for
+  undo and redo are provided. Additional actions are available from context menus
+  on the column and array headers including plotting a column with
+  \progref{sddsplot}, sorting, searching, and resizing arrays. Files may also be
+  exported to HDF format using \verb|Ctrl+Shift+H|.
 
-\begin{itemize}
-\item {\bf description:} \verb|sddseditor| is a Qt graphical application for viewing
-and modifying SDDS files.  Multiple pages of parameters, columns and arrays can be
-edited using familiar table widgets.  Standard shortcuts such as
-\verb|Ctrl+O| for opening files, \verb|Ctrl+S| for saving, \verb|Ctrl+C| and
-\verb|Ctrl+V| for copy and paste, and \verb|Ctrl+Z|/\verb|Ctrl+Shift+Z| for
-undo and redo are provided.  Additional actions are available from context menus
-on the column and array headers including plotting a column with
-\progref{sddsplot}, sorting, searching, and resizing arrays.  Files may also be
-exported to HDF format using \verb|Ctrl+Shift+H|.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    sddseditor lattice.twi
+    sddseditor
+    \end{verbatim}
 
-\item {\bf examples:}
-Open an existing SDDS file in the editor:
-\begin{flushleft}{\tt
-sddseditor lattice.twi
-}\end{flushleft}
-Start the editor without loading a file:
-\begin{flushleft}{\tt
-sddseditor
-}\end{flushleft}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    sddseditor [inputFile]
+    \end{verbatim}
 
-\item {\bf synopsis:}
-\begin{flushleft}{\tt
-sddseditor [inputFile]
-}\end{flushleft}
-
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
-    \item \progref{sddsplot}
-    \item \progref{sddsprocess}
-    \item \progref{SDDS editing}
+      \item \progref{sddsplot}
+      \item \progref{sddsprocess}
+      \item \progref{SDDS editing}
     \end{itemize}
-\item {\bf author:} R. Soliday, ANL/APS.
-\end{itemize}
+  \item \textbf{author:} R. Soliday, ANL/APS.
+\end{sddsprog}

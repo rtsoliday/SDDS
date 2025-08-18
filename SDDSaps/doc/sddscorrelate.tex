@@ -1,5 +1,5 @@
 \begin{sddsprog}{sddscorrelate}
-\item {\bf description:}
+\item \textbf{description:}
   {\tt sddscorrelate} computes correlation coefficients and correlation
   significance between column data. The correlation coefficient between
   columns i and j is defined as
@@ -10,28 +10,28 @@
   observed correlation coefficient could happen by chance if the variables were in fact
   uncorrelated. Hence, a very small correlation significance means that the variables are
   probably correlated.
-\item {\bf examples:}
+\item \textbf{examples:}
 \begin{verbatim}
   sddscorrelate par.bpm par.cor -column='*x'
 \end{verbatim}
 \begin{verbatim}
   sddscorrelate par.bpm par.cor -column='*x' -withOnly=P1P1x
 \end{verbatim}
-\item {\bf synopsis:}
+\item \textbf{synopsis:}
 \begin{verbatim}
   sddscorrelate [-pipe=[input][,output]] [inputFile] [outputFile]
     [-columns=columnNames] [-excludeColumns=columnNames]
     [-withOnly=columnName] [-rankOrder]
     [-stDevOutlier[=limit=factor][,passes=integer]]
 \end{verbatim}
-\item {\bf files:}
+\item \textbf{files:}
   {\em inputFile} is an SDDS file containing two or more columns of data. For each page of
   the file, {\em outputFile} contains the correlation coefficients and significance for
   every possible pairing of variables requested. {\em outputFile} also contains three string
   columns: {\tt Correlate1Name}, {\tt Correlate2Name}, and {\tt CorrelatePair}. These are
   respectively the name first column in the analysis, the name of the second column in
   the analysis, and a string of the form {\em Name1}.{\em Name2}.
-\item {\bf switches:}
+\item \textbf{switches:}
   \begin{itemize}
   \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
   \item {\tt -columns={\em columnNames}} --- Specifies the names of columns to be included in the analysis.
@@ -49,11 +49,11 @@
     default is 1. The {\tt passes} qualifier specifies how many times the outlier elimination (including
     recomputation of the mean and standard deviation) is performed; the default is 1.
   \end{itemize}
-\item {\bf see also:}
+\item \textbf{see also:}
   \begin{itemize}
   \item \hyperref[exampleData]{Data for Examples}
   \item \progref{sddsprocess}
   \end{itemize}
-\item {\bf author:} M. Borland, ANL/APS.
+\item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
 

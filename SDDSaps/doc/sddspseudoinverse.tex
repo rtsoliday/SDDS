@@ -1,5 +1,5 @@
 \begin{sddsprog}{sddspseudoinverse}
-  \item {\bf description:} \verb|sddspseudoinverse| views the numerical tabular data of the input file as though it formed a matrix and produces an output file containing the pseudo-inverse of this matrix. At present the pseudo-inversion is done using a singular value decomposition. Other methods may be made available in the future.
+  \item \textbf{description:} \verb|sddspseudoinverse| views the numerical tabular data of the input file as though it formed a matrix and produces an output file containing the pseudo-inverse of this matrix. At present the pseudo-inversion is done using a singular value decomposition. Other methods may be made available in the future.
 
   Command line options specify the number of singular values to be used in the inversion process.
 
@@ -7,11 +7,11 @@
 
   The column names of the input file are collected and made into a string column in the output file.
 
-  \item {\bf examples:}
+  \item \textbf{examples:}
     \begin{verbatim}
     sddspseudoinverse LTP.R12 LTP.InvR12
     \end{verbatim}
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
     \begin{verbatim}
     sddspseudoinverse [<input>] [<output>] [-pipe[=input][,output]]
       [{-minimumSingularValueRatio=<value> | -largestSingularValues=<number>}]
@@ -24,14 +24,14 @@
       [-reconstruct=<file>] [-symbol=<string>] [-ascii] [-verbose] [-noWarnings]
       [-multiplyMatrix=<file>[,invert]]
     \end{verbatim}
-  \item {\bf files:}
+  \item \textbf{files:}
     The input file contains the data for the matrix to be inverted. The output file contains the data for the inverted matrix. If only one file is specified, then the input file is overwritten by the output.
 
     Multiple data pages of the input file will be processed and written to the output file if all the data pages of the input file have the same number of rows. The processing will stop at the first data page which does not have the same number of rows as that of the first page.
 
     If applicable, the string column selected to generate column names for the output file is assumed to be the same in all input data sets. The string columns of only the first data set are read.
 
-  \item {\bf switches:}
+  \item \textbf{switches:}
     \begin{itemize}
       \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
       \item \verb|-minimumSingularValueRatio=value| --- Used to remove small singular values from the calculation. The smallest singular value retained for the inverse calculation is determined by multiplying this ratio value with the largest singular value of the input matrix.
@@ -55,9 +55,9 @@
       \item \verb|-verbose| --- Prints out incidental information to stderr.
       \item \verb|-noWarnings| --- Suppresses warning messages.
     \end{itemize}
-  \item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
       \item \progref{sddsmatrixop}
     \end{itemize}
-  \item {\bf author:} L. Emery, ANL.
+  \item \textbf{author:} L. Emery, ANL.
 \end{sddsprog}

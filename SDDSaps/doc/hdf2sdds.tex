@@ -1,19 +1,19 @@
 \begin{sddsprog}{hdf2sdds}
-\item {\bf description:} Converts Hierarchical Data Format (HDF) to SDDS.
-\item {\bf examples:}
+\item \textbf{description:} Converts Hierarchical Data Format (HDF) to SDDS.
+\item \textbf{examples:}
 \begin{verbatim}
 hdf2sdds data.hdf data.sdds -withIndex
 \end{verbatim}
-\item {\bf synopsis:}
+\item \textbf{synopsis:}
 \begin{verbatim}
 hdf2sdds [HDFfile] [SDDSfile] [-pipe[=out]] [-query] [-ascii] [-binary]
 [-withIndex] [-reduceFactor=integer[,keep=integer]] [-3doutput]
 \end{verbatim}
-\item {\bf files:}
+\item \textbf{files:}
 {\em HDFfile} is the filename of the HDF file.
 
 {\em SDDSfile} is the SDDS output that is created.
-\item {\bf switches:}
+\item \textbf{switches:}
 \begin{itemize}
   \item \verb|-pipe[=out]| --- The standard SDDS Toolkit pipe option.
   \item \verb|-query| --- Print out the names of the groups and datasets in the HDF file.
@@ -23,10 +23,10 @@ hdf2sdds [HDFfile] [SDDSfile] [-pipe[=out]] [-query] [-ascii] [-binary]
   \item {\tt -reduceFactor={\em integer}[,keep={\em integer}]} --- Write the first {\em keep}th value of every {\em reduceFactor} values in order to reduce the size of the output file. The attributes are written to the output file by their original data types.
   \item \verb|-3doutput| --- Used to convert 3-dimensional HDF data.
 \end{itemize}
-\item {\bf see also:}
+\item \textbf{see also:}
 \begin{itemize}
   \item \progref{sddsconvert}
 \end{itemize}
-\item {\bf author:} R. Soliday, ANL/APS.
+\item \textbf{author:} R. Soliday, ANL/APS.
 \end{sddsprog}
 

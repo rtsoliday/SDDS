@@ -1,17 +1,17 @@
 \begin{sddsprog}{elegant2genesis}
-  \item {\bf description:}
+  \item \textbf{description:}
   \verb|elegant2genesis| analyzes particle output data from \verb|elegant| and prepares
   a ``beamfile'' for input to GENESIS\cite{GENESIS}, a 3-D time-dependent FEL code by
   S. Reiche.  The beamfile contains slice analysis of the particle data, and may be
   useful in other applications as well.
 
-  \item {\bf examples:}
+  \item \textbf{examples:}
   \begin{verbatim}
 elegant2genesis run.out beamfile.genesis
 elegant2genesis run.out beamfile.gen -totalCharge=3e-9 -slices=100
   \end{verbatim}
 
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
   \begin{verbatim}
 elegant2genesis inputfile outputfile
   [-pipe=[in][,out]] [-textOutput]
@@ -21,7 +21,7 @@ elegant2genesis inputfile outputfile
   [-reverseOrder] [-localFit]
   \end{verbatim}
 
-  \item {\bf files:}
+  \item \textbf{files:}
   \begin{itemize}
     \item {\em inputfile} --- A particle output file from \verb|elegant| or any other program that uses the same column names and units.
     \item {\em outputfile} --- Contains the slice analysis, suitable for use with SDDS-compliant GENESIS.  The columns are as follows:
@@ -40,7 +40,7 @@ elegant2genesis inputfile outputfile
       \end{itemize}
   \end{itemize}
 
-  \item {\bf switches:}
+  \item \textbf{switches:}
   \begin{itemize}
     \item \verb|-pipe[=in][,out]| --- The standard SDDS toolkit pipe option.
     \item \verb|-textOutput| --- Requests text output instead of SDDS output, which may be useful for input to non-SDDS-compliant versions of GENESIS.
@@ -54,6 +54,6 @@ elegant2genesis inputfile outputfile
     \item \verb|-localFit| --- If given, then for each slice a local linear fit is used to remove any momentum chirp prior to computing the momentum spread.  This produces a momentum spread that is more independent of the number of slices.  Should not be used if the FEL cooperation length is greater than the slice length.
   \end{itemize}
 
-  \item {\bf author:} R. Soliday, M. Borland, ANL/APS.
+  \item \textbf{author:} R. Soliday, M. Borland, ANL/APS.
 \end{sddsprog}
 

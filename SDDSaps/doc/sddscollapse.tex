@@ -1,26 +1,26 @@
 \begin{sddsprog}{sddscollapse}
-  \item {\bf description:} \verb|sddscollapse| reads data pages from an SDDS file and writes a new SDDS file containing a single data page. This data page contains only the values of the parameters from the original file, with each parameter forming a column of the tabular data. In spite of the simplicity of the command line, this is an extremely useful program. A typical use might involve processing a multipage file using \verb|sddsprocess| to, for example, obtain statistical analyses of columns for each page; the results of such analyses are placed in parameters. Using \verb|sddscollapse| on this file would produce columns of statistical analyses, with one row for each page. One might then further analyze the data using \verb|sddsprocess|. One could also use \verb|sddscombine| to combine several collapsed, processed data sets into a single file, which puts one formally back in the same position as when one started. In this fashion, multi-level data analysis and collation is possible. This is done with some magnetic measurements at APS.
+  \item \textbf{description:} \verb|sddscollapse| reads data pages from an SDDS file and writes a new SDDS file containing a single data page. This data page contains only the values of the parameters from the original file, with each parameter forming a column of the tabular data. In spite of the simplicity of the command line, this is an extremely useful program. A typical use might involve processing a multipage file using \verb|sddsprocess| to, for example, obtain statistical analyses of columns for each page; the results of such analyses are placed in parameters. Using \verb|sddscollapse| on this file would produce columns of statistical analyses, with one row for each page. One might then further analyze the data using \verb|sddsprocess|. One could also use \verb|sddscombine| to combine several collapsed, processed data sets into a single file, which puts one formally back in the same position as when one started. In this fashion, multi-level data analysis and collation is possible. This is done with some magnetic measurements at APS.
 
-  \item {\bf examples:}
+  \item \textbf{examples:}
   \begin{verbatim}
   sddscollapse APS.twi APS.parameters
   sddscollapse APS.twi -pipe=out | sddspfit -pipe=in fit.sdds -column=nux,nuy -verbose
   \end{verbatim}
 
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
   \begin{verbatim}
   sddscollapse [inputFile] [outputFile] [-pipe[=input][,output]]
   \end{verbatim}
 
-  \item {\bf files:} \verb|inputFile| is the name of an SDDS data set to be collapsed.  \verb|outputFile| is the result.  Note that \verb|outputFile| will not contain any information on the arrays or columns that are in \verb|inputFile|.
+  \item \textbf{files:} \verb|inputFile| is the name of an SDDS data set to be collapsed.  \verb|outputFile| is the result.  Note that \verb|outputFile| will not contain any information on the arrays or columns that are in \verb|inputFile|.
 
-  \item {\bf switches:}
+  \item \textbf{switches:}
   \begin{itemize}
     \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
     \item \verb|-noWarnings| --- Suppresses warnings about file overwrites.
   \end{itemize}
 
-  \item {\bf see also:}
+  \item \textbf{see also:}
   \begin{itemize}
     \item \hyperref[exampleData]{Data for Examples}
     \item \progref{sddsprocess}
@@ -28,6 +28,6 @@
     \item \progref{sddsexpand}
   \end{itemize}
 
-  \item {\bf author:} M. Borland, ANL/APS.
+  \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
 

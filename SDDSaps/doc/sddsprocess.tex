@@ -1,37 +1,34 @@
 %\begin{latexonly}
 \newpage
 %\end{latexonly}
-\subsection{sddsprocess}
-\label{sddsprocess}
-
-\begin{itemize}
-\item {\bf description:} \hspace*{1mm}\\
-\verb|sddsprocess| operates on the data columns and parameters of an existing SDDS data set and creates a new
-data set.  The program supports filtering and matching operations on both tabular data and parameter
-data, definition of new parameters and columns in terms of existing ones, units conversions, scanning of 
-string data to produce numeric data, composition of string data from other data types, 
-statistical and waveform analyses, and other operations.
-\item {\bf examples:}
-Compute the square-roots of the beta-functions, which are the beam-size envelopes:
-\begin{flushleft}{\tt
-sddsprocess APS.twi -define=column,sqrtBetax,"betax sqrt"  -define=column,sqrtBetay,"betay sqrt" 
-}\end{flushleft}
-Compute the horizontal beam-size, given by the equation
-\[ \sigma_x = \sqrt{ \epsilon_x \beta_x + (\eta_x \sigma_\delta)^2} \]
-\begin{flushleft}{\tt
-sddsprocess APS.twi -define=parameter,epsx,8.2e-9,units=nm -define=parameter,sigmaDelta,1e-3 
+\begin{sddsprog}{sddsprocess}
+  \item \textbf{description:}
+  \verb|sddsprocess| operates on the data columns and parameters of an existing SDDS data set and creates a new
+  data set.  The program supports filtering and matching operations on both tabular data and parameter
+  data, definition of new parameters and columns in terms of existing ones, units conversions, scanning of
+  string data to produce numeric data, composition of string data from other data types,
+  statistical and waveform analyses, and other operations.
+  \item \textbf{examples:}
+  Compute the square-roots of the beta-functions, which are the beam-size envelopes:
+\begin{verbatim}
+sddsprocess APS.twi -define=column,sqrtBetax,"betax sqrt"  -define=column,sqrtBetay,"betay sqrt"
+\end{verbatim}
+  Compute the horizontal beam-size, given by the equation
+  \[ \sigma_x = \sqrt{ \epsilon_x \beta_x + (\eta_x \sigma_\delta)^2} \]
+\begin{verbatim}
+sddsprocess APS.twi -define=parameter,epsx,8.2e-9,units=nm -define=parameter,sigmaDelta,1e-3
   -define=column,sigmax,"epsx betax *  sigmaDelta etax * sqr + sqrt",units=m
-}\end{flushleft}
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsprocess [-pipe[=input][,output]] [{\em inputFile}] [{\em outputFile}] {\em options}
-}\end{flushleft}
-\item {\bf files:}
+\end{verbatim}
+  \item \textbf{synopsis:}
+\begin{verbatim}
+sddsprocess [-pipe[=input][,output]] [inputFile] [outputFile] options
+\end{verbatim}
+  \item \textbf{files:}
 {\em inputFile} is an SDDS file containing data to be processed.  If no options are given, it is copied to {\em
 outputFile} without change.  {\em Warning:} if no output filename is given, and if an output pipe is not selected,
 then the input file will be replaced.
 
-\item {\bf switches:}
+  \item \textbf{switches:}
     \begin{itemize}
     \item Data winnowing: Any number of the following may be used.  They are applied in the order
 given.  Note that {\tt -match} and {\tt -test} are the most time intensive; thus, if several types
@@ -383,6 +380,6 @@ present, execution aborts.
         \end{itemize}
     \end{itemize}
 
-\item {\bf author:} M. Borland, H. Shang, R. Soliday ANL/APS.
-\end{itemize}
+  \item \textbf{author:} M. Borland, H. Shang, R. Soliday, ANL/APS.
+\end{sddsprog}
 

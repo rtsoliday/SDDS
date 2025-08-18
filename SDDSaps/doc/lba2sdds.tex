@@ -1,1 +1,31 @@
-
+\begin{sddsprog}{lba2sdds}
+  \item \textbf{description:} Converts Spiricon Laser Beam Analyzer (LBA) files to SDDS image data.
+  \item \textbf{examples:}
+    \begin{verbatim}
+    lba2sdds sample.lba image.sdds -definition=Image,type=character
+    lba2sdds sample.lba -pipe=out -definition=Image,type=character | sddsprintout
+    \end{verbatim}
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+    lba2sdds [inputfile] [outputfile] [-pipe[=input][,output]]
+      -definition=name,definition-entries [-majorOrder=row|column]
+    \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+    \item \verb|-pipe[=input][,output]| --- Use standard SDDS Toolkit pipe option for input and/or output.
+    \item \verb|-definition=name,definition-entries| --- Define the SDDS column used for image data. Must include \verb|type=character|.
+    \item \verb|-majorOrder=row| or \verb|-majorOrder=column| --- Write data in row or column major order (default is row).
+    \end{itemize}
+  \item \textbf{files:}
+    \begin{itemize}
+    \item \emph{inputfile} --- Spiricon LBA file to convert. If omitted, data is read from standard input.
+    \item \emph{outputfile} --- Resulting SDDS file. If omitted, data is written to standard output.
+    \end{itemize}
+  \item \textbf{see also:}
+    \begin{itemize}
+    \item \progref{hpif2sdds}
+    \item \progref{mpl2sdds}
+    \item \progref{image2sdds}
+    \end{itemize}
+  \item \textbf{author:} M. Borland, C. Saunders, R. Soliday, H. Shang, ANL/APS.
+\end{sddsprog}

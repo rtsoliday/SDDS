@@ -1,6 +1,6 @@
 \begin{sddsprog}{sddsmakedataset}
-\item {\bf description:} \verb|sddsmakedataset| writes input data into an SDDS file or pipe. It can be used to create a small SDDS file from a script, and is more convenient than \verb|sddssave|.
-\item {\bf examples:}
+\item \textbf{description:} \verb|sddsmakedataset| writes input data into an SDDS file or pipe. It can be used to create a small SDDS file from a script, and is more convenient than \verb|sddssave|.
+\item \textbf{examples:}
 \begin{verbatim}
 sddsmakedataset mydata.sdds \
   -parameter=pi,type=double -data=3.1415926 \
@@ -29,7 +29,7 @@ pi =           3.141593e+00  UserName =         somebody
      9            19                  i
     10            23                  j
 \end{verbatim}
-\item {\bf synopsis:}
+\item \textbf{synopsis:}
 \begin{verbatim}
 sddsmakedataset [<outputFile> | -pipe=out] \
   [-defaultType={double|float|long|short|string|character}] \
@@ -39,7 +39,7 @@ sddsmakedataset [<outputFile> | -pipe=out] \
   [-data=<listOfCommaSeparatedValue>] -column=... -data=... \
   [-noWarnings] [-description=<string>] [-contents=<string>] [-mode=<string>]
 \end{verbatim}
-\item {\bf switches:}
+\item \textbf{switches:}
 \begin{itemize}
   \item \verb|outputFile| --- SDDS output file for writing the data.
   \item \verb|-pipe=out| --- Output the data in SDDS format to the pipe instead of to a file.
@@ -51,9 +51,9 @@ sddsmakedataset [<outputFile> | -pipe=out] \
   \item \verb|-description| --- Description of output file.
   \item \verb|-contents| --- Contents of the description.
 \end{itemize}
-\item {\bf see also:}
+\item \textbf{see also:}
 \begin{itemize}
   \item \progref{sddsprintout}
 \end{itemize}
-\item {\bf author:} H. Shang, ANL/APS.
+\item \textbf{author:} H. Shang, ANL/APS.
 \end{sddsprog}

@@ -1,10 +1,10 @@
 \begin{sddsprog}{sddsinsideboundaries}
-  \item {\bf description:} \verb|sddsinsideboundaries| determines whether points in a two-dimensional space (\verb|x|, \verb|y|) are inside any of a series of closed boundaries (or contours).
-  \item {\bf examples:}
+  \item \textbf{description:} \verb|sddsinsideboundaries| determines whether points in a two-dimensional space (\verb|x|, \verb|y|) are inside any of a series of closed boundaries (or contours).
+  \item \textbf{examples:}
     \begin{verbatim}
     sddsinsideboundaries <inputFile> <outputFile> -columns=Z,X -boundary=exclusionRegions.sdds,Z,X -keep=outside
     \end{verbatim}
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
     \begin{verbatim}
     sddsinsideboundaries [<inputfile>] [<outputfile>] [-pipe=[input][,output]]
       -columns=<x-name>,<y-name>
@@ -12,7 +12,7 @@
       [-insideColumn=<columnName>]
       [-keep={inside|outside}] [-threads=<number>]
     \end{verbatim}
-  \item {\bf switches:}
+  \item \textbf{switches:}
     \begin{itemize}
       \item \verb|-pipe[=input]| --- The standard SDDS Toolkit pipe option.
       \item \verb|-columns=\emph{xName},\emph{yName}| --- Specifies the columns containing the \verb|x| and \verb|y| coordinates of the probe points.
@@ -21,8 +21,8 @@
       \item \verb!-keep={inside|outside}! --- By default, all input rows appear in the output file. If this option is given, the user may elect to keep only those rows that are inside at least one boundary or only those rows that are outside all boundaries.
       \item \verb|-threads=\emph{number}| --- Specify the number of threads to use for computations. Defaults to 1. Using more threads tends to help more when there are many complex boundary contours and when the number of output points is a small fraction of the number of input points.
     \end{itemize}
-  \item {\bf files:}
+  \item \textbf{files:}
     The input file contains the columns defining the test points. By default, the output file will contain the same columns, but also an additional column indicating if each test point is inside any of the boundaries. The boundary file provides a series of closed boundaries, each on a separate page.
-  \item {\bf author:} M. Borland, ANL/APS.
+  \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
 

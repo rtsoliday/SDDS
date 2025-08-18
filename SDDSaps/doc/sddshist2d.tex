@@ -1,14 +1,14 @@
 \begin{sddsprog}{sddshist2d}
-  \item {\bf description:} \verb|sddshist2d| makes two-dimensional histograms of data, producing
+  \item \textbf{description:} \verb|sddshist2d| makes two-dimensional histograms of data, producing
     output that is suitable for plotting with \verb|sddscontour|. The two-dimensional histogram
     may include data from two columns, or may show the histograms of a single column versus
     page number.
-  \item {\bf examples:}
+  \item \textbf{examples:}
     \begin{verbatim}
     sddshist2d par.bpm par.bpm.h2d -column=P1P1x,P1P2x -xparam=50 -yparam=50
     sddscontour -shade=32 par.bpm.h2d -quantity=frequency
     \end{verbatim}
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
     \begin{verbatim}
     sddshist2d [-pipe[=input][,output]] [inputfile] [outputfile]
       -columns={xName,yName | yName}
@@ -18,7 +18,7 @@
       [-sameScale] [-combine] [-normalize[=sum]] [-smooth[=passes]]
       [-verbose]
     \end{verbatim}
-  \item {\bf switches:}
+  \item \textbf{switches:}
     \begin{itemize}
       \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
       \item \verb!-columns={xName,yName | yName}! --- Specifies the data from the input to histogram. If both
@@ -42,12 +42,12 @@
       \item \verb|-smooth[=passes]| --- Specifies smoothing by nearest-neighbor-averaging. If {\em passes} is omitted, only one pass is performed.
       \item \verb|-verbose| --- Requests informational output during processing.
     \end{itemize}
-  \item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
       \item \progref{sddshist}
       \item \progref{sddscontour}
       \item \progref{sddscongen}
     \end{itemize}
-  \item {\bf author:} M. Borland, ANL/APS.
+  \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
 

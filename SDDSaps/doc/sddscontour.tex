@@ -1,10 +1,10 @@
 \begin{sddsprog}{sddscontour}
-  \item {\bf description:}
+  \item \textbf{description:}
   \verb|sddscontour| makes contour and color-map plots from an SDDS data set column, or from a \verb|rpn| expression
   in terms of the values in the columns of a data set. It supports FFT interpolation and filtering. If the
   data set contains more than one data page, data from successive pages is plotted on separate pages.
 
-  \item {\bf examples:}
+  \item \textbf{examples:}
   This will generate a two-dimensional color-shaded map of the function ${\rm sin(4\pi (x^2 + y^2))}$ on
   the region x:[-1, 1] and y:[-1, 1]:
   \begin{verbatim}
@@ -12,11 +12,11 @@ sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 \\
   -zEquation="x x * y y * + 4 * pi * sin"
 sddscontour example.sdds -shade example.sdds -equalAspect
   \end{verbatim}
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
   \begin{verbatim}
 sddscontour SDDSfilename switches
   \end{verbatim}
-  \item {\bf switches:}
+  \item \textbf{switches:}
     \begin{itemize}
     \item Choice of what to plot:
 \begin{flushleft}{\tt
@@ -232,7 +232,7 @@ C, respectively.
                 of the \verb|level| parameter result in more output.
         \end{itemize}
     \end{itemize}
-  \item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
       \item \progref{sddscongen}
       \item \progref{sddshist2d}
@@ -242,6 +242,6 @@ C, respectively.
       \item \progref{sddsspotanalysis}
       \item \progref{rpn}
     \end{itemize}
-  \item {\bf author:} M. Borland, ANL/APS.
+  \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
 

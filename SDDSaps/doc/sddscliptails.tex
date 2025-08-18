@@ -1,26 +1,26 @@
 \begin{sddsprog}{sddscliptails}
-  \item {\bf description:}
+  \item \textbf{description:}
   \verb|sddscliptails| removes the tails from functions, where a tail is a dubious feature
   extending to the left or right of a peak.
-  \item {\bf examples:}
+  \item \textbf{examples:}
   Remove tails from profiles of beam spots after baseline removal and prior to determining
   rms spot properties. This command clips the tails when the function falls to 1\% of
   its peak value.
   \begin{verbatim}
 sddscliptails input.sdds output.sdds -columns=VideoLine* -fractional=0.01
   \end{verbatim}
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
   \begin{verbatim}
 sddscliptails [input] [output] [-pipe=[in][,out]]
   [-columns=listOfNames] [-fractional=value] [-absolute=value] [-fwhm=multiplier]
   [-afterzero[=bufferWidth]]
   \end{verbatim}
-  \item {\bf files:}
+  \item \textbf{files:}
   {\em input} is an SDDS file containing one or more pages of data to be processed.
   {\em output} is an SDDS file in which the result is placed. The output file will
   generally have fewer rows than the input file, corresponding to the number of
   rows clipped.
-  \item {\bf switches:}
+  \item \textbf{switches:}
     \begin{itemize}
     \item {\tt -pipe=[input][,output]} --- The standard SDDS Toolkit pipe option.
     \item {\tt -columns={\em listOfNames}} --- Specifies an optionally-wildcarded list
@@ -36,10 +36,10 @@ sddscliptails [input] [output] [-pipe=[in][,out]]
       If {\em bufferWidth} is specified, then a region {\em bufferWidth} wide is kept
       on either side of the peak, if possible.
     \end{itemize}
-  \item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
     \item \progref{sddsbaseline}
     \end{itemize}
-  \item {\bf author:} M. Borland, ANL/APS.
+  \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
 

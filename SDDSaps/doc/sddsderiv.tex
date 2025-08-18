@@ -1,10 +1,10 @@
 \begin{sddsprog}{sddsderiv}
-  \item {\bf description:} \verb|sddsderiv| differentiates one or more columns of data as a function of a common column. The program will perform error propagation if error bars are provided in the data set.
-  \item {\bf examples:}
+  \item \textbf{description:} \verb|sddsderiv| differentiates one or more columns of data as a function of a common column. The program will perform error propagation if error bars are provided in the data set.
+  \item \textbf{examples:}
     \begin{verbatim}
     sddsderiv bessel.sdds bessel.deriv -differentiate=J0,J1 -versus=z
     \end{verbatim}
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
     \begin{verbatim}
     sddsderiv [-pipe=[input][,output]] [input] [output]
       -differentiate=columnName[,sigmaName] ...
@@ -13,8 +13,8 @@
       [-mainTemplates=item=string[,...]]
       [-errorTemplates=item=string[,...]]
     \end{verbatim}
-  \item {\bf files:} {\em input} is an SDDS file containing columns of data to be differentiated. If it contains multiple data pages, each is treated separately. The independent quantity along with the requested derivatives are placed in columns in {\em output}. By default, the derivative column name is constructed by appending \verb|Deriv| to the variable column name. If applicable, the column name for the derivative error is constructed by appending \verb|DerivSigma|. The data with respect to which the derivative is taken should be monotonically ordered.
-  \item {\bf switches:}
+  \item \textbf{files:} {\em input} is an SDDS file containing columns of data to be differentiated. If it contains multiple data pages, each is treated separately. The independent quantity along with the requested derivatives are placed in columns in {\em output}. By default, the derivative column name is constructed by appending \verb|Deriv| to the variable column name. If applicable, the column name for the derivative error is constructed by appending \verb|DerivSigma|. The data with respect to which the derivative is taken should be monotonically ordered.
+  \item \textbf{switches:}
     \begin{itemize}
       \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
       \item \verb|-differentiate=\emph{columnName}[,\emph{sigmaName}]| --- Specifies the name of a column to differentiate, and optionally the name of the column containing the error in the differentiated quantity. May be given any number of times.
@@ -27,6 +27,6 @@
       \item \verb|-mainTemplates=\emph{item}=\emph{string}[,...]| --- Specifies template strings for names and definition entries for the derivative columns in the output file. \emph{item} may be one of \verb|name|, \verb|description|, \verb|symbol|. The symbols ``\%x'' and ``\%y'' are used to represent the independent variable name and the name of the differentiated quantity, respectively.
       \item \verb|-errorTemplates=\emph{item}=\emph{string}[,...]| --- Specifies template strings for names and definition entries for the derivative error columns in the output file. \emph{item} may be one of \verb|name| or \verb|description|. The symbols ``\%x'' and ``\%y'' are used to represent the independent variable name and the name of the differentiated quantity, respectively.
     \end{itemize}
-  \item {\bf see also:} \progref{sddsinteg}
-  \item {\bf author:} M. Borland, ANL/APS.
+  \item \textbf{see also:} \progref{sddsinteg}
+  \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}

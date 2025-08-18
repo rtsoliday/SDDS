@@ -5,24 +5,24 @@
 \label{sddsmatrix2column}
 
 \begin{sddsprog}{sddsmatrix2column}
-  \item {\bf description:} \verb|sddsmatrix2column| transfers a matrix into a single-column SDDS file.
-  \item {\bf examples:}
+  \item \textbf{description:} \verb|sddsmatrix2column| transfers a matrix into a single-column SDDS file.
+  \item \textbf{examples:}
     \begin{verbatim}
     sddsmatrix2column matrix.sdds column.sdds
     sddsmatrix2column matrix.sdds column.sdds -rowNameColumn=Label -dataColumnName=Value -rootnameColumnName=ID -majorOrder=row
     \end{verbatim}
-  \item {\bf synopsis:}
+  \item \textbf{synopsis:}
     \begin{verbatim}
     sddsmatrix2column [inputfile] [outputfile] [-pipe=[input][,output]]
       [-rowNameColumn=string] [-dataColumnName=string]
       [-rootnameColumnName=string] [-majorOrder=row|column]
     \end{verbatim}
-  \item {\bf files:}
+  \item \textbf{files:}
     \begin{itemize}
       \item {\em inputfile} Contains an optional string column and multiple numerical columns. If the string column or \verb|-rowNameColumn| is not provided, Row$<$row\_index$>$ will be used as row names in the output file.
       \item {\em outputfile} Contains two columns: a string column and a data column. The string column combines the input string column (or Row$<$row\_index$>$) and the input data column names.
     \end{itemize}
-  \item {\bf switches:}
+  \item \textbf{switches:}
     \begin{itemize}
       \item \verb|-pipe=[input][,output]| --- Standard SDDS pipe option for reading/writing from stdin/stdout.
       \item \verb|-rowNameColumn=<string>| --- Column name for row names in the input file. If not provided, Row$<$row\_index$>$ will be used.
@@ -30,7 +30,7 @@
       \item \verb|-rootnameColumnName=<string>| --- Column name of the string column in the output file.
       \item \verb+-majorOrder=row|column+ --- Specifies the binary SDDS layout.
     \end{itemize}
-  \item {\bf see also:} \progref{sddsarray2column}
-  \item {\bf author:} H. Shang, R. Soliday, ANL/APS.
+  \item \textbf{see also:} \progref{sddsarray2column}
+  \item \textbf{author:} H. Shang, R. Soliday, ANL/APS.
 \end{sddsprog}
 
