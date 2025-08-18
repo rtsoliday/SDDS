@@ -1,14 +1,6 @@
-%
-%\begin{latexonly}
-\newpage
-%\end{latexonly}
-
-\subsection{sddsplot}
-\label{sddsplot}
-
-\begin{itemize}
-\item {\bf description:}
-{\tt sddsplot} is a general purpose device-independent graphics program for displaying parameter and column data
+\begin{sddsprog}{sddsplot}
+  \item \textbf{description:}
+    \verb|sddsplot| is a general purpose device-independent graphics program for displaying parameter and column data
 from SDDS files.  The program is equally capable of quick-and-dirty plots and publication quality graphics.  It
 allows organization of large amounts of data from multiple files into useful plots with minimal effort.  It
 provides line, point, symbol, impulse, error-bar, and arrow plotting, with automatic variation of color, linetype,
@@ -16,59 +8,53 @@ etc.  It can do data winnowing using the data to be graphed or other data in the
 be designated for use as plot labels, legends, or for placement on the plot in specified locations.  Data pages may
 be tagged and sorted by multiple criteria.
 
-{\tt sddsplot} supports various flavors of Postscript, various windows options, and numerous graphics terminals.  For
+\verb|sddsplot| supports various flavors of Postscript, various windows options, and numerous graphics terminals.  For
 X-windows, a GUI interface is generated that supports zoom/pan, cursor readout, movie mode, and much more.
 
-\item {\bf examples:} 
-Plot the horizontal beta function for the APS design:
-\begin{flushleft}{\tt 
+  \item \textbf{examples:}
+    Plot the horizontal beta function for the APS design:
+    \begin{verbatim}
 sddsplot -columnNames=s,betax APS0.twi
-}
-\end{flushleft}
-Plot the Twiss functions for the APS design, using different line types for
-each quantity:
-\begin{flushleft}{\tt 
-sddsplot -columnNames=s,'(beta?,etax)' APS0.twi -graph=line,vary 
-}
-\end{flushleft}
-Plot the Twiss functions for APS lattices, one plotting page per lattice (i.e., per
-data page), with different linetypes and a legend:
-\begin{flushleft}{\tt 
+    \end{verbatim}
+    Plot the Twiss functions for the APS design, using different line types for
+    each quantity:
+    \begin{verbatim}
+sddsplot -columnNames=s,'(beta?,etax)' APS0.twi -graph=line,vary
+    \end{verbatim}
+    Plot the Twiss functions for APS lattices, one plotting page per lattice (i.e., per
+    data page), with different linetypes and a legend:
+    \begin{verbatim}
 sddsplot -columnNames=s,'(beta?,etax)' APS.twi -graphic=line,vary -legend
         -split=page -separate=page
-}\end{flushleft}
-Plot the Twiss functions for APS lattices, one plotting page per function, with each 
-data page shown with a different line type:
-\begin{flushleft}{\tt 
+    \end{verbatim}
+    Plot the Twiss functions for APS lattices, one plotting page per function, with each
+    data page shown with a different line type:
+    \begin{verbatim}
 sddsplot -columnNames=s,'(beta?,etax)' APS.twi -graphic=line,vary
         -split=page -groupby=nameIndex -separate=nameIndex
-}
-\end{flushleft}
-Plot the Twiss functions for the APS design, using a common scale for the beta functions
-and another for eta:
-\begin{flushleft}{\tt
-sddsplot -graphic=line,vary APS0.twi -columnNames=s,beta? -yScalesGroup=id=beta 
+    \end{verbatim}
+    Plot the Twiss functions for the APS design, using a common scale for the beta functions
+    and another for eta:
+    \begin{verbatim}
+sddsplot -graphic=line,vary APS0.twi -columnNames=s,beta? -yScalesGroup=id=beta
 -columnNames=s,etax -yScalesGroup=id=eta
-}
+    \end{verbatim}
 
-\end{flushleft}
-
-\item {\bf sddsplot concepts:}\\
-
-{\tt sddsplot} has a very large number of options and is very flexible.   In most cases, only a very few
-of these options are employed.  In order to make best use of {\tt sddsplot}, it helps to be familiar with
+  \item \textbf{sddsplot concepts:}
+\verb|sddsplot| has a very large number of options and is very flexible.   In most cases, only a very few
+of these options are employed.  In order to make best use of \verb|sddsplot|, it helps to be familiar with
 certain concepts. 
 
-{\tt sddsplot} supports multiple ``plot pages'' and multiple ``panels'' per page.  In this context, a
+\verb|sddsplot| supports multiple ``plot pages'' and multiple ``panels'' per page.  In this context, a
 ``plot page'' is a separate sheet of paper for hardcopy devices, and the equivalent for interactive
 devices.  For example, when using the X-windows interface just described, separate plot pages are held in
 memory so that the user may go back and forth between them rapidly, or run them as a movie.  A plot page
 may contain several nonoverlapping panels, each displaying essentially independent graphics.  Presently,
-{\tt sddsplot} divides the plot page into an array of plot panels, each of equal size.  The default is one
+\verb|sddsplot| divides the plot page into an array of plot panels, each of equal size.  The default is one
 plot panel per plot page.
 
-Within each plot panel, {\tt sddsplot} may display data from any number of ``plot requests''.  A plot
-request is a specification to {\tt sddsplot} of what data to plot from what files, and how to do it.  A plot
+Within each plot panel, \verb|sddsplot| may display data from any number of ``plot requests''.  A plot
+request is a specification to \verb|sddsplot| of what data to plot from what files, and how to do it.  A plot
 request must contain or indicate a list of names of columns and parameters to display, as well as the names
 of one or more files from which to extract the data.  The data from plot requests are organized into plot
 panels and plot pages according to certain defaults or explicit instructions.  One frequent choice is to
@@ -95,25 +81,25 @@ may be altered implicitly by certain switches (e.g., to make room for legends). 
 coordinates, referred to as (x, y), are mapped onto this space, as are the ``pspace coordinates'',
 (p, q).  The latter are [0, 1]x[0, 1] coordinates.
 
-When {\tt sddsplot} reads data in from files, it collects it into internal data sets. By default,
+When \verb|sddsplot| reads data in from files, it collects it into internal data sets. By default,
 each of these internal data sets contains the all of the data for one name group from one file.  That
 is, an internal data set normally contains all of the data for a name group from an SDDS data set.
 The phrase ``internal data set'' is used to maintain the distinction between the SDDS data set and
-the representation of data from an SDDS data set within {\tt sddsplot}.  Associated with each
+the representation of data from an SDDS data set within \verb|sddsplot|.  Associated with each
 internal data set is the request number, the filename, the file number within the request, the y
 dataname, the name group index within the request, the starting page number from the file, and an
 optional user-specified tag value (from the commandline or a parameter in the file).  These values
 may be used to sort and group the data in order to place on individual panels sets of similar data
 from multiple sources.  An instance of this is shown in the last example above.
 
-\item {\bf synopsis:} 
-\begin{flushleft}{\tt
-sddsplot [{\em X11Switches}] [{\em commonSwitches}]
-{\em plotRequestSwitch} {\em fileNames} {\em localSwitches}
-[{\em plotRequestSwitch} {\em fileNames} {\em localSwitches} \ldots]
-}\end{flushleft}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddsplot [X11Switches] [commonSwitches]
+plotRequestSwitch fileNames localSwitches
+[plotRequestSwitch fileNames localSwitches ...]
+  \end{verbatim}
 
-The {\tt sddsplot} command line is organized into three categories.  First, one may issue any of the standard X11
+The \verb|sddsplot| command line is organized into three categories.  First, one may issue any of the standard X11
 switches (e.g., -geometry).  Second, one may give a set of switches, indicated by {\em commonSwitches}, that will
 apply to all subsequest plot requests.
 
@@ -127,7 +113,7 @@ In the examples above, only a single plot request is exhibited.  There are no X1
 set.  The plot request is initiated by the {\tt -columnNames} switch.  The {-graphic} and {-legend} switches are
 local switches.
 
-\item {\bf switches:}
+  \item \textbf{switches:}
 \begin{itemize}
 \item Initiating a plot request:\\
   \begin{itemize}
@@ -175,10 +161,10 @@ local switches.
 
   \item {\tt -mplfiles[=noTitle][,noTopline]} ---
         Provided for compatibility with an older type of data file and rarely used.
-        Allows plotting of {\tt mpl} data files with {\tt sddsplot}.  The x and y columns of the {\tt mpl} file
+        Allows plotting of {\tt mpl} data files with \verb|sddsplot|.  The x and y columns of the {\tt mpl} file
         are used.  The qualifiers may be employed to inhibit use of the {\tt mpl} plot title and topline.
 
-  \item {\tt -namescan=\{all | first\}} --- Specifies whether {\tt sddsplot} should scan all input files when searching
+  \item {\tt -namescan=\{all | first\}} --- Specifies whether \verb|sddsplot| should scan all input files when searching
         for matches to wildcard datanames, or only the first.  The default is to scan all files, which may be slow
         for many files with large numbers of columns or parameters.
   \end{itemize}
@@ -229,7 +215,7 @@ local switches.
   \item {\tt -graphic={\em element}[,type={\em integer}][,fill][,subtype=\{{\em integer} | type\}]}
         {\tt [,connect[=\{{\em linetype} | type | subtype\}]][,vary[=\{type | subtype\}]][,modulus={\em integer}]}
         {\tt [,scale={\em factor}][,\{eachFile | eachPage | eachRequest | fixForName | ]}
-	{\tt fixForFile | fixForRequest\}]} ---
+  {\tt fixForFile | fixForRequest\}]} ---
         Specifies the type of graphic element to use for data in the present plot request.  
 
 {\em element} may be one of {\tt line}, {\tt symbol}, {\tt errorBar}, {\tt impulse}, {\tt yimpulse}, {\tt
@@ -319,7 +305,7 @@ the plot.  If given without qualifiers, both x and y are ``unsuppressed''.
   \item {\tt -sameScale[=x][,y][,global]}---Specifies that separate panels of data shall be displayed
 on the same scales.  In other words, any autoscaling is done based on all of the data from a request,
 rather than simply the data on a particular plot panel.  If given without these qualifiers, both x
-and y are affected.  {\tt global} forces {\tt sddsplot} to impose the desired condition across all
+and y are affected.  {\tt global} forces \verb|sddsplot| to impose the desired condition across all
 plot requests.
 
   \item {\tt -zoom=[\{x|y\}Factor={\em value}][,\{x|p\}Center={\em value}][,\{y|q\}Center={\em
@@ -357,7 +343,7 @@ The {\tt factor} qualifiers specify factors to apply to the data values in produ
 might want to muliply small values by a power of ten in order to get labels that are of order units.  The {\tt
 spacing} values give the spacing of the ticks and labels with any factor included.  I.e., to keep the same number
 of ticks, {\tt factor} and {\tt spacing} values must be increased together.  Usually, giving the {\tt spacing}
-qualifiers is unnecessary, since {\tt sddsplot} chooses appropriate values.
+qualifiers is unnecessary, since \verb|sddsplot| chooses appropriate values.
 
 The {\tt modulus} qualifiers allow printing the modulus of the label value rather than the value itself; for
 example, one might use {\tt xmodulus=24} if x was the time in hours over many days.  The {\tt size} qualifiers
@@ -439,9 +425,9 @@ at the top of the plot, above the ``topline label''.
   \item {\tt -topline}---This switch has identical usage to {\tt -xLabel}.  It is blank by default.
   \item {\tt -filenamesOnTopline}---Directs that the topline text contain the names of the files from which data
 is displayed.
-  \item {\tt -labelSize={\em fraction}} --- {\bf Obsolete}: 
+  \item {\tt -labelSize={\em fraction}} --- \textbf{Obsolete}:
 Specifies a common size for all labels, including numeric labels.  
-In the original version of {\tt sddsplot}, the {\em fraction} was the horizontal size of the characters as a 
+In the original version of \verb|sddsplot|, the {\em fraction} was the horizontal size of the characters as a 
 fraction of the horizontal size of the plot region.  This meaning is no longer precisely true because the
 new version doesn't used fixed character sizes.  However, this option may still be used to scale character
 sizes up and down.  The previous nominal value for {\em fraction} was 0.03, which is now used as the reference
@@ -596,7 +582,7 @@ data.  (An example is plotting magnet layouts for Twiss parameter
 plots using the {\tt magnets} output from {\tt elegant}.)
 
 {\tt -overlay=[\{x|y\}mode={\em mode}][,\{x|y\}factor={\em value}]} {\tt [,\{x|y\}offset={\em
-value}]} {\tt [,\{x|y\}center]}---Normally, {\tt sddsplot} displays all data on a single panel on the same
+value}]} {\tt [,\{x|y\}center]}---Normally, \verb|sddsplot| displays all data on a single panel on the same
 scale.  In some cases, one wants to overlay data that is on a different scale from other data on the
 panel.  One way to do this is with the {\tt -overlay} switch, which gives convenient control of how
 overlayed data is displayed.  Any data in a plot request for which this switch is given will be
@@ -696,7 +682,7 @@ separate by filename.
  
   \item {\tt -split=\{pages[,interval={\em integer}] | parameterChange={\em name}[,width={\em
 value}][,offset={\em value}] | columnBin={\em name},width={\em name}[,start={\em
-value}][,completely]\}}---As discussed in the introductory sections, when {\tt sddsplot} reads data
+value}][,completely]\}}---As discussed in the introductory sections, when \verb|sddsplot| reads data
 for one dataname group from a file, it normally concatenates data from successive pages to form a
 single internal data set.  This would mean, for example, that all of the data from the file would be
 displayed with the same linetype or symbol.  The {\tt -split} switch overrides this behavior,
@@ -745,7 +731,7 @@ eliminated from the data prior to plotting.  This complements the facility avail
 {\tt -match} in that one need not specify the name of the data one is winnowing with.  This permits easier
 filtering of data from many columns or parameters.
 
-The {\tt autoscaling} qualifier specifies that {\tt sddsplot} will not remove data outside the
+The {\tt autoscaling} qualifier specifies that \verb|sddsplot| will not remove data outside the
 defined limits, but rather that it will ignore it for purposes of autoscaling.  If lines are used to
 connect data points, this could result in lines being drawn to the boundary of the plot region, thus
 showing the presence of extreme points.
@@ -800,7 +786,7 @@ all the rows for which the column {\tt Name} starts with 'A' or 'B', one could u
 \begin{itemize}
         \item {\tt -repeat[=checkSeconds={\em number}][,timeOut={\em seconds}]} ---
 Specifies repeated plotting of data from the files, with replotting occuring when any
-file is modified.  By default, {\tt sddsplot} checks the files every second and times out
+file is modified.  By default, \verb|sddsplot| checks the files every second and times out
 after 900s of no change.  This is available on UNIX systems only.  It is best used with
 the \verb|motif| device type and the following device argument:
 \verb|-device=motif,''-movie true -keep 1''|.
@@ -819,8 +805,8 @@ the \verb|motif| device type and the following device argument:
 
 \end{itemize}
 
-\item {\bf special characters:}
-{\tt sddsplot} supports Greek and mathematical characters in labels and strings through special sequences embedded in
+  \item \textbf{special characters:}
+\verb|sddsplot| supports Greek and mathematical characters in labels and strings through special sequences embedded in
 text strings.  A similar mechanism is used to allow character-by-character control over size and positioning.
 The special sequences are of the form \verb|$|{\em character}, where {\em character} may be one of the following:
 \begin{itemize}
@@ -857,7 +843,7 @@ character size.  The two sequences \verb|$i| and \verb|$d| are
 inverses of each other.  \verb|$i| increases the size of subsequent
 characters by 50\%, while \verb|$d| decreases the size of subsequent
 characters by ${\rm 33 \frac{1}{3}}$\%.  These are seldom used, since
-{\tt sddsplot} provides other means of controlling the size of
+\verb|sddsplot| provides other means of controlling the size of
 characters in labels and strings.
 
 \item {\tt u}, {\tt v}: provide for motion of the baseline Up and down by one half character height.  
@@ -869,19 +855,19 @@ tall while maintaining width, while \verb|$f| makes characters half as tall whil
 \end{itemize}
 
 
-\item {\bf environment variables:}
+  \item \textbf{environment variables:}
         \begin{itemize}
         \item {\tt SDDS\_DEVICE} --- Gives the name of the device type to use as the default.
         \end{itemize}
-\item {\bf see also:}
+  \item \textbf{see also:}
     \begin{itemize}
     \item \hyperref[exampleData]{Data for Examples}
     \item \progref{SDDS editing}
     \item \progref{SDDS Wildcard Conventions}
     \end{itemize}
-\item {\bf author:} M. Borland, H. Shang and R. Soliday ANL/APS.
+  \item \textbf{author:} M. Borland, H. Shang and R. Soliday ANL/APS.
 
-\item {\bf acknowledgements}: {\tt sddsplot} uses device driver code from the program {\tt GNUPLOT}, 
+  \item \textbf{acknowledgements}: \verb|sddsplot| uses device driver code from the program {\tt GNUPLOT},
 with modifications and enhancements made at Argonne.  The GNUPLOT code is covered by a separate
 copyright, and is used by permission of the authors.  See the {\tt GNUPLOT\_README} file included
 with the distribution for restrictions associated with this code.
@@ -891,6 +877,6 @@ The GUI X-windows program ({\tt mpl\_motif}) was written by K. Evans of ANL/APS.
 The GIF drivers use the {\tt gd 1.2} library by Thomas Boutell.  The latter is copyrighted by the
 Quest Protein Database Center, Cold Spring Harbor Labs.
 
-\end{itemize}
+\end{sddsprog}
 
 
