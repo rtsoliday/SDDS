@@ -26,7 +26,7 @@ endif
 
 ifeq ($(OS), Darwin)
   CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt5Widgets Qt5Network)
-  LDFLAGS += $(shell pkg-config --libs Qt5Widgets Qt5PrintSupport Qt5Network)
+  LDFLAGS += $(shell pkg-config --libs Qt5Widgets Qt5PrintSupport Qt5Network) -framework ApplicationServices
   PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
   PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
   MOC = $(wildcard /opt/local/libexec/qt5/bin/moc)
