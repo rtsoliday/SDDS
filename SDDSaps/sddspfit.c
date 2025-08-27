@@ -61,6 +61,7 @@
  * | `-verbose`                            | Outputs additional details during execution.                                         |
  * | `-evaluate`                           | Outputs evaluated fit at specified points or from a file.                            |
  * | `-fitLabelFormat`                     | Format string for labeling the fit.                                                  |
+ * | `-repeatFits'                         | Repeats the fit <number> times with resampling to estimate errors in fit coefficients. |
  * | `-copyParameters`                     | Copies parameters from the input file to the output file.                            |
  * | `-majorOrder`                         | Specifies output order (row or column).                                              |
  *
@@ -107,12 +108,12 @@ char **initializeOutputFile(SDDS_DATASET *SDDSout, char *output,
                             SDDS_DATASET *SDDSin, char *input, char *xName,
                             char *yName, char *xSigmaName, char *ySigmaName,
                             long sigmasValid, int32_t *order, long terms,
-                            long chebyshev, long copyParameters);
+                            long chebyshev, long copyParameters, long repeatFits);
 void checkInputFile(SDDS_DATASET *SDDSin, char *xName, char *yName,
                     char *xSigmaName, char *ySigmaName);
 long coefficient_index(int32_t *order, long terms, long order_of_interest);
 void makeFitLabel(char *buffer, long bufsize, char *fitLabelFormat,
-                  double *coef, int32_t *order, long terms, long chebyshev);
+                  double *coef, double *coefSigma, int32_t *order, long terms, long chebyshev);
 void createRpnSequence(char *buffer, long bufsize, double *coef, int32_t *order,
                        long terms);
 
@@ -172,6 +173,7 @@ enum option_type {
   CLO_AUTOOFFSET,
   CLO_COPY_PARAMETERS,
   CLO_MAJOR_ORDER,
+  CLO_REPEATFITS,
   N_OPTIONS
 };
 
@@ -197,6 +199,7 @@ char *option[N_OPTIONS] = {
   "autooffset",
   "copyparameters",
   "majorOrder",
+  "repeatfits",
 };
 
 char *USAGE =
@@ -224,9 +227,9 @@ function evaluated at x. By default, P(x, i) = x^i. Chebyshev T polynomials can 
  -orders                Orders (P[i]) to use in fitting.\n\
  -reviseOrders          Modify the orders used in the fit to eliminate poorly-determined coefficients based on fitting\n\
                              of the first data page. The algorithm adds one order at a time, terminating when the reduced\n\
-                             chi-squared is less than the \"goodEnough\" value (default: 1) or when the new term does not improve\n\
+                             chi-squared is less than the 'goodEnough' value (default: 1) or when the new term does not improve\n\
                              the reduced chi-squared by more than the threshold value (default: 0.1). It next tries removing terms one at a time.\n\
-                             Finally, if the resulting best reduced chi-squared is greater than the threshold given with the \"complete\" option,\n\
+                             Finally, if the resulting best reduced chi-squared is greater than the threshold given with the 'complete' option,\n\
                              it also tries all possible combinations of allowed terms.\n\
  -chebyshev             Use Chebyshev T polynomials (xOffset is set automatically).\n\
                              Giving the `convert` option causes the fit to be written out in terms of ordinary polynomials.\n\
@@ -234,13 +237,14 @@ function evaluated at x. By default, P(x, i) = x^i. Chebyshev T polynomials can 
  -xOffset               Desired value of x to fit about.\n";
 
 static char *additional_help2 =
-  " -autoOffset            Automatically offset x values by the mean x value for fitting.\n\
-                             Helpful if x values are very large in magnitude.\n\
+" -autoOffset           Automatically offset x values by the mean x value for fitting.\n\
+                           Helpful if x values are very large in magnitude.\n\
  -xFactor               Desired factor to multiply x values by before fitting.\n\
  -sigmas                Specify absolute or fractional sigma for all points.\n\
  -modifySigmas          Modify the y sigmas using the x sigmas and an initial fit.\n\
  -generateSigmas        Generate y sigmas from the RMS deviation from an initial fit.\n\
-                             Optionally keep the sigmas from the data if larger/smaller than RMS deviation.\n\
+                            Optionally keep the sigmas from the data if larger/smaller than RMS deviation.\n\
+ -repeatFits            Repeats the fit <number> times with resampling (bootstrap) to estimate RMS errors in fit coefficients.\n\
  -sparse                Specify integer interval at which to sample data.\n\
  -range                 Specify range of independent variable over which to perform fit and evaluation.\n\
                              If 'fitOnly' is given, then fit is compared to data over the original range.\n\
@@ -339,6 +343,7 @@ int main(int argc, char **argv) {
   unsigned long pipeFlags, reviseOrders, majorOrderFlag;
   EVAL_PARAMETERS evalParameters;
   short columnMajorOrder = -1;
+  long repeatFits = 0;
 
   sxOrig = syOrig = NULL;
   rmsResidual = 0;
@@ -376,7 +381,13 @@ int main(int argc, char **argv) {
 
   for (iArg = 1; iArg < argc; iArg++) {
     if (s_arg[iArg].arg_type == OPTION) {
-      switch (match_string(s_arg[iArg].list[0], option, N_OPTIONS, 0)) {
+  switch (match_string(s_arg[iArg].list[0], option, N_OPTIONS, 0)) {
+      case CLO_REPEATFITS:
+        if (s_arg[iArg].n_items != 2 || sscanf(s_arg[iArg].list[1], "%ld", &repeatFits) != 1 || repeatFits < 1)
+          SDDS_Bomb("invalid -repeatFits syntax");
+	if (repeatFits<10)
+	  SDDS_Bomb("The number of repeats should be at least 10");
+        break;
       case CLO_MAJOR_ORDER:
         majorOrderFlag = 0;
         s_arg[iArg].n_items--;
@@ -598,7 +609,6 @@ int main(int argc, char **argv) {
   }
   ySigmasValid = 0;
   if (sigmasMode != -1 || generateSigmas || ySigmaName || modifySigmas)
-    ySigmasValid = 1;
 
   if (normTerm >= 0 && normTerm >= terms)
     SDDS_Bomb("can't normalize to that term--not that many terms");
@@ -628,7 +638,7 @@ int main(int argc, char **argv) {
   checkInputFile(&SDDSin, xName, yName, xSigmaName, ySigmaName);
   coefUnits = initializeOutputFile(&SDDSout, output, &SDDSin, input, xName,
                                    yName, xSigmaName, ySigmaName, ySigmasValid,
-                                   order, terms, chebyshev, copyParameters);
+                                   order, terms, chebyshev, copyParameters,  repeatFits);
   if (columnMajorOrder != -1)
     SDDSout.layout.data_mode.column_major = columnMajorOrder;
   else
@@ -830,8 +840,59 @@ int main(int argc, char **argv) {
         reviseOrders = 0;
       }
 
-      isFit = lsfg(x, y, sy, points, terms, order, coef, coefSigma, &chi, diff,
-                   basis_fn);
+      if (repeatFits <= 1) {
+        isFit = lsfg(x, y, sy, points, terms, order, coef, coefSigma, &chi, diff,
+                     basis_fn);
+      } else {
+        double *coefRepeat = tmalloc(sizeof(*coefRepeat) * terms * repeatFits);
+        double *coefSigmaRepeat = tmalloc(sizeof(*coefSigmaRepeat) * terms * repeatFits);
+        long fitIdx;
+        isFit = 1;
+	srand(1);
+        for (fitIdx = 0; fitIdx < repeatFits; fitIdx++) {
+          // Resample indices with replacement (bootstrap)
+          int64_t *indices = tmalloc(sizeof(*indices) * points);
+          for (i = 0; i < points; i++) indices[i] = rand() % points;
+          double *xSample = tmalloc(sizeof(*xSample) * points);
+          double *ySample = tmalloc(sizeof(*ySample) * points);
+          double *sySample = tmalloc(sizeof(*sySample) * points);
+          for (i = 0; i < points; i++) {
+            xSample[i] = x[indices[i]];
+            ySample[i] = y[indices[i]];
+            sySample[i] = sy[i];
+          }
+          double chiTmp;
+          double *diffTmp = tmalloc(sizeof(*diffTmp) * points);
+          int fitOk = lsfg(xSample, ySample, sySample, points, terms, order, coefRepeat + fitIdx * terms, coefSigmaRepeat + fitIdx * terms, &chiTmp, diffTmp, basis_fn);
+          free(indices);
+          free(xSample);
+          free(ySample);
+          free(sySample);
+          free(diffTmp);
+	  isFit *= fitOk;
+        }
+        // Compute mean and rms for each coefficient
+        for (i = 0; i < terms; i++) {
+          double sum = 0, sum2 = 0;
+          for (j = 0; j < repeatFits; j++) {
+            double v = coefRepeat[j * terms + i];
+            sum += v;
+            sum2 += v * v;
+          }
+          coef[i] = sum / repeatFits;
+          coefSigma[i] = sqrt(sum2 / repeatFits - (coef[i] * coef[i]));
+        }
+        free(coefRepeat);
+        free(coefSigmaRepeat);
+        // Evaluate the fit for the mean coefficients and populate the diff array (residuals)
+	chi = 0;
+        for (i = 0; i < points; i++) {
+          double fitValue = eval_sum(basis_fn, coef, order, terms, x[i]);
+          diff[i] = fitValue- y[i];
+	  chi += sqr(diff[i]);
+        }
+	chi /= points - terms;
+      }
       if (isFit) {
         rmsResidual = rms_average(diff, points);
         if (verbose) {
@@ -854,7 +915,7 @@ int main(int argc, char **argv) {
                        SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     rpnSeqBuffer[0] = 0;
     if (!invalid) {
-      setCoefficientData(&SDDSout, coef, (ySigmasValid ? coefSigma : NULL),
+      setCoefficientData(&SDDSout, coef, ((repeatFits || ySigmasValid) ? coefSigma : NULL),
                          coefUnits, order, terms, chebyshev, fitLabelFormat,
                          rpnSeqBuffer);
       if (rangeFitOnly) {
@@ -1010,9 +1071,9 @@ void print_coefs(FILE *fpo, double xOffset, double xScaleFactor, long chebyshev,
 }
 
 void makeFitLabel(char *buffer, long bufsize, char *fitLabelFormat,
-                  double *coef, int32_t *order, long terms, long chebyshev) {
+                  double *coef, double *coefSigma, int32_t *order, long terms, long chebyshev) {
   long i;
-  static char buffer1[SDDS_MAXLINE], buffer2[SDDS_MAXLINE];
+  static char buffer1[SDDS_MAXLINE], buffer2[SDDS_MAXLINE], buffer3[SDDS_MAXLINE];
 
   sprintf(buffer, "%s = ", ySymbol);
   for (i = 0; i < terms; i++) {
@@ -1025,12 +1086,24 @@ void makeFitLabel(char *buffer, long bufsize, char *fitLabelFormat,
         sprintf(buffer1 + 1, fitLabelFormat, coef[i]);
       } else
         sprintf(buffer1, fitLabelFormat, coef[i]);
+      if (coefSigma) {
+	strcat(buffer1, "($sa$e");
+	sprintf(buffer3, fitLabelFormat, coefSigma[i]);
+	strcat(buffer1, buffer3);
+	strcat(buffer1, ")");
+      }
     } else {
       if (coef[i] > 0) {
         strcat(buffer1, "+");
         sprintf(buffer1 + 1, fitLabelFormat, coef[i]);
       } else
         sprintf(buffer1, fitLabelFormat, coef[i]);
+      if (coefSigma) {
+	strcat(buffer1, "($sa$e");
+	sprintf(buffer3, fitLabelFormat, coefSigma[i]);
+	strcat(buffer1, buffer3);
+	strcat(buffer1, ")");
+      }
       if (order[i] >= 1) {
         strcat(buffer1, "*");
         if (chebyshev != 1) {
@@ -1100,11 +1173,10 @@ char **initializeOutputFile(SDDS_DATASET *SDDSout, char *output,
                             SDDS_DATASET *SDDSin, char *input, char *xName,
                             char *yName, char *xSigmaName, char *ySigmaName,
                             long sigmasValid, int32_t *order, long terms,
-                            long chebyshev, long copyParameters) {
+                            long chebyshev, long copyParameters, long repeatFits) {
   char buffer[SDDS_MAXLINE], buffer1[SDDS_MAXLINE], *xUnits, *yUnits,
     **coefUnits;
   long i;
-
   if (!SDDS_InitializeOutput(SDDSout, SDDS_BINARY, 0, NULL, "sddspfit output",
                              output) ||
       !SDDS_TransferColumnDefinition(SDDSout, SDDSin, xName, NULL) ||
@@ -1173,7 +1245,7 @@ char **initializeOutputFile(SDDS_DATASET *SDDSout, char *output,
       SDDS_DefineArray(SDDSout, "Coefficient", "a", "[CoefficientUnits]",
                        "Coefficient of term in fit", NULL, SDDS_DOUBLE, 0, 1,
                        "FitResults") < 0 ||
-      (sigmasValid &&
+      ((sigmasValid || repeatFits) &&
        SDDS_DefineArray(SDDSout, "CoefficientSigma", "$gs$r$ba$n",
                         "[CoefficientUnits]",
                         "Sigma of coefficient of term in fit", NULL,
@@ -1238,7 +1310,7 @@ char **initializeOutputFile(SDDS_DATASET *SDDSout, char *output,
       iIntercept =
         SDDS_DefineParameter(SDDSout, "Intercept", "Intercept", coefUnits[i],
                              "Intercept of fit", NULL, SDDS_DOUBLE, NULL);
-      if (sigmasValid)
+      if (sigmasValid || repeatFits)
         iInterceptSigma = SDDS_DefineParameter(
                                                SDDSout, "InterceptSigma", "InterceptSigma", coefUnits[i],
                                                "Sigma of intercept of fit", NULL, SDDS_DOUBLE, NULL);
@@ -1246,7 +1318,7 @@ char **initializeOutputFile(SDDS_DATASET *SDDSout, char *output,
     if ((i = coefficient_index(order, terms, 1)) >= 0) {
       iSlope = SDDS_DefineParameter(SDDSout, "Slope", "Slope", coefUnits[i],
                                     "Slope of fit", NULL, SDDS_DOUBLE, NULL);
-      if (sigmasValid)
+      if (sigmasValid || repeatFits)
         iSlopeSigma = SDDS_DefineParameter(SDDSout, "SlopeSigma", "SlopeSigma",
                                            coefUnits[i], "Sigma of slope of fit",
                                            NULL, SDDS_DOUBLE, NULL);
@@ -1255,7 +1327,7 @@ char **initializeOutputFile(SDDS_DATASET *SDDSout, char *output,
       iCurvature =
         SDDS_DefineParameter(SDDSout, "Curvature", "Curvature", coefUnits[i],
                              "Curvature of fit", NULL, SDDS_DOUBLE, NULL);
-      if (sigmasValid)
+      if (sigmasValid || repeatFits)
         iCurvatureSigma = SDDS_DefineParameter(
                                                SDDSout, "CurvatureSigma", "CurvatureSigma", coefUnits[i],
                                                "Sigma of curvature of fit", NULL, SDDS_DOUBLE, NULL);
@@ -1270,7 +1342,7 @@ char **initializeOutputFile(SDDS_DATASET *SDDSout, char *output,
   }
   for (i = 0; i < terms; i++) {
     char s[100];
-    if (sigmasValid) {
+    if (sigmasValid || repeatFits) {
       sprintf(s, "Coefficient%02ldSigma", (long)order[i]);
       iTermSig[i] = SDDS_DefineParameter(SDDSout, s, s, coefUnits[i], NULL,
                                          NULL, SDDS_DOUBLE, NULL);
@@ -1352,7 +1424,7 @@ long setCoefficientData(SDDS_DATASET *SDDSout, double *coef, double *coefSigma,
       SDDS_PrintErrors(stderr,
                        SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if (iFitLabel != -1 && !invalid) {
-      makeFitLabel(fitLabelBuffer, SDDS_MAXLINE, fitLabelFormat, coef, order,
+      makeFitLabel(fitLabelBuffer, SDDS_MAXLINE, fitLabelFormat, coef, coefSigma, order,
                    terms, chebyshev);
       if (!SDDS_SetParameters(SDDSout, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE,
                               iFitLabel, fitLabelBuffer, -1))
