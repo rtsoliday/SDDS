@@ -362,10 +362,12 @@ int main(int argc, char **argv) {
       t[0] = 0;
       for (i = 0; i < columns; i++) {
         ptr = getToken(ptr, separator, startDelim, endDelim, t);
-        if (strlen(t) == 0)
-          break;
-        columnData[i].units = malloc(strlen(t) + 1);
-        sprintf(columnData[i].units, "%s", t);
+        if (strlen(t) > 0) {
+          columnData[i].units = malloc(strlen(t) + 1);
+          sprintf(columnData[i].units, "%s", t);
+        } else {
+          columnData[i].units = NULL;
+        }
       }
       unitlabels = 0;
       continue;
