@@ -99,6 +99,8 @@ private:
   void populateModels();
   void commitModels();
   void clearDataset();
+  /** Ensures a dataset is initialized, creating an empty one if needed. */
+  bool ensureDataset();
   bool writeFile(const QString &path);
   bool writeHDF(const QString &path);
   bool writeCSV(const QString &path);

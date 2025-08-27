@@ -1580,6 +1580,36 @@ void SDDSEditor::clearDataset() {
     pages.clear();
   }
 }
+
+/**
+ * @brief Ensure an SDDS dataset exists, creating an empty one if necessary.
+ * @return true if a dataset is available, false otherwise.
+ */
+bool SDDSEditor::ensureDataset() {
+  if (datasetLoaded)
+    return true;
+
+  memset(&dataset, 0, sizeof(dataset));
+  if (!SDDS_InitializeOutput(&dataset, asciiSave ? SDDS_ASCII : SDDS_BINARY, 1,
+                             NULL, NULL, NULL)) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to initialize dataset"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return false;
+  }
+
+  datasetLoaded = true;
+  pages.clear();
+  pages.append(PageStore());
+  currentPage = 0;
+
+  pageCombo->blockSignals(true);
+  pageCombo->clear();
+  pageCombo->addItem(tr("Page %1").arg(1));
+  pageCombo->blockSignals(false);
+
+  populateModels();
+  return true;
+}
 void SDDSEditor::commitModels() {
   if (QWidget *fw = QApplication::focusWidget()) {
     fw->clearFocus();
@@ -2691,7 +2721,7 @@ static void removeArrayFromLayout(SDDS_LAYOUT *layout, int col) {
 }
 
 void SDDSEditor::insertParameter() {
-  if (!datasetLoaded)
+  if (!ensureDataset())
     return;
 
   QDialog dlg(this);
@@ -2768,7 +2798,7 @@ void SDDSEditor::insertParameter() {
 }
 
 void SDDSEditor::insertColumn() {
-  if (!datasetLoaded)
+  if (!ensureDataset())
     return;
 
   QDialog dlg(this);
@@ -2847,7 +2877,7 @@ void SDDSEditor::insertColumn() {
 }
 
 void SDDSEditor::insertArray() {
-  if (!datasetLoaded)
+  if (!ensureDataset())
     return;
 
   QDialog dlg(this);
@@ -3076,7 +3106,7 @@ void SDDSEditor::clonePage() {
 }
 
 void SDDSEditor::insertPage() {
-  if (!datasetLoaded)
+  if (!ensureDataset())
     return;
 
   commitModels();
