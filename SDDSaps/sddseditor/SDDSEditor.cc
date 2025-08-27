@@ -1420,8 +1420,10 @@ bool SDDSEditor::writeCSV(const QString &path) {
 }
 
 void SDDSEditor::saveFile() {
-  if (currentFilename.isEmpty())
+  if (currentFilename.isEmpty()) {
+    saveFileAs();
     return;
+  }
   writeFile(currentFilename);
 }
 
