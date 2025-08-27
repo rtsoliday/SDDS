@@ -18,6 +18,9 @@
 #  include <windows.h>
 #elif defined(__APPLE__)
 #  include <ApplicationServices/ApplicationServices.h>
+#  include <objc/objc.h>
+#  include <objc/runtime.h>
+#  include <objc/message.h>
 #endif
 
 double scalex, scaley;
@@ -90,7 +93,15 @@ static void makeWindowVisible(QMainWindow *window) {
 #elif defined(__APPLE__)
   ProcessSerialNumber psn = {0, kCurrentProcess};
   TransformProcessType(&psn, kProcessTransformToForegroundApplication);
-  SetFrontProcess(&psn);
+
+  /*
+   * Use modern Cocoa APIs to bring the application to the foreground.
+   * This avoids the deprecated SetFrontProcess call that was previously used.
+   */
+  Class nsAppClass = objc_getClass("NSApplication");
+  id sharedApp = ((id (*)(Class, SEL))objc_msgSend)(nsAppClass, sel_registerName("sharedApplication"));
+  ((void (*)(id, SEL, BOOL))objc_msgSend)(sharedApp, sel_registerName("activateIgnoringOtherApps:"), YES);
+
   window->showNormal();
   window->raise();
   window->activateWindow();
