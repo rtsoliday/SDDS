@@ -15,7 +15,7 @@ sddspfit [-pipe=[input][,output]] [inputFile] [outputFile]
   [-chebyshev[=convert]]
   [-xOffset=value] [-xFactor=value]
   [-sigmas={absolute=value | fractional=value}]
-  [-modifySigmas] [-generateSigmas[={keepLargest | keepSmallest}]]
+  [-modifySigmas] [-generateSigmas[={keepLargest | keepSmallest}]] [-repeatFits=integer]
   [-sparse=interval] [-range=lower,upper]
   [-normalize[=termNumber]] [-verbose]
   [-fitLabelFormat=sprintfString]
@@ -64,6 +64,8 @@ sddspfit [-pipe=[input][,output]] [inputFile] [outputFile]
           \item \verb!-sigmas={absolute=value | fractional=value}! --- Specifies that independent-variable errors be generated using a specified value for all points, or a specified fraction for all points.
           \item \verb|-modifySigmas| --- Specifies that independent-variable sigmas be modified to include the effect of uncertainty in the dependent variable values. If this option is not given, any x sigmas specified with \verb|-columns| are ignored.
           \item \verb!-generateSigmas[={keepLargest | keepSmallest}]! --- Specifies that independent-variable errors be generated from the variance of an initial equal-weights fit. If errors are already given (via \emph{-column}), one may request that for every point \verb|sddspfit| retain the larger or smaller of the sigma in the data and the one given by the variance.
+          \item \verb|-repeatFits=integer| --- The number of times to repeat the fit using sampling with replacement in order to obtain the coefficient sigma values from the bootstrap
+            method. The number must be greater than 10 and should ideally greater than 30.
         \end{itemize}
       \item \verb|-sparse=interval| --- Specifies sparsing of the input data prior to fitting. This can greatly speed computations when the number of data points is large.
       \item \verb|-range=lower,upper| --- Specifies the range of independent variable over which to do fitting.
