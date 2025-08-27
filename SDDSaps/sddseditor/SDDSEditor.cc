@@ -56,6 +56,9 @@ static bool validateTextForType(const QString &text, int type,
       bool ok = true;
       if (SDDS_FLOATING_TYPE(type))
         trimmed.toDouble(&ok);
+      else if (type == SDDS_USHORT || type == SDDS_ULONG ||
+               type == SDDS_ULONG64)
+        trimmed.toULongLong(&ok);
       else
         trimmed.toLongLong(&ok);
       if (!ok) {
@@ -77,9 +80,14 @@ static bool validateTextForType(const QString &text, int type,
 }
 
 static int dimProduct(const QVector<int> &dims) {
+  if (dims.isEmpty())
+    return 0;
   int prod = 1;
-  for (int d : dims)
-    prod *= d > 0 ? d : 1;
+  for (int d : dims) {
+    if (d <= 0)
+      return 0;
+    prod *= d;
+  }
   return prod;
 }
 
