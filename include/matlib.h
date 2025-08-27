@@ -100,9 +100,9 @@ epicsShareFuncMATLIB extern void mat_zero(MATRIX *A);
  
 epicsShareFuncMATLIB extern void mat_identity(MATRIX *A);
 #define m_identity(A) mat_identity(A)
- 
-epicsShareFuncMATLIB extern int mat_check(MATRIX *A);
-#define m_check(A) mat_check(A)
+
+epicsShareFuncMATLIB extern void mat_diag(MATRIX *A, double *diagElements);
+#define m_diag(A, diagElements) mat_diag(A, diagElements)
 
 /* float versions  */
 
