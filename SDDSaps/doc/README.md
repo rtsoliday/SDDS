@@ -605,6 +605,32 @@ This approach ensures the number is printed with the desired number of significa
 
 ---
 
+### Question
+
+Why does `sddsprocess` with `-filter=col,y,-5,200` give the warning *“no rows selected for page 1”* when processing data from `sddsimageprofiles`?
+
+### Answer
+
+The `-filter=col,y,-5,200` option only keeps rows where the values of the specified column are inside the range from `-5` to `200`. If all of the values fall outside that range, no rows will be selected, which produces the warning.
+
+If your goal is to **keep values outside the specified range**, add `,!` to the filter option. For example:
+
+```
+sddsprocess input.sdds -filter=col,y,-5,200,!
+```
+
+This inverts the selection, keeping all rows where the column values are *not* between `-5` and `200`.
+
+Also, note that when using `sddsimageprofiles` with `-method=integrated`, the resulting column values may be very large (e.g., in the range of 72000 to 75000). If you intended to average instead of integrate, consider using:
+
+```
+-method=average
+```
+
+to produce values on a scale consistent with your filter range.
+
+---
+
 
 
 
