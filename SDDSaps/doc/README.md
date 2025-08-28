@@ -35,7 +35,7 @@ Use the table of contents below to jump to a specific topic.
 
 ---
 
-## Why doesn't my `sddsxref` command add the column I requested when I use both `-take` and `-leave`? {#faq1}
+## <a id="faq1"></a>Why doesn't my `sddsxref` command add the column I requested when I use both `-take` and `-leave`?
 
 I tried the following command:
 
@@ -52,7 +52,7 @@ The `-leave` option overrides `-take` when both specify a given column. Using `-
 
 ---
 
-## How can I trim an image file to remove noisy regions and improve profile analysis, especially for the y-profile? {#faq2}
+## <a id="faq2"></a>How can I trim an image file to remove noisy regions and improve profile analysis, especially for the y-profile?
 
 For example, given an image file with systematic noise in the background, the following commands produced a good x-profile but a poor y-profile fit:
 
@@ -94,7 +94,7 @@ This trims the analysis to only the specified rows and columns, avoiding backgro
 
 ---
 
-## What is the difference between using `-method=integrated` and `-method=centerline` in `sddsimageprofiles`? {#faq3}
+## <a id="faq3"></a>What is the difference between using `-method=integrated` and `-method=centerline` in `sddsimageprofiles`?
 
 ### Answer
 
@@ -104,7 +104,7 @@ The `-method=centerline` option instead extracts the profile along the central l
 
 ---
 
-## How can I print the input filename on a plot when using `sddscontour`, similar to the `-filename` option in `sddsplot`? {#faq4}
+## <a id="faq4"></a>How can I print the input filename on a plot when using `sddscontour`, similar to the `-filename` option in `sddsplot`?
 
 ```
 sddscontour datafile.sdds -filename,edit=49d%
@@ -121,7 +121,7 @@ This will draw the specified text string at the top of the plot. If you want the
 
 ---
 
-## Why do I get a "no match" error when running `sddsplot` with wildcards in column names? {#faq5}
+## <a id="faq5"></a>Why do I get a "no match" error when running `sddsplot` with wildcards in column names?
 
 **Example of failing command:**
 
@@ -154,7 +154,7 @@ echo $SHELL
 
 ---
 
-## How can I modify the text shown in a legend when using `-legend` in `sddsplot`? {#faq6}
+## <a id="faq6"></a>How can I modify the text shown in a legend when using `-legend` in `sddsplot`?
 
 ### Answer
 
@@ -186,7 +186,7 @@ The actual substitution pattern depends on what portion of the string you want t
 
 ---
 
-## Why doesn't this `sddsderiv` command generate the derivative column for `ColumnB`? {#faq7}
+## <a id="faq7"></a>Why doesn't this `sddsderiv` command generate the derivative column for `ColumnB`?
 
 ```
 sddsprocess -pipe=out inputFile.sdds \
@@ -232,7 +232,7 @@ This ensures that derivative columns will be properly generated for both `Column
 
 ---
 
-## How can I offset the y-axis in `sddsplot` using a parameter value from an SDDS file? {#faq8}
+## <a id="faq8"></a>How can I offset the y-axis in `sddsplot` using a parameter value from an SDDS file?
 
 ```
 sddsplot -graph=dot -thick=2 track-5nC.w2 \
@@ -270,7 +270,7 @@ This approach applies the parameter value `pCentral` as the y-offset while inver
 
 ---
 
-## How can I add arrows to a plot using `sddsplot` with `-arrowSettings`? {#faq9}
+## <a id="faq9"></a>How can I add arrows to a plot using `sddsplot` with `-arrowSettings`?
 
 I tried adding arrows to a plot with the following command:
 
@@ -309,7 +309,7 @@ If the `-arrowSettings` option is omitted entirely, no data may be plotted becau
 
 ---
 
-## How do I fix the `invalid -columnData syntax` error when using `csv2sdds`? {#faq10}
+## <a id="faq10"></a>How do I fix the `invalid -columnData syntax` error when using `csv2sdds`?
 
 A user attempted to convert a CSV file to SDDS format with the following command:
 
@@ -344,7 +344,7 @@ This should allow the command to run without triggering the syntax error.
 
 ---
 
-## Why does `csv2sdds` produce zeros for a numeric column when converting from CSV? {#faq11}
+## <a id="faq11"></a>Why does `csv2sdds` produce zeros for a numeric column when converting from CSV?
 
 A user attempted to convert a CSV file into SDDS format using:
 
@@ -381,7 +381,7 @@ Adjust the number of skipped lines and column definitions as needed based on the
 
 ---
 
-## How can I show a variable with an overline and subscript in `sddsplot`? {#faq12}
+## <a id="faq12"></a>How can I show a variable with an overline and subscript in `sddsplot`?
 
 ```bash
 sddsplot -thick=2 -graph=sym,conn,fill,thick=2  input_file.sdds \
@@ -415,7 +415,7 @@ The result is `x̅₀` instead of `x₀`.
 
 ---
 
-## How can I use a filename that begins with a minus sign (`-`) in an SDDS command? {#faq13}
+## <a id="faq13"></a>How can I use a filename that begins with a minus sign (`-`) in an SDDS command?
 
 When I try to pass a file whose name starts with a minus sign (`-`) to an SDDS command, the command interprets the leading `-` as an option flag. I’ve tried escaping it with `\`, surrounding it with quotes, and using `''`, but none of these work. How can I make the command accept the file without renaming it?
 
@@ -435,7 +435,7 @@ If the command you are using does not support `-pipe`, or if piping isn’t appr
 
 ---
 
-## How can I specify a fixed maximum z-value in `sddscontour` instead of using autoscaling? {#faq14}
+## <a id="faq14"></a>How can I specify a fixed maximum z-value in `sddscontour` instead of using autoscaling?
 
 When comparing two contour plots side by side, the autoscaling of the z-axis can make it difficult to directly compare intensity values. For example, one plot might be scaled from -1 to 1 while another is scaled from -2 to 2, leading to mismatched color scales.
 
@@ -456,7 +456,7 @@ This ensures that both plots use the same color mapping, making visual compariso
 
 ---
 
-## Why does `sddsgenericfit` fail when fitting oscillatory data to a sine wave? {#faq15}
+## <a id="faq15"></a>Why does `sddsgenericfit` fail when fitting oscillatory data to a sine wave?
 
 I attempted to use `sddsgenericfit` to fit oscillatory data to the function
 
@@ -497,7 +497,7 @@ If your application allows, consider using `sddssinefit` instead of `sddsgeneric
 
 ---
 
-## How can I plot specific pages from oscilloscope data and display the page number? {#faq16}
+## <a id="faq16"></a>How can I plot specific pages from oscilloscope data and display the page number?
 
 I converted oscilloscope waveform files to SDDS format using `wfm2sdds`. Each file contains multiple segments recorded in FastFrame mode. After adding a `Turn` column with `sddsprocess`, I can plot all pages with a command like:
 
@@ -548,7 +548,7 @@ If you instead specify only `-dev=lpng -out=DATASET.png`, only the first page wi
 
 ---
 
-## How can I embed comments directly into SDDS commands when writing scripts? {#faq17}
+## <a id="faq17"></a>How can I embed comments directly into SDDS commands when writing scripts?
 
 ### Answer
 
@@ -570,7 +570,7 @@ In this example, each `=`...`=` block is treated as a comment and ignored during
 
 ---
 
-## How can I control the number of significant digits when inserting a numeric value into the title or topline of an `sddscontour` plot? {#faq18}
+## <a id="faq18"></a>How can I control the number of significant digits when inserting a numeric value into the title or topline of an `sddscontour` plot?
 
 When constructing a plot title or topline in `sddscontour`, simply embedding a `format=%.3e` expression in the command line will not work as expected and may cause errors such as:
 
@@ -605,7 +605,7 @@ This approach ensures the number is printed with the desired number of significa
 
 ---
 
-## Why does `sddsprocess` with `-filter=col,y,-5,200` give the warning "no rows selected for page 1" when processing `sddsimageprofiles` data? {#faq19}
+## <a id="faq19"></a>Why does `sddsprocess` with `-filter=col,y,-5,200` give the warning "no rows selected for page 1" when processing `sddsimageprofiles` data?
 
 ### Answer
 
@@ -629,7 +629,7 @@ to produce values on a scale consistent with your filter range.
 
 ---
 
-## Why does the second column overwrite the first when adding multiple columns with `sddsprocess`, and how can I keep both? {#faq20}
+## <a id="faq20"></a>Why does the second column overwrite the first when adding multiple columns with `sddsprocess`, and how can I keep both?
 
 A user attempted the following commands to add two new columns into a single file:
 
@@ -654,7 +654,7 @@ This ensures that the final output contains the original contents of `inputX.sdd
 
 ---
 
-## Why does `sddscontour` give a `no data values in file` error when using output from `sddsspotanalysis`? {#faq21}
+## <a id="faq21"></a>Why does `sddscontour` give a `no data values in file` error when using output from `sddsspotanalysis`?
 
 ```
 sddsspotanalysis vc20220427-0004 vc20220427-0004_test -background=halfwidth=0,symmetric "-imageColumn=HLine*" -spotimage=vc20220427-0004_plot
@@ -678,7 +678,7 @@ Here, `ix` and `iy` are the grid coordinate columns, and `Image` is the data col
 
 ---
 
-## How can I convert a text table of density data into SDDS format for contour plotting with specified z-value regions? {#faq22}
+## <a id="faq22"></a>How can I convert a text table of density data into SDDS format for contour plotting with specified z-value regions?
 
 ```
 plaindata2sdds -col=rho,type=double,units=g/cc input.txt -pipe=out -skiplines=1 -outputmode=ascii -norowcount > output.sdds
@@ -722,7 +722,7 @@ The `-shade=10` option divides the values into 10 bins. Keep in mind that depend
 
 ---
 
-## How can I copy a single column value from one SDDS file into a parameter of another SDDS file? {#faq23}
+## <a id="faq23"></a>How can I copy a single column value from one SDDS file into a parameter of another SDDS file?
 
 I want to take a single value from a column in one SDDS file and add it as a parameter to a set of other SDDS files. Specifically, I have a column in `caseList.sdds` containing values that correspond to identifiers in filenames like `beamDump??.oscil` (where `??` runs from 00 to 19). For each file, I’d like to copy the column value into a parameter. I thought `sdds2stream` might help, but it wasn’t clear how to make it work.
 
@@ -740,7 +740,7 @@ This will create a new parameter (`SomeColumnCopy`) in `beamDump18.oscil` using 
 
 ---
 
-## How can I compute the average profile from a set of profiles with shared `ypos` values? {#faq24}
+## <a id="faq24"></a>How can I compute the average profile from a set of profiles with shared `ypos` values?
 
 I have a set of eight SDDS files, each containing `xpos` values at the same set of `ypos` values. I would like to generate a new file that has one column with `ypos` and another column with the average value of `xpos`, so I can plot `xpos_avg` versus `ypos`. I tried:
 
@@ -796,7 +796,7 @@ This produces an output file with `ypos` and the averaged `xpos` column for plot
 
 ---
 
-## How can I convert a tabular image file into a single-column file for use with contour plotting? {#faq25}
+## <a id="faq25"></a>How can I convert a tabular image file into a single-column file for use with contour plotting?
 
 When attempting a conversion with the following command:
 
@@ -824,7 +824,7 @@ After conversion, you may need to adjust parameters such as interval, minimum, a
 
 ---
 
-## How can I create a human-readable time column when converting archived data to SDDS? {#faq26}
+## <a id="faq26"></a>How can I create a human-readable time column when converting archived data to SDDS?
 
 ```
 sddsprocess -pipe=out input.proc \
@@ -852,7 +852,7 @@ This creates a new column (e.g., `TextTime`) containing formatted strings such a
 
 ---
 
-## Why does `plaindata2sdds` misread columns after the first when converting a plain text file? {#faq27}
+## <a id="faq27"></a>Why does `plaindata2sdds` misread columns after the first when converting a plain text file?
 
 ```
 plaindata2sdds dataTable.txt dataTable.sdds \
@@ -885,7 +885,7 @@ After running this, retry the conversion command. The columns should then parse 
 
 ---
 
-## Why does a wildcard `sddscombine` command fail in a Tcl script but work in the shell? {#faq28}
+## <a id="faq28"></a>Why does a wildcard `sddscombine` command fail in a Tcl script but work in the shell?
 
 ```
 exec sddscombine /tmp/FilePrefix_${fileTemplate}??????.sdds.proc004.sdds \
