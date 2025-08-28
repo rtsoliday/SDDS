@@ -190,7 +190,7 @@ Unable to compute rpn expression--rpn error (SDDS_ComputeDefinedColumn)
 
 Why isn’t the derivative column being generated for `ColumnB`?
 
-###Answer
+### Answer
 
 The problem is with the way multiple columns were specified in the `-differentiate` option. In **sddsderiv**, if you list a second column after the first, that second entry is treated as an *optional sigma column*, not as an additional column to differentiate.
 
@@ -210,20 +210,45 @@ This ensures that derivative columns will be properly generated for both `Column
 
 ---
 
+### Question
 
+How can I use a parameter value from an SDDS file to offset the y-axis in `sddsplot`? When I tried commands like the following, I received errors stating the parameter name was unrecognized:
 
+```
+sddsplot -graph=dot -thick=2 track-5nC.w2 \
+  -split=page -separate=page \
+  -col=dt,p \
+  -offset=yparameter=-@pCentral
 
+sddsplot -graph=dot -thick=2 track-5nC.w2 \
+  -split=page -separate=page \
+  -col=dt,p \
+  -offset=yparameter=-pCentral
 
+sddsplot -graph=dot -thick=2 track-5nC.w2 \
+  -split=page -separate=page \
+  -col=dt,p \
+  -offset=yparameter=-"pCentral"
+```
 
+Each attempt resulted in:
 
+```
+Error:
+Unable to get parameter value--parameter name is unrecognized (SDDS_GetParameterAsDouble)
+```
 
+## Answer
 
+When using `-offset` with a parameter, the syntax does not accept embedded signs or quotes with the parameter name. Instead, specify the parameter name directly, and if needed, combine it with the `yinvert` option to flip the sign. For example:
 
+```
+-offset=yparameter=pCentral,yinvert
+```
 
+This approach applies the parameter value `pCentral` as the y-offset while inverting the direction if required.
 
-
-
-
+---
 
 
 
