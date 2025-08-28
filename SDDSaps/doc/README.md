@@ -328,5 +328,48 @@ This should allow the command to run without triggering the syntax error.
 
 ---
 
+### Question
+
+Why does `csv2sdds` produce zeros for a numeric column when converting from CSV?
+
+A user attempted to convert a CSV file into SDDS format using:
+
+```
+csv2sdds input.csv output.sdds -col=name=ColumnA,type=double
+```
+
+However, all values for `ColumnA` in the SDDS file appeared as zeros.
+
+### Answer
+
+This issue can occur if the CSV file has formatting that prevents correct parsing. Common problems include:
+
+* Extra header or descriptive lines before the data.
+* Columns containing empty strings or non-numeric text that do not match the declared type.
+* Misaligned data due to delimiters or unexpected characters.
+
+One approach is to skip the non-data lines, define the columns explicitly, and remove any temporary placeholder columns. For example:
+
+```
+csv2sdds input.csv -pipe=out -skiplines=16 \
+  -col=name=Temp,type=string \
+  -col=name=ColumnA,type=double | \
+sddsprocess -pipe=in /tmp/junk -delete=column,Temp
+```
+
+Here:
+
+* `-skiplines=16` ignores header or formatting lines before the actual data.
+* `-col=name=Temp,type=string` captures a non-numeric field so it does not corrupt numeric parsing.
+* `sddsprocess ... -delete=column,Temp` removes the temporary column after conversion.
+
+Adjust the number of skipped lines and column definitions as needed based on the structure of your CSV file.
+
+---
+
+
+
+
+
 
 
