@@ -723,7 +723,7 @@ sddsprocess output.sdds -define=column,Index,i_row,type=long
 and create the contour plot with shading:
 
 ```
-sddscontour output.sdds "-columnmatch=Index,rho*" -shade
+sddscontour output.sdds "-columnmatch=Index,rho*" -shade=10
 ```
 
 The `-shade=10` option divides the values into 10 bins. Keep in mind that depending on your dataset, values may only fall into some of those bins, so not all ranges may appear in the contour plot.
