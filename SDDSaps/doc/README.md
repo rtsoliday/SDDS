@@ -730,10 +730,24 @@ The `-shade=10` option divides the values into 10 bins. Keep in mind that depend
 
 ---
 
+### Question
 
+How can I copy a single column value from one SDDS file into a parameter of another SDDS file?
 
+I want to take a single value from a column in one SDDS file and add it as a parameter to a set of other SDDS files. Specifically, I have a column in `caseList.sdds` containing values that correspond to identifiers in filenames like `beamDump??.oscil` (where `??` runs from 00 to 19). For each file, I’d like to copy the column value into a parameter. I thought `sdds2stream` might help, but it wasn’t clear how to make it work.
 
+### Answer
 
+One way to achieve this is to first extract the desired column value into a temporary SDDS file, then transfer it into the target file as a parameter. For example, if you want to use the column named `SomeColumn` from `caseList.sdds` and add it to the corresponding `beamDump??.oscil` file based on the `Abort` index, you can use commands like:
 
+```
+sddsprocess caseList.sdds temp.sdds -match=column,Abort=18 -process=SomeColumn,last,SomeColumnCopy
+sddsxref beamDump18.oscil temp.sdds -transfer=parameter,SomeColumnCopy "-leave=*" -nowarn
+rm temp.sdds
+```
+
+This will create a new parameter (`SomeColumnCopy`) in `beamDump18.oscil` using the value from the appropriate row of `caseList.sdds`. You can repeat this process for each file by adjusting the `Abort` value (and corresponding filename).
+
+---
 
 
