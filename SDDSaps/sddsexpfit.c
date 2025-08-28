@@ -302,7 +302,7 @@ int main(int argc, char **argv) {
       continue;
 
     if (xData[0] > xData[nData - 1])
-      fputs("warning: data reverse-ordered", stderr);
+      fprintf(stderr, "warning: data reverse-ordered (%le, %le)", xData[0], xData[nData-1]);
 
     find_min_max(&yMin, &yMax, yData, nData);
     find_min_max(&xMin, &xMax, xData, nData);
