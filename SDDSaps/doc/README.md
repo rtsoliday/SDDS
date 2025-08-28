@@ -384,8 +384,6 @@ sddsplot -thick=2 -graph=sym,conn,fill,thick=2  input_file.sdds \
 
 This produced `x₀`, but I want to display `x̅₀`.
 
----
-
 ### Answer
 
 You can use the following syntax to place a bar over `x` while keeping the subscript `0`:
