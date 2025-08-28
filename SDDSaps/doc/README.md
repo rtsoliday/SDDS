@@ -94,3 +94,53 @@ This will draw the specified text string at the top of the plot. If you want the
 
 ---
 
+### Question
+
+Why do I get a "no match" error when running `sddsplot` with wildcards in column names?
+
+**Example of failing command:**
+
+```
+sddsplot -graph=line,thick=2,vary -thick=2 OUTFILE_red -file \
+-col=Index,DEVICE:Signal.s37*p?.y -sep -layout=2,4 \
+-leg=edit=25d \
+-dev=lpng -out=OUTFILE_red_s37_y.png
+```
+
+### Answer
+
+This error can occur when using a shell that expands wildcard characters (`*` or `?`) before they are passed to `sddsplot`. In `csh` or `tcsh`, the shell interprets these characters as filename patterns, which prevents `sddsplot` from receiving them properly.
+
+To avoid this, enclose the column argument in quotes:
+
+```
+sddsplot -graph=line,thick=2,vary -thick=2 OUTFILE_red -file \
+"-col=Index,DEVICE:Signal.s37*p?.y" -sep -layout=2,4 \
+-leg=edit=25d \
+-dev=lpng -out=OUTFILE_red_s37_y.png
+```
+
+In `bash`, quoting is not necessary, but in `csh`/`tcsh` it is required.
+To check which shell you are using, run:
+
+```
+echo $SHELL
+```
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
