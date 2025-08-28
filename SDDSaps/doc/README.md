@@ -684,5 +684,56 @@ Here, `ix` and `iy` are the grid coordinate columns, and `Image` is the data col
 
 ---
 
+### Question
+
+I have a text file with many rows and columns of density data. I want to convert it into SDDS format so that I can make a contour plot. The values range from 0 up to about 2.7, and I’d like to divide the data into 10 density regions (e.g., 0–0.27, 0.27–0.54, …, 2.43–2.7). I tried the following command:
+
+```
+plaindata2sdds -col=rho,type=double,units=g/cc input.txt -pipe=out -skiplines=1 -outputmode=ascii -norowcount > output.sdds
+```
+
+but I received the error:
+
+```
+Error (plaindata2sdds): invalid -column type
+```
+
+How should I convert this text file so I can produce a shaded contour plot?
+
+### Answer
+
+The `-col` option in `plaindata2sdds` requires you to define each column individually, including its name, type, and units. If your file has multiple columns of density values, you need to list each column separately. For example:
+
+```
+plaindata2sdds input.txt output.sdds \
+  -col=rho1,double,units=g/cc \
+  -col=rho2,double,units=g/cc \
+  -col=rho3,double,units=g/cc \
+  ... (repeat for each column) ...
+  -col=rho36,double,units=g/cc \
+  -outputmode=ascii
+```
+
+You can then add an index column:
+
+```
+sddsprocess output.sdds -define=column,Index,i_row,type=long
+```
+
+and create the contour plot with shading:
+
+```
+sddscontour output.sdds "-columnmatch=Index,rho*" -shade
+```
+
+The `-shade=10` option divides the values into 10 bins. Keep in mind that depending on your dataset, values may only fall into some of those bins, so not all ranges may appear in the contour plot.
+
+---
+
+
+
+
+
+
 
 
