@@ -425,9 +425,28 @@ If the command you are using does not support `-pipe`, or if piping isn’t appr
 
 ---
 
+### Question
 
+How can I specify a fixed maximum z-value in `sddscontour` instead of using autoscaling?
 
+When comparing two contour plots side by side, the autoscaling of the z-axis can make it difficult to directly compare intensity values. For example, one plot might be scaled from -1 to 1 while another is scaled from -2 to 2, leading to mismatched color scales.
 
+### Answer
+
+You can control the vertical scale explicitly by using the `-shade` option with three arguments:
+
+```
+sddscontour input.sdds -shade=100,-2,2
+```
+
+In this example:
+
+* `100` specifies the number of shading levels.
+* `-2,2` sets the fixed z-range for the shading scale.
+
+This ensures that both plots use the same color mapping, making visual comparison consistent.
+
+---
 
 
 
