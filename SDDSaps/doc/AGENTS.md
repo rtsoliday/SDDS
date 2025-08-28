@@ -77,5 +77,5 @@ make
     ---
     ```
   - Use the same `faqN` anchor as in the table of contents.
-- Maintain this structure for all future updates. If the FAQ format in `README.md` changes, update these instructions to match.
+- Maintain this structure for all future updates. If the FAQ format in `FAQ.md` changes, update these instructions to match.
 
