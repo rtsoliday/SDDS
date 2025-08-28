@@ -490,3 +490,63 @@ y(t) = A0 + A*sin(2*PI*<freq>*t + <phase>)
 If your application allows, consider using `sddssinefit` instead of `sddsgenericfit` for sine-wave fitting. `sddssinefit` directly supports oscillatory functions and avoids the simplex initialization issue encountered in `sddsgenericfit`.
 
 ---
+
+### Question
+
+How can I plot specific pages from oscilloscope data and display the page number?
+
+I converted oscilloscope waveform files to SDDS format using `wfm2sdds`. Each file contains multiple segments recorded in FastFrame mode. After adding a `Turn` column with `sddsprocess`, I can plot all pages with a command like:
+
+```
+sddsplot -graph=line,vary,thick=2 -thick=2 -topline=DATASET \
+  -filter=col,Turn,-1,3 -split=page -separate=page \
+  -col=Turn,Signal DATASET_Ch1.proc "-leg=spec=Ch1" \
+  -col=Turn,Signal DATASET_Ch2.proc "-leg=spec=Ch2"
+```
+
+However:
+
+1. How can I plot a single page at a time (e.g., page 7) for both channels so they can be compared?
+2. How can the page number be displayed on the plot?
+
+---
+
+### Answer
+
+First, define a new parameter in each processed file to store the page number:
+
+```
+sddsprocess DATASET_Ch1.proc -define=parameter,Page,i_page,type=long
+sddsprocess DATASET_Ch2.proc -define=parameter,Page,i_page,type=long
+```
+
+Then use `sddsplot` with tagging and grouping options so the `Page` parameter is available:
+
+```
+sddsplot -split=page -separate=page \
+  -tagRequest=@Page -groupby=tag -title=@Page \
+  -thick=2 -graph=line,vary,thick=2 -topline=DATASET \
+  -filter=col,Turn,-1,3 \
+  -col=Turn,Signal DATASET_Ch1.proc -leg=spec=Ch1 \
+  -col=Turn,Signal DATASET_Ch2.proc -leg=spec=Ch2
+```
+
+This approach:
+
+* Displays the page number (`Page` parameter) in the plot title area.
+* Groups plots by page value, allowing you to select and compare individual pages.
+
+To generate separate image files for each page, use a template with page substitution:
+
+```
+-dev=lpng,template=DATASET.page%d.png
+```
+
+If you instead specify only `-dev=lpng -out=DATASET.png`, only the first page will be saved to a file.
+
+---
+
+
+
+
+
