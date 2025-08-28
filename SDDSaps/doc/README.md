@@ -238,7 +238,7 @@ Error:
 Unable to get parameter value--parameter name is unrecognized (SDDS_GetParameterAsDouble)
 ```
 
-## Answer
+### Answer
 
 When using `-offset` with a parameter, the syntax does not accept embedded signs or quotes with the parameter name. Instead, specify the parameter name directly, and if needed, combine it with the `yinvert` option to flip the sign. For example:
 
@@ -291,16 +291,42 @@ If the `-arrowSettings` option is omitted entirely, no data may be plotted becau
 
 ---
 
+### Question
 
+How do I fix the `invalid -columnData syntax` error when using `csv2sdds`?
 
+A user attempted to convert a CSV file to SDDS format with the following command:
 
+```
+csv2sdds IrradiationDataLegacyTrim.csv IrradiationDataLegacyTrim.sdds \
+-skiplines=1 \
+-col=name=ID,type=char \
+-col=name=Vref,type=float,units=V \
+-col=name=V240305,type=float,units=V \
+-col=name=V240307,type=float,units=V \
+-col=name=V240327,type=float,units=V \
+-col=name=V240521,type=float,units=V
+```
 
+This produced the error:
 
+```
+Error (csv2sdds): invalid -columnData syntax
+```
 
+### Answer
 
+The `type` field in the `-col` option must use the full keyword `character` rather than the shorthand `char`. The program does not recognize `char` as a valid type.
 
+Replace `type=char` with `type=character`. For example:
 
+```
+-col=name=ID,type=character
+```
 
+This should allow the command to run without triggering the syntax error.
+
+---
 
 
 
