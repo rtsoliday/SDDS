@@ -808,6 +808,32 @@ This produces an output file with `ypos` and the averaged `xpos` column for plot
 
 ---
 
+### Question
 
+How can I convert a tabular image file into a single-column file for use with contour plotting?
 
+When attempting a conversion with the following command:
 
+```
+sddsimageconvert inputFile outputFile
+```
+
+the following error may appear:
+
+```
+Error (sddsimageconvert): Unknown input file type
+```
+
+This indicates that the program could not recognize the format of the input file.
+
+### Answer
+
+To handle tabular image data and produce a single-column output, you can use the `-multicolumn` option. This allows the program to treat the data as multiple columns, with a specified index column and prefix for naming:
+
+```
+sddsimageconvert inputFile outputFile -multicolumn=indexName=Index,prefix=HLine
+```
+
+After conversion, you may need to adjust parameters such as interval, minimum, and dimension values to properly generate a contour plot over the desired physical range.
+
+---
