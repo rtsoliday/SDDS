@@ -509,8 +509,6 @@ However:
 1. How can I plot a single page at a time (e.g., page 7) for both channels so they can be compared?
 2. How can the page number be displayed on the plot?
 
----
-
 ### Answer
 
 First, define a new parameter in each processed file to store the page number:
@@ -549,4 +547,28 @@ If you instead specify only `-dev=lpng -out=DATASET.png`, only the first page wi
 
 
 
+
+### Question
+
+How can I embed comments directly into SDDS commands when writing scripts?
+
+### Answer
+
+When writing scripts that call SDDS programs, you can embed comments directly in the command line itself. This allows you to annotate processing steps without affecting execution.
+
+Comments are enclosed within `=` characters and can appear between options or arguments.
+
+```
+sddsprocess inputFile outputFile \
+    = Find the maximum of selected columns = \
+    -process=C*,max,%sMax \
+    = Normalize the columns to the maxima = \
+    "-redefine=col,%s,%s %sMax /,select=C*" \
+    "-define=col,%s2,%s sqr,select=C*  = Take the square of the normalized data =" \
+    <etc.>
+```
+
+In this example, each `=`...`=` block is treated as a comment and ignored during execution. This feature makes longer SDDS command sequences easier to read and maintain.
+
+---
 
