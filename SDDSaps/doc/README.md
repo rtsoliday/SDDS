@@ -401,6 +401,29 @@ Explanation of escape sequences:
 
 The result is `x̅₀` instead of `x₀`.
 
+---
+
+### Question
+
+How can I use a filename that begins with a minus sign (`-`) in an SDDS command?
+
+When I try to pass a file whose name starts with a minus sign (`-`) to an SDDS command, the command interprets the leading `-` as an option flag. I’ve tried escaping it with `\`, surrounding it with quotes, and using `''`, but none of these work. How can I make the command accept the file without renaming it?
+
+### Answer
+
+In many UNIX and Tcl commands, a `--` argument can be used to indicate the end of options. Everything following it will then be treated as a filename, even if it starts with `-`.
+
+For SDDS commands that accept standard input, one possible workaround without renaming the file is to use a pipeline, for example:
+
+```
+cat -- -filename.sdds | sddsquery -pipe=in
+```
+
+This forces `cat` to read the file named `-filename.sdds` and then pipes the data into the SDDS command.
+
+If the command you are using does not support `-pipe`, or if piping isn’t appropriate, the most reliable solution remains renaming the file to remove the leading dash.
+
+---
 
 
 
