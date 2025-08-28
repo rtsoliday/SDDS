@@ -868,5 +868,44 @@ This creates a new column (e.g., `TextTime`) containing formatted strings such a
 
 ---
 
+### Question
+
+When I try to convert a plain text file to SDDS format using `plaindata2sdds`, only the first column is read correctly. The rest of the columns produce incorrect values. My command looks like this:
+
+```
+plaindata2sdds dataTable.txt dataTable.sdds \
+  -inputMode=ascii "-separator= " -norowcount \
+  -col=SN,long \
+  -col=Nb,long \
+  -col=yoff,double,units=mm \
+  -col=I,double,units=mA \
+  -col=Qb,double,units=nC \
+  -col=emitx,double,'units=\$gm\$rm' \
+  -col=emity,double,'units=\$gm\$rm' \
+  -col=sigx,double,units=mm \
+  -col=sigy,double,'units=A/mm\$a2\$n' \
+  -col=D,double,units=MGy
+```
+
+Why is the data not being parsed correctly?
+
+### Answer
+
+If only the first column appears correct, the issue may be related to hidden carriage return characters in the input file. This often happens if the text file was created on a Windows system and still contains DOS-style line endings (`CRLF`).
+
+You can convert the file to use Unix-style line endings (`LF`) before running `plaindata2sdds`. For example:
+
+```
+dos2unix dataTable.txt
+```
+
+After running this, retry the conversion command. The columns should then parse correctly in the SDDS file.
+
+---
+
+
+
+
+
 
 
