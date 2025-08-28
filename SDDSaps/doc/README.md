@@ -75,16 +75,15 @@ The `-method=centerline` option instead extracts the profile along the central l
 
 ---
 
-### How can I print the input filename on a plot when using `sddscontour`, similar to the `-filename` option in `sddsplot`?
+### Question
 
-**Question:**
-When running `sddscontour`, is there a way to display the name of the input file directly on the generated plot, as can be done in `sddsplot`? For example:
+How can I print the input filename on a plot when using `sddscontour`, similar to the `-filename` option in `sddsplot`? For example:
 
 ```
 sddscontour datafile.sdds -filename,edit=49d%
 ```
 
-**Answer:**
+### Answer
 `sddscontour` does not support the `-filename` option used in `sddsplot`. However, you can place text (such as the filename) on the plot by using the `-topline` option. For example:
 
 ```
