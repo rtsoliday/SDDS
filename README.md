@@ -136,6 +136,9 @@ pytest -q
 The tests require the binaries in `bin/Linux-x86_64` and use `SDDSlib/demo/example.sdds` as sample data.
 
 
+## FAQ
+For answers to common questions about the SDDS toolkit, see the [FAQ](SDDSaps/doc/FAQ.md).
+
 ## ChatGPT Assistant
 A custom **[ChatGPT SDDS C/C++ Language Assistant](https://chatgpt.com/g/g-67376bce92308190a01b7056cdd3d74a-sdds-c-c-language-assistant)** is available to help write new SDDS software.
 
