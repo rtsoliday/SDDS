@@ -43,6 +43,10 @@
 #include <string.h>
 #include <stdarg.h>
 #include <lzma.h>
+#if defined(_WIN32)
+  #define LZMA_BUF_SIZE 40960
+  #include "SDDS.h"
+#endif
 
 #if LZMA_VERSION <= UINT32_C(49990030)
 #  define LZMA_EASY_ENCODER(a, b) lzma_easy_encoder_single(a, b)
