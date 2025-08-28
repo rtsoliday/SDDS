@@ -60,11 +60,22 @@ make
 
 ## Updating the FAQ
 
-- The FAQ lives in `README.md`.
-- Add new entries at the end of the file.
-- Each entry uses the existing structure:
-  - `### Question` followed by the question text.
-  - `### Answer` followed by the answer text.
-  - A line containing only `---` separates entries.
-- Preserve this format for any new questions and answers.
+- The FAQ is stored in `README.md`.
+- A numbered table of contents at the top links to each question using anchors like `#faq1`.
+- To add a new entry:
+  - Append a new item to the table of contents with the next number and a link to `#faqN` containing the question text.
+  - At the end of the file, add a section using:
+    ```
+    ## <a id="faqN"></a>Your question?
+
+    [optional context or examples]
+
+    ### Answer
+
+    Your answer text.
+
+    ---
+    ```
+  - Use the same `faqN` anchor as in the table of contents.
+- Maintain this structure for all future updates. If the FAQ format in `README.md` changes, update these instructions to match.
 
