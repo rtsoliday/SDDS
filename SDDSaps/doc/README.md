@@ -129,6 +129,56 @@ echo $SHELL
 
 ---
 
+### Question
+
+How can I modify the text shown in a legend when using `-legend` in `sddsplot`?
+
+### Answer
+
+When using the `-legend` option in `sddsplot`, the legend label can be modified with the `editcommand` field. The `editcommand` applies string-editing instructions that allow removal or replacement of portions of the original label. This is useful when the original data name is long or contains prefixes that are not needed in the display.
+
+For example, if the column or parameter name is:
+
+```
+S-DAQTBT:TurnsOnDiagTrig.s38*p?.y
+```
+
+and you only want the portion:
+
+```
+s38*p?.y
+```
+
+to appear in the legend, you can apply an editing command.
+
+The editing commands are those accepted by the `editstring` program, which is also available separately. Running `editstring` from the command line will print a usage message describing the available operations. These same editing commands are used inside `sddsplot` when supplied to the `editcommand` field.
+
+A simplified example command might look like:
+
+```
+sddsplot datafile.sdds -column=y -legend=editcommand="%/S-DAQTBT:TurnsOnDiagTrig//"
+```
+
+The actual substitution pattern depends on what portion of the string you want to keep or remove. Text substitutions (`%/old/new/`) and other editing operations are supported as described in the `editstring` documentation.
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
