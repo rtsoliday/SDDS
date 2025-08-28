@@ -99,7 +99,7 @@ The -push and operator can be repeated many times. \n\n\
 sddsmatrixop provides a generic method for matrix operations.\n\
 Program by Hairong Shang. (This is version 1.0, June 2003)\n";
 
-#define MAX_PAGES 256 /*the number of pages in a file, each page is an element of an array stack */
+#define MAX_PAGES 1024 /*the number of pages in a file, each page is an element of an array stack */
 long matrixStack[MAX_PAGES][STACKSIZE];
 long matrixStackPtr[MAX_PAGES];
 /*each page of files is a stack, each stack has a maximum number size of STACKSIZE */
