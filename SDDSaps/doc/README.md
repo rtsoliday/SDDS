@@ -448,12 +448,45 @@ This ensures that both plots use the same color mapping, making visual compariso
 
 ---
 
+### Question
 
+Why does `sddsgenericfit` fail when fitting oscillatory data to a sine wave?
 
+I attempted to use `sddsgenericfit` to fit oscillatory data to the function
 
+```
+y(t) = A0 + A*sin(omega*(t - t0))
+```
 
+with parameter guesses for `omega`, `t0`, `A`, and `A0`. Despite good initial estimates, the program consistently returned the error:
 
+```
+error: can't find valid initial simplex in simplexMin()
+```
 
+An example command I used was:
 
+```
+sddsgenericfit input.sine output.sineFit \
+  -column=t,y -simplex=restarts=1000 \
+  "-equation=t t0 - omega * sin A * A0 +" \
+  -tolerance=0.1 \
+  -variable=name=omega,start=0.395,lower=0.34,upper=0.44,step=0.01,heat=0.02 \
+  -variable=name=t0,start=11.3,lower=10.,upper=13.,step=0.1,heat=0.2 \
+  -variable=name=A,start=1,lower=0.5,upper=1.5,step=0.1,heat=0.1 \
+  -variable=name=A0,start=0,lower=-0.1,upper=0.1,step=0.01,heat=0.01
+```
 
+Plotting the waveform using guess values produced a reasonable match, but the fit routine would not converge.
 
+### Answer
+
+At present, there is no confirmed solution for using `sddsgenericfit` in this case. However, fitting this type of data is straightforward with `sddssinefit`, which uses the model:
+
+```
+y(t) = A0 + A*sin(2*PI*<freq>*t + <phase>)
+```
+
+If your application allows, consider using `sddssinefit` instead of `sddsgenericfit` for sine-wave fitting. `sddssinefit` directly supports oscillatory functions and avoids the simplex initialization issue encountered in `sddsgenericfit`.
+
+---
