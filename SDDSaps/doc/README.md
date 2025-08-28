@@ -367,6 +367,50 @@ Adjust the number of skipped lines and column definitions as needed based on the
 
 ---
 
+### Question
+
+How can I place a bar over a character in *sddsplot*? For example, I tried to show a variable `x` with a subscript (`x₀`), but instead I want `x̅₀` (x with a bar on top and a subscript 0). My command looked something like this:
+
+```bash
+sddsplot -thick=2 -graph=sym,conn,fill,thick=2  input_file.sdds \
+-col=ColumnX,ColumnY \
+'-string=x$b0$n = ,pCoord=0.05,qCoord=0.93,scale=1.1' \
+-string=@Value1,format=%.3f,pCoord=0.15,qCoord=0.93,scale=1.1 \
+"-string=units,pCoord=0.29,qCoord=0.93,scale=1.1" \
+'-string=$gs$r$bx$n = ,pCoord=0.05,qCoord=0.83,scale=1.1' \
+-string=@Value2,format=%.3f,pCoord=0.15,qCoord=0.83,scale=1.1 \
+"-string=units,pCoord=0.26,qCoord=0.83,scale=1.1"
+```
+
+This produced `x₀`, but I want to display `x̅₀`.
+
+---
+
+### Answer
+
+You can use the following syntax to place a bar over `x` while keeping the subscript `0`:
+
+```bash
+-string=x$h$h$a-$b0
+```
+
+Explanation of escape sequences:
+
+* `$h` moves one character back (two are required to align the bar correctly).
+* `$a` turns on superscript, which is used to place the bar (`-`) above the character.
+* `-` is the actual bar symbol drawn above the `x`.
+* `$b` turns on subscript for the `0`.
+
+The result is `x̅₀` instead of `x₀`.
+
+
+
+
+
+
+
+
+
 
 
 
