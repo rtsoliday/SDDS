@@ -631,6 +631,35 @@ to produce values on a scale consistent with your filter range.
 
 ---
 
+### Question
+
+When I try to add two new data columns to an existing SDDS file using `sddsprocess`, the second column overwrites the first. Why does this happen, and how can I correctly combine both columns into the same file?
+
+A user attempted the following commands to add two new columns into a single file:
+
+```
+sddsprocess inputX.sdds output.sdds "-define=column,xCentroid,<pvnameX> 287 +"
+sddsprocess inputY.sdds output.sdds "-define=column,yCentroid,<pvnameY> 194 +"
+```
+
+The result was that the `yCentroid` column overwrote the previously added `xCentroid` column in the output file.
+
+### Answer
+
+`SDDSprocess` overwrites the specified output file each time it runs and does not preserve existing content in that file. To retain both columns, you should process the X and Y data separately, then merge the results into a single file using `sddsxref`. For example:
+
+```
+sddsprocess inputX.sdds "-define=column,xCentroid,<pvnameX> 287 +"
+sddsprocess inputY.sdds "-define=column,yCentroid,<pvnameY> 194 +"
+sddsxref inputX.sdds inputY.sdds output.sdds -take=yCentroid
+```
+
+This ensures that the final output contains the original contents of `inputX.sdds` along with both `xCentroid` and `yCentroid` columns.
+
+---
+
+
+
 
 
 
