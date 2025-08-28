@@ -250,19 +250,46 @@ This approach applies the parameter value `pCentral` as the y-offset while inver
 
 ---
 
+### Question
 
+How can I add arrows to a plot using `sddsplot` with `-arrowSettings`?
 
+I tried adding arrows to a plot with the following command:
 
+```
+sddsplot -grap=line,thick=2 -thick=2 -filter=col,Time,1720587600.0,1720596108.0 \
+-col=Time,S-DCCT:CurrentM datafile.sdds -tick=xtime \
+-arrowSettings=scale=1.0,barblength=0.1,barbAngle=0,linetype=1,centered,cartesian,0.1,0.1,singleBarb,thick=1
+```
 
+but received the error:
 
+```
+unknown keyword/value given: 0.1
+error: invalid -arrowsettings syntax
+```
 
+What is the correct way to use `-arrowSettings` in this situation?
 
+### Answer
 
+The error occurs because the option string contains extra numeric values (`0.1,0.1`) that are not valid keywords. A corrected version of the option would look like:
 
+```
+-arrowSettings=scale=1.0,barblength=0.1,barbAngle=0,linetype=1,centered,cartesian,singleBarb,thick=1
+```
 
+In addition, when using the `cartesian` mode for arrows, `sddsplot` requires a second set of x and y columns to specify the vector components. This means the `-col` option must be modified to include two pairs of x and y values. For example:
 
+```
+-col=Time,(S-DCCT:CurrentM),Time,(S-DCCT:CurrentM)
+```
 
+The first pair provides the data for plotting, while the second pair provides the vector data for the arrows. Depending on the intended analysis, the second pair may reference different columns than the first.
 
+If the `-arrowSettings` option is omitted entirely, no data may be plotted because filtering options (such as `-filter`) can remove all points. Always verify that the chosen filter and column specifications produce valid data for both the line and arrow overlays.
+
+---
 
 
 
