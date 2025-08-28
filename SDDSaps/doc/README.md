@@ -75,10 +75,6 @@ The `-method=centerline` option instead extracts the profile along the central l
 
 ---
 
-Here’s the email thread rewritten into a Markdown FAQ in the style of the SDDS `README.md` documentation. I kept it to a single question/answer, obscured private details, and included the failing example.
-
----
-
 ### How can I print the input filename on a plot when using `sddscontour`, similar to the `-filename` option in `sddsplot`?
 
 **Question:**
