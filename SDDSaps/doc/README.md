@@ -1,6 +1,8 @@
 # SDDS FAQ
 
-### Q: Why doesn’t my `sddsxref` command add the column I requested when I use both `-take` and `-leave`?
+### Question
+
+Why doesn’t my `sddsxref` command add the column I requested when I use both `-take` and `-leave`?
 
 I tried the following command:
 
@@ -11,7 +13,9 @@ sddsxref ./data/inputFile referenceFile -nowarn \
 
 but the column from the reference file was not added to the output.
 
-### A: The `-leave` option overrides `-take` when both specify a given column. Using `-leave=*` means no columns are taken at all. If you only want to select specific columns, you don’t need `-leave` when you already use `-take`. Removing `-leave=*` will allow the requested column to be added.&#x20;
+### Answer
+
+The `-leave` option overrides `-take` when both specify a given column. Using `-leave=*` means no columns are taken at all. If you only want to select specific columns, you don’t need `-leave` when you already use `-take`. Removing `-leave=*` will allow the requested column to be added.&#x20;
 
 ---
 
