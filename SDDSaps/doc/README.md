@@ -837,3 +837,36 @@ sddsimageconvert inputFile outputFile -multicolumn=indexName=Index,prefix=HLine
 After conversion, you may need to adjust parameters such as interval, minimum, and dimension values to properly generate a contour plot over the desired physical range.
 
 ---
+
+### Question
+
+When I convert archived data into an SDDS file, the time column appears as integers (e.g., days only). I want the time axis to look similar to the format shown when plotting directly from the data logger (e.g., hours and minutes when zooming). I tried the following command, but it only produced integer days, and switching to "hour" omitted the day:
+
+```
+sddsprocess -pipe=out input.proc \
+  -delete=col,TimeOfDay | \
+sddstimeconvert -pipe=in input.proc2 \
+  -breakdown=column,Time,day=TimeOfDay
+```
+
+How can I create a human-readable time column in the SDDS file itself?
+
+### Answer
+
+The time data stored in the `Time` column represents the number of seconds since Jan 1, 1970. When using `sddsplot` with the `-tick=xtime` option, this is automatically converted into a human-readable time format. If "Use Improved Zoom" is enabled under *Options → Zoom*, the axis labels will adjust dynamically (e.g., showing dates, hours, or minutes depending on the zoom range).
+
+If you need a permanent human-readable column inside the SDDS file, use `sddstimeconvert` with a text breakdown. For example:
+
+```
+sddstimeconvert input.proc -pipe=out \
+  -breakdown=column,Time,text=TextTime | \
+sddsprocess -pipe=in output.proc \
+  -reedit=column,TextTime,5d5f2D
+```
+
+This creates a new column (e.g., `TextTime`) containing formatted strings such as `MM/DD` or other representations depending on your requirements. You can then plot or process this column alongside your data.
+
+---
+
+
+
