@@ -658,12 +658,31 @@ This ensures that the final output contains the original contents of `inputX.sdd
 
 ---
 
+### Question
 
+When I collect frame grabber images and analyze them with `sddsspotanalysis`, I generate a “plot” file. However, when I try to use `sddscontour` on this file, I get the following error:
 
+```
+sddsspotanalysis vc20220427-0004 vc20220427-0004_test -background=halfwidth=0,symmetric "-imageColumn=HLine*" -spotimage=vc20220427-0004_plot
 
+sddscontour -shade -quantity=Image vc20220427-0004_plot
+Error: Can't figure out how to turn column into 2D grid!
+Check existence and type of Variable1Name and Variable2Name
+```
 
+The “plot” file does not contain `Variable1Name` or `Variable2Name`, but this used to work. How can I make `sddscontour` work again?
 
+### Answer
 
+Instead of relying on `Variable1Name` and `Variable2Name`, explicitly specify which columns define the 2D grid and the data to plot. For example:
+
+```
+sddscontour vc20220427-0004_plot -shade -xyz=ix,iy,Image
+```
+
+Here, `ix` and `iy` are the grid coordinate columns, and `Image` is the data column. This allows `sddscontour` to construct the 2D grid properly and apply shading to the image data.
+
+---
 
 
 
