@@ -45,8 +45,6 @@ sddsconvert inputFile outputFile_filt \
 
 But it was unclear if this was the best way to restrict the analysis region.
 
----
-
 ### Answer
 
 To reduce noise from unwanted regions, use the `-areaOfInterest=<rowStart>,<rowEnd>,<columnStart>,<columnEnd>` option with `sddsimageprofiles`. This allows you to define a rectangular region within the image for profile extraction.
@@ -68,8 +66,6 @@ This trims the analysis to only the specified rows and columns, avoiding backgro
 ### Question
 
 What is the difference between using `-method=integrated` and `-method=centerline` in `sddsimageprofiles`?
-
----
 
 ### Answer
 
