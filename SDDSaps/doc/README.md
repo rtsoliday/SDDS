@@ -903,9 +903,51 @@ After running this, retry the conversion command. The columns should then parse 
 
 ---
 
+### Question
 
+I am trying to use the following command inside a Tcl script, but it fails with an error:
 
+```
+exec sddscombine /tmp/FilePrefix_${fileTemplate}??????.sdds.proc004.sdds \
+  -collapse ${fileTemplate}collapse.sdds
+```
 
+The error is:
 
+```
+Unable to open file "/tmp/FilePrefix_20250723??????.sdds.proc004.sdds" for reading (SDDS_InitializeInput)
+    while executing
+"exec sddscombine "/tmp/FilePrefix_${fileTemplate}??????.sdds.proc004.sdds" \
+      -collapse ${fileTemplate}collapse.sdds"
+```
+
+However, if I type the equivalent command directly at the shell prompt:
+
+```
+sddscombine /tmp/FilePrefix_20250723??????.sdds.proc004.sdds \
+  -collapse 20250723collapse.sdds
+```
+
+it works. Why does the script version fail, and how can I fix it?
+
+### Answer
+
+When using Tcl (`tclsh` or `oagtclsh`), wildcard expansion (`??????`) is not automatically performed the same way as in `bash`, `csh`, or `tcsh`. In Tcl, the string with `??????` is passed literally to the command, rather than being expanded into the list of matching files.
+
+To make Tcl expand the filenames, you should use the `glob` command, which returns all matching files. Additionally, you need `eval` to ensure Tcl treats the expanded list as separate arguments to `sddscombine`.
+
+An example solution is:
+
+```
+eval exec sddscombine [glob /tmp/FilePrefix_${fileTemplate}??????.sdds.proc004.sdds] \
+  -collapse ${fileTemplate}collapse.sdds
+```
+
+This way:
+
+* `glob` finds all files that match the wildcard pattern.
+* `eval` ensures Tcl passes them as individual file arguments rather than one long string.
+
+---
 
 
