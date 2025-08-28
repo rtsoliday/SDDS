@@ -57,3 +57,14 @@ Use the provided `Makefile` to generate PostScript, PDF and HTML output:
 ```
 make
 ```
+
+## Updating the FAQ
+
+- The FAQ lives in `README.md`.
+- Add new entries at the end of the file.
+- Each entry uses the existing structure:
+  - `### Question` followed by the question text.
+  - `### Answer` followed by the answer text.
+  - A line containing only `---` separates entries.
+- Preserve this format for any new questions and answers.
+
