@@ -33,7 +33,7 @@ struct UDF {
     long start_index;
     long end_index;
     };
-short is_udf(char *string);
+long is_udf(char *string);
 
 /* structure of data for each user-callable function */
 struct FUNCTION {
@@ -79,8 +79,8 @@ epicsShareFuncRPNLIB long dstack[STACKSIZE];
 
 /* stack that replaces PCODE */
 typedef struct {
-    short type;
-    short index;
+    long type;
+    long index;
     double data;
     char *keyword;
     } UDF_CODE;
@@ -146,7 +146,7 @@ epicsShareFuncRPNLIB long code_lev;                    /* number of links */
 
 /* stack for logical operations */
 #define LOGICSTACKSIZE 500
-epicsShareFuncRPNLIB short logicstack[LOGICSTACKSIZE];
+epicsShareFuncRPNLIB long logicstack[LOGICSTACKSIZE];
 epicsShareFuncRPNLIB long lstackptr;
 
 

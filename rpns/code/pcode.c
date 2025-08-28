@@ -24,7 +24,7 @@ char pc_buf[PC_BUFLEN];
 
 /* routine: gen_pcode()
  * purpose: converts a text string into pseudo-code, which is really just a
- *          short-hand way of writing the commands.  This pcode can be parsed
+ *          long-hand way of writing the commands.  This pcode can be parsed
  *          much faster than text.
  */
 
@@ -34,7 +34,7 @@ void gen_pcode(char *s0, long i_udf)
   register char *ptr;
   double dummy2;
   char *s, *dummy3=NULL;
-  short is_string=0;
+  long is_string=0;
   long scan_pos, num;
   double x;
   

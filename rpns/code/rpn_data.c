@@ -60,7 +60,7 @@ char *sstack[STACKSIZE];
 long sstackptr=0;
 
 /* stack for logical operations */
-short logicstack[LOGICSTACKSIZE];
+long logicstack[LOGICSTACKSIZE];
 long lstackptr=0;
 
 /* stack for command input files */

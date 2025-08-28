@@ -55,7 +55,7 @@ long find_udf_mod(char *udf_name)
   return i;
 }
 
-short get_udf(long number)
+long get_udf(long number)
 /* returns udf string from udf number */
 {
   register long i;
@@ -82,7 +82,7 @@ void get_udf_indexes(long number)
   udf_id_createarray(udfptr->start_index, udfptr->end_index);
 }
 
-short is_udf(char *string)
+long is_udf(char *string)
 {
   long i;
   if ((i=find_udf(string))<0)
@@ -95,7 +95,7 @@ void make_udf(void)
   static char name[20];
   static char function[2048];
   char *ptr, *dummy1=NULL;
-  short is_string=0;
+  long is_string=0;
   double dummy;
   
   udf_changed = 1;
@@ -199,7 +199,7 @@ void link_udfs(void)
   register long i;
   long num;
   char *dummy1=NULL;
-  short is_string=0;
+  long is_string=0;
   double dummy;
   i = 0;
   while (i<=udf_unknownptr) {

@@ -28,7 +28,7 @@ long n_memories = 0, memory_added=0, max_n_memories = 0;
 typedef struct {
   char *name;
   long index;
-  short is_string;
+  long is_string;
 } MEMORY ;
 
 
@@ -41,7 +41,7 @@ int compare_mem(const void *m1, const void *m2)
   return strcmp(((MEMORY *)m1)->name, ((MEMORY *)m2)->name);
 }
 
-long rpn_create_mem(char *name, short is_string)
+long rpn_create_mem(char *name, long is_string)
 {
   long i_mem;
   int32_t duplicate;
@@ -189,7 +189,7 @@ void store_in_str_mem(void)
  *          facility.
  */
 
-long is_memory(double *val, char **str_val, short *is_string,  char *string)
+long is_memory(double *val, char **str_val, long *is_string,  char *string)
 {
   long i_mem;
   MEMORY newMem;

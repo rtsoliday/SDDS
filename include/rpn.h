@@ -62,9 +62,9 @@ void sref(void);
 epicsShareFuncRPNLIB long rpn_createarray(long size);
 epicsShareFuncRPNLIB double *rpn_getarraypointer(long memory_number, int32_t *length);
 epicsShareFuncRPNLIB long rpn_resizearray(long arraynum, long size);
-void udf_createarray(short type, short index, double data, char *rpn, long i_udf);
+void udf_createarray(long type, long index, double data, char *rpn, long i_udf);
 void udf_cond_createarray(long colon, long i);
-void udf_modarray(short type, short index, double data, long i);
+void udf_modarray(long type, long index, double data, long i);
 void udf_id_createarray(long start_index_value, long end_index_value);
 void udf_create_unknown_array(char *ptr, long index);
 
@@ -167,14 +167,14 @@ void rpn_bitand(void);
 void rpn_bitor(void);
   
 /* prototypes for code in file memory.c */
-epicsShareFuncRPNLIB long rpn_create_mem(char *name, short is_string);
+epicsShareFuncRPNLIB long rpn_create_mem(char *name, long is_string);
 epicsShareFuncRPNLIB long rpn_store(double value, char *str_value, long memory_number);
 epicsShareFuncRPNLIB long rpn_quick_store(double value, char *str_value, long memory_number);
 epicsShareFuncRPNLIB double rpn_recall(long memory_number);
 epicsShareFuncRPNLIB char *rpn_str_recall(long memory_number);
 void store_in_mem(void);
 void store_in_str_mem(void);
-epicsShareFuncRPNLIB long is_memory(double *val, char **str_value, short *is_string, char *string);
+epicsShareFuncRPNLIB long is_memory(double *val, char **str_value, long *is_string, char *string);
 void revmem(void);
 
 /* prototypes for code in file pcode.c */
@@ -231,7 +231,7 @@ void exe_str(void);
 /* prototypes for code in file udf.c */
 long find_udf(char *udf_name);
 long find_udf_mod(char *udf_name);
-short get_udf(long number);
+long get_udf(long number);
 void get_udf_indexes(long number);
 void make_udf(void);
 void rpn_mudf(void);

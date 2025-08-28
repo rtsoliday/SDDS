@@ -39,7 +39,7 @@ long execute_code(void)
   register char *ptr=NULL;
   register long index;
   char *text, *buffer, *token, *dummy=NULL;
-  short is_string=0;
+  long is_string=0;
   double x;
   long return_code;
   
@@ -320,7 +320,7 @@ long cycle_through_udf(void)
       case 1:
         /* Built-in function */
         if (udf_temp_stack.index<0 || udf_temp_stack.index>NFUNCS) {
-          fprintf(stderr, "pcode error: index is %d\n", udf_temp_stack.index);
+          fprintf(stderr, "pcode error: index is %ld\n", udf_temp_stack.index);
           exit(1);
         }
         if (do_trace)
@@ -332,7 +332,7 @@ long cycle_through_udf(void)
       case 2:
         /* User-defined function */    
         if (udf_temp_stack.index<0 || udf_temp_stack.index>num_udfs) {
-          fprintf(stderr, "pcode udf error: index is %d\n", udf_temp_stack.index);
+          fprintf(stderr, "pcode udf error: index is %ld\n", udf_temp_stack.index);
           exit(1);
         }
         if (do_trace)
@@ -345,7 +345,7 @@ long cycle_through_udf(void)
       case 3:
         /* memory Store operation for sto*/
         if (udf_temp_stack.index<0 || udf_temp_stack.index>n_memories) {
-          fprintf(stderr, "pcode store error: index is %d\n", udf_temp_stack.index);
+          fprintf(stderr, "pcode store error: index is %ld\n", udf_temp_stack.index);
           exit(1);
         }
         if (do_trace) 
@@ -356,7 +356,7 @@ long cycle_through_udf(void)
       case 4:
         /* memory Recall operation */
         if (udf_temp_stack.index<0 || udf_temp_stack.index>n_memories) {
-          fprintf(stderr, "pcode recall error: index is %d\n", udf_temp_stack.index);
+          fprintf(stderr, "pcode recall error: index is %ld\n", udf_temp_stack.index);
           exit(1);
         }
         if (do_trace) 
@@ -377,7 +377,7 @@ long cycle_through_udf(void)
       case 8:
         /* memory Store operation for ssto*/
         if (udf_temp_stack.index<0 || udf_temp_stack.index>n_memories) {
-          fprintf(stderr, "pcode store error: index is %d\n", udf_temp_stack.index);
+          fprintf(stderr, "pcode store error: index is %ld\n", udf_temp_stack.index);
           exit(1);
         }
         if (do_trace) 
@@ -388,7 +388,7 @@ long cycle_through_udf(void)
       case 9:
         /* memory Recall operation for string */
         if (udf_temp_stack.index<0 || udf_temp_stack.index>n_memories) {
-          fprintf(stderr, "pcode recall error: index is %d\n", udf_temp_stack.index);
+          fprintf(stderr, "pcode recall error: index is %ld\n", udf_temp_stack.index);
           exit(1);
         }
         if (do_trace) 

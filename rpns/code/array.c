@@ -145,7 +145,7 @@ double *rpn_getarraypointer(long memory_number, int32_t *length)
 /* routine: udf_createarray 
  * purpose: create a new array
  */
-void udf_createarray(short type, short index, double data, char *ptr, long i_udf)
+void udf_createarray(long type, long index, double data, char *ptr, long i_udf)
 {
     register long i, cond_temp, colon=0;
     if (udf_stackptr>=max_udf_stackptr || !udf_stack) 
@@ -200,7 +200,7 @@ void udf_cond_createarray(long colon, long i)
 /* routine: udf_modarray 
  * purpose: modify an existing udf array
  */
-void udf_modarray(short type, short index, double data, long i)
+void udf_modarray(long type, long index, double data, long i)
 {
     udf_stack[i].type = type;
     udf_stack[i].index = index;
