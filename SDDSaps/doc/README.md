@@ -750,4 +750,64 @@ This will create a new parameter (`SomeColumnCopy`) in `beamDump18.oscil` using 
 
 ---
 
+### Question
+
+How can I compute the average profile from a set of profiles with shared `ypos` values?
+
+I have a set of eight SDDS files, each containing `xpos` values at the same set of `ypos` values. I would like to generate a new file that has one column with `ypos` and another column with the average value of `xpos`, so I can plot `xpos_avg` versus `ypos`. I tried:
+
+```
+sddscombine -overwrite \
+slice000um.smth slice100um.smth slice200um.smth \
+slice300um.smth slice400um.smth slice500um.smth \
+slice600um.smth slice700um.smth \
+sliceSN08_z2.smth
+```
+
+This produced a file with multiple pages. Using `-merge` concatenates the data instead of averaging. How can I create a single file with `ypos` and the average of `xpos`?
+
+### Answer
+
+You can use a Tcl script with `sddsprocess` and `sddsxref` to combine the data and compute the average. The script defines new columns for each `xpos` set, scales them by the number of files, and then sums them to create an average. Save the following as a script and run with `oagtclsh <filename>`:
+
+```tcl
+# Define the output file
+set outputFile /tmp/sliceAverage.smth
+
+# Set the input files
+set files "slice000um.smth slice100um.smth slice200um.smth \
+slice300um.smth slice400um.smth slice500um.smth \
+slice600um.smth slice700um.smth"
+
+# Count the number of input files (floating point for division)
+set number [expr 1.0 * [llength $files]]
+
+set i 1
+set option ""
+foreach f $files {
+    # Define xpos[i] as xpos divided by the number of files
+    exec sddsprocess $f -pipe=out "-define=column,xpos${i},i_row &xpos \[ $number /" \
+        | sddsprocess -pipe=in /tmp/${f}.tmp -delete=column,xpos -nowarn
+
+    if {$i == 1} {
+        file copy -force /tmp/${f}.tmp $outputFile
+        set option "i_row &xpos$i \[ "
+    } else {
+        # Merge xpos[i] into one file using shared ypos
+        exec sddsxref $outputFile /tmp/${f}.tmp -equate=ypos -take=xpos$i -nowarn
+        append option "i_row &xpos$i \[ + "
+    }
+    incr i
+}
+
+# Define new xpos as the sum of all xpos[i]
+exec sddsprocess $outputFile "-define=column,xpos,$option" -nowarn
+```
+
+This produces an output file with `ypos` and the averaged `xpos` column for plotting.
+
+---
+
+
+
 
