@@ -163,6 +163,64 @@ The actual substitution pattern depends on what portion of the string you want t
 
 ---
 
+### Question
+I tried running the following command with `sddsderiv`:
+
+```
+sddsprocess -pipe=out inputFile.sdds \
+-filter=col,relativeTime,0.5683,0.5688 | \
+sddsderiv -pipe \
+-differentiate=ColumnA,ColumnB -versus=relativeTime | \
+sddsprocess -pipe=in outputFile.sdds \
+"-define=col,dColAdt,ColumnADeriv -1 *,type=double,units=Counts/s" \
+"-define=col,dColBdt,ColumnBDeriv -1 *,type=double,units=Counts/s" \
+-proc=dColAdt,fwhm,FWHM_A,functionOf=relativeTime \
+-proc=dColBdt,fwhm,FWHM_B,functionOf=relativeTime
+```
+
+But I received errors such as:
+
+```
+unknown token: ColumnBDeriv
+too few items on stack (multiply)
+*stop*
+Error for sddsprocess:
+Unable to compute rpn expression--rpn error (SDDS_ComputeDefinedColumn)
+```
+
+Why isn’t the derivative column being generated for `ColumnB`?
+
+###Answer
+
+The problem is with the way multiple columns were specified in the `-differentiate` option. In **sddsderiv**, if you list a second column after the first, that second entry is treated as an *optional sigma column*, not as an additional column to differentiate.
+
+So the following is incorrect:
+
+```
+-differentiate=ColumnA,ColumnB
+```
+
+Instead, each column you want differentiated must be specified with its own `-differentiate` option, for example:
+
+```
+-differentiate=ColumnA -differentiate=ColumnB
+```
+
+This ensures that derivative columns will be properly generated for both `ColumnA` and `ColumnB`.
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
