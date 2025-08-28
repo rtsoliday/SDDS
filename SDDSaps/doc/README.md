@@ -544,10 +544,6 @@ If you instead specify only `-dev=lpng -out=DATASET.png`, only the first page wi
 
 ---
 
-
-
-
-
 ### Question
 
 How can I embed comments directly into SDDS commands when writing scripts?
@@ -571,4 +567,48 @@ sddsprocess inputFile outputFile \
 In this example, each `=`...`=` block is treated as a comment and ignored during execution. This feature makes longer SDDS command sequences easier to read and maintain.
 
 ---
+
+### Question
+
+How can I control the number of significant digits when inserting a numeric value into the title or topline of an `sddscontour` plot?
+
+When constructing a plot title or topline in `sddscontour`, simply embedding a `format=%.3e` expression in the command line will not work as expected and may cause errors such as:
+
+```
+error: only one filename accepted
+```
+
+For example, the following command fails:
+
+```
+exec sddscontour $inputFile -shade -thick=2 -logscale=.01 -scale=0,0,0,0 \
+   '-topline= Max. Dose Rate (mSv/hr) = ',format=%.3e,'$Max' -swapxy \
+   "-title=log\$b10\$n(dose rate (mSv/hr))" \
+   "-xlabel=y(cm)" "-ylabel=z(cm)" -equalAspect &
+```
+
+### Answer
+
+Format the value in the script before passing it to `sddscontour`. For example, in Tcl:
+
+```
+set Max [format %.3e $Max]
+```
+
+Then use the formatted variable directly:
+
+```
+-topline="Max. Dose Rate (mSv/hr) = $Max"
+```
+
+This approach ensures the number is printed with the desired number of significant digits in the plot annotation.
+
+---
+
+
+
+
+
+
+
 
