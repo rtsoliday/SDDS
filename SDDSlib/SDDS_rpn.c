@@ -354,7 +354,7 @@ int64_t SDDS_CreateRpnArray(char *name) {
   int64_t memnum;
   double dummy;
   char *dummy1 = NULL;
-  short is_string = 0;
+  long is_string = 0;
 
   if (!name)
     return (-1);
