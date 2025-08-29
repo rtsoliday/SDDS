@@ -1229,7 +1229,7 @@ sddstimeconvert input.sdds -pipe=out \
   -breakdown=column,Time,julianDay=JDay,hour=HourOfDay | \
 sddsprocess -pipe=in output.sdds \
   "-define=column,TimeOfDayCont,JDay 0 &JDay [ - 24 * HourOfDay +,type=double,units=h"
-````
+```
 
 Explanation:
 
@@ -1250,7 +1250,7 @@ sddsplot data.proc -col=Index,ColumnX
 -graph=line,vary,thick=2 
 -filter=col,Index,1999,minIndex
 
-````
+```
 
 but it did not work.
 
@@ -1267,7 +1267,7 @@ set minIndex [exec sdds2stream data.proc -para=minIndex]
 exec sddsplot data.proc -col=Index,ColumnX \
   -graph=line,vary,thick=2 \
   -filter=col,Index,1999,$minIndex
-````
+```
 
 This ensures the filter range uses the actual numeric value rather than the unresolved parameter name.
 
@@ -1386,7 +1386,7 @@ For example, the failing approach looked like:
 ```
 
 foreach fil \$filList {
-exec sddscombine \$fil output.sdds -retain=col,Xcol,Ycol,SomeData&#x20;
+exec sddscombine \$fil output.sdds -retain=col,Xcol,Ycol,SomeData 
 -overwrite -merge
 }
 
@@ -1403,7 +1403,7 @@ Instead of looping over files, use `glob` and `eval` to pass the full expanded l
 
 set filList \[lsort \[glob input\*.proc]]
 
-eval exec sddscombine \$filList merged.sdds&#x20;
+eval exec sddscombine \$filList merged.sdds 
 -retain=col,Xcol,Ycol,SomeData -overwrite -merge
 
 ```
@@ -1422,11 +1422,11 @@ I want to plot several files together and offset them like a mountain range. Usi
 
 ```
 
-sddsplot -graph=line,vary,thick=2 -thick=2&#x20;
--factor=yMultiplier=1e3&#x20;
--stagger=xIncrement=50,yIncrement=0.0025,files&#x20;
--col=tns,SignalInv file1.proc&#x20;
--col=tns,SignalInv file2.proc&#x20;
+sddsplot -graph=line,vary,thick=2 -thick=2 
+-factor=yMultiplier=1e3 
+-stagger=xIncrement=50,yIncrement=0.0025,files 
+-col=tns,SignalInv file1.proc 
+-col=tns,SignalInv file2.proc 
 -col=tns,SignalInv file3.proc
 
 ```
@@ -1439,9 +1439,9 @@ When using `-stagger` with the `files` keyword, all the files must be listed und
 
 ```
 
-sddsplot -graph=line,vary,thick=2 -thick=2&#x20;
--factor=yMultiplier=1e3&#x20;
--stagger=xIncrement=50,yIncrement=0.0025,files&#x20;
+sddsplot -graph=line,vary,thick=2 -thick=2 
+-factor=yMultiplier=1e3 
+-stagger=xIncrement=50,yIncrement=0.0025,files 
 -col=tns,SignalInv file1.proc file2.proc file3.proc
 
 ```
@@ -1472,7 +1472,7 @@ sddscombine file1.sdds file2.sdds ... -pipe=out | \
   sddsprocess -pipe -process=deq,sum,deqSum -process=deq,average,deqAve | \
   sddscollapse -pipe | \
   sddsconvert -pipe /tmp/output.sdds -ascii
-````
+```
 
 Explanation:
 
@@ -1496,7 +1496,7 @@ I have a file with two columns (e.g., `tc` and `SigConvolve`) and multiple pages
 sddsplot -graph=line -thick=2 input.smth2 \
   -col=tc,SigConvolve -split=pages \
   -stagger=yinc=-0.04,xinc=-102.30
-````
+```
 
 ### Answer
 
@@ -1504,18 +1504,18 @@ sddsplot -graph=line -thick=2 input.smth2 \
 
 1. Use `sddsprocess` to add a page index column:
 
-   ```bash
+```bash
    sddsprocess input.smth2 -pipe=out \
      -define=column,Page,i_page,type=long | \
    sddsconvert -pipe=out input_withPage.sdds
-   ```
+```
 
 2. Run `sddscontour`, specifying the independent variable, page index, and data column:
 
-   ```bash
+```bash
    sddscontour input_withPage.sdds -shade \
      -xyz=tc,Page,SigConvolve
-   ```
+```
 
 This treats `tc` as the horizontal axis, `Page` as the vertical axis (replacing the staggered pages), and `SigConvolve` as the plotted intensity.
 
@@ -1536,10 +1536,10 @@ I tried to generate x- and y-profiles from a 6×11 image dataset using:
 
 ```
 
-sddsimageprofiles -pipe=out output.sdds -profileType=x -method=integrated "-columnPrefix=data" |&#x20;
+sddsimageprofiles -pipe=out output.sdds -profileType=x -method=integrated "-columnPrefix=data" | 
 sddsprocess -pipe=in output\_Intx "-define=col,aveDR,y 11 / 3.6e8 \*,type=double,units=mrem/hr"
 
-sddsimageprofiles -pipe=out output.sdds -profileType=y -method=integrated "-columnPrefix=data" |&#x20;
+sddsimageprofiles -pipe=out output.sdds -profileType=y -method=integrated "-columnPrefix=data" | 
 sddsprocess -pipe=in output\_Inty "-define=col,aveDR,x 6 / 3.6e8 \*,type=double,units=mrem/hr"
 
 ```
@@ -1554,7 +1554,7 @@ but instead of getting a true integrated profile, the first command produced all
 
 Index, Data1, Data2, Data3, ...
 
-````
+```
 
 If the input file does not already have this structure, the program cannot correctly interpret rows and columns, leading to unexpected results (such as returning every pixel or collapsing to a single point).  
 
@@ -1564,7 +1564,7 @@ To fix this, first run the file through `sddsimageconvert`:
 sddsimageconvert output.sdds -pipe=out | \
   sddsimageprofiles -pipe -profileType=x -method=integrated "-columnPrefix=data" | \
   sddsprocess -pipe=in output_Intx "-define=col,aveDR,y 11 / 3.6e8 *,type=double,units=mrem/hr"
-````
+```
 
 This ensures the data is reshaped into the expected format so `sddsimageprofiles` can compute correct x- and y-profiles.
 
@@ -1585,7 +1585,7 @@ Example:
 
 ```bash
 sddscontour input.sdds -shade -yflip
-````
+```
 
 will produce a vertical mirror image.
 
@@ -1633,7 +1633,7 @@ beforeVC\_3\_frame08.sdds
 beforeVC\_4\_frame07.sdds
 beforeVC\_5\_frame15.sdds
 
-````
+```
 
 I want to add them together into a single file, such as `beforeVC.sdds`.
 
@@ -1646,7 +1646,7 @@ For example:
 ```bash
 sddsimagecombine beforeVC_2_frame02.sdds beforeVC_3_frame08.sdds \
   beforeVC_4_frame07.sdds beforeVC_5_frame15.sdds beforeVC.sdds -sum
-````
+```
 
 The `-sum` option ensures that pixel values from each file are added together into the final image.
 
@@ -1669,7 +1669,7 @@ I have archived data with a `Time` column stored as seconds since Jan 1, 1970 (e
 
 -tick=xtime
 
-````
+```
 
 This converts the numeric epoch values into readable labels (e.g., dates, hours, minutes) on the plot axis, adjusting dynamically with zoom level.  
 To enable this, simply keep the `Time` column as epoch seconds and add `-tick=xtime` to your plotting command.
@@ -1681,7 +1681,7 @@ sddstimeconvert input.sdds -pipe=out \
   -breakdown=column,Time,text=TextTime | \
 sddsprocess -pipe=in output.sdds \
   -reedit=column,TextTime,5d5f2D
-````
+```
 
 This creates a new column (`TextTime`) with formatted strings such as `MM/DD` or `HH:MM`, which can then be plotted directly.
 
@@ -1737,7 +1737,7 @@ For instance:
 ```bash
 sddsprocess input.sdds output.sdds \
   "-define=column,sumfractPass,i_row 0 == ? i_row &fractPass [ : i_row &fractPass [ val + $ sto val"
-````
+```
 
 Explanation:
 
@@ -1759,7 +1759,7 @@ Use the `-removePages` option of **sddsconvert**. For example, to delete the 16t
 
 ```bash
 sddsconvert input.sdds output.sdds -removePages=16
-````
+```
 
 You can also specify a range or a comma-separated list of page numbers. For example:
 
@@ -1786,7 +1786,7 @@ sddsimageprofiles -pipe -columnPrefix=frequency -method=integrate -profileType=x
 sddsxref outputProfiles.sdds tempfile.sdds \
   -transfer=parameter,xMin,xMax -nowarn
 rm tempfile.sdds
-````
+```
 
 Now `outputProfiles.sdds` contains the original profile data plus the `xMin` and `xMax` parameters.
 
@@ -1804,7 +1804,7 @@ A first attempt such as:
 
 ```
 
-sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2&#x20;
+sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2 
 -par=z,Tmelt -graph=ybar
 
 ```
@@ -1817,8 +1817,8 @@ Use the `-drawLine` option with the `y0parameter` and `y1parameter` keywords to 
 
 ```
 
-sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2&#x20;
--drawLine=p0value=0,p1value=1,y0parameter=Tmelt,y1parameter=Tmelt&#x20;
+sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2 
+-drawLine=p0value=0,p1value=1,y0parameter=Tmelt,y1parameter=Tmelt 
 "-ylabel=T\$bmax\$n (K)"
 
 ```
@@ -1833,9 +1833,9 @@ I want to construct a file that I can plot with `sddscontour` using parameters `
 
 ```
 
-sddsprocess RadDoseRate.sdds RadDoseRate.sdds.1&#x20;
-"-define=col,data,DR 1 \*,type=double,units=mrem/hr"&#x20;
--format=par,Variable1Name,symbol=x&#x20;
+sddsprocess RadDoseRate.sdds RadDoseRate.sdds.1 
+"-define=col,data,DR 1 \*,type=double,units=mrem/hr" 
+-format=par,Variable1Name,symbol=x 
 -format=par,Variable2Name,symbol=y
 
 ```
@@ -1848,8 +1848,8 @@ In **sddsprocess**, the `-define` option is for creating numeric parameters, whi
 
 ```
 
-sddsprocess input.sdds output.sdds&#x20;
--print=par,Variable1Name,x&#x20;
+sddsprocess input.sdds output.sdds 
+-print=par,Variable1Name,x 
 -print=par,Variable2Name,y
 
 ```
