@@ -1203,20 +1203,25 @@ Both forms are valid. The explicit output form is safer if you want to keep the 
 
 ## <a id="faq37"></a>How can I create a continuous `TimeOfDay` column from archived data that spans multiple days?
 
-For example, if `TimeOfDay` resets to 0 after midnight, how can I generate a column that continues increasing past 24 hours?
+For example, if `TimeOfDay` resets to 0 after midnight, how can I generate a column that keeps increasing past 24 hours?
 
 ### Answer
 
-1. **Use `sddstimeconvert`** — If your SDDS file contains a `Time` column (seconds since 1970), you can directly generate an hour-of-day breakdown without manual logic:
+Compute a continuous hour counter from the epoch `Time` by breaking it into **Julian day** and **hour-of-day**, then combine them:
 
-```
+```bash
+sddstimeconvert input.sdds -pipe=out \
+  -breakdown=column,Time,julianDay=JDay,hour=HourOfDay | \
+sddsprocess -pipe=in output.sdds \
+  "-define=column,TimeOfDayCont,JDay 0 &JDay [ - 24 * HourOfDay +,type=double,units=h"
+````
 
-sddstimeconvert input.sdds output.sdds&#x20;
--breakdown=column,Time,hour=TimeOfDay
+Explanation:
 
-```
+* `sddstimeconvert ... -breakdown=...,julianDay=JDay,hour=HourOfDay` produces `JDay` (day index) and `HourOfDay` (0–24).
+* In `sddsprocess`, `0 &JDay [` grabs the **first** `JDay` value; the RPN computes
+  `TimeOfDayCont = (JDay - JDay[0]) * 24 + HourOfDay`, which increases past 24 whenever the day rolls over.
 
-This produces a `TimeOfDay` column in hours.  
 
 ---
 
