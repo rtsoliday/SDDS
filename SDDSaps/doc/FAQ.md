@@ -55,6 +55,11 @@ Use the table of contents below to jump to a specific topic.
 49. [How can I sum multiple image files converted with `tiff2sdds` into a single SDDS file?](#faq49)
 50. [How can I convert an epoch `Time` column into conventional human-readable time in `sddsplot`?](#faq50)
 51. [How can I format numeric parameter values in `sddsplot` annotations to show a fixed number of digits?](#faq51)
+52. [How can I compute a running cumulative sum of a column across rows in `sddsprocess`?](#faq52)
+53. [How can I delete specific pages from an SDDS file?](#faq53)
+54. [How can I pass parameter values (like min and max) from one SDDS command into another?](#faq54)
+55. [How can I plot a horizontal line at a parameter value in `sddsplot`?](#faq55)
+56. [How can I add symbols like `x` and `y` to parameters in an SDDS file using `sddsprocess`?](#faq56)
 
 ---
 
@@ -1717,5 +1722,138 @@ This command:
 This effectively leaves the value in scientific notation with three decimal places before the `e`.
 
 If you need more precise formatting control, you should format the parameter value in your script (e.g., with `printf` in Tcl or `format` in shell) before passing it to `sddsplot`. Then insert the pre-formatted string using `-string="text"`.
+
+---
+
+## <a id="faq52"></a>How can I compute a running cumulative sum of a column across rows in `sddsprocess`?
+
+For example, given a file with a column `fractPass`, I want to create a new column `sumfractPass` that contains the cumulative sum of `fractPass` over rows.
+
+### Answer
+
+You can define a new column using an RPN expression that accumulates values across rows.  
+For instance:
+
+```bash
+sddsprocess input.sdds output.sdds \
+  "-define=column,sumfractPass,i_row 0 == ? i_row &fractPass [ : i_row &fractPass [ val + $ sto val"
+````
+
+Explanation:
+
+* `i_row 0 == ? ... : ...` ensures the first row initializes properly.
+* `i_row &fractPass [` retrieves the current row’s value.
+* `val + $ sto val` adds the current value to the running total and stores it back into `val`.
+
+The result is a new column `sumfractPass` that holds the cumulative sum of `fractPass` over all rows.
+
+---
+
+## <a id="faq53"></a>How can I delete specific pages from an SDDS file?
+
+Suppose I have a file with 16 pages and want to remove the last page.
+
+### Answer
+
+Use the `-removePages` option of **sddsconvert**. For example, to delete the 16th page:
+
+```bash
+sddsconvert input.sdds output.sdds -removePages=16
+````
+
+You can also specify a range or a comma-separated list of page numbers. For example:
+
+```bash
+sddsconvert input.sdds output.sdds -removePages=1,3,5-7
+```
+
+This removes pages 1, 3, and 5 through 7, keeping the rest unchanged.
+
+---
+
+## <a id="faq54"></a>How can I pass parameter values (like min and max) from one SDDS command into another?
+
+For example, suppose you compute `xMin` and `xMax` using `sddsprocess` and want to use them in another file:
+
+```bash
+sddsprocess input.xy.Table.sdds -pipe=out \
+  -filter=column,Index,-0.0011,0.0011 \
+  -process=Index,minimum,xMin \
+  -process=Index,maximum,xMax | \
+tee tempfile.sdds | \
+sddsimageprofiles -pipe -columnPrefix=frequency -method=integrate -profileType=x
+
+sddsxref outputProfiles.sdds tempfile.sdds \
+  -transfer=parameter,xMin,xMax -nowarn
+rm tempfile.sdds
+````
+
+Now `outputProfiles.sdds` contains the original profile data plus the `xMin` and `xMax` parameters.
+
+### Answer
+
+To pass parameters between SDDS programs, first compute them into a temporary file with `sddsprocess`. Then use **`sddsxref`** with `-transfer=parameter` to copy those parameter values into the target file. This avoids having to re-compute them downstream. The `tee` utility is not required—use `-pipe` consistently and rely on `sddsxref` for parameter transfer.
+
+---
+
+## <a id="faq55"></a>How can I plot a horizontal line at a parameter value in `sddsplot`?
+
+For example, I want to draw a line at the value of a parameter named `Tmelt` across the plot.
+
+A first attempt such as:
+
+```
+
+sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2&#x20;
+-par=z,Tmelt -graph=ybar
+
+```
+
+does not work.
+
+### Answer
+
+Use the `-drawLine` option with the `y0parameter` and `y1parameter` keywords to plot a horizontal line at the parameter value. For example:
+
+```
+
+sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2&#x20;
+-drawLine=p0value=0,p1value=1,y0parameter=Tmelt,y1parameter=Tmelt&#x20;
+"-ylabel=T\$bmax\$n (K)"
+
+```
+
+This draws a line across the entire x-range (`p0value=0` to `p1value=1`) at the y-value given by the parameter `Tmelt`.
+
+---
+
+## <a id="faq56"></a>How can I add symbols like `x` and `y` to parameters in an SDDS file using `sddsprocess`?
+
+I want to construct a file that I can plot with `sddscontour` using parameters `Variable1Name` and `Variable2Name`. I tried:
+
+```
+
+sddsprocess RadDoseRate.sdds RadDoseRate.sdds.1&#x20;
+"-define=col,data,DR 1 \*,type=double,units=mrem/hr"&#x20;
+-format=par,Variable1Name,symbol=x&#x20;
+-format=par,Variable2Name,symbol=y
+
+```
+
+but got errors. I ended up editing the file manually with `sddsedit` to add the symbols.
+
+### Answer
+
+In **sddsprocess**, the `-define` option is for creating numeric parameters, while `-print` should be used to insert string values. To add symbols such as `x` or `y` to parameters, use:
+
+```
+
+sddsprocess input.sdds output.sdds&#x20;
+-print=par,Variable1Name,x&#x20;
+-print=par,Variable2Name,y
+
+```
+
+This creates parameters `Variable1Name` and `Variable2Name` as string values with the desired symbols. Unlike `-define`, which requires specifying type and units for numeric data, `-print` directly assigns string content to parameters.
 
 ---
