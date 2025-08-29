@@ -1804,7 +1804,7 @@ A first attempt such as:
 
 ```
 
-sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2 \\
+sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2 \
   -par=z,Tmelt -graph=ybar
 
 ```
@@ -1817,8 +1817,8 @@ Use the `-drawLine` option with the `y0parameter` and `y1parameter` keywords to 
 
 ```
 
-sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2 \\
-  -drawLine=p0value=0,p1value=1,y0parameter=Tmelt,y1parameter=Tmelt \\
+sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2 \
+  -drawLine=p0value=0,p1value=1,y0parameter=Tmelt,y1parameter=Tmelt \
   "-ylabel=T\$bmax\$n (K)"
 
 ```
@@ -1833,9 +1833,9 @@ I want to construct a file that I can plot with `sddscontour` using parameters `
 
 ```
 
-sddsprocess RadDoseRate.sdds RadDoseRate.sdds.1 \\
-  "-define=col,data,DR 1 \*,type=double,units=mrem/hr" \\
-  -format=par,Variable1Name,symbol=x \\
+sddsprocess RadDoseRate.sdds RadDoseRate.sdds.1 \
+  "-define=col,data,DR 1 \*,type=double,units=mrem/hr" \
+  -format=par,Variable1Name,symbol=x \
   -format=par,Variable2Name,symbol=y
 
 ```
@@ -1848,8 +1848,8 @@ In **sddsprocess**, the `-define` option is for creating numeric parameters, whi
 
 ```
 
-sddsprocess input.sdds output.sdds \\
-  -print=par,Variable1Name,x \\
+sddsprocess input.sdds output.sdds \
+  -print=par,Variable1Name,x \
   -print=par,Variable2Name,y
 
 ```
