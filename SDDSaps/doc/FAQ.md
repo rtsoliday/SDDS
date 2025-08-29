@@ -38,6 +38,13 @@ Use the table of contents below to jump to a specific topic.
 32. [How can I save the zero crossing found by `sddszerofind` as a parameter in the original file?](#faq32)
 33. [Why does `sddscontour` fail with `Can't figure out how to turn column into 2D grid!` when plotting output from `sddsspotanalysis`?](#faq33)
 34. [How can I strip unwanted text from legend labels in `sddsplot`?](#faq34)
+35. [How can I flip or mirror an `sddscontour` image along an axis?](#faq35)
+36. [How can I rename a column in an SDDS file?](#faq36)
+37. [How can I create a continuous `TimeOfDay` column from archived data that spans multiple days?](#faq37)
+38. [How can I use a parameter value to define a plot filter range in `sddsplot`?](#faq38)
+39. [How can I copy all parameters from one SDDS file into another?](#faq39)
+40. [How can I select a specific row in `sddsprocess` when the match column is numeric instead of string?](#faq40)
+41. [How can I create a waterfall plot using `sddsplot`?](#faq41)
 
 ---
 
@@ -1135,3 +1142,218 @@ You can use other edit rules to strip prefixes, suffixes, or replace text as nee
 
 ---
 
+## <a id="faq35"></a>How can I flip or mirror an `sddscontour` image along an axis?
+
+When plotting contour data, the image sometimes appears inverted along the x or y axis compared to the expected orientation. For example:
+
+```
+
+sddscontour input.sdds -shade
+
+```
+
+### Answer
+
+`sddscontour` supports axis flipping with the `-xflip` and `-yflip` options.  
+
+* Use `-xflip` to reverse the horizontal axis.  
+* Use `-yflip` to reverse the vertical axis.  
+
+For example:
+
+```
+
+sddscontour input.sdds -shade -yflip
+
+```
+
+will mirror the image vertically.  
+
+If you need to rotate the image instead, use the `-transpose` option (once for 90° rotation, twice for 180°, etc.). Combining transpose with `-xflip` or `-yflip` provides full control over the orientation.
+
+---
+
+## <a id="faq36"></a>How can I rename a column in an SDDS file?
+
+I want to change the name of an existing column in an SDDS file without altering the data.  
+For example, I need to rename `OldColumn` to `NewColumn`.
+
+### Answer
+
+Use the `-rename=column` option of `sddsconvert`. For example:
+
+```
+
+sddsconvert input.sdds output.sdds -rename=column,OldColumn=NewColumn
+
+```
+
+This creates a copy of `input.sdds` with the column renamed.  
+If you omit the output file, `sddsconvert` will overwrite the input file:
+
+```
+
+sddsconvert input.sdds -rename=column,OldColumn=NewColumn
+
+```
+
+Both forms are valid. The explicit output form is safer if you want to keep the original file unchanged.
+
+---
+
+## <a id="faq37"></a>How can I create a continuous `TimeOfDay` column from archived data that spans multiple days?
+
+For example, if `TimeOfDay` resets to 0 after midnight, how can I generate a column that continues increasing past 24 hours?
+
+### Answer
+
+1. **Use `sddstimeconvert`** — If your SDDS file contains a `Time` column (seconds since 1970), you can directly generate an hour-of-day breakdown without manual logic:
+
+```
+
+sddstimeconvert input.sdds output.sdds&#x20;
+-breakdown=column,Time,hour=TimeOfDay
+
+```
+
+This produces a `TimeOfDay` column in hours.  
+
+---
+
+## <a id="faq38"></a>How can I use a parameter value to define a plot filter range in `sddsplot`?
+
+For example, after computing the minimum of a column and saving its index as a parameter (`minIndex`), I tried:
+
+```
+
+sddsplot data.proc -col=Index,ColumnX&#x20;
+-graph=line,vary,thick=2&#x20;
+-filter=col,Index,1999,minIndex
+
+````
+
+but it did not work.
+
+### Answer
+
+The `-filter` option in `sddsplot` does not accept parameter names directly.  
+Instead, you must first extract the parameter value using `sdds2stream` and store it in a shell or Tcl variable. Then pass the numeric value into the filter expression.
+
+For example in Tcl:
+
+```tcl
+set minIndex [exec sdds2stream data.proc -para=minIndex]
+
+exec sddsplot data.proc -col=Index,ColumnX \
+  -graph=line,vary,thick=2 \
+  -filter=col,Index,1999,$minIndex
+````
+
+This ensures the filter range uses the actual numeric value rather than the unresolved parameter name.
+
+---
+
+## <a id="faq39"></a>How can I copy all parameters from one SDDS file into another?
+
+I tried the following command:
+
+```
+
+sddsxref inputFileWithParameters outputFile -nowarn "-transfer=param,*" "-leave=*"
+
+```
+
+but the parameters were not transferred, and I got warnings like:
+
+```
+
+warning: no parameter matches \*
+
+```
+
+### Answer
+
+In `sddsxref`, the **first file listed is the destination** (the file that will receive new data), and the **second file is the source** (the file from which data is copied).  
+If you list them in the wrong order, no parameters will be transferred.
+
+For example, to copy all parameters from `sourceFile.sdds` into `targetFile.sdds`, use:
+
+```
+
+sddsxref targetFile.sdds sourceFile.sdds -nowarn "-transfer=parameter,*" "-leave=*"
+
+```
+
+This ensures that every parameter from the source file is added to the target file while leaving existing content unchanged.
+```
+
+---
+
+## <a id="faq40"></a>How can I select a specific row in `sddsprocess` when the match column is numeric instead of string?
+
+When I try to select rows based on a numeric column, I get an error such as:
+
+```
+
+Error for sddsprocess:
+Unable to select rows--selection column is not a string (SDDS\_MatchRowsOfInterest)
+
+```
+
+### Answer
+
+The `-match` option in `sddsprocess` only works with string-type columns.  
+For numeric columns, you must instead use the `-filter` option with a numeric range.
+
+For example, if you want to select the row where `nreg = 2`, use a small range around that value:
+
+```
+
+sddsprocess input.sdds output.sdds -filter=column,nreg,1.99,2.01
+
+```
+
+This will keep only the rows where `nreg` is approximately equal to 2.  
+Adjust the tolerance (`1.99–2.01`) as needed for your data.
+
+---
+
+## <a id="faq41"></a>How can I create a waterfall plot using `sddsplot`?
+
+I want to plot multiple waveforms in a "waterfall" style, offset so they don’t overlap. I tried a command like:
+
+```
+
+sddsplot&#x20;
+-graph=sym,vary=type,vary=subtype,conn=subtype,scale=1.5,conn,thick=2,fill&#x20;
+-stagger=yIncrement=0.25,xIncrement=1e-7&#x20;
+-leg -thick=2 -filter=col,Index,35,100 input.table&#x20;
+-col=Index,Signal1.2374e-06&#x20;
+-col=Index,Signal1.2382e-06&#x20;
+-col=Index,Signal1.239e-06&#x20;
+...
+-col=Index,Signal1.2454e-06
+
+```
+
+but the staggering didn’t apply as expected.
+
+### Answer
+
+Use the `-stagger` option with the `datanames` keyword so that the stagger increments apply to each column being plotted. For example:
+
+```
+
+sddsplot input.table&#x20;
+-graph=sym,conn,thick=2,fill&#x20;
+-stagger=yIncrement=0.25,xIncrement=1e-7,datanames&#x20;
+-col=Index,Signal\*
+
+```
+
+* `yIncrement` and `xIncrement` control the vertical and horizontal offsets between successive data sets.
+* `datanames` ensures that the stagger increments are applied separately for each plotted column.
+
+If you need separate groups of plots, combine this with `-split` as appropriate (e.g., `-split=page` or `-split=columnBin=<colname>`).
+
+---
