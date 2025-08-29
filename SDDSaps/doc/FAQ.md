@@ -24,7 +24,7 @@ Use the table of contents below to jump to a specific topic.
 18. [How can I control the number of significant digits when inserting a numeric value into the title or topline of an `sddscontour` plot?](#faq18)
 19. [Why does `sddsprocess` with `-filter=col,y,-5,200` give the warning "no rows selected for page 1" when processing `sddsimageprofiles` data?](#faq19)
 20. [Why does the second column overwrite the first when adding multiple columns with `sddsprocess`, and how can I keep both?](#faq20)
-21. [Why does `sddscontour` give a `no data values in file` error when using output from `sddsspotanalysis`?](#faq21)
+21. [Why does `sddscontour` fail with `Can't figure out how to turn column into 2D grid` when using output from `sddsspotanalysis`?](#faq21)
 22. [How can I convert a text table of density data into SDDS format for contour plotting with specified z-value regions?](#faq22)
 23. [How can I copy a single column value from one SDDS file into a parameter of another SDDS file?](#faq23)
 24. [How can I compute the average profile from a set of profiles with shared `ypos` values?](#faq24)
@@ -757,7 +757,7 @@ This ensures that the final output contains the original contents of `inputX.sdd
 
 ---
 
-## <a id="faq21"></a>Why does `sddscontour` give a `no data values in file` error when using output from `sddsspotanalysis`?
+## <a id="faq21"></a>Why does `sddscontour` fail with `Can't figure out how to turn column into 2D grid` when using output from `sddsspotanalysis`?
 
 ```
 sddsspotanalysis vc20220427-0004 vc20220427-0004_test -background=halfwidth=0,symmetric "-imageColumn=HLine*" -spotimage=vc20220427-0004_plot
@@ -818,7 +818,7 @@ sddsprocess output.sdds -define=column,Index,i_row,type=long
 and create the contour plot with shading:
 
 ```
-sddscontour output.sdds "-columnmatch=Index,rho*" -shade=10
+sddscontour output.sdds "-columnMatch=Index,rho*" -shade=10
 ```
 
 The `-shade=10` option divides the values into 10 bins. Keep in mind that depending on your dataset, values may only fall into some of those bins, so not all ranges may appear in the contour plot.
