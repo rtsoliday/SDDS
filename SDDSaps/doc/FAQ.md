@@ -32,6 +32,12 @@ Use the table of contents below to jump to a specific topic.
 26. [How can I create a human-readable time column when converting archived data to SDDS?](#faq26)
 27. [Why does `plaindata2sdds` misread columns after the first when converting a plain text file?](#faq27)
 28. [Why does a wildcard `sddscombine` command fail in a Tcl script but work in the shell?](#faq28)
+29. [What is the best way to convert an Excel spreadsheet to SDDS format?](#faq29)
+30. [How can I select a specific row from an `sddsimageconvert` table for plotting?](#faq30)
+31. [How can I use the `Index` column from `sddsimageconvert` output as the x-axis in `sddsimageprofiles`?](#faq31)
+32. [How can I save the zero crossing found by `sddszerofind` as a parameter in the original file?](#faq32)
+33. [Why does `sddscontour` fail with `Can't figure out how to turn column into 2D grid!` when plotting output from `sddsspotanalysis`?](#faq33)
+34. [How can I strip unwanted text from legend labels in `sddsplot`?](#faq34)
 
 ---
 
@@ -929,3 +935,203 @@ This way:
 * `eval` ensures Tcl passes them as individual file arguments rather than one long string.
 
 ---
+
+## <a id="faq29"></a>What is the best way to convert an Excel spreadsheet to SDDS format?
+
+I have measurement data stored in an Excel spreadsheet. Can I use `csv2sdds` directly, or do I need to convert it to an ASCII text file first?
+
+### Answer
+
+SDDS tools do not read Excel `.xls` or `.xlsx` files directly.  
+The recommended approach is:
+
+1. Open the spreadsheet in Excel (or another program that can read it).
+2. Save or export the data as a CSV (comma-separated values) file.
+3. Use `csv2sdds` on the CSV file to create an SDDS file.
+
+---
+
+## <a id="faq30"></a>How can I select a specific row from an `sddsimageconvert` table for plotting?
+
+I tried to extract the row with `Index = -4.0` using:
+
+```
+
+sddsconvert outputTable.sdds outputTableRow\.sdds&#x20;
+-retain=col,data???,Index,-4.0
+
+```
+
+but this removed many data columns instead of isolating the row.
+
+### Answer
+
+To select a row by index value, use `sddsprocess` with the `-filter` option:
+
+```
+
+sddsprocess outputTable.sdds outputTableRow\.sdds -filter=column,Index,-4.1,-3.9
+
+```
+
+This keeps only rows where `Index` is near `-4.0`.
+
+If the resulting file has columns with embedded numeric values (e.g., `data123.4`), you can convert those column names into a new numeric column (`Zpos`) using a sequence of commands:
+
+```
+
+sddsprocess -pipe=out outputTableRow\.sdds -proc=Index,first,xoffset |&#x20;
+sddsprocess -pipe -delete=col,Index |&#x20;
+sddstranspose -pipe |&#x20;
+sddsprocess -pipe -scan=column,Zpos,OldColumnNames,%lf,type=double,edit=4d |&#x20;
+sddsconvert -pipe=in finalOutput.sdds -delete=column,OldColumnNames
+
+```
+
+This produces a file with two useful columns: `Zpos` and the corresponding data values, suitable for plotting.
+
+---
+
+## <a id="faq31"></a>How can I use the `Index` column from `sddsimageconvert` output as the x-axis in `sddsimageprofiles`?
+
+When generating profiles with `sddsimageprofiles`, I want the `Index` column from the `sddsimageconvert` output file to be used as the x-axis values in the profile file.  
+For example, the file `beamDump027.sdds.gz.converted` (created by `sddsimageconvert`) should provide the `Index` column for the x-axis of the profile file `beamDump027.sdds.gz.x.sdds` (created by `sddsimageprofiles`).  
+How can this be done?
+
+### Answer
+
+After creating the profile file, use `sddsxref` to transfer the `Index` column from the converted file into the profile file:
+
+```
+
+sddsxref beamDump027.x.sdds beamDump027.converted -take=Index -nowarn
+
+```
+
+This ensures that the `Index` values are available in the profile file, allowing you to plot **Y vs Index**.
+
+---
+
+## <a id="faq32"></a>How can I save the zero crossing found by `sddszerofind` as a parameter in the original file?
+
+I used a command like:
+
+```
+
+sddsprocess -pipe=out ./<dir>/<file>.pfit4&#x20;
+"-define=column,dfdth,phase 3 pow 4 \* Coefficient04 \*&#x20;
+phase sqr 3 \* Coefficient03 \* + phase 2 \* Coefficient02 \* +&#x20;
+Coefficient01 +,type=double,units=MeV/c/deg" |&#x20;
+sddszerofind -pipe=in ./<dir>/<file>\_dfdtheta\_zero&#x20;
+-zero=dfdth -col=phase -slopeoutput
+
+```
+
+This produced a file containing a single-row column with the zero crossing value.  
+How can I instead store this value as a parameter back in the original file?
+
+### Answer
+
+Use `sddsexpand` to convert the row of column values into parameters, then transfer those parameters back to the original file with `sddsxref`. For example:
+
+```
+
+sddsprocess -pipe=out /tmp/input.pfit4&#x20;
+"-define=column,dfdth,phase 3 pow 4 \* Coefficient04 \*&#x20;
+phase sqr 3 \* Coefficient03 \* + phase 2 \* Coefficient02 \* +&#x20;
+Coefficient01 +,type=double,units=MeV/c/deg" |&#x20;
+sddszerofind -pipe -zero=dfdth -col=phase -slopeoutput |&#x20;
+sddsexpand -pipe=in /tmp/input\_dfdtheta\_zero
+
+sddsxref /tmp/input.pfit4 /tmp/input\_dfdtheta\_zero&#x20;
+-transfer=parameter,phase,phaseSlope -nowarn
+
+rm /tmp/input\_dfdtheta\_zero
+
+```
+
+This workflow:
+1. Computes the zero crossing with `sddszerofind`.
+2. Converts the output row into parameters with `sddsexpand`.
+3. Merges the new parameters back into the original file with `sddsxref`.
+
+---
+
+## <a id="faq33"></a>Why does `sddscontour` fail with `Can't figure out how to turn column into 2D grid!` when plotting output from `sddsspotanalysis`?
+
+For example, running a script that calls `sddsspotanalysis` produced output like this:
+
+```
+
+spotAnalysisScript -fileName sampleFile -plot 1
+Results for sampleFile:
+Background Level: 0.52
+Integrated Spot Intensity: 9067.1
+Peak Spot Intensity: 3.47
+Error: Can't figure out how to turn column into 2D grid!
+Check existence and type of Variable1Name and Variable2Name
+
+```
+
+and the follow-up `sddscontour` command failed with:
+
+```
+
+sddscontour -shade sampleFile\_plot
+Error: Can't figure out how to turn column into 2D grid!
+
+```
+
+### Answer
+
+Recent versions of `sddsspotanalysis` no longer produce `Variable1Name` and `Variable2Name` columns in the spot image file.  
+Instead, the output contains three explicit columns: `ix`, `iy`, and `Image`, which represent the grid x-coordinate, y-coordinate, and pixel intensity.  
+
+To use this file with `sddscontour`, specify these columns directly:
+
+```
+
+sddscontour sampleFile\_plot -shade -xyz=ix,iy,Image
+
+```
+
+This tells `sddscontour` which columns form the 2D grid and which column contains the data values. Without this explicit mapping, the program cannot construct the grid and produces the error above.
+
+---
+
+## <a id="faq34"></a>How can I strip unwanted text from legend labels in `sddsplot`?
+
+For example, using a command such as:
+
+```
+
+sddsplot -graph=line,vary,thick=2 -thick=2&#x20;
+-filter=col,TimeOfDay,14.75,15.2&#x20;
+inputFile.sdds&#x20;
+"-col=TimeOfDay,SomeColumn\*" -yscalesGroup=ID=0&#x20;
+-leg ' -ylabel=TC Temperature (\$ao\$nC)'&#x20;
+-col=TimeOfDay,AnotherColumn -yscalesGroup=ID=1
+
+```
+
+The legend may display labels like `SomeColumn*` or device-style PV names that are too long or not user-friendly. How can these be simplified?
+
+### Answer
+
+Use the `-legend=editcommand=<rule>` option in `sddsplot`.  
+The `editcommand` applies the same syntax as the `editstring` utility, which allows pattern substitution, deletion, or truncation of legend labels.
+
+For example:
+
+```
+
+sddsplot inputFile.sdds -col=TimeOfDay,SomeColumn\*&#x20;
+-legend=editcommand="%/SomeColumn//"
+
+```
+
+This removes the text `SomeColumn` from the legend label.  
+You can use other edit rules to strip prefixes, suffixes, or replace text as needed. Running the `editstring` program on the command line will show the available editing rules.
+
+---
+
