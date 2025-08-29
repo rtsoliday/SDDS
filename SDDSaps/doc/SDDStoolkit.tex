@@ -1031,6 +1031,11 @@ literally as shown.
 usually switch keywords or qualifiers.  Any unique abbreviation is acceptable.
 \end{itemize}
 
+Another convenience is the ability to embed comments in command lines.  Any text between
+standalone ``='' tokens is ignored by the parser, which permits annotating commands.  For example,\\
+\hspace*{5mm}{\tt sddsconvert {\em input} = this text is a comment = -binary {\em output}}\\
+will be processed as if the comment were not present.
+
 In addition to using files, most toolkit programs also take input from pipes, which obviates the need for temporary
 files in many cases.  For those programs that support pipes, one can employ the {\tt -pipe} option.  This option
 provides a good example of what options look like.  For example, one could do the following to test binary-ascii
