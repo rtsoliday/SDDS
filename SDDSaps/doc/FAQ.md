@@ -61,7 +61,7 @@ but the column from the reference file was not added to the output.
 
 ### Answer
 
-The `-leave` option overrides `-take` when both specify a given column. Using `-leave=*` means no columns are taken at all. If you only want to select specific columns, you don’t need `-leave` when you already use `-take`. Removing `-leave=*` will allow the requested column to be added.&#x20;
+The `-leave` option overrides `-take` when both specify a given column. Using `-leave=*` means no columns are taken at all. If you only want to select specific columns, you don’t need `-leave` when you already use `-take`. Removing `-leave=*` will allow the requested column to be added. 
 
 ---
 
@@ -964,7 +964,7 @@ I tried to extract the row with `Index = -4.0` using:
 
 ```
 
-sddsconvert outputTable.sdds outputTableRow\.sdds&#x20;
+sddsconvert outputTable.sdds outputTableRow\.sdds 
 -retain=col,data???,Index,-4.0
 
 ```
@@ -987,10 +987,10 @@ If the resulting file has columns with embedded numeric values (e.g., `data123.4
 
 ```
 
-sddsprocess -pipe=out outputTableRow\.sdds -proc=Index,first,xoffset |&#x20;
-sddsprocess -pipe -delete=col,Index |&#x20;
-sddstranspose -pipe |&#x20;
-sddsprocess -pipe -scan=column,Zpos,OldColumnNames,%lf,type=double,edit=4d |&#x20;
+sddsprocess -pipe=out outputTableRow\.sdds -proc=Index,first,xoffset | 
+sddsprocess -pipe -delete=col,Index | 
+sddstranspose -pipe | 
+sddsprocess -pipe -scan=column,Zpos,OldColumnNames,%lf,type=double,edit=4d | 
 sddsconvert -pipe=in finalOutput.sdds -delete=column,OldColumnNames
 
 ```
@@ -1025,11 +1025,11 @@ I used a command like:
 
 ```
 
-sddsprocess -pipe=out ./<dir>/<file>.pfit4&#x20;
-"-define=column,dfdth,phase 3 pow 4 \* Coefficient04 \*&#x20;
-phase sqr 3 \* Coefficient03 \* + phase 2 \* Coefficient02 \* +&#x20;
-Coefficient01 +,type=double,units=MeV/c/deg" |&#x20;
-sddszerofind -pipe=in ./<dir>/<file>\_dfdtheta\_zero&#x20;
+sddsprocess -pipe=out ./<dir>/<file>.pfit4 
+"-define=column,dfdth,phase 3 pow 4 \* Coefficient04 \* 
+phase sqr 3 \* Coefficient03 \* + phase 2 \* Coefficient02 \* + 
+Coefficient01 +,type=double,units=MeV/c/deg" | 
+sddszerofind -pipe=in ./<dir>/<file>\_dfdtheta\_zero 
 -zero=dfdth -col=phase -slopeoutput
 
 ```
@@ -1043,14 +1043,14 @@ Use `sddsexpand` to convert the row of column values into parameters, then trans
 
 ```
 
-sddsprocess -pipe=out /tmp/input.pfit4&#x20;
-"-define=column,dfdth,phase 3 pow 4 \* Coefficient04 \*&#x20;
-phase sqr 3 \* Coefficient03 \* + phase 2 \* Coefficient02 \* +&#x20;
-Coefficient01 +,type=double,units=MeV/c/deg" |&#x20;
-sddszerofind -pipe -zero=dfdth -col=phase -slopeoutput |&#x20;
+sddsprocess -pipe=out /tmp/input.pfit4 
+"-define=column,dfdth,phase 3 pow 4 \* Coefficient04 \* 
+phase sqr 3 \* Coefficient03 \* + phase 2 \* Coefficient02 \* + 
+Coefficient01 +,type=double,units=MeV/c/deg" | 
+sddszerofind -pipe -zero=dfdth -col=phase -slopeoutput | 
 sddsexpand -pipe=in /tmp/input\_dfdtheta\_zero
 
-sddsxref /tmp/input.pfit4 /tmp/input\_dfdtheta\_zero&#x20;
+sddsxref /tmp/input.pfit4 /tmp/input\_dfdtheta\_zero 
 -transfer=parameter,phase,phaseSlope -nowarn
 
 rm /tmp/input\_dfdtheta\_zero
@@ -1112,11 +1112,11 @@ For example, using a command such as:
 
 ```
 
-sddsplot -graph=line,vary,thick=2 -thick=2&#x20;
--filter=col,TimeOfDay,14.75,15.2&#x20;
-inputFile.sdds&#x20;
-"-col=TimeOfDay,SomeColumn\*" -yscalesGroup=ID=0&#x20;
--leg ' -ylabel=TC Temperature (\$ao\$nC)'&#x20;
+sddsplot -graph=line,vary,thick=2 -thick=2 
+-filter=col,TimeOfDay,14.75,15.2 
+inputFile.sdds 
+"-col=TimeOfDay,SomeColumn\*" -yscalesGroup=ID=0 
+-leg ' -ylabel=TC Temperature (\$ao\$nC)' 
 -col=TimeOfDay,AnotherColumn -yscalesGroup=ID=1
 
 ```
@@ -1132,7 +1132,7 @@ For example:
 
 ```
 
-sddsplot inputFile.sdds -col=TimeOfDay,SomeColumn\*&#x20;
+sddsplot inputFile.sdds -col=TimeOfDay,SomeColumn\* 
 -legend=editcommand="%/SomeColumn//"
 
 ```
@@ -1231,8 +1231,8 @@ For example, after computing the minimum of a column and saving its index as a p
 
 ```
 
-sddsplot data.proc -col=Index,ColumnX&#x20;
--graph=line,vary,thick=2&#x20;
+sddsplot data.proc -col=Index,ColumnX 
+-graph=line,vary,thick=2 
 -filter=col,Index,1999,minIndex
 
 ````
@@ -1328,13 +1328,13 @@ I want to plot multiple waveforms in a "waterfall" style, offset so they don’t
 
 ```
 
-sddsplot&#x20;
--graph=sym,vary=type,vary=subtype,conn=subtype,scale=1.5,conn,thick=2,fill&#x20;
--stagger=yIncrement=0.25,xIncrement=1e-7&#x20;
--leg -thick=2 -filter=col,Index,35,100 input.table&#x20;
--col=Index,Signal1.2374e-06&#x20;
--col=Index,Signal1.2382e-06&#x20;
--col=Index,Signal1.239e-06&#x20;
+sddsplot 
+-graph=sym,vary=type,vary=subtype,conn=subtype,scale=1.5,conn,thick=2,fill 
+-stagger=yIncrement=0.25,xIncrement=1e-7 
+-leg -thick=2 -filter=col,Index,35,100 input.table 
+-col=Index,Signal1.2374e-06 
+-col=Index,Signal1.2382e-06 
+-col=Index,Signal1.239e-06 
 ...
 -col=Index,Signal1.2454e-06
 
@@ -1348,9 +1348,9 @@ Use the `-stagger` option with the `datanames` keyword so that the stagger incre
 
 ```
 
-sddsplot input.table&#x20;
--graph=sym,conn,thick=2,fill&#x20;
--stagger=yIncrement=0.25,xIncrement=1e-7,datanames&#x20;
+sddsplot input.table 
+-graph=sym,conn,thick=2,fill 
+-stagger=yIncrement=0.25,xIncrement=1e-7,datanames 
 -col=Index,Signal\*
 
 ```
