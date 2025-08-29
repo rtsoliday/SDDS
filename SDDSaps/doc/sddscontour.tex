@@ -11,7 +11,7 @@
   \begin{verbatim}
 sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 \
   -zEquation="x x * y y * + 4 * pi * sin"
-sddscontour example.sdds -shade -equalAspect
+sddscontour example.sdds -shade -equalaspect
   \end{verbatim}
   \item \textbf{synopsis:}
   \begin{verbatim}
@@ -69,7 +69,7 @@ way, variable 1 is the row index and variable 2 is the column index.
 \item The numeric parameters \verb|NumberOfRows| and \verb|NumberOfColumns| contain the values of R and
 C, respectively.
 \end{enumerate}
-Use \verb|v1v2preferred| to force the first method to be used when both parameter sets are present.
+Use \verb|-v1v2preferred| to force the first method to be used when both parameter sets are present.
 
     \item \verb|rpn| control:
 \begin{flushleft}{\tt
@@ -175,41 +175,42 @@ Use \verb|v1v2preferred| to force the first method to be used when both paramete
         \item \verb|ystrings| --- Controls the y tick labels, allowing optional editing, sparsity, and scaling.
         \item \verb|yeditstrings| --- Provides an edit command for y tick labels; equivalent to using \verb|edit| with \verb|-ystrings|.
         \end{itemize}
-        {\bf For example}, {\em origin1}, {\em delta1}, {\em max\_ext1}, {\em origin2}, {\em delta2} and {\em max\_ext2} are the
- parameters in \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour.input1}{sddscontour.input1} file, {\em origin1},
- {\em delta1} and {\em max\_ext1} represent the minimum, delta and maximum values of x coordinate, {\em origin2}, {\em delta2}, and {\em max\_ext2} represents the minimum, delta and maximum values of y coordinate. The {\em Index} column represents the index
- of x coordinate, i.e. value of {\em x=Index * delta1 + origin1}; The Ex\_{\em n} column represents the Ex field at {\em n}th y
-value, where {\em y=(n-1)*delta2 + origin2}. If no -xrange and -yrange provided as in following command, the actual value of x and y will not be shown in the plot. (click the show\_plot button will show you the corresponding plot.)
-       \begin{flushleft}{\tt \bf
-            sddscontour sddscontour.input1 -columnmatch=Index,Ex* -ystrings=sparse=10 -ylabel=y -shade
-         \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour1_img.html}{show\_plot}
-        }\end{flushleft}
-
-        We can use -ystrings to remove the string part of y label as following:
+        {\bf For example}, parameters {\em origin1}, {\em delta1}, {\em max\_ext1}, {\em origin2}, {\em delta2}, and {\em max\_ext2} in \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour.input1}{sddscontour.input1} define the coordinate ranges.
+        The first three give the minimum, spacing, and maximum of the x coordinate, while the latter three give the same for y.
+        The {\em Index} column provides the x index so that {\em x = Index * delta1 + origin1}.  Columns {\em Ex_n} contain field
+        values at {\em y = (n-1)*delta2 + origin2}.  Without \verb|-xrange| and \verb|-yrange| the plot shows index values rather
+        than coordinates:
         \begin{flushleft}{\tt \bf
-            sddscontour sddscontour.input1 -columnmatch=Index,Ex* -ystrings=edit=\%/Ex\_//,sparse=10 -ylabel=y -shade    \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour2_img.html}{show\_plot}
+            sddscontour sddscontour.input1 -columnmatch=Index,Ex* -ystrings=sparse=10 -ylabel=y -shade
+            \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour1_img.html}{show\_plot}
         }\end{flushleft}
 
-        The above y tick label still shows the index of y coordinate, not y values. Following command allows us to see the y values:
+        To remove the string portion of the y tick labels, use \verb|-ystrings|:
+        \begin{flushleft}{\tt \bf
+            sddscontour sddscontour.input1 -columnmatch=Index,Ex* -ystrings=edit=\%/Ex_//,sparse=10 -ylabel=y -shade
+            \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour2_img.html}{show\_plot}
+        }\end{flushleft}
+
+        The previous plot still labels y with indexes.  Supplying \verb|-yrange| displays the actual y values:
         \begin{flushleft}{\tt \bf
             sddscontour sddscontour.input1 -columnmatch=Index,Ex* -yrange=minimum=@origin2,maximum=@max\_ext2 -ylabel=y -shade
-        \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour3_img.html}{show\_plot}
+            \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour3_img.html}{show\_plot}
         }\end{flushleft}
 
-        Now, for the x tick labels, the above plot shows the Index value. Following command will show the values of x coordinate:
-
+        To label the x axis with coordinate values, add \verb|-xrange|:
         \begin{flushleft}{\tt \bf
-        sddscontour sddscontour.input1 -columnmatch=Index,Ex* -yrange=minimum=@origin2,maximum=@max\_ext2 -xrange=minimum=@origin1,maximum=@max\_ext1 -xlabel=x -ylabel=y  -shade   \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour4_img.html}{show\_plot}
+            sddscontour sddscontour.input1 -columnmatch=Index,Ex* -yrange=minimum=@origin2,maximum=@max\_ext2 -xrange=minimum=@origin1,maximum=@max\_ext1 -xlabel=x -ylabel=y -shade \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour4_img.html}{show\_plot}
         }\end{flushleft}
 
-        The independent column - Index in the above command is useless. Therefore, -xrange provides a way for plotting a set of
-columns with contour without independent column. If use sddsprocess to create x column through {\em x=Index * delta1 + origin1}, the above plot can be created using following command, note that the titles in two plots are different because the independent column names are different since the title is automatically generated from input column names if it is not provided.
-
+        In this case the independent column ({\em Index}) is redundant.  The \verb|-xrange| option allows contour plots of a set
+        of columns without an explicit independent column.  If \verb|sddsprocess| is used to create an x column via
+        {\em x=Index * delta1 + origin1}, the same plot results from
         \begin{flushleft}{\tt \bf
-        sddscontour sddscontour.input1 -columnmatch=x,Ex* -yrange=minimum=@origin2,maximum=@max\_ext2 -ylabel=y -shade   \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour5_img.html}{show\_plot}
+            sddscontour sddscontour.input1 -columnmatch=x,Ex* -yrange=minimum=@origin2,maximum=@max\_ext2 -ylabel=y -shade \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour5_img.html}{show\_plot}
         }\end{flushleft}
 
-       Here shows the examples of providing xrange and yrange from parameters, however, they can be provided by fixed values from commandline also.
+        These examples obtain \verb|xrange| and \verb|yrange| from parameters, but fixed values may also be given on the command line.
+
 
     \item Data scaling:
 \begin{flushleft}{\tt
