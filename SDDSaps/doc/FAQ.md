@@ -69,7 +69,7 @@ I tried the following command:
 
 ```
 sddsxref ./data/inputFile referenceFile -nowarn \
--take=SomeColumnName -leave=* -equate=PageNumber
+  -take=SomeColumnName -leave=* -equate=PageNumber
 ```
 
 but the column from the reference file was not added to the output.
@@ -95,11 +95,11 @@ For example, given an image file with systematic noise in the background, the fo
 ```bash
 sddsimageprofiles -pipe=out $inputFile -profileType=x \
   -method=integrated "-columnPrefix=HLine" | \
-  sddsprocess -pipe=in ${inputFile}.Intx
+sddsprocess -pipe=in ${inputFile}.Intx
 
 sddsimageprofiles -pipe=out $inputFile -profileType=y \
   -method=integrated "-columnPrefix=HLine" | \
-  sddsprocess -pipe=in ${inputFile}.Inty
+sddsprocess -pipe=in ${inputFile}.Inty
 ```
 
 A trimming attempt was made using `sddsconvert`:
@@ -176,7 +176,7 @@ sddscontour datafile.sdds -topline=datafile.sdds
 
 Unlike `sddsplot`, the program will not automatically insert the filename—you must pass it yourself (e.g., with a shell variable:
 
-````bash
+```bash
 sddscontour "$f" -topline="$f"
 ```
 
@@ -192,9 +192,9 @@ If you want more control over placement, you can use `-string` instead, which al
 
 ```
 sddsplot -graph=line,thick=2,vary -thick=2 OUTFILE_red -file \
--col=Index,DEVICE:Signal.s37*p?.y -sep -layout=2,4 \
--leg=edit=25d \
--dev=lpng -out=OUTFILE_red_s37_y.png
+  -col=Index,DEVICE:Signal.s37*p?.y -sep -layout=2,4 \
+  -leg=edit=25d \
+  -dev=lpng -out=OUTFILE_red_s37_y.png
 ```
 
 ### Answer
@@ -206,15 +206,15 @@ If your shell (e.g., `csh` or `tcsh`) expands them as **filename patterns**, `sd
 
 ```bash
 sddsplot -graph=line,thick=2,vary -thick=2 OUTFILE_red -file \
-"-col=Index,DEVICE:Signal.s37*p?.y" -sep -layout=2,4 \
--leg=edit=25d \
--dev=lpng -out=OUTFILE_red_s37_y.png
+  "-col=Index,DEVICE:Signal.s37*p?.y" -sep -layout=2,4 \
+  -leg=edit=25d \
+  -dev=lpng -out=OUTFILE_red_s37_y.png
 ```
 
 or equivalently:
 
 ```bash
--col=Index,DEVICE:Signal.s37\*p?.y
+-col=Index,DEVICE:Signal.s37*p?.y
 ```
 
 Notes:
@@ -223,9 +223,9 @@ Notes:
 * In **csh/tcsh**, quoting (or escaping) is essential to prevent premature expansion.
 * To check your shell, run:
 
-  ```bash
-  echo $SHELL
-  ```
+```bash
+echo $SHELL
+```
 
 This ensures that the wildcard expression is interpreted by `sddsplot`, not by the shell.
 
@@ -276,14 +276,14 @@ Other useful `editCommand` forms include:
 
 ```
 sddsprocess -pipe=out inputFile.sdds \
--filter=col,relativeTime,0.5683,0.5688 | \
+  -filter=col,relativeTime,0.5683,0.5688 | \
 sddsderiv -pipe \
--differentiate=ColumnA,ColumnB -versus=relativeTime | \
+  -differentiate=ColumnA,ColumnB -versus=relativeTime | \
 sddsprocess -pipe=in outputFile.sdds \
-"-define=col,dColAdt,ColumnADeriv -1 *,type=double,units=Counts/s" \
-"-define=col,dColBdt,ColumnBDeriv -1 *,type=double,units=Counts/s" \
--proc=dColAdt,fwhm,FWHM_A,functionOf=relativeTime \
--proc=dColBdt,fwhm,FWHM_B,functionOf=relativeTime
+  "-define=col,dColAdt,ColumnADeriv -1 *,type=double,units=Counts/s" \
+  "-define=col,dColBdt,ColumnBDeriv -1 *,type=double,units=Counts/s" \
+  -proc=dColAdt,fwhm,FWHM_A,functionOf=relativeTime \
+  -proc=dColBdt,fwhm,FWHM_B,functionOf=relativeTime
 ```
 
 But I received errors such as:
@@ -324,7 +324,7 @@ Attempts like these will fail:
 
 ```
 
--offset=yParameter=-\@pCentral
+-offset=yParameter=-@pCentral
 -offset=yParameter=-pCentral
 -offset=yParameter=-"pCentral"
 
@@ -334,7 +334,7 @@ with errors such as:
 
 ```
 
-Unable to get parameter value--parameter name is unrecognized (SDDS\_GetParameterAsDouble)
+Unable to get parameter value--parameter name is unrecognized (SDDS_GetParameterAsDouble)
 
 ```
 
@@ -363,7 +363,7 @@ Similarly, for x-axis offsets use:
 
 ```
 
--offset=xParameter=<parameterName>\[,xInvert]
+-offset=xParameter=<parameterName>[,xInvert]
 
 ```
 
@@ -379,8 +379,8 @@ I tried adding arrows to a plot with the following command:
 
 ```
 sddsplot -graph=line,thick=2 -thick=2 -filter=col,Time,1720587600.0,1720596108.0 \
--col=Time,S-DCCT:CurrentM datafile.sdds -tick=xtime \
--arrowSettings=scale=1.0,barblength=0.1,barbAngle=0,linetype=1,centered,cartesian,0.1,0.1,singleBarb,thick=1
+  -col=Time,S-DCCT:CurrentM datafile.sdds -tick=xtime \
+  -arrowSettings=scale=1.0,barblength=0.1,barbAngle=0,linetype=1,centered,cartesian,0.1,0.1,singleBarb,thick=1
 ```
 
 but received the error:
@@ -418,13 +418,13 @@ A user attempted to convert a CSV file to SDDS format with the following command
 
 ```
 csv2sdds IrradiationDataLegacyTrim.csv IrradiationDataLegacyTrim.sdds \
--skiplines=1 \
--col=name=ID,type=char \
--col=name=Vref,type=float,units=V \
--col=name=V240305,type=float,units=V \
--col=name=V240307,type=float,units=V \
--col=name=V240327,type=float,units=V \
--col=name=V240521,type=float,units=V
+  -skiplines=1 \
+  -col=name=ID,type=char \
+  -col=name=Vref,type=float,units=V \
+  -col=name=V240305,type=float,units=V \
+  -col=name=V240307,type=float,units=V \
+  -col=name=V240327,type=float,units=V \
+  -col=name=V240521,type=float,units=V
 ```
 
 This produced the error:
@@ -489,13 +489,13 @@ If `csv2sdds` encounters bad numeric data, it will emit warnings and substitute 
 
 ```bash
 sddsplot -thick=2 -graph=sym,conn,fill,thick=2  input_file.sdds \
--col=ColumnX,ColumnY \
-'-string=x$b0$n = ,pCoord=0.05,qCoord=0.93,scale=1.1' \
--string=@Value1,format=%.3f,pCoord=0.15,qCoord=0.93,scale=1.1 \
-"-string=units,pCoord=0.29,qCoord=0.93,scale=1.1" \
-'-string=$gs$r$bx$n = ,pCoord=0.05,qCoord=0.83,scale=1.1' \
--string=@Value2,format=%.3f,pCoord=0.15,qCoord=0.83,scale=1.1 \
-"-string=units,pCoord=0.26,qCoord=0.83,scale=1.1"
+  -col=ColumnX,ColumnY \
+  '-string=x$b0$n = ,pCoord=0.05,qCoord=0.93,scale=1.1' \
+  -string=@Value1,format=%.3f,pCoord=0.15,qCoord=0.93,scale=1.1 \
+  "-string=units,pCoord=0.29,qCoord=0.93,scale=1.1" \
+  '-string=$gs$r$bx$n = ,pCoord=0.05,qCoord=0.83,scale=1.1' \
+  -string=@Value2,format=%.3f,pCoord=0.15,qCoord=0.83,scale=1.1 \
+  "-string=units,pCoord=0.26,qCoord=0.83,scale=1.1"
 ```
 
 This produced `x₀`, but I want to display `x̅₀`.
@@ -545,7 +545,7 @@ You can override autoscaling by setting explicit shading limits with the **`-sha
 
 ```bash
 sddscontour input.sdds -shade=100,-2,2
-````
+```
 
 * `100` = number of shading levels (use fewer for coarser bins).
 * `-2,2` = fixed z-range applied to all plots.
@@ -745,7 +745,7 @@ The result was that the `yCentroid` column overwrote the previously added `xCent
 
 ### Answer
 
-`SDDSprocess` overwrites the specified output file each time it runs and does not preserve existing content in that file. To retain both columns, you should process the X and Y data separately, then merge the results into a single file using `sddsxref`. For example:
+`sddsprocess` overwrites the specified output file each time it runs and does not preserve existing content in that file. To retain both columns, you should process the X and Y data separately, then merge the results into a single file using `sddsxref`. For example:
 
 ```
 sddsprocess inputX.sdds "-define=column,xCentroid,<pvnameX> 287 +"
@@ -849,10 +849,10 @@ I have a set of eight SDDS files, each containing `xpos` values at the same set 
 
 ```
 sddscombine -overwrite \
-slice000um.smth slice100um.smth slice200um.smth \
-slice300um.smth slice400um.smth slice500um.smth \
-slice600um.smth slice700um.smth \
-sliceSN08_z2.smth
+  slice000um.smth slice100um.smth slice200um.smth \
+  slice300um.smth slice400um.smth slice500um.smth \
+  slice600um.smth slice700um.smth \
+  sliceSN08_z2.smth
 ```
 
 This produced a file with multiple pages. Using `-merge` concatenates the data instead of averaging. How can I create a single file with `ypos` and the average of `xpos`?
@@ -867,8 +867,8 @@ set outputFile /tmp/sliceAverage.smth
 
 # Set the input files
 set files "slice000um.smth slice100um.smth slice200um.smth \
-slice300um.smth slice400um.smth slice500um.smth \
-slice600um.smth slice700um.smth"
+  slice300um.smth slice400um.smth slice500um.smth \
+  slice600um.smth slice700um.smth"
 
 # Count the number of input files (floating point for division)
 set number [expr 1.0 * [llength $files]]
@@ -1078,10 +1078,10 @@ If the resulting file has columns with embedded numeric values (e.g., `data123.4
 ```
 
 sddsprocess -pipe=out outputTableRow.sdds -proc=Index,first,xoffset | \
-  sddsprocess -pipe -delete=col,Index | \
-  sddstranspose -pipe | \
-  sddsprocess -pipe -scan=column,Zpos,OldColumnNames,%lf,type=double,edit=4d | \
-  sddsconvert -pipe=in finalOutput.sdds -delete=column,OldColumnNames
+sddsprocess -pipe -delete=col,Index | \
+sddstranspose -pipe | \
+sddsprocess -pipe -scan=column,Zpos,OldColumnNames,%lf,type=double,edit=4d | \
+sddsconvert -pipe=in finalOutput.sdds -delete=column,OldColumnNames
 
 ```
 
@@ -1115,12 +1115,10 @@ I used a command like:
 
 ```
 
-sddsprocess -pipe=out ./<dir>/<file>.pfit4 
-"-define=column,dfdth,phase 3 pow 4 \* Coefficient04 \* 
-phase sqr 3 \* Coefficient03 \* + phase 2 \* Coefficient02 \* + 
-Coefficient01 +,type=double,units=MeV/c/deg" | 
-sddszerofind -pipe=in ./<dir>/<file>_dfdtheta_zero 
--zero=dfdth -col=phase -slopeoutput
+sddsprocess -pipe=out ./<dir>/<file>.pfit4 \
+  "-define=column,dfdth,phase 3 pow 4 * Coefficient04 * phase sqr 3 * Coefficient03 * + phase 2 * Coefficient02 * + Coefficient01 +,type=double,units=MeV/c/deg" | \
+sddszerofind -pipe=in ./<dir>/<file>_dfdtheta_zero \ 
+  -zero=dfdth -col=phase -slopeoutput
 
 ```
 
@@ -1133,15 +1131,13 @@ Use `sddsexpand` to convert the row of column values into parameters, then trans
 
 ```
 
-sddsprocess -pipe=out /tmp/input.pfit4 
-"-define=column,dfdth,phase 3 pow 4 \* Coefficient04 \* 
-phase sqr 3 \* Coefficient03 \* + phase 2 \* Coefficient02 \* + 
-Coefficient01 +,type=double,units=MeV/c/deg" | 
-sddszerofind -pipe -zero=dfdth -col=phase -slopeoutput | 
+sddsprocess -pipe=out /tmp/input.pfit4 \
+  "-define=column,dfdth,phase 3 pow 4 * Coefficient04 * phase sqr 3 * Coefficient03 * + phase 2 * Coefficient02 * Coefficient01 +,type=double,units=MeV/c/deg" | \
+sddszerofind -pipe -zero=dfdth -col=phase -slopeoutput | \
 sddsexpand -pipe=in /tmp/input_dfdtheta_zero
 
-sddsxref /tmp/input.pfit4 /tmp/input_dfdtheta_zero 
--transfer=parameter,phase,phaseSlope -nowarn
+sddsxref /tmp/input.pfit4 /tmp/input_dfdtheta_zero \
+  -transfer=parameter,phase,phaseSlope -nowarn
 
 rm /tmp/input_dfdtheta_zero
 
@@ -1205,7 +1201,7 @@ For example, using a command such as:
 sddsplot -graph=line,vary,thick=2 -thick=2 
 -filter=col,TimeOfDay,14.75,15.2 
 inputFile.sdds 
-"-col=TimeOfDay,SomeColumn\*" -yscalesGroup=ID=0 
+"-col=TimeOfDay,SomeColumn*" -yscalesGroup=ID=0 
 -leg ' -ylabel=TC Temperature (\$ao\$nC)' 
 -col=TimeOfDay,AnotherColumn -yscalesGroup=ID=1
 
@@ -1222,8 +1218,8 @@ For example:
 
 ```
 
-sddsplot inputFile.sdds -col=TimeOfDay,SomeColumn\* 
--legend=editCommand="%/SomeColumn//"
+sddsplot inputFile.sdds "-col=TimeOfDay,SomeColumn*" \
+  -legend=editCommand="%/SomeColumn//"
 
 ```
 
@@ -1362,7 +1358,7 @@ but the parameters were not transferred, and I got warnings like:
 
 ```
 
-warning: no parameter matches \*
+warning: no parameter matches *
 
 ```
 
@@ -1438,10 +1434,10 @@ Use the `-stagger` option with the `datanames` keyword so that the stagger incre
 
 ```
 
-sddsplot input.table 
--graph=sym,conn,thick=2,fill 
--stagger=yIncrement=0.25,xIncrement=1e-7,datanames 
--col=Index,Signal\*
+sddsplot input.table \
+  -graph=sym,conn,thick=2,fill \
+  -stagger=yIncrement=0.25,xIncrement=1e-7,datanames \
+  "-col=Index,Signal*"
 
 ```
 
@@ -1460,9 +1456,8 @@ For example, the failing approach looked like:
 
 ```
 
-foreach fil \$filList {
-exec sddscombine \$fil output.sdds -retain=col,Xcol,Ycol,SomeData 
--overwrite -merge
+foreach fil $filList {
+  exec sddscombine $fil output.sdds -retain=col,Xcol,Ycol,SomeData -overwrite -merge
 }
 
 ```
@@ -1476,10 +1471,10 @@ Instead of looping over files, use `glob` and `eval` to pass the full expanded l
 
 ```
 
-set filList \[lsort \[glob input\*.proc]]
+set filList [lsort [glob input*.proc]]
 
-eval exec sddscombine \$filList merged.sdds 
--retain=col,Xcol,Ycol,SomeData -overwrite -merge
+eval exec sddscombine $filList merged.sdds \
+  -retain=col,Xcol,Ycol,SomeData -overwrite -merge
 
 ```
 
@@ -1526,7 +1521,7 @@ If you instead want the staggering applied to each column in a single file, use 
 
 ```
 
-sddsplot datafile.sdds -stagger=yIncrement=0.25,datanames -col=Index,Signal\*
+sddsplot datafile.sdds -stagger=yIncrement=0.25,datanames "-col=Index,Signal*"
 
 ```
 
@@ -1543,10 +1538,10 @@ You can use a pipeline of SDDS tools:
 
 ```bash
 sddscombine file1.sdds file2.sdds ... -pipe=out | \
-  sddsprocess -pipe -match=column,volname=<Pattern> | \
-  sddsprocess -pipe -process=deq,sum,deqSum -process=deq,average,deqAve | \
-  sddscollapse -pipe | \
-  sddsconvert -pipe /tmp/output.sdds -ascii
+sddsprocess -pipe -match=column,volname=<Pattern> | \
+sddsprocess -pipe -process=deq,sum,deqSum -process=deq,average,deqAve | \
+sddscollapse -pipe | \
+sddsconvert -pipe /tmp/output.sdds -ascii
 ```
 
 Explanation:
@@ -1580,16 +1575,16 @@ sddsplot -graph=line -thick=2 input.smth2 \
 1. Use `sddsprocess` to add a page index column:
 
 ```bash
-   sddsprocess input.smth2 -pipe=out \
-     -define=column,Page,i_page,type=long | \
-   sddsconvert -pipe=out input_withPage.sdds
+sddsprocess input.smth2 -pipe=out \
+  -define=column,Page,i_page,type=long | \
+sddsconvert -pipe=out input_withPage.sdds
 ```
 
 2. Run `sddscontour`, specifying the independent variable, page index, and data column:
 
 ```bash
-   sddscontour input_withPage.sdds -shade \
-     -xyz=tc,Page,SigConvolve
+sddscontour input_withPage.sdds -shade \
+  -xyz=tc,Page,SigConvolve
 ```
 
 This treats `tc` as the horizontal axis, `Page` as the vertical axis (replacing the staggered pages), and `SigConvolve` as the plotted intensity.
@@ -1612,10 +1607,10 @@ I tried to generate x- and y-profiles from a 6×11 image dataset using:
 ```
 
 sddsimageprofiles -pipe=out output.sdds -profileType=x -method=integrated "-columnPrefix=data" | 
-sddsprocess -pipe=in output_Intx "-define=col,aveDR,y 11 / 3.6e8 \*,type=double,units=mrem/hr"
+sddsprocess -pipe=in output_Intx "-define=col,aveDR,y 11 / 3.6e8 *,type=double,units=mrem/hr"
 
 sddsimageprofiles -pipe=out output.sdds -profileType=y -method=integrated "-columnPrefix=data" | 
-sddsprocess -pipe=in output_Inty "-define=col,aveDR,x 6 / 3.6e8 \*,type=double,units=mrem/hr"
+sddsprocess -pipe=in output_Inty "-define=col,aveDR,x 6 / 3.6e8 *,type=double,units=mrem/hr"
 
 ```
 
@@ -1637,8 +1632,8 @@ To fix this, first run the file through `sddsimageconvert`:
 
 ```bash
 sddsimageconvert output.sdds -pipe=out | \
-  sddsimageprofiles -pipe -profileType=x -method=integrated "-columnPrefix=data" | \
-  sddsprocess -pipe=in output_Intx "-define=col,aveDR,y 11 / 3.6e8 *,type=double,units=mrem/hr"
+sddsimageprofiles -pipe -profileType=x -method=integrated "-columnPrefix=data" | \
+sddsprocess -pipe=in output_Intx "-define=col,aveDR,y 11 / 3.6e8 *,type=double,units=mrem/hr"
 ```
 
 This ensures the data is reshaped into the expected format so `sddsimageprofiles` can compute correct x- and y-profiles.
@@ -1682,7 +1677,7 @@ For example, a command such as:
 
 ```
 
-sddscontour example.sdds "-col=Index,z\*" -shade
+sddscontour example.sdds "-col=Index,z*" -shade
 
 ```
 
@@ -1909,7 +1904,7 @@ I want to construct a file that I can plot with `sddscontour` using parameters `
 ```
 
 sddsprocess RadDoseRate.sdds RadDoseRate.sdds.1 \
-  "-define=col,data,DR 1 \*,type=double,units=mrem/hr" \
+  "-define=col,data,DR 1 *,type=double,units=mrem/hr" \
   -format=par,Variable1Name,symbol=x \
   -format=par,Variable2Name,symbol=y
 
