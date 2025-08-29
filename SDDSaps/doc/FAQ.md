@@ -76,7 +76,15 @@ but the column from the reference file was not added to the output.
 
 ### Answer
 
-The `-leave` option overrides `-take` when both specify a given column. Using `-leave=*` means no columns are taken at all. If you only want to select specific columns, you don’t need `-leave` when you already use `-take`. Removing `-leave=*` will allow the requested column to be added. 
+The `-leave` option applies to the primary file and restricts which of its columns are kept. When you specify both `-take` and `-leave`, the `-leave` setting dominates. Using `-leave=*` means "keep all columns from the primary file," but it prevents the requested column from the reference file from being added.
+
+If your goal is to add specific columns from the reference file, **omit `-leave=*`** and just use `-take`.
+
+In general:
+
+* Use **`-take`** when you want to bring in specific columns, parameters, or arrays from the reference file.
+* Use **`-leave`** when you want to restrict which items are retained from the primary file.
+* Do not use both together unless you carefully intend the interaction.
 
 ---
 
@@ -106,7 +114,7 @@ But it was unclear if this was the best way to restrict the analysis region.
 
 ### Answer
 
-To reduce noise from unwanted regions, use the `-areaOfInterest=<rowStart>,<rowEnd>,<columnStart>,<columnEnd>` option with `sddsimageprofiles`. This allows you to define a rectangular region within the image for profile extraction.
+Use the **`-areaOfInterest=<rowStart>,<rowEnd>,<columnStart>,<columnEnd>`** option in `sddsimageprofiles` to restrict the analysis to a rectangular region of the image. Row and column indices start at **0** from the top-left corner.
 
 For example:
 
@@ -118,7 +126,16 @@ sddsimageprofiles inputFile -profileType=y \
 sddsplot outputFile.y -col=y,x -graph=symbol
 ```
 
-This trims the analysis to only the specified rows and columns, avoiding background noise outside the signal region.
+This extracts the y-profile only from the specified rows and columns, reducing noise from background regions.
+
+If you want to permanently crop the image data for later use (not just profiles), you can also run:
+
+```bash
+sddsimageconvert inputFile outputTrimmed.sdds \
+  -areaOfInterest=260,290,245,280
+```
+
+and then analyze the trimmed file.
 
 ---
 
@@ -126,9 +143,20 @@ This trims the analysis to only the specified rows and columns, avoiding backgro
 
 ### Answer
 
-The `-method=integrated` option computes a profile by summing signal across the specified dimension, which can include contributions from background noise. In some cases this produces poor fits, especially for the y-profile.
+The `-method` option controls how profiles are computed from image data:
 
-The `-method=centerline` option instead extracts the profile along the central line of the region, often giving a cleaner result when the signal is well localized. If the integrated method produces too much noise in the background, switching to `-method=centerline` can provide a more reliable profile for fitting.
+* **`-method=integrated`** — sums pixel values across the specified dimension (rows for an x-profile, columns for a y-profile). This produces a profile proportional to total intensity but may amplify background noise, since all pixels in the strip contribute.
+
+* **`-method=average`** — computes the mean value across the specified dimension. This keeps profiles on the same scale regardless of image size and can reduce scaling issues compared with `integrated`.
+
+* **`-method=centerline`** — extracts data from a single central row or column of the region. This often gives a cleaner profile if the signal is strongly localized, but it may miss information from the full beam distribution.
+
+For best results:
+- Use **`integrated`** when total signal intensity matters.
+- Use **`average`** when you want normalized profiles less sensitive to image size.
+- Use **`centerline`** when background noise makes integration unreliable, or when the feature of interest is well-centered.
+
+In all cases, the **`-areaOfInterest`** option can be used to restrict analysis to a smaller region, which often improves profile quality by excluding noisy background pixels.
 
 ---
 
@@ -139,13 +167,22 @@ sddscontour datafile.sdds -filename,edit=49d%
 ```
 
 ### Answer
-`sddscontour` does not support the `-filename` option used in `sddsplot`. However, you can place text (such as the filename) on the plot by using the `-topline` option. For example:
 
-```
+`sddscontour` does not provide the `-filename` option that `sddsplot` supports. To display the filename, use the **`-topline`** or **`-title`** options with the filename text supplied explicitly. For example:
+
+```bash
 sddscontour datafile.sdds -topline=datafile.sdds
 ```
 
-This will draw the specified text string at the top of the plot. If you want the actual filename to appear automatically, you will need to supply it explicitly to `-topline`.
+Unlike `sddsplot`, the program will not automatically insert the filename—you must pass it yourself (e.g., with a shell variable:
+
+````bash
+sddscontour "$f" -topline="$f"
+```
+
+If you want more control over placement, you can use `-string` instead, which allows positioning the text anywhere on the plot.
+
+**Note:** If multiple files are plotted in one command, the same topline will appear for all; there is no per-file automatic filename labeling.
 
 ---
 
@@ -162,23 +199,35 @@ sddsplot -graph=line,thick=2,vary -thick=2 OUTFILE_red -file \
 
 ### Answer
 
-This error can occur when using a shell that expands wildcard characters (`*` or `?`) before they are passed to `sddsplot`. In `csh` or `tcsh`, the shell interprets these characters as filename patterns, which prevents `sddsplot` from receiving them properly.
+`sddsplot` supports wildcards (`*`, `?`) in column names, but they must be passed literally to the program.
+If your shell (e.g., `csh` or `tcsh`) expands them as **filename patterns**, `sddsplot` never receives the wildcard and will report `"no match"`.
 
-To avoid this, enclose the column argument in quotes:
+**Fix:** Quote or escape the column specification so the shell does not interpret it:
 
-```
+```bash
 sddsplot -graph=line,thick=2,vary -thick=2 OUTFILE_red -file \
 "-col=Index,DEVICE:Signal.s37*p?.y" -sep -layout=2,4 \
 -leg=edit=25d \
 -dev=lpng -out=OUTFILE_red_s37_y.png
 ```
 
-In `bash`, quoting is not necessary, but in `csh`/`tcsh` it is required.
-To check which shell you are using, run:
+or equivalently:
 
+```bash
+-col=Index,DEVICE:Signal.s37\*p?.y
 ```
-echo $SHELL
-```
+
+Notes:
+
+* In **bash**, quoting is usually not required but is still recommended for safety.
+* In **csh/tcsh**, quoting (or escaping) is essential to prevent premature expansion.
+* To check your shell, run:
+
+  ```bash
+  echo $SHELL
+  ```
+
+This ensures that the wildcard expression is interpreted by `sddsplot`, not by the shell.
 
 ---
 
@@ -186,31 +235,40 @@ echo $SHELL
 
 ### Answer
 
-When using the `-legend` option in `sddsplot`, the legend label can be modified with the `editCommand` field. The `editCommand` applies string-editing instructions that allow removal or replacement of portions of the original label. This is useful when the original data name is long or contains prefixes that are not needed in the display.
+When using the `-legend` option in `sddsplot`, you can control how the legend text is displayed using the **`editCommand`** field. This applies the same rules as the **`editstring`** utility, allowing you to remove, replace, or reformat parts of the original legend label.
 
-For example, if the column or parameter name is:
-
-```
-S-DAQTBT:TurnsOnDiagTrig.s38*p?.y
-```
-
-and you only want the portion:
+For example, suppose the original label is:
 
 ```
-s38*p?.y
+S-DAQTBT:TurnsOnDiagTrig.s38p1.y
 ```
 
-to appear in the legend, you can apply an editing command.
-
-The editing commands are those accepted by the `editstring` program, which is also available separately. Running `editstring` from the command line will print a usage message describing the available operations. These same editing commands are used inside `sddsplot` when supplied to the `editCommand` field.
-
-A simplified example command might look like:
+and you only want to keep the shorter portion:
 
 ```
-sddsplot datafile.sdds -column=y -legend=editCommand="%/S-DAQTBT:TurnsOnDiagTrig//"
+s38p1.y
 ```
 
-The actual substitution pattern depends on what portion of the string you want to keep or remove. Text substitutions (`%/old/new/`) and other editing operations are supported as described in the `editstring` documentation.
+You can use:
+
+```bash
+sddsplot data.sdds -col=y \
+  -legend=editCommand="%/S-DAQTBT:TurnsOnDiagTrig//"
+```
+
+This removes the matching prefix (`S-DAQTBT:TurnsOnDiagTrig`) from the legend text.
+
+Other useful `editCommand` forms include:
+
+* **Substitution:**
+  `%/old/new/` — replaces `old` with `new`.
+* **Deletion:**
+  `%/unwanted//` — removes the substring `unwanted`.
+* **Truncation:**
+  `%49d` — keep only the first 49 characters.
+* **Case changes, multiple edits, etc.** — see the `editstring` program for a full list of editing operations.
+
+**Tip:** You can test your `editCommand` rules interactively using the `editstring` program before applying them in `sddsplot`.
 
 ---
 
@@ -262,39 +320,56 @@ This ensures that derivative columns will be properly generated for both `Column
 
 ## <a id="faq8"></a>How can I offset the y-axis in `sddsplot` using a parameter value from an SDDS file?
 
-```
-sddsplot -graph=dot -thick=2 track-5nC.w2 \
-  -split=page -separate=page \
-  -col=dt,p \
-  -offset=yParameter=-@pCentral
-
-sddsplot -graph=dot -thick=2 track-5nC.w2 \
-  -split=page -separate=page \
-  -col=dt,p \
-  -offset=yParameter=-pCentral
-
-sddsplot -graph=dot -thick=2 track-5nC.w2 \
-  -split=page -separate=page \
-  -col=dt,p \
-  -offset=yParameter=-"pCentral"
-```
-
-Each attempt resulted in:
+Attempts like these will fail:
 
 ```
-Error:
-Unable to get parameter value--parameter name is unrecognized (SDDS_GetParameterAsDouble)
+
+-offset=yParameter=-\@pCentral
+-offset=yParameter=-pCentral
+-offset=yParameter=-"pCentral"
+
+```
+
+with errors such as:
+
+```
+
+Unable to get parameter value--parameter name is unrecognized (SDDS\_GetParameterAsDouble)
+
 ```
 
 ### Answer
 
-When using `-offset` with a parameter, the syntax does not accept embedded signs or quotes with the parameter name. Instead, specify the parameter name directly, and if needed, combine it with the `yInvert` option to flip the sign. For example:
+The correct syntax is:
 
 ```
+
+-offset=yParameter=pCentral
+
+```
+
+This applies the parameter `pCentral` as the vertical offset.
+
+If you need the negative of the parameter, you cannot prefix a minus sign to the name.  
+Instead, add the `yInvert` keyword:
+
+```
+
 -offset=yParameter=pCentral,yInvert
+
 ```
 
-This approach applies the parameter value `pCentral` as the y-offset while inverting the direction if required.
+Similarly, for x-axis offsets use:
+
+```
+
+-offset=xParameter=<parameterName>\[,xInvert]
+
+```
+
+**Notes:**
+* Do not use `@`, quotes, or leading minus signs in parameter names.  
+* `xInvert` and `yInvert` provide sign reversal if needed.
 
 ---
 
@@ -384,28 +459,29 @@ However, all values for `ColumnA` in the SDDS file appeared as zeros.
 
 ### Answer
 
-This issue can occur if the CSV file has formatting that prevents correct parsing. Common problems include:
+This happens when the input text cannot be parsed as valid numeric data for the declared type. Common causes include:
 
-* Extra header or descriptive lines before the data.
-* Columns containing empty strings or non-numeric text that do not match the declared type.
-* Misaligned data due to delimiters or unexpected characters.
+* Extra header or descriptive lines before the actual data (use `-skiplines`).
+* Non-numeric strings or empty fields in the column (declare a `string` column for these and later delete it).
+* Wrong delimiter (set with `-separator=,` or `-separator="\t"`).
+* Declaring the wrong data type (e.g., `double` vs `long`).
 
-One approach is to skip the non-data lines, define the columns explicitly, and remove any temporary placeholder columns. For example:
+Typical workflow:
 
-```
-csv2sdds input.csv -pipe=out -skiplines=16 \
+```bash
+csv2sdds input.csv -pipe=out -skiplines=16 -separator=, \
   -col=name=Temp,type=string \
   -col=name=ColumnA,type=double | \
-sddsprocess -pipe=in /tmp/junk -delete=column,Temp
+sddsprocess -pipe=in output.sdds -delete=column,Temp
 ```
 
-Here:
+Notes:
 
-* `-skiplines=16` ignores header or formatting lines before the actual data.
-* `-col=name=Temp,type=string` captures a non-numeric field so it does not corrupt numeric parsing.
-* `sddsprocess ... -delete=column,Temp` removes the temporary column after conversion.
+* `-skiplines=16` skips headers before the real data starts (adjust as needed).
+* Temporary string columns capture text fields so they don’t corrupt numeric parsing.
+* After conversion, remove unwanted string columns with `sddsprocess`.
 
-Adjust the number of skipped lines and column definitions as needed based on the structure of your CSV file.
+If `csv2sdds` encounters bad numeric data, it will emit warnings and substitute zeros. Always check the program output for these messages.
 
 ---
 
@@ -434,7 +510,7 @@ You can use the following syntax to place a bar over `x` while keeping the subsc
 
 Explanation of escape sequences:
 
-* `$h` moves one character back (two are required to align the bar correctly).
+* `$h` moves back **half a character space** (use two for one full character).
 * `$a` turns on superscript, which is used to place the bar (`-`) above the character.
 * `-` is the actual bar symbol drawn above the `x`.
 * `$b` turns on subscript for the `0`.
@@ -449,17 +525,13 @@ When I try to pass a file whose name starts with a minus sign (`-`) to an SDDS c
 
 ### Answer
 
-In many UNIX and Tcl commands, a `--` argument can be used to indicate the end of options. Everything following it will then be treated as a filename, even if it starts with `-`.
+Prefix a path component (e.g., `./`) so the argument doesn’t *start* with `-`:
 
-For SDDS commands that accept standard input, one possible workaround without renaming the file is to use a pipeline, for example:
-
+```bash
+sddsquery ./-filename.sdds
+# or with an absolute/relative directory:
+sddsquery /path/to/-filename.sdds
 ```
-cat -- -filename.sdds | sddsquery -pipe=in
-```
-
-This forces `cat` to read the file named `-filename.sdds` and then pipes the data into the SDDS command.
-
-If the command you are using does not support `-pipe`, or if piping isn’t appropriate, the most reliable solution remains renaming the file to remove the leading dash.
 
 ---
 
@@ -469,18 +541,25 @@ When comparing two contour plots side by side, the autoscaling of the z-axis can
 
 ### Answer
 
-You can control the vertical scale explicitly by using the `-shade` option with three arguments:
+You can override autoscaling by setting explicit shading limits with the **`-shade`** option:
 
-```
+```bash
 sddscontour input.sdds -shade=100,-2,2
+````
+
+* `100` = number of shading levels (use fewer for coarser bins).
+* `-2,2` = fixed z-range applied to all plots.
+
+This ensures consistent color mapping across plots.
+
+**Notes:**
+
+* For contour lines without shading, use:
+
+```bash
+sddscontour input.sdds -scale=z,-2,2
 ```
-
-In this example:
-
-* `100` specifies the number of shading levels.
-* `-2,2` sets the fixed z-range for the shading scale.
-
-This ensures that both plots use the same color mapping, making visual comparison consistent.
+* To emphasize positive/negative symmetry, choose limits like `-A,A`.
 
 ---
 
@@ -637,23 +716,19 @@ This approach ensures the number is printed with the desired number of significa
 
 ### Answer
 
-The `-filter=col,y,-5,200` option only keeps rows where the values of the specified column are inside the range from `-5` to `200`. If all of the values fall outside that range, no rows will be selected, which produces the warning.
+`-filter=column,y,-5,200` **keeps** only the rows whose `y` values lie **inside** `[-5, 200]`. If all values fall outside this interval, no rows are selected and you’ll see the warning “no rows selected for page 1.” Range endpoints are **inclusive**. To **invert** the selection (i.e., keep values *outside* the interval), add `,!` to the filter:
 
-If your goal is to **keep values outside the specified range**, add `,!` to the filter option. For example:
-
-```
-sddsprocess input.sdds -filter=col,y,-5,200,!
+```bash
+sddsprocess input.sdds -filter=column,y,-5,200,!
 ```
 
-This inverts the selection, keeping all rows where the column values are *not* between `-5` and `200`.
+When the data come from `sddsimageprofiles`, be aware that `-method=integrated` **sums** profiles and can produce large magnitudes. If you intended values comparable to a single profile, use:
 
-Also, note that when using `sddsimageprofiles` with `-method=integrated`, the resulting column values may be very large (e.g., in the range of 72000 to 75000). If you intended to average instead of integrate, consider using:
-
-```
--method=average
+```bash
+sddsimageprofiles image.sdds output.sdds -profileType=y -method=averaged
 ```
 
-to produce values on a scale consistent with your filter range.
+This returns the **average** profile instead of the sum, which typically matches filter ranges like `[-5, 200]` more naturally.
 
 ---
 
