@@ -979,8 +979,8 @@ I tried to extract the row with `Index = -4.0` using:
 
 ```
 
-sddsconvert outputTable.sdds outputTableRow\.sdds 
--retain=col,data???,Index,-4.0
+sddsconvert outputTable.sdds outputTableRow.sdds \
+  -retain=col,data???,Index,-4.0
 
 ```
 
@@ -992,7 +992,7 @@ To select a row by index value, use `sddsprocess` with the `-filter` option:
 
 ```
 
-sddsprocess outputTable.sdds outputTableRow\.sdds -filter=column,Index,-4.1,-3.9
+sddsprocess outputTable.sdds outputTableRow.sdds -filter=column,Index,-4.1,-3.9
 
 ```
 
@@ -1002,11 +1002,11 @@ If the resulting file has columns with embedded numeric values (e.g., `data123.4
 
 ```
 
-sddsprocess -pipe=out outputTableRow\.sdds -proc=Index,first,xoffset | 
-sddsprocess -pipe -delete=col,Index | 
-sddstranspose -pipe | 
-sddsprocess -pipe -scan=column,Zpos,OldColumnNames,%lf,type=double,edit=4d | 
-sddsconvert -pipe=in finalOutput.sdds -delete=column,OldColumnNames
+sddsprocess -pipe=out outputTableRow.sdds -proc=Index,first,xoffset | \
+  sddsprocess -pipe -delete=col,Index | \
+  sddstranspose -pipe | \
+  sddsprocess -pipe -scan=column,Zpos,OldColumnNames,%lf,type=double,edit=4d | \
+  sddsconvert -pipe=in finalOutput.sdds -delete=column,OldColumnNames
 
 ```
 
@@ -1044,7 +1044,7 @@ sddsprocess -pipe=out ./<dir>/<file>.pfit4
 "-define=column,dfdth,phase 3 pow 4 \* Coefficient04 \* 
 phase sqr 3 \* Coefficient03 \* + phase 2 \* Coefficient02 \* + 
 Coefficient01 +,type=double,units=MeV/c/deg" | 
-sddszerofind -pipe=in ./<dir>/<file>\_dfdtheta\_zero 
+sddszerofind -pipe=in ./<dir>/<file>_dfdtheta_zero 
 -zero=dfdth -col=phase -slopeoutput
 
 ```
@@ -1063,12 +1063,12 @@ sddsprocess -pipe=out /tmp/input.pfit4
 phase sqr 3 \* Coefficient03 \* + phase 2 \* Coefficient02 \* + 
 Coefficient01 +,type=double,units=MeV/c/deg" | 
 sddszerofind -pipe -zero=dfdth -col=phase -slopeoutput | 
-sddsexpand -pipe=in /tmp/input\_dfdtheta\_zero
+sddsexpand -pipe=in /tmp/input_dfdtheta_zero
 
-sddsxref /tmp/input.pfit4 /tmp/input\_dfdtheta\_zero 
+sddsxref /tmp/input.pfit4 /tmp/input_dfdtheta_zero 
 -transfer=parameter,phase,phaseSlope -nowarn
 
-rm /tmp/input\_dfdtheta\_zero
+rm /tmp/input_dfdtheta_zero
 
 ```
 
@@ -1099,7 +1099,7 @@ and the follow-up `sddscontour` command failed with:
 
 ```
 
-sddscontour -shade sampleFile\_plot
+sddscontour -shade sampleFile_plot
 Error: Can't figure out how to turn column into 2D grid!
 
 ```
@@ -1113,7 +1113,7 @@ To use this file with `sddscontour`, specify these columns directly:
 
 ```
 
-sddscontour sampleFile\_plot -shade -xyz=ix,iy,Image
+sddscontour sampleFile_plot -shade -xyz=ix,iy,Image
 
 ```
 
@@ -1315,7 +1315,7 @@ When I try to select rows based on a numeric column, I get an error such as:
 ```
 
 Error for sddsprocess:
-Unable to select rows--selection column is not a string (SDDS\_MatchRowsOfInterest)
+Unable to select rows--selection column is not a string (SDDS_MatchRowsOfInterest)
 
 ```
 
@@ -1537,10 +1537,10 @@ I tried to generate x- and y-profiles from a 6×11 image dataset using:
 ```
 
 sddsimageprofiles -pipe=out output.sdds -profileType=x -method=integrated "-columnPrefix=data" | 
-sddsprocess -pipe=in output\_Intx "-define=col,aveDR,y 11 / 3.6e8 \*,type=double,units=mrem/hr"
+sddsprocess -pipe=in output_Intx "-define=col,aveDR,y 11 / 3.6e8 \*,type=double,units=mrem/hr"
 
 sddsimageprofiles -pipe=out output.sdds -profileType=y -method=integrated "-columnPrefix=data" | 
-sddsprocess -pipe=in output\_Inty "-define=col,aveDR,x 6 / 3.6e8 \*,type=double,units=mrem/hr"
+sddsprocess -pipe=in output_Inty "-define=col,aveDR,x 6 / 3.6e8 \*,type=double,units=mrem/hr"
 
 ```
 
@@ -1628,10 +1628,10 @@ For example, given several images converted with `tiff2sdds`:
 
 ```
 
-beforeVC\_2\_frame02.sdds
-beforeVC\_3\_frame08.sdds
-beforeVC\_4\_frame07.sdds
-beforeVC\_5\_frame15.sdds
+beforeVC_2_frame02.sdds
+beforeVC_3_frame08.sdds
+beforeVC_4_frame07.sdds
+beforeVC_5_frame15.sdds
 
 ```
 
