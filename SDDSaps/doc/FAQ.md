@@ -48,6 +48,13 @@ Use the table of contents below to jump to a specific topic.
 42. [How can I merge selected columns from multiple SDDS files into a single file in Tcl?](#faq42)
 43. [How can I stagger plots from multiple files in `sddsplot` so they don’t overlap?](#faq43)
 44. [How can I collect and average a column across multiple SDDS files for use in contour plotting?](#faq44)
+45. [How can I convert a two-column, multi-page file into a format suitable for `sddscontour`?](#faq45)
+46. [Why does `sddsimageprofiles` return unexpected results (all points or a single point) instead of an integrated profile?](#faq46)
+47. [How can I flip an `sddscontour` plot about an axis to create a mirror image?](#faq47)
+48. [Why does `sddscontour` require both `-col` and `-shade` to work when plotting irregularly spaced data?](#faq48)
+49. [How can I sum multiple image files converted with `tiff2sdds` into a single SDDS file?](#faq49)
+50. [How can I convert an epoch `Time` column into conventional human-readable time in `sddsplot`?](#faq50)
+51. [How can I format numeric parameter values in `sddsplot` annotations to show a fixed number of digits?](#faq51)
 
 ---
 
@@ -1471,5 +1478,244 @@ Explanation:
 * **`sddsconvert -ascii`** creates a human-readable SDDS file.
 
 The resulting file will contain the computed `deqSum` and `deqAve` columns, which can then be used for contour plotting or further analysis.
+
+---
+
+## <a id="faq45"></a>How can I convert a two-column, multi-page file into a format suitable for `sddscontour`?
+
+I have a file with two columns (e.g., `tc` and `SigConvolve`) and multiple pages. It plots correctly with `sddsplot` using `-split=pages` and `-stagger`, but how can I make it work with `sddscontour`?
+
+**Example command that worked with `sddsplot`:**
+
+```bash
+sddsplot -graph=line -thick=2 input.smth2 \
+  -col=tc,SigConvolve -split=pages \
+  -stagger=yinc=-0.04,xinc=-102.30
+````
+
+### Answer
+
+`sddscontour` requires three quantities: an **x column**, a **y column** (or page index), and a **z column** (the data values). A simple two-column file with multiple pages cannot be used directly. To make it compatible:
+
+1. Use `sddsprocess` to add a page index column:
+
+   ```bash
+   sddsprocess input.smth2 -pipe=out \
+     -define=column,Page,i_page,type=long | \
+   sddsconvert -pipe=out input_withPage.sdds
+   ```
+
+2. Run `sddscontour`, specifying the independent variable, page index, and data column:
+
+   ```bash
+   sddscontour input_withPage.sdds -shade \
+     -xyz=tc,Page,SigConvolve
+   ```
+
+This treats `tc` as the horizontal axis, `Page` as the vertical axis (replacing the staggered pages), and `SigConvolve` as the plotted intensity.
+
+If you want a waterfall-like appearance, use the `-waterfall` option:
+
+```bash
+sddscontour input_withPage.sdds -shade \
+  -waterfall=independentColumn=tc,colorColumn=SigConvolve,parameter=Page
+```
+
+This produces a stacked contour visualization similar to `sddsplot -stagger`.
+
+---
+
+## <a id="faq46"></a>Why does `sddsimageprofiles` return unexpected results (all points or a single point) instead of an integrated profile?
+
+I tried to generate x- and y-profiles from a 6×11 image dataset using:
+
+```
+
+sddsimageprofiles -pipe=out output.sdds -profileType=x -method=integrated "-columnPrefix=data" |&#x20;
+sddsprocess -pipe=in output\_Intx "-define=col,aveDR,y 11 / 3.6e8 \*,type=double,units=mrem/hr"
+
+sddsimageprofiles -pipe=out output.sdds -profileType=y -method=integrated "-columnPrefix=data" |&#x20;
+sddsprocess -pipe=in output\_Inty "-define=col,aveDR,x 6 / 3.6e8 \*,type=double,units=mrem/hr"
+
+```
+
+but instead of getting a true integrated profile, the first command produced all 66 points in x, and the second produced only a single point in y.
+
+### Answer
+
+`sddsimageprofiles` requires its input to be in a tabular "image" format with columns named:
+
+```
+
+Index, Data1, Data2, Data3, ...
+
+````
+
+If the input file does not already have this structure, the program cannot correctly interpret rows and columns, leading to unexpected results (such as returning every pixel or collapsing to a single point).  
+
+To fix this, first run the file through `sddsimageconvert`:
+
+```bash
+sddsimageconvert output.sdds -pipe=out | \
+  sddsimageprofiles -pipe -profileType=x -method=integrated "-columnPrefix=data" | \
+  sddsprocess -pipe=in output_Intx "-define=col,aveDR,y 11 / 3.6e8 *,type=double,units=mrem/hr"
+````
+
+This ensures the data is reshaped into the expected format so `sddsimageprofiles` can compute correct x- and y-profiles.
+
+---
+
+## <a id="faq47"></a>How can I flip an `sddscontour` plot about an axis to create a mirror image?
+
+For example, I want to mirror the plot horizontally or vertically without modifying the underlying data.
+
+### Answer
+
+`sddscontour` provides built-in options for flipping the plot:
+
+* `-xflip` — reverses the horizontal axis.  
+* `-yflip` — reverses the vertical axis.  
+
+Example:
+
+```bash
+sddscontour input.sdds -shade -yflip
+````
+
+will produce a vertical mirror image.
+
+If instead you want to create a new SDDS file with reversed data (rather than just flipping the display), you can preprocess the file using `sddsprocess`. For example:
+
+```bash
+sddsprocess input.sdds output.sdds \
+  "-define=column,Xrev,n_rows 1 - i_row - &X ["
+```
+
+where `X` is the original x-column and `Xrev` is the reversed column.
+This creates a physically mirrored dataset that can then be plotted normally.
+
+---
+
+## <a id="faq48"></a>Why does `sddscontour` require both `-col` and `-shade` to work when plotting irregularly spaced data?
+
+For example, a command such as:
+
+```
+
+sddscontour example.sdds "-col=Index,z\*" -shade
+
+```
+
+only produces a plot when both `-col` and `-shade` are specified.
+
+### Answer
+
+When plotting irregularly spaced data, `sddscontour` needs explicit instructions for both the **data columns** and the **shading method**:
+
+* The `-col` (or `-columnMatch`) option tells `sddscontour` which columns contain the independent variables and the data values.
+* The `-shade` option directs the program to create a shaded intensity map instead of a line contour. Without `-shade`, the program cannot interpolate irregular grids into a filled plot.
+
+---
+
+## <a id="faq49"></a>How can I sum multiple image files converted with `tiff2sdds` into a single SDDS file?
+
+For example, given several images converted with `tiff2sdds`:
+
+```
+
+beforeVC\_2\_frame02.sdds
+beforeVC\_3\_frame08.sdds
+beforeVC\_4\_frame07.sdds
+beforeVC\_5\_frame15.sdds
+
+````
+
+I want to add them together into a single file, such as `beforeVC.sdds`.
+
+### Answer
+
+Use `sddsimagecombine` to combine multiple SDDS image files into a single output. This program correctly handles the 2D array format (`Index` and `Line*` columns) produced by `tiff2sdds`.
+
+For example:
+
+```bash
+sddsimagecombine beforeVC_2_frame02.sdds beforeVC_3_frame08.sdds \
+  beforeVC_4_frame07.sdds beforeVC_5_frame15.sdds beforeVC.sdds -sum
+````
+
+The `-sum` option ensures that pixel values from each file are added together into the final image.
+
+If you need to switch between multi-column (`Line*`) and single-column formats, you can use:
+
+* `tiff2sdds -singleColumnMode` when creating the SDDS file, or
+* `sddsimageconvert` to convert between the two formats.
+
+---
+
+## <a id="faq50"></a>How can I convert an epoch `Time` column into conventional human-readable time in `sddsplot`?
+
+I have archived data with a `Time` column stored as seconds since Jan 1, 1970 (epoch time). When plotting with `sddsplot`, the x-axis shows large numbers like `1.6e9`. I’d like the axis to show days, hours, or minutes instead.
+
+### Answer
+
+`sddsplot` can automatically format epoch seconds into conventional time using the option:
+
+```
+
+-tick=xtime
+
+````
+
+This converts the numeric epoch values into readable labels (e.g., dates, hours, minutes) on the plot axis, adjusting dynamically with zoom level.  
+To enable this, simply keep the `Time` column as epoch seconds and add `-tick=xtime` to your plotting command.
+
+If you want a permanent human-readable column inside the SDDS file (rather than just for plotting), preprocess the file with `sddstimeconvert`. For example:
+
+```bash
+sddstimeconvert input.sdds -pipe=out \
+  -breakdown=column,Time,text=TextTime | \
+sddsprocess -pipe=in output.sdds \
+  -reedit=column,TextTime,5d5f2D
+````
+
+This creates a new column (`TextTime`) with formatted strings such as `MM/DD` or `HH:MM`, which can then be plotted directly.
+
+---
+
+## <a id="faq51"></a>How can I format numeric parameter values in `sddsplot` annotations to show a fixed number of digits?
+
+For example, using `-string=@FWHMy` places the parameter value on the plot, but I want it displayed with three significant digits. Attempts such as:
+
+```
+
+-string=@FWHMy,format=%.3e
+
+```
+
+produce errors.
+
+### Answer
+
+The `-string` option in `sddsplot` does not directly support a `format` specifier.  
+Instead, you can use the `,edit=` feature to control how the numeric text is displayed.  
+The `edit` option applies an `editstring` command, which allows truncating or reformatting the inserted value.
+
+For example:
+
+```
+
+-string=@FWHMy,edit=s?/./3fze
+
+```
+
+This command:
+
+* Searches for the decimal point (`.`).
+* Moves three characters past it.
+* Deletes all characters up to the exponent (`e`).
+
+This effectively leaves the value in scientific notation with three decimal places before the `e`.
+
+If you need more precise formatting control, you should format the parameter value in your script (e.g., with `printf` in Tcl or `format` in shell) before passing it to `sddsplot`. Then insert the pre-formatted string using `-string="text"`.
 
 ---
