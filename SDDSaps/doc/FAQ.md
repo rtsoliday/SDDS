@@ -186,7 +186,7 @@ echo $SHELL
 
 ### Answer
 
-When using the `-legend` option in `sddsplot`, the legend label can be modified with the `editcommand` field. The `editcommand` applies string-editing instructions that allow removal or replacement of portions of the original label. This is useful when the original data name is long or contains prefixes that are not needed in the display.
+When using the `-legend` option in `sddsplot`, the legend label can be modified with the `editCommand` field. The `editCommand` applies string-editing instructions that allow removal or replacement of portions of the original label. This is useful when the original data name is long or contains prefixes that are not needed in the display.
 
 For example, if the column or parameter name is:
 
@@ -202,12 +202,12 @@ s38*p?.y
 
 to appear in the legend, you can apply an editing command.
 
-The editing commands are those accepted by the `editstring` program, which is also available separately. Running `editstring` from the command line will print a usage message describing the available operations. These same editing commands are used inside `sddsplot` when supplied to the `editcommand` field.
+The editing commands are those accepted by the `editstring` program, which is also available separately. Running `editstring` from the command line will print a usage message describing the available operations. These same editing commands are used inside `sddsplot` when supplied to the `editCommand` field.
 
 A simplified example command might look like:
 
 ```
-sddsplot datafile.sdds -column=y -legend=editcommand="%/S-DAQTBT:TurnsOnDiagTrig//"
+sddsplot datafile.sdds -column=y -legend=editCommand="%/S-DAQTBT:TurnsOnDiagTrig//"
 ```
 
 The actual substitution pattern depends on what portion of the string you want to keep or remove. Text substitutions (`%/old/new/`) and other editing operations are supported as described in the `editstring` documentation.
@@ -266,17 +266,17 @@ This ensures that derivative columns will be properly generated for both `Column
 sddsplot -graph=dot -thick=2 track-5nC.w2 \
   -split=page -separate=page \
   -col=dt,p \
-  -offset=yparameter=-@pCentral
+  -offset=yParameter=-@pCentral
 
 sddsplot -graph=dot -thick=2 track-5nC.w2 \
   -split=page -separate=page \
   -col=dt,p \
-  -offset=yparameter=-pCentral
+  -offset=yParameter=-pCentral
 
 sddsplot -graph=dot -thick=2 track-5nC.w2 \
   -split=page -separate=page \
   -col=dt,p \
-  -offset=yparameter=-"pCentral"
+  -offset=yParameter=-"pCentral"
 ```
 
 Each attempt resulted in:
@@ -288,10 +288,10 @@ Unable to get parameter value--parameter name is unrecognized (SDDS_GetParameter
 
 ### Answer
 
-When using `-offset` with a parameter, the syntax does not accept embedded signs or quotes with the parameter name. Instead, specify the parameter name directly, and if needed, combine it with the `yinvert` option to flip the sign. For example:
+When using `-offset` with a parameter, the syntax does not accept embedded signs or quotes with the parameter name. Instead, specify the parameter name directly, and if needed, combine it with the `yInvert` option to flip the sign. For example:
 
 ```
--offset=yparameter=pCentral,yinvert
+-offset=yParameter=pCentral,yInvert
 ```
 
 This approach applies the parameter value `pCentral` as the y-offset while inverting the direction if required.
@@ -303,7 +303,7 @@ This approach applies the parameter value `pCentral` as the y-offset while inver
 I tried adding arrows to a plot with the following command:
 
 ```
-sddsplot -grap=line,thick=2 -thick=2 -filter=col,Time,1720587600.0,1720596108.0 \
+sddsplot -graph=line,thick=2 -thick=2 -filter=col,Time,1720587600.0,1720596108.0 \
 -col=Time,S-DCCT:CurrentM datafile.sdds -tick=xtime \
 -arrowSettings=scale=1.0,barblength=0.1,barbAngle=0,linetype=1,centered,cartesian,0.1,0.1,singleBarb,thick=1
 ```
@@ -1140,15 +1140,15 @@ The legend may display labels like `SomeColumn*` or device-style PV names that a
 
 ### Answer
 
-Use the `-legend=editcommand=<rule>` option in `sddsplot`.  
-The `editcommand` applies the same syntax as the `editstring` utility, which allows pattern substitution, deletion, or truncation of legend labels.
+Use the `-legend=editCommand=<rule>` option in `sddsplot`.  
+The `editCommand` applies the same syntax as the `editstring` utility, which allows pattern substitution, deletion, or truncation of legend labels.
 
 For example:
 
 ```
 
 sddsplot inputFile.sdds -col=TimeOfDay,SomeColumn\* 
--legend=editcommand="%/SomeColumn//"
+-legend=editCommand="%/SomeColumn//"
 
 ```
 
@@ -1169,7 +1169,7 @@ sddscontour input.sdds -shade
 
 ### Answer
 
-`sddscontour` supports axis flipping with the `-xflip` and `-yflip` options.  
+`sddscontour` supports axis flipping with the `-xflip` and `-yflip` options.
 
 * Use `-xflip` to reverse the horizontal axis.  
 * Use `-yflip` to reverse the vertical axis.  
@@ -1182,7 +1182,7 @@ sddscontour input.sdds -shade -yflip
 
 ```
 
-will mirror the image vertically.  
+will mirror the image vertically.
 
 If you need to rotate the image instead, use the `-transpose` option (once for 90° rotation, twice for 180°, etc.). Combining transpose with `-xflip` or `-yflip` provides full control over the orientation.
 
@@ -1804,8 +1804,8 @@ A first attempt such as:
 
 ```
 
-sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2 
--par=z,Tmelt -graph=ybar
+sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2 \\
+  -par=z,Tmelt -graph=ybar
 
 ```
 
@@ -1817,9 +1817,9 @@ Use the `-drawLine` option with the `y0parameter` and `y1parameter` keywords to 
 
 ```
 
-sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2 
--drawLine=p0value=0,p1value=1,y0parameter=Tmelt,y1parameter=Tmelt 
-"-ylabel=T\$bmax\$n (K)"
+sddsplot input.sdds -col=z,Tmx -graph=sym,fill,scale=2 \\
+  -drawLine=p0value=0,p1value=1,y0parameter=Tmelt,y1parameter=Tmelt \\
+  "-ylabel=T\$bmax\$n (K)"
 
 ```
 
@@ -1833,10 +1833,10 @@ I want to construct a file that I can plot with `sddscontour` using parameters `
 
 ```
 
-sddsprocess RadDoseRate.sdds RadDoseRate.sdds.1 
-"-define=col,data,DR 1 \*,type=double,units=mrem/hr" 
--format=par,Variable1Name,symbol=x 
--format=par,Variable2Name,symbol=y
+sddsprocess RadDoseRate.sdds RadDoseRate.sdds.1 \\
+  "-define=col,data,DR 1 \*,type=double,units=mrem/hr" \\
+  -format=par,Variable1Name,symbol=x \\
+  -format=par,Variable2Name,symbol=y
 
 ```
 
@@ -1848,9 +1848,9 @@ In **sddsprocess**, the `-define` option is for creating numeric parameters, whi
 
 ```
 
-sddsprocess input.sdds output.sdds 
--print=par,Variable1Name,x 
--print=par,Variable2Name,y
+sddsprocess input.sdds output.sdds \\
+  -print=par,Variable1Name,x \\
+  -print=par,Variable2Name,y
 
 ```
 
