@@ -60,7 +60,7 @@ make
 
 ## Updating the FAQ
 
-- The FAQ is stored in `README.md`.
+- The FAQ is stored in `FAQ.md`.
 - A numbered table of contents at the top links to each question using anchors like `#faq1`.
 - To add a new entry:
   - Append a new item to the table of contents with the next number and a link to `#faqN` containing the question text.
