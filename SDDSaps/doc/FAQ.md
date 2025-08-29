@@ -45,6 +45,9 @@ Use the table of contents below to jump to a specific topic.
 39. [How can I copy all parameters from one SDDS file into another?](#faq39)
 40. [How can I select a specific row in `sddsprocess` when the match column is numeric instead of string?](#faq40)
 41. [How can I create a waterfall plot using `sddsplot`?](#faq41)
+42. [How can I merge selected columns from multiple SDDS files into a single file in Tcl?](#faq42)
+43. [How can I stagger plots from multiple files in `sddsplot` so they don’t overlap?](#faq43)
+44. [How can I collect and average a column across multiple SDDS files for use in contour plotting?](#faq44)
 
 ---
 
@@ -1359,5 +1362,114 @@ sddsplot input.table
 * `datanames` ensures that the stagger increments are applied separately for each plotted column.
 
 If you need separate groups of plots, combine this with `-split` as appropriate (e.g., `-split=page` or `-split=columnBin=<colname>`).
+
+---
+
+## <a id="faq42"></a>How can I merge selected columns from multiple SDDS files into a single file in Tcl?
+
+I want to take a few specific columns from many files and combine them into one output file that contains only those columns merged across all input files. Running `sddscombine` inside a Tcl `foreach` loop didn’t work as expected.
+
+For example, the failing approach looked like:
+
+```
+
+foreach fil \$filList {
+exec sddscombine \$fil output.sdds -retain=col,Xcol,Ycol,SomeData&#x20;
+-overwrite -merge
+}
+
+```
+
+but this overwrote the output file each time instead of merging.
+
+### Answer
+
+In Tcl, wildcards and lists need to be expanded before calling `sddscombine`.  
+Instead of looping over files, use `glob` and `eval` to pass the full expanded list of filenames as arguments in a single command:
+
+```
+
+set filList \[lsort \[glob input\*.proc]]
+
+eval exec sddscombine \$filList merged.sdds&#x20;
+-retain=col,Xcol,Ycol,SomeData -overwrite -merge
+
+```
+
+* `glob` finds all files that match the pattern.
+* `lsort` ensures consistent ordering.
+* `eval` expands the list into individual arguments so `sddscombine` sees them as multiple files.
+
+This way, all files are combined at once, keeping only the specified columns.
+
+---
+
+## <a id="faq43"></a>How can I stagger plots from multiple files in `sddsplot` so they don’t overlap?
+
+I want to plot several files together and offset them like a mountain range. Using commands such as:
+
+```
+
+sddsplot -graph=line,vary,thick=2 -thick=2&#x20;
+-factor=yMultiplier=1e3&#x20;
+-stagger=xIncrement=50,yIncrement=0.0025,files&#x20;
+-col=tns,SignalInv file1.proc&#x20;
+-col=tns,SignalInv file2.proc&#x20;
+-col=tns,SignalInv file3.proc
+
+```
+
+just puts the plots on top of each other.
+
+### Answer
+
+When using `-stagger` with the `files` keyword, all the files must be listed under a single `-col` option. For example:
+
+```
+
+sddsplot -graph=line,vary,thick=2 -thick=2&#x20;
+-factor=yMultiplier=1e3&#x20;
+-stagger=xIncrement=50,yIncrement=0.0025,files&#x20;
+-col=tns,SignalInv file1.proc file2.proc file3.proc
+
+```
+
+This way, `sddsplot` knows to apply the stagger increments per file rather than per column.  
+If you instead want the staggering applied to each column in a single file, use the `datanames` keyword:
+
+```
+
+sddsplot datafile.sdds -stagger=yIncrement=0.25,datanames -col=Index,Signal\*
+
+```
+
+---
+
+## <a id="faq44"></a>How can I collect and average a column across multiple SDDS files for use in contour plotting?
+
+I have a set of files named `MTUPLE.sdds` in different directories.  
+I want to extract values from the column `deq` only where `volname` matches a given string, then compute the sum and average across all files, and save the result into a single SDDS file for later use with `sddscontour`.
+
+### Answer
+
+You can use a pipeline of SDDS tools:
+
+```bash
+sddscombine file1.sdds file2.sdds ... -pipe=out | \
+  sddsprocess -pipe -match=column,volname=<Pattern> | \
+  sddsprocess -pipe -process=deq,sum,deqSum -process=deq,average,deqAve | \
+  sddscollapse -pipe | \
+  sddsconvert -pipe /tmp/output.sdds -ascii
+````
+
+Explanation:
+
+* **`sddscombine`** merges pages from multiple input files.
+* **`sddsprocess -match=column,volname=<Pattern>`** filters rows by matching the `volname` column (e.g., `bxTsEMz2`).
+* **`sddsprocess -process=deq,sum,deqSum -process=deq,average,deqAve`** computes the sum and average of the `deq` column.
+* **`sddscollapse`** collapses multiple pages into a single table for easier plotting.
+* **`sddsconvert -ascii`** creates a human-readable SDDS file.
+
+The resulting file will contain the computed `deqSum` and `deqAve` columns, which can then be used for contour plotting or further analysis.
 
 ---
