@@ -1,7 +1,8 @@
 \begin{sddsprog}{sddscontour}
   \item \textbf{description:}
-  \verb|sddscontour| makes contour and color-map plots from an SDDS data set column, or from a \verb|rpn| expression
-  in terms of the values in the columns of a data set. It supports FFT interpolation and filtering. If the
+  \verb|sddscontour| makes contour and color-map plots from an SDDS data set column, array data, or from a \verb|rpn| expression
+  in terms of the values in the columns of a data set. It supports FFT interpolation and filtering and also provides
+  \verb|-columnmatch| and waterfall modes for plotting multiple columns or pages. If the
   data set contains more than one data page, data from successive pages is plotted on separate pages.
 
   \item \textbf{examples:}
@@ -10,17 +11,17 @@
   \begin{verbatim}
 sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 \
   -zEquation="x x * y y * + 4 * pi * sin"
-sddscontour example.sdds -shade example.sdds -equalAspect
+sddscontour example.sdds -shade -equalAspect
   \end{verbatim}
   \item \textbf{synopsis:}
   \begin{verbatim}
-sddscontour SDDSfilename switches
+sddscontour [-pipe[=input][,output]] [<inputfile>] [options]
   \end{verbatim}
   \item \textbf{switches:}
     \begin{itemize}
     \item Choice of what to plot and data source:
 \begin{flushleft}{\tt
-[{ -quantity={\em columnName} | -equation={\em rpnExpression} |
+[{ -quantity={\em columnName} | -equation={\em rpnExpression}[,algebraic] |
   -columnmatch={\em indepColumnName},{\em matchingExpression}} |
  -waterfall=parameter=<parameter>,independentColumn=<xColumn>,
              colorColumn=<colorColumn>[,scroll=vertical|horizontal]]
@@ -31,7 +32,8 @@ sddscontour SDDSfilename switches
         \item \verb|quantity| --- Specifies the name of the column to make a contour or color map of.
         \item \verb|equation| --- Specifies a \verb|rpn| expression to make a contour or color map of.
         The expression may refer to the values in the columns by the appropriate column name, and may
-        also refer to the variable values by name.
+        also refer to the variable values by name.  Adding \verb|algebraic| allows the
+        expression to be given in standard algebraic form instead of RPN.
         \item \verb|columnmatch| --- Specifies plotting of all columns matching {\em matchingExpression}
         as a function of the column {\em indepColumnName}.  Each matching column is displayed as a horizontal
         color bar.
@@ -72,15 +74,17 @@ Use \verb|v1v2preferred| to force the first method to be used when both paramete
     \item \verb|rpn| control:
 \begin{flushleft}{\tt
 [-rpndefinitionsfiles={\em filename}[,{\em filename}...]]
-[-rpnexpressions={\em setupExpression}[,{\em setupExpression}...]]
-[-rpntransform={\em expression}]
+[-rpnexpressions={\em setupExpression}[,{\em setupExpression}...][,algebraic]]
+[-rpntransform={\em expression}[,algebraic]]
 }\end{flushleft}
         \begin{itemize}
         \item \verb|rpndefinitionsfiles| --- Specifies the names of files containing \verb|rpn| expressions
         to be executed before any other processing takes place.
         \item \verb|rpnexpressions| --- Specifies \verb|rpn| expressions to be executed before any other processing
-         takes place, immediately after any definitions files.
+         takes place, immediately after any definitions files.  Adding \verb|algebraic| treats the
+         expressions as standard algebraic formulas.
         \item \verb|rpntransform| --- Specifies an \verb|rpn| expression applied to each data value after it is read.
+         Use \verb|algebraic| to supply the transform in algebraic form.
         \end{itemize}
     \item Data range control:
 \begin{flushleft}{\tt
@@ -102,10 +106,10 @@ Use \verb|v1v2preferred| to force the first method to be used when both paramete
         indicated {\em number} of shades mapped onto the range from {\em min} to {\em max}.  If {\em min}
         and {\em max} are not given, they are taken to be equal to the minimum and maximum data values.
         \item \verb|contours| --- Specifies that contour lines should be drawn, with the
-        indicated {\em number} of lines for  the range from {\em min} to {\em max}.  If {\em min}
+        indicated {\em number} of lines for the range from {\em min} to {\em max}.  If {\em min}
         and {\em max} are not given, they are taken to be equal to the minimum and maximum data values.
-        \item \verb|labelcontours| --- Specifies that every {\em interval}$ {th}$ contour line, starting with
-        the {\em offset}$ {th}$ line, should be labeled with the contour value.
+        \item \verb|labelcontours| --- Specifies that every {\em interval}$^{th}$ contour line, starting with
+        the {\em offset}$^{th}$ line, should be labeled with the contour value.
         \item \verb|levellist| --- Gives an explicit comma-separated list of contour or shade levels to use.
         \item \verb|limitlevels| --- Restricts contour or shade levels to the specified range.
         \item \verb|mapshade| --- Maps the shades from hue {\em hue0} to {\em hue1} instead of the default rainbow.
@@ -132,17 +136,18 @@ Use \verb|v1v2preferred| to force the first method to be used when both paramete
 \begin{flushleft}{\tt
 [-xlabel={\em string|@<parameter-name>[,scale=<value>][,edit=<string>]}]
 [-ylabel={\em string|@<parameter-name>[,scale=<value>][,edit=<string>]}]
-[-title={\em string|@<parameter-name>|file[,edit=<string>]}]
-[-topline={\em string|@<parameter-name>|file[,edit=<string>]}]
+[-title={\em string|@<parameter-name>|filename[,edit=<string>]}]
+[-topline={\em string|@<parameter-name>|filename[,edit=<string>][,format=<string>]}]
 [-toptitle] [-nolabels] [-noscales] [-noborder] [-datestamp]
 [-fixfontsize[=all=.02][,legend=.015][,<x|y>xlabel=<value>][,<x|y>ticks=<value>][,title=<value>][,topline=<value>]]
 }\end{flushleft}
         \begin{itemize}
         \item \verb|xlabel|, \verb|ylabel|, \verb|title|, \verb|topline| --- These specify strings to be placed
                 in the various label locations on the plot. If @<parameter-name> is provided, the value of the
-                given parameter will be printed; If {\em -topline=file[,edit=<string>]} or
-                {\em -title=file[,edit=<string>]} option is provided, then the input file name or edited file
-                name (if edit command is also provided) will be printed to the topline or title.
+                given parameter will be printed.  If {\em -topline=filename[,edit=<string>][,format=<string>]} or
+                {\em -title=filename[,edit=<string>]} option is provided, then the input file name or edited file
+                name (if edit command is also provided) will be printed to the topline or title.  The
+                \verb|format| qualifier allows a printf-style format for numeric parameter values in the topline.
         \item \verb|toptitle| --- Requests that the title label be placed at the top of the plot, rather than
                 at the bottom.
         \item \verb|nolabels| --- Requests that no labels be placed on the plot.
@@ -151,7 +156,7 @@ Use \verb|v1v2preferred| to force the first method to be used when both paramete
         \item \verb|datestamp| --- Requests that the date and time be placed on the plot.
         \item \verb|fixfontsize| --- Disables automatic font scaling and sets the font sizes explicitly.
         \end{itemize}
-    \item Plot tick labeling: (only valid for -columnmatch plot)
+    \item Plot tick labeling (only valid for -columnmatch plots):
 \begin{flushleft}{\tt
 [-xrange=minimum={\em value}|@{\em parameterName},maximum={\em value}|@{\em parameterName}]
 [-yrange=minimum={\em value}|@{\em parameterName},maximum={\em value}|@{\em parameterName}]
@@ -165,8 +170,8 @@ Use \verb|v1v2preferred| to force the first method to be used when both paramete
                 If \verb|-xrange| is provided, the independent column will be ignored.
         \item \verb|yrange| --- Specifies the minimum and maximum value of the y axis. The value can be provided or obtained from parameters.
                 If \verb|-yrange| is provided, the y tick labels will be numerically labeled with the provided range.
-        \item \verb|xaxis| --- Specifies scale and offset for x-axis tick labels, with values or parameters.
-        \item \verb|yaxis| --- Specifies scale and offset for y-axis tick labels, with values or parameters.
+        \item \verb|xaxis| --- Sets scale and offset for x-axis tick labels using explicit values or parameter references. Labels are computed as \verb|index * scale + offset|.
+        \item \verb|yaxis| --- Sets scale and offset for y-axis tick labels using explicit values or parameter references. Labels are computed as \verb|index * scale + offset|.
         \item \verb|ystrings| --- Controls the y tick labels, allowing optional editing, sparsity, and scaling.
         \item \verb|yeditstrings| --- Provides an edit command for y tick labels; equivalent to using \verb|edit| with \verb|-ystrings|.
         \end{itemize}
@@ -232,7 +237,8 @@ columns with contour without independent column. If use sddsprocess to create x 
 [-drawline=\{x0value={\em value} | p0value={\em value} | x0parameter={\em name} | p0parameter={\em name}\},
             \{x1value={\em value} | p1value={\em value} | x1parameter={\em name} | p1parameter={\em name}\},
             \{y0value={\em value} | q0value={\em value} | y0parameter={\em name} | q0parameter={\em name}\},
-            \{y1value={\em value} | q1value={\em value} | y1parameter={\em name} | q1parameter={\em name}\}]
+            \{y1value={\em value} | q1value={\em value} | y1parameter={\em name} | q1parameter={\em name}\},
+            [,linetype={\em integer}][,thickness={\em integer}][,clip]]
 }\end{flushleft}
         \begin{itemize}
         \item \verb|scales| --- Specifies the extent of the plot region.
@@ -252,7 +258,8 @@ columns with contour without independent column. If use sddsprocess to create x 
         \item \verb|symbols| --- Plots symbols from {\em filename} using columns {\em xColumn} and {\em yColumn}.
         \item \verb|drawline| --- Requests drawing of lines on the plot, using any combination of real coordinate values
           or plot-space values, either specified as literal values or drawn from parameters in the data file.
-          Suitable for multi-page files.
+          Optional qualifiers \verb|linetype|, \verb|thickness|, and \verb|clip| control the appearance and clipping of
+          the line. Suitable for multi-page files.
         \end{itemize}
     \item Miscellaneous:
 \begin{flushleft}{\tt
