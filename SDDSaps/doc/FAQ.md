@@ -14,6 +14,7 @@ Use the table of contents below to jump to a specific topic.
 * [1.5 How can I rename a column in an SDDS file?](#faq36)
 * [1.6 How can I copy all parameters from one SDDS file into another?](#faq39)
 * [1.7 How can I delete specific pages from an SDDS file?](#faq53)
+* [1.8 How can I split a large SDDS file into smaller files?](#faq66)
 
 ---
 
@@ -27,6 +28,9 @@ Use the table of contents below to jump to a specific topic.
 * [2.6 How can I convert a tabular image file into a single-column file for contour plotting?](#faq25)
 * [2.7 How can I convert color images (PNG, JPEG, etc.) into SDDS format?](#faq60)
 * [2.8 Why does a wildcard `sddscombine` command fail in Tcl but work in the shell?](#faq28)
+* [2.9 How can I export an SDDS file to CSV or Excel format?](#faq67)
+* [2.10 How can I create or read compressed SDDS files?](#faq68)
+* [2.11 How can I convert an SDDS file between ASCII and binary formats?](#faq69)
 
 ---
 
@@ -89,6 +93,8 @@ Use the table of contents below to jump to a specific topic.
 * [6.13 How can I copy a single column value into a parameter of another file?](#faq23)
 * [6.14 How can I merge selected columns from multiple SDDS files in Tcl?](#faq42)
 * [6.15 How can I add symbols like `x` and `y` to parameters with `sddsprocess`?](#faq56)
+* [6.16 How can I change the units of a column (e.g., seconds to milliseconds)?](#faq65)
+* [6.17 How can I sort rows using multiple columns with different sort orders?](#faq67)
 
 ---
 
@@ -2266,5 +2272,107 @@ To fix this:
 * If you intend to integrate only negative-going signals, ensure the threshold matches the actual range of your data.
 
 In short, infinite results occur because the `topLimit` excludes all data, leaving nothing to sum.
+
+---
+
+## <a id="faq65"></a>How can I change the units of a column (e.g., seconds to milliseconds)?
+
+### Answer
+
+Use `sddsprocess` to define a new column that scales the original values and updates the units:
+
+```bash
+sddsprocess input.sdds output.sdds \
+  -define=column,newTime,Time,1000 *,units=ms
+```
+
+This multiplies the values in `Time` by 1000 and stores the result in `newTime` with units of milliseconds.
+
+---
+
+## <a id="faq66"></a>How can I split a large SDDS file into smaller files?
+
+### Answer
+
+Use **sddssplit** to divide the data by pages or rows. For example, to create a new file every 100 pages:
+
+```bash
+sddssplit bigfile.sdds -pages=100
+```
+
+To split by row count, e.g., 1,000 rows per file:
+
+```bash
+sddssplit bigfile.sdds -rows=1000
+```
+
+If you need to partition the file based on a column or parameter value, use **sddsseparate**. For example:
+
+```bash
+sddsseparate bigfile.sdds -parameter=GroupID
+```
+
+This creates one output file for each distinct `GroupID`. Use `-column` instead of `-parameter` to separate by a column value.
+
+---
+
+## <a id="faq67"></a>How can I export an SDDS file to CSV or Excel format?
+
+### Answer
+
+1. **`sdds2spreadsheet`** – Convert the entire SDDS file to a CSV or tab-delimited file:
+
+   ```bash
+   sdds2spreadsheet input.sdds output.csv -delimiter=,
+   ```
+
+   Leaving off `-delimiter` writes a tab-separated file that Excel's Text Import Wizard can read.
+
+2. **`sdds2plaindata`** – Export specific parameters or columns with more control over formatting:
+
+   ```bash
+   sdds2plaindata input.sdds output.txt \
+     -parameter=Time -column=X -column=Y -separator=,
+   ```
+
+   This writes the selected fields to a plain-text file with comma separators.
+
+---
+
+## <a id="faq67"></a>How can I sort rows using multiple columns with different sort orders?
+
+### Answer
+
+Use `sddssort` with multiple `-column` options, specifying the desired order for each column:
+
+```bash
+sddssort input.sdds output.sdds -column=colA,increasing -column=colB,decreasing
+```
+
+This command sorts rows by `colA` in ascending order, then by `colB` in descending order.
+
+---
+
+## <a id="faq68"></a>How can I create or read compressed SDDS files?
+
+Choose a compressed extension when invoking `sddsconvert`:
+```bash
+sddsconvert data.sdds data.sdds.gz       # gzip
+sddsconvert data.sdds data.sdds.xz       # LZMA
+```
+
+The extension selects the compression algorithm.
+
+---
+
+## <a id="faq69"></a>How can I convert an SDDS file between ASCII and binary formats?
+
+Use `sddsconvert` with `-ascii` or `-binary`. Example:
+```bash
+sddsconvert input.sdds output.sdds -binary   # to binary
+sddsconvert input.sdds output.sdds -ascii    # to ASCII
+```
+
+This preserves data while changing the storage format.
 
 ---
