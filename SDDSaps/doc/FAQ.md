@@ -2355,6 +2355,8 @@ This command sorts rows by `colA` in ascending order, then by `colB` in descendi
 
 ## <a id="faq68"></a>How can I create or read compressed SDDS files?
 
+### Answer
+
 Choose a compressed extension when invoking `sddsconvert`:
 ```bash
 sddsconvert data.sdds data.sdds.gz       # gzip
@@ -2366,6 +2368,8 @@ The extension selects the compression algorithm.
 ---
 
 ## <a id="faq69"></a>How can I convert an SDDS file between ASCII and binary formats?
+
+### Answer
 
 Use `sddsconvert` with `-ascii` or `-binary`. Example:
 ```bash
