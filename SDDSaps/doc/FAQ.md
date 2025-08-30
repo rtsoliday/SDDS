@@ -4,70 +4,107 @@ This document answers common questions about SDDS tools.
 Use the table of contents below to jump to a specific topic.
 
 ## Table of Contents
-1. [Why doesn't my `sddsxref` command add the column I requested when I use both `-take` and `-leave`?](#faq1)
-2. [How can I trim an image file to remove noisy regions and improve profile analysis, especially for the y-profile?](#faq2)
-3. [What is the difference between using `-method=integrated` and `-method=centerline` in `sddsimageprofiles`?](#faq3)
-4. [How can I print the input filename on a plot when using `sddscontour`, similar to the `-filename` option in `sddsplot`?](#faq4)
-5. [Why do I get a "no match" error when running `sddsplot` with wildcards in column names?](#faq5)
-6. [How can I modify the text shown in a legend when using `-legend` in `sddsplot`?](#faq6)
-7. [Why doesn't this `sddsderiv` command generate the derivative column for `ColumnB`?](#faq7)
-8. [How can I offset the y-axis in `sddsplot` using a parameter value from an SDDS file?](#faq8)
-9. [How can I add arrows to a plot using `sddsplot` with `-arrowSettings`?](#faq9)
-10. [How do I fix the `invalid -columnData syntax` error when using `csv2sdds`?](#faq10)
-11. [Why does `csv2sdds` produce zeros for a numeric column when converting from CSV?](#faq11)
-12. [How can I show a variable with an overline and subscript in `sddsplot`?](#faq12)
-13. [How can I use a filename that begins with a minus sign (`-`) in an SDDS command?](#faq13)
-14. [How can I specify a fixed maximum z-value in `sddscontour` instead of using autoscaling?](#faq14)
-15. [Why does `sddsgenericfit` fail when fitting oscillatory data to a sine wave?](#faq15)
-16. [How can I plot specific pages from oscilloscope data and display the page number?](#faq16)
-17. [How can I embed comments directly into SDDS commands when writing scripts?](#faq17)
-18. [How can I control the number of significant digits when inserting a numeric value into the title or topline of an `sddscontour` plot?](#faq18)
-19. [Why does `sddsprocess` with `-filter=col,y,-5,200` give the warning "no rows selected for page 1" when processing `sddsimageprofiles` data?](#faq19)
-20. [Why does the second column overwrite the first when adding multiple columns with `sddsprocess`, and how can I keep both?](#faq20)
-21. [Why does `sddscontour` fail with `Can't figure out how to turn column into 2D grid` when using output from `sddsspotanalysis`?](#faq21)
-22. [How can I convert a text table of density data into SDDS format for contour plotting with specified z-value regions?](#faq22)
-23. [How can I copy a single column value from one SDDS file into a parameter of another SDDS file?](#faq23)
-24. [How can I compute the average profile from a set of profiles with shared `ypos` values?](#faq24)
-25. [How can I convert a tabular image file into a single-column file for use with contour plotting?](#faq25)
-26. [How can I create a human-readable time column when converting archived data to SDDS?](#faq26)
-27. [Why does `plaindata2sdds` misread columns after the first when converting a plain text file?](#faq27)
-28. [Why does a wildcard `sddscombine` command fail in a Tcl script but work in the shell?](#faq28)
-29. [What is the best way to convert an Excel spreadsheet to SDDS format?](#faq29)
-30. [How can I select a specific row from an `sddsimageconvert` table for plotting?](#faq30)
-31. [How can I use the `Index` column from `sddsimageconvert` output as the x-axis in `sddsimageprofiles`?](#faq31)
-32. [How can I save the zero crossing found by `sddszerofind` as a parameter in the original file?](#faq32)
-33. [Why does `sddscontour` fail with `Can't figure out how to turn column into 2D grid!` when plotting output from `sddsspotanalysis`?](#faq33)
-34. [How can I strip unwanted text from legend labels in `sddsplot`?](#faq34)
-35. [How can I flip or mirror an `sddscontour` image along an axis?](#faq35)
-36. [How can I rename a column in an SDDS file?](#faq36)
-37. [How can I create a continuous `TimeOfDay` column from archived data that spans multiple days?](#faq37)
-38. [How can I use a parameter value to define a plot filter range in `sddsplot`?](#faq38)
-39. [How can I copy all parameters from one SDDS file into another?](#faq39)
-40. [How can I select a specific row in `sddsprocess` when the match column is numeric instead of string?](#faq40)
-41. [How can I create a waterfall plot using `sddsplot`?](#faq41)
-42. [How can I merge selected columns from multiple SDDS files into a single file in Tcl?](#faq42)
-43. [How can I stagger plots from multiple files in `sddsplot` so they don’t overlap?](#faq43)
-44. [How can I collect and average a column across multiple SDDS files for use in contour plotting?](#faq44)
-45. [How can I convert a two-column, multi-page file into a format suitable for `sddscontour`?](#faq45)
-46. [Why does `sddsimageprofiles` return unexpected results (all points or a single point) instead of an integrated profile?](#faq46)
-47. [How can I flip an `sddscontour` plot about an axis to create a mirror image?](#faq47)
-48. [Why does `sddscontour` require both `-col` and `-shade` to work when plotting irregularly spaced data?](#faq48)
-49. [How can I sum multiple image files converted with `tiff2sdds` into a single SDDS file?](#faq49)
-50. [How can I convert an epoch `Time` column into conventional human-readable time in `sddsplot`?](#faq50)
-51. [How can I format numeric parameter values in `sddsplot` annotations to show a fixed number of digits?](#faq51)
-52. [How can I compute a running cumulative sum of a column across rows in `sddsprocess`?](#faq52)
-53. [How can I delete specific pages from an SDDS file?](#faq53)
-54. [How can I pass parameter values (like min and max) from one SDDS command into another?](#faq54)
-55. [How can I plot a horizontal line at a parameter value in `sddsplot`?](#faq55)
-56. [How can I add symbols like `x` and `y` to parameters in an SDDS file using `sddsprocess`?](#faq56)
-57. [How can I convolve each page of a multi-page SDDS file with a single impulse response waveform using `sddsconvolve`?](#faq57)
-58. [How can I restrict the vertical range displayed in an `sddscontour` plot?](#faq58)
-59. [How can I generate a bare image (no borders, scales, or text) from `sddscontour` with exact pixel dimensions matching the digitizer (e.g., 640×480)?](#faq59)
-60. [How can I convert color images (PNG, JPEG, etc.) into SDDS format for use with `sddscontour`?](#faq60)
-61. [How can I compute the average of multiple measurement columns for rows matching a specific parameter value?](#faq61)
-62. [How can I display the month, day, and year in a legend instead of using the full `TimeStamp`?](#faq62)
-63. [How should I structure an `sddsplot` command with multiple `-col` and `-leg` options to avoid warnings about missing data or mismatched units?](#faq63)
-64. [Why does `sddsprocess` return infinite values when using `-proc=Signal,sum,...,topLimit=-0.05`?](#faq64)
+
+### 1. General
+
+* [1.1 Why doesn’t my `sddsxref` command add the column I requested when I use both `-take` and `-leave`?](#faq1)
+* [1.2 How can I use a filename that begins with a minus sign (`-`) in an SDDS command?](#faq13)
+* [1.3 How can I embed comments directly into SDDS commands when writing scripts?](#faq17)
+* [1.4 How can I control the number of significant digits in a `sddscontour` topline or title?](#faq18)
+* [1.5 How can I rename a column in an SDDS file?](#faq36)
+* [1.6 How can I copy all parameters from one SDDS file into another?](#faq39)
+* [1.7 How can I delete specific pages from an SDDS file?](#faq53)
+
+---
+
+### 2. File Conversion & Input
+
+* [2.1 Why does `csv2sdds` give `invalid -columnData syntax`?](#faq10)
+* [2.2 Why does `csv2sdds` produce zeros for a numeric column?](#faq11)
+* [2.3 What is the best way to convert an Excel spreadsheet to SDDS format?](#faq29)
+* [2.4 Why does `plaindata2sdds` misread columns after the first?](#faq27)
+* [2.5 How can I convert a text table of density data into SDDS format for contour plotting?](#faq22)
+* [2.6 How can I convert a tabular image file into a single-column file for contour plotting?](#faq25)
+* [2.7 How can I convert color images (PNG, JPEG, etc.) into SDDS format?](#faq60)
+* [2.8 Why does a wildcard `sddscombine` command fail in Tcl but work in the shell?](#faq28)
+
+---
+
+### 3. Plotting with `sddsplot`
+
+* [3.1 Why do I get a "no match" error when using wildcards in column names?](#faq5)
+* [3.2 How can I modify the text shown in a legend?](#faq6)
+* [3.3 How can I offset the y-axis using a parameter value?](#faq8)
+* [3.4 How can I add arrows with `-arrowSettings`?](#faq9)
+* [3.5 How can I show a variable with an overline and subscript?](#faq12)
+* [3.6 How can I strip unwanted text from legend labels?](#faq34)
+* [3.7 How can I create a waterfall plot?](#faq41)
+* [3.8 How can I stagger plots from multiple files so they don’t overlap?](#faq43)
+* [3.9 How can I plot a horizontal line at a parameter value?](#faq55)
+* [3.10 How can I display the month/day/year in a legend instead of full `TimeStamp`?](#faq62)
+* [3.11 How should I structure commands with multiple `-col` and `-leg` to avoid warnings?](#faq63)
+* [3.12 How can I use a parameter value to define a plot filter range?](#faq38)
+
+---
+
+### 4. Plotting with `sddscontour`
+
+* [4.1 How can I print the input filename on a plot?](#faq4)
+* [4.2 How can I specify a fixed maximum z-value instead of autoscaling?](#faq14)
+* [4.3 Why does it fail with `Can't figure out how to turn column into 2D grid` when using `sddsspotanalysis`?](#faq21)
+* [4.4 Why does it fail with `Can't figure out how to turn column into 2D grid!` when plotting output from `sddsspotanalysis`?](#faq33)
+* [4.5 Why does it fail with irregularly spaced data unless I use both `-col` and `-shade`?](#faq48)
+* [4.6 How can I flip or mirror an image along an axis?](#faq35)
+* [4.7 How can I flip a plot about an axis to create a mirror image?](#faq47)
+* [4.8 How can I restrict the vertical range displayed?](#faq58)
+* [4.9 How can I generate a bare image (no borders, scales, text) with exact pixel dimensions?](#faq59)
+
+---
+
+### 5. Image Tools (`sddsimage*`, `tiff2sdds`)
+
+* [5.1 How can I trim an image file to remove noisy regions?](#faq2)
+* [5.2 What’s the difference between `-method=integrated` and `-method=centerline` in `sddsimageprofiles`?](#faq3)
+* [5.3 Why does `sddsimageprofiles` return unexpected results?](#faq46)
+* [5.4 How can I use the `Index` column from `sddsimageconvert` output as x-axis?](#faq31)
+* [5.5 How can I select a specific row from an `sddsimageconvert` table?](#faq30)
+* [5.6 How can I sum multiple images from `tiff2sdds`?](#faq49)
+
+---
+
+### 6. Data Processing (`sddsprocess`, `sddsderiv`, `sddszerofind`, Tcl scripts)
+
+* [6.1 Why doesn’t `sddsderiv` generate the derivative column?](#faq7)
+* [6.2 Why does `sddsprocess` filtering give "no rows selected"?](#faq19)
+* [6.3 Why does the second column overwrite the first in `sddsprocess`?](#faq20)
+* [6.4 How can I compute a running cumulative sum?](#faq52)
+* [6.5 How can I select rows when the match column is numeric?](#faq40)
+* [6.6 Why does `sddsprocess` return infinite values with `topLimit`?](#faq64)
+* [6.7 How can I compute the average profile from a set of profiles?](#faq24)
+* [6.8 How can I collect and average a column across multiple files for contour plotting?](#faq44)
+* [6.9 How can I compute the average of multiple measurement columns for rows matching a parameter?](#faq61)
+* [6.10 How can I convolve each page with a waveform?](#faq57)
+* [6.11 How can I pass parameter values between commands?](#faq54)
+* [6.12 How can I save the zero crossing from `sddszerofind` as a parameter?](#faq32)
+* [6.13 How can I copy a single column value into a parameter of another file?](#faq23)
+* [6.14 How can I merge selected columns from multiple SDDS files in Tcl?](#faq42)
+* [6.15 How can I add symbols like `x` and `y` to parameters with `sddsprocess`?](#faq56)
+
+---
+
+### 7. Time & Index Handling
+
+* [7.1 How can I create a human-readable time column?](#faq26)
+* [7.2 How can I convert epoch `Time` into readable time in plots?](#faq50)
+* [7.3 How can I create a continuous `TimeOfDay` across multiple days?](#faq37)
+
+---
+
+### 8. Specialized Fitting & Oscilloscope Data
+
+* [8.1 Why does `sddsgenericfit` fail on sine wave fitting?](#faq15)
+* [8.2 How can I plot specific pages from oscilloscope data and display the page number?](#faq16)
+* [8.3 How can I convert a two-column multi-page file for `sddscontour`?](#faq45)
 
 ---
 
