@@ -60,6 +60,14 @@ Use the table of contents below to jump to a specific topic.
 54. [How can I pass parameter values (like min and max) from one SDDS command into another?](#faq54)
 55. [How can I plot a horizontal line at a parameter value in `sddsplot`?](#faq55)
 56. [How can I add symbols like `x` and `y` to parameters in an SDDS file using `sddsprocess`?](#faq56)
+57. [How can I convolve each page of a multi-page SDDS file with a single impulse response waveform using `sddsconvolve`?](#faq57)
+58. [How can I restrict the vertical range displayed in an `sddscontour` plot?](#faq58)
+59. [How can I generate a bare image (no borders, scales, or text) from `sddscontour` with exact pixel dimensions matching the digitizer (e.g., 640×480)?](#faq59)
+60. [How can I convert color images (PNG, JPEG, etc.) into SDDS format for use with `sddscontour`?](#faq60)
+61. [How can I compute the average of multiple measurement columns for rows matching a specific parameter value?](#faq61)
+62. [How can I display the month, day, and year in a legend instead of using the full `TimeStamp`?](#faq62)
+63. [How should I structure an `sddsplot` command with multiple `-col` and `-leg` options to avoid warnings about missing data or mismatched units?](#faq63)
+64. [Why does `sddsprocess` return infinite values when using `-proc=Signal,sum,...,topLimit=-0.05`?](#faq64)
 
 ---
 
@@ -1925,5 +1933,301 @@ sddsprocess input.sdds output.sdds \
 ```
 
 This creates parameters `Variable1Name` and `Variable2Name` as string values with the desired symbols. Unlike `-define`, which requires specifying type and units for numeric data, `-print` directly assigns string content to parameters.
+
+---
+
+## <a id="faq57"></a>How can I convolve each page of a multi-page SDDS file with a single impulse response waveform using `sddsconvolve`?
+
+I want to convolve each page of a file (broken into pages using `sddsbreak`) with the same impulse response waveform. However, `sddsconvolve` does not appear to operate on separate pages in this way.
+
+### Answer
+
+`sddsconvolve` requires that both input files have the **same number of pages**, since it performs the convolution page by page. If one file has multiple pages (e.g., your signal data) and the impulse response has only one page, you must create a matching number of pages in the impulse response file.
+
+You can do this with `sddscombine` by providing the same impulse file multiple times:
+
+```bash
+# Example for 10 pages
+sddscombine impulse.sdds impulse.sdds impulse.sdds impulse.sdds impulse.sdds \
+  impulse.sdds impulse.sdds impulse.sdds impulse.sdds impulse.sdds \
+  repeatedImpulse.sdds
+```
+
+Or in a shell loop:
+
+```bash
+sddscombine $(yes impulse.sdds | head -n 10) repeatedImpulse.sdds
+```
+
+This produces `repeatedImpulse.sdds` with 10 identical pages.
+Then convolve each page of the data file with the corresponding impulse page:
+
+```bash
+sddsconvolve data.sdds repeatedImpulse.sdds output.sdds
+```
+
+Each page of `data.sdds` will be convolved with the impulse waveform.
+
+---
+
+## <a id="faq58"></a>How can I restrict the vertical range displayed in an `sddscontour` plot?
+
+For example, a user attempted:
+
+```
+
+sddscontour -shades=256 -col='Index,HLine*' -thick=2 input.sdds \
+  "-Title=" "-topline=" \
+  -ystrings=edit=5d,sparse=50 -scale=0,0,50,400
+
+```
+
+This limited the tick labels, but the data still extended above and below the region of interest.  
+Using:
+
+```
+
+-yrange=minimum=50,maximum=400
+
+```
+
+changed the axis labels but did not crop the plotted data.
+
+### Answer
+
+`sddscontour` does not crop the underlying dataset with `-yrange`; it only changes how the axis is labeled. To actually restrict the displayed vertical region, you must **filter the data before plotting**. For example:
+
+```bash
+sddsprocess input.sdds -pipe=out -filter=column,Index,50,400 | \
+sddscontour -pipe -shades=256 -col='Index,HLine*' -thick=2 \
+  "-Title=" "-topline="
+```
+
+Here:
+
+* `sddsprocess -filter=column,Index,50,400` removes rows outside the desired y-range.
+* The resulting file only contains data in the range 50–400, so `sddscontour` displays just that region.
+
+If you simply want to control axis labeling without removing data, you can continue using:
+
+```bash
+-yrange=minimum=50,maximum=400
+```
+
+but note that values outside that range will still influence the contour shading.
+
+---
+
+## <a id="faq59"></a>How can I generate a bare image (no borders, scales, or text) from `sddscontour` with exact pixel dimensions matching the digitizer (e.g., 640×480)?
+
+For example, a user tried:
+
+```bash
+sddscontour -shades=gray -equalAspect -col='Index,HLine*' \
+  -noborder -topline= -title= -nocolorbar -fillscreen -noscales \
+  inputFile.sdds -dev=lpng -out=output.png
+````
+
+but the PNG opened in ImageJ showed **1093×842** pixels instead of the expected **640×480**.
+
+### Answer
+
+By default, the `-dev=png` family options in `sddscontour` use fixed device sizes (e.g., `lpng = 1093×842`, `mpng = 820×632`, etc.), not the native dimensions of the digitizer data. To obtain an image file with a **one-to-one mapping** between SDDS array dimensions and image pixels, you must select a device option that matches the digitizer.
+
+Recent versions of SDDS include special devices for this purpose:
+
+* **`-dev=lfgpng`** → produces 640×480 PNGs (for “LFG” frame grabber output).
+* **`-dev=mv200png`** → produces 512×480 PNGs (for “MV200” digitizer output).
+
+Example:
+
+```bash
+sddscontour inputFile.sdds -dev=lfgpng -noborder -title= -topline= -nocolorbar -noscales -out=output.png
+```
+
+This creates a bare 640×480 PNG with no labels, borders, or scales, exactly matching the digitizer resolution.
+
+---
+
+## <a id="faq60"></a>How can I convert color images (PNG, JPEG, etc.) into SDDS format for use with `sddscontour`?
+
+Attempts like this often give unexpected or confusing results:
+
+```bash
+convert input.png output.tiff
+tiff2sdds output.tiff output.sdds
+sddscontour output.sdds "-columnmatch=Index,Line*" -shade
+```
+
+The resulting contour plot may not match what you expect, because `tiff2sdds` does not properly convert color images to grayscale intensity.
+
+### Answer
+
+`tiff2sdds` expects grayscale or black-and-white TIFF input. When given a color image, it sums the red, green, and blue components into an intensity value. For example:
+
+* 100% black → 0
+* 100% blue → 256
+* 100% green → 256
+* 100% orange → 512
+
+This does not reflect perceived brightness, so different colors may appear with the same intensity.
+
+**To get correct results:**
+
+1. Save or convert the image to **grayscale (black-and-white)** before running `tiff2sdds`.
+   Example with ImageMagick:
+
+```bash
+convert input.png -colorspace Gray output.tiff
+tiff2sdds output.tiff output.sdds
+```
+
+2. If your data is already in an ASCII table format (e.g., BeamView `.img` with a CSV structure and header), use **`csv2sdds`** or the dedicated **`img2sdds`** tool instead of `tiff2sdds`.
+
+This ensures the resulting SDDS file represents intensity correctly and produces valid profiles and contours.
+
+---
+
+## <a id="faq61"></a>How can I compute the average of multiple measurement columns for rows matching a specific parameter value?
+
+Suppose I have an SDDS file with a column `Iset` containing values such as 40, 60, 80, 100, and 110.  
+For each `Iset`, there are 12 measurement columns (e.g., one per device). I want to compute the average value of each measurement column, but only for rows where `Iset = 100`.
+
+**Example of the original file layout:**
+
+```
+
+Iset    DiodeA   DiodeB   DiodeC   ...   DiodeL
+40      ...
+60      ...
+100     ...
+100     ...
+...
+
+````
+
+### Answer
+
+You can filter rows by the desired `Iset` value, then apply `sddsrowstats` to compute column-wise averages:
+
+```bash
+sddsprocess diodeData.sdds -pipe=out -filter=column,Iset,100,100 | \
+sddsrowstats -pipe=in output.sdds "-mean=Mean,(Diode*)"
+```
+
+This does the following:
+
+* **`sddsprocess ... -filter=column,Iset,100,100`** keeps only rows where `Iset = 100`.
+* **`sddsrowstats ... -mean=Mean,(Diode*)`** computes the mean of each measurement column matching `Diode*` and outputs them as new columns prefixed with `Mean`.
+
+If you want the averages as parameters instead of new columns, add the `-parameter` keyword:
+
+```bash
+sddsrowstats input.sdds output.sdds "-mean=Mean,(Diode*),parameter"
+```
+
+This way you do not need to transpose the data—the averages can be computed directly from the rows.
+
+---
+
+## <a id="faq62"></a>How can I display the month, day, and year in a legend instead of using the full `TimeStamp`?
+
+For example:
+
+```bash
+sddsplot -graph=line,vary,thick=2 -thick=2 \
+  -col=Time,Signal input1.sdds -legend=par=TimeStamp \
+  -col=Time,Signal input2.sdds -legend=par=TimeStamp
+```
+
+uses the `TimeStamp` parameter, but the text is too long.
+How can I shorten it to just `MM/DD/YYYY`?
+
+### Answer
+
+You can shorten the legend to display only the month, day, and year by using `-legend=par=TimeStamp` together with an edit command:
+
+```bash
+-legend=par=TimeStamp,editCommand=2D2FD
+```
+
+This reformats the `TimeStamp` parameter into a compact `MM/DD/YYYY` style legend entry.
+
+---
+
+## <a id="faq63"></a>How should I structure an `sddsplot` command with multiple `-col` and `-leg` options to avoid warnings about missing data or mismatched units?
+
+For example, a command like:
+
+```bash
+sddsplot \
+  -graph=sym,vary=type,conn=type,vary=subtype,scale=2,thickness=2 \
+  -thickness=2 -yScalesGroup=nameString \
+  -col=z,MaxdT -leg=spec="max temp rise" \
+  -col=z,TotalE -leg=spec="dep. E" \
+  -string="E"$btotal$n" =,pCoord=0.03,qCoord=1.03,scale=1.1" \
+  -string=@scraperE,pCoord=0.14,qCoord=1.03,scale=1.1 \
+  -string="J,pCoord=0.43,qCoord=1.03,scale=1.1" \
+  -col=zseg,maxT -leg=spec="GEOM defn" \
+  outputMaxT_E.sdds.totalE aaa.seg.break.maxT.collapse
+```
+
+may generate warnings such as:
+
+```
+warning: (zseg, maxT) was excluded from plot.
+warning: no datanames in request found for file outputMaxT_E.sdds.totalE
+Warning: not all y quantities have the same units
+```
+
+### Answer
+
+In `sddsplot`, each **plot request** must specify its own input file **immediately after the `-col` option** that uses it. If you place all filenames at the end of the command, `sddsplot` attempts to apply every plot request to every file, which triggers warnings about missing columns or mismatched units.
+
+The correct structure is:
+
+```bash
+sddsplot \
+  -graph=sym,vary=type,conn=type,vary=subtype,scale=2,thickness=2 \
+  -thickness=2 -yScalesGroup=nameString \
+  -col=z,MaxdT -leg=spec="max temp rise" outputMaxT_E.sdds.totalE \
+  -string="E"$btotal$n" =,pCoord=0.03,qCoord=1.03,scale=1.1" \
+  -string=@scraperE,pCoord=0.14,qCoord=1.03,scale=1.1 \
+  -string="J,pCoord=0.43,qCoord=1.03,scale=1.1" \
+  -col=z,TotalE -leg=spec="dep. E" outputMaxT_E.sdds.totalE \
+  -col=zseg,maxT -leg=spec="GEOM defn" aaa.seg.break.maxT.collapse
+```
+
+Key points:
+
+* Place each **input file** immediately after the corresponding `-col` request.
+* Use separate plot requests when legend specifications (`-leg`) differ.
+* This avoids mismatched units and prevents `sddsplot` from trying to apply column requests to files that do not contain them.
+
+---
+
+## <a id="faq64"></a>Why does `sddsprocess` return infinite values when using `-proc=Signal,sum,...,topLimit=-0.05`?
+
+**Example of failing command:**
+
+```bash
+sddsprocess input.break input.break.sum -nowarn \
+  -proc=Signal,sum,Qint,functionOf=t,topLimit=-0.05 \
+  -proc=bunchNo,first,bunchNo \
+  "-define=parameter,qL,Qint 50 / 1e9 * 8.e-10 *,type=double,units=nC"
+````
+
+### Answer
+
+The `-nowarn` option is suppressing a warning that no rows satisfy the `topLimit=-0.05` condition.
+Since all `Signal` values are above –0.05, the summation is performed on an empty set of rows, which results in **`Qint` values of infinity**.
+
+To fix this:
+
+* Remove `-nowarn` so you can see when no data passes the filter.
+* Adjust or remove the `topLimit` so that valid rows are included in the integration.
+* If you intend to integrate only negative-going signals, ensure the threshold matches the actual range of your data.
+
+In short, infinite results occur because the `topLimit` excludes all data, leaving nothing to sum.
 
 ---
