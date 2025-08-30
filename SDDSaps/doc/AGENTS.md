@@ -61,10 +61,12 @@ make
 ## Updating the FAQ
 
 - The FAQ is stored in `FAQ.md`.
-- A numbered table of contents at the top links to each question using anchors like `#faq1`.
-- To add a new entry:
-  - Append a new item to the table of contents with the next number and a link to `#faqN` containing the question text.
-  - At the end of the file, add a section using:
+- A table of contents groups questions into numbered sections (e.g., `### 1. General`).
+  - Each heading is followed by a bulleted list of questions.
+  - Items use `<section>.<index>` numbering and link to anchors like `#faqN`, where `N` increases sequentially.
+- To add a new question:
+  - Insert a bullet in the appropriate section (or create a new one) with the next `<section>.<index>` value and a link to `#faqN` containing the question text.
+  - Append a matching entry at the end of the file using:
     ```
     ## <a id="faqN"></a>Your question?
 
@@ -76,6 +78,7 @@ make
 
     ---
     ```
-  - Use the same `faqN` anchor as in the table of contents.
-- Maintain this structure for all future updates. If the FAQ format in `FAQ.md` changes, update these instructions to match.
+  - Ensure the `faqN` anchor matches the table of contents link.
+- Every question section ends with `---`.
+- Maintain this structure for all future updates. Update these instructions if the format of `FAQ.md` changes.
 
