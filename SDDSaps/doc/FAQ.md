@@ -15,6 +15,8 @@ Use the table of contents below to jump to a specific topic.
 * [1.6 How can I copy all parameters from one SDDS file into another?](#faq39)
 * [1.7 How can I delete specific pages from an SDDS file?](#faq53)
 * [1.8 How can I split a large SDDS file into smaller files?](#faq66)
+* [1.9 What’s the best way to add a column from one SDDS file to another (using sddsxref)?](#faq72)
+* [1.10 Is there a tool to interactively view or edit SDDS files (e.g. using sddseditor)?](#faq74)
 
 ---
 
@@ -31,7 +33,8 @@ Use the table of contents below to jump to a specific topic.
 * [2.9 How can I export an SDDS file to CSV or Excel format?](#faq67)
 * [2.10 How can I create or read compressed SDDS files?](#faq68)
 * [2.11 How can I convert an SDDS file between ASCII and binary formats?](#faq69)
-
+* [2.12 How can I use `sddsconvert` to remove or keep only certain columns in an SDDS file?](#faq70)
+ 
 ---
 
 ### 3. Plotting with `sddsplot`
@@ -48,6 +51,7 @@ Use the table of contents below to jump to a specific topic.
 * [3.10 How can I display the month/day/year in a legend instead of full `TimeStamp`?](#faq62)
 * [3.11 How should I structure commands with multiple `-col` and `-leg` to avoid warnings?](#faq63)
 * [3.12 How can I use a parameter value to define a plot filter range?](#faq38)
+* [3.13 How can I save a plot from sddsplot as an image or PDF file?](#faq73)
 
 ---
 
@@ -95,6 +99,7 @@ Use the table of contents below to jump to a specific topic.
 * [6.15 How can I add symbols like `x` and `y` to parameters with `sddsprocess`?](#faq56)
 * [6.16 How can I change the units of a column (e.g., seconds to milliseconds)?](#faq65)
 * [6.17 How can I sort rows using multiple columns with different sort orders?](#faq67)
+* [6.18 How do I create a new column from existing data using `sddsprocess`?](#faq71)
 
 ---
 
@@ -2378,5 +2383,97 @@ sddsconvert input.sdds output.sdds -ascii    # to ASCII
 ```
 
 This preserves data while changing the storage format.
+
+---
+
+## <a id="faq70"></a>How can I use sddsconvert to remove or keep only certain columns in an SDDS file?
+
+New SDDS users often get files with many columns but only need a subset.
+
+### Answer
+
+Use the `-retain` and `-delete` options of `sddsconvert` to filter columns or parameters:
+
+```bash
+# Keep only selected columns
+sddsconvert input.sdds output.sdds -retain=col,Column1,Column2
+
+# Remove selected columns
+sddsconvert input.sdds output.sdds -delete=col,Column1,Column2
+```
+
+Replace `col` with `par` to filter parameters instead of columns.
+
+---
+
+## <a id="faq71"></a>How do I create a new column from existing data using sddsprocess?
+
+A common beginner task is computing a new value (such as a formula or unit conversion) from existing columns. Many users aren’t sure how to do arithmetic or transformations with `sddsprocess`, or they confuse the `-define` and `-process` options.
+
+### Answer
+
+Use `sddsprocess` with the `-define=column` option to create a new column from an expression using existing data. Expressions are written in Reverse Polish Notation (RPN):
+
+```bash
+sddsprocess input.sdds output.sdds \
+  "-define=column,newCol,col1 col2 +,type=double"
+```
+
+This defines `newCol` as the sum of `col1` and `col2`. You can use other operators and functions supported by SDDS RPN.
+
+To modify an existing column in place, use `-process` instead:
+
+```bash
+sddsprocess input.sdds output.sdds \
+  "-process=column,col1,col1,1000 *"
+```
+
+This multiplies `col1` by 1000 and stores the result back in `col1`.
+
+---
+
+## <a id="faq72"></a>What’s the best way to add a column from one SDDS file to another (using sddsxref)?
+
+If two SDDS files share a common index or parameter, `sddsxref` can join them so that selected columns from the second file are appended to matching rows in the first file. This is more powerful than `sddscombine`, which simply concatenates files without matching rows.
+
+For example, to add the column `NewData` from `add.sdds` into `base.sdds` by matching the numeric column `Index`:
+
+```bash
+sddsxref base.sdds add.sdds -equate=Index -take=NewData
+```
+
+* `base.sdds` is the destination file receiving the new column.
+* `add.sdds` is the source file providing the data.
+* `-equate=Index` matches rows using the shared numeric column. Use `-match=<name>` when the key is a string column.
+* `-take=NewData` copies only that column. Omit `-take` to import all nonconflicting columns.
+
+Use `-reuse` or `-fillIn` to control how unmatched rows are handled. Reserve `sddscombine` for cases where you’re stacking files or merging pages without row-by-row matching.
+
+---
+
+## <a id="faq73"></a>How can I save a plot from sddsplot as an image or PDF file?
+
+By default, `sddsplot` displays plots interactively. To write the plot to a file, choose an output device and filename using `-device` and `-output`.
+
+```bash
+sddsplot input.sdds -col=x,y -device=png -output=plot.png
+```
+
+For a PDF, create a PostScript file and convert it:
+
+```bash
+sddsplot input.sdds -col=x,y -device=postscript -output=plot.ps
+ps2pdf plot.ps plot.pdf
+```
+
+The `-device` option selects the format (e.g., `png` or `postscript`), and `-output` directs the graphics to a file instead of the screen.
+
+---
+
+## <a id="faq74"></a>Is there a tool to interactively view or edit SDDS files (e.g. using sddseditor)?
+
+### Answer
+
+Yes. `sddseditor` offers an interactive GUI for browsing pages, examining columns and parameters, and performing modifications. It is helpful for quick data checks or manual corrections without writing command-line scripts.
 
 ---
