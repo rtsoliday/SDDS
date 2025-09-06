@@ -128,6 +128,15 @@ static int run3d(const char *filename) {
     gradient.setColorAt((double)i / (nspect - 1), QColor::fromRgb(spectrum[i]));
   series->setBaseGradient(gradient);
   series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
+  series->setDrawMode(QSurface3DSeries::DrawSurface);
+  series->setMeshSmooth(true);
+  bool wireframe = false;
+  QShortcut *toggleLines = new QShortcut(QKeySequence(QStringLiteral("g")), &widget);
+  QObject::connect(toggleLines, &QShortcut::activated, [series, &wireframe]() {
+    wireframe = !wireframe;
+    series->setDrawMode(wireframe ? QSurface3DSeries::DrawSurfaceAndWireframe
+                                  : QSurface3DSeries::DrawSurface);
+  });
   graph->addSeries(series);
   widget.show();
   return QApplication::instance()->exec();
