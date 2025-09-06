@@ -607,7 +607,15 @@ void sddscontour_main(char *input_line)
           fprintf(stderr, "Error (sddscontour): couldn't scan output filename\n");
           return (1);
         }
-        outfile = fopen_e(output, "w", FOPEN_INFORM_OF_OPEN);
+        /*
+         * Opening an output file should be silent unless an error occurs.
+         * Using FOPEN_INFORM_OF_OPEN results in diagnostic messages such as
+         * "<file> opened in mode w", which is undesirable for tools that
+         * create temporary files during interactive operations (e.g., when
+         * replots are triggered while zooming).  Use default behavior instead
+         * so no message is printed.
+         */
+        outfile = fopen_e(output, "w", 0);
         break;
 #endif
       case SET_SCALES:
