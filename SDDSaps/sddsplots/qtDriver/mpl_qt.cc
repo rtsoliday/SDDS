@@ -25,6 +25,8 @@
 #include <QFile>
 #include <QTextStream>
 #include <QVector3D>
+#include <QFont>
+#include <cstdlib>
 #ifdef _WIN32
 #  include <windows.h>
 #elif defined(__APPLE__)
@@ -87,7 +89,8 @@ QAction *replotZoomAction;
 QFrame *canvas;
 QMainWindow *mainWindowPointer;
 
-static int run3d(const char *filename) {
+static int run3d(const char *filename, const char *xlabel,
+                 const char *ylabel, int fontSize) {
   Q3DSurface *graph = new Q3DSurface();
   Q3DTheme *theme = graph->activeTheme();
   Q3DCamera *camera = graph->scene()->activeCamera();
@@ -102,6 +105,21 @@ static int run3d(const char *filename) {
   vbox->setContentsMargins(0, 0, 0, 0);
   vbox->addWidget(container);
   widget.setWindowTitle("MPL Outboard Driver 3D");
+
+  QFont font = theme->font();
+  if (fontSize > 0)
+    font.setPointSize(fontSize);
+  else
+    font.setPointSize(font.pointSize() + 24);
+  theme->setFont(font);
+  if (xlabel) {
+    graph->axisX()->setTitle(QString::fromUtf8(xlabel));
+    graph->axisX()->setTitleVisible(true);
+  }
+  if (ylabel) {
+    graph->axisZ()->setTitle(QString::fromUtf8(ylabel));
+    graph->axisZ()->setTitleVisible(true);
+  }
 
   QFile dataFile(filename);
   if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -690,12 +708,21 @@ int main(int argc, char *argv[]) {
 
   QApplication app(argc, argv);
   char *file3d = NULL;
+  char *xlabel = NULL;
+  char *ylabel = NULL;
+  int fontSize = 0;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
       file3d = argv[++i];
+    else if (!strcmp(argv[i], "-xlabel") && i + 1 < argc)
+      xlabel = argv[++i];
+    else if (!strcmp(argv[i], "-ylabel") && i + 1 < argc)
+      ylabel = argv[++i];
+    else if (!strcmp(argv[i], "-fontsize") && i + 1 < argc)
+      fontSize = atoi(argv[++i]);
   }
   if (file3d)
-    return run3d(file3d);
+    return run3d(file3d, xlabel, ylabel, fontSize);
 
   // Create main window
   QMainWindow mainWindow;

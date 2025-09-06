@@ -200,7 +200,9 @@ char *getParameterLabel(SDDS_TABLE *SDDS_table, char *parameter_name, char *edit
 void checkParameter(SDDS_TABLE *SDDS_table, char *parameter_name);
 void checkLabelParameters(SDDS_TABLE *SDDS_table, char *p1, char *p2, char *p3, char *p4);
 void freeParameterLabel(char *users_label, char *label);
-void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax, double ymin, double ymax);
+void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
+                   double ymin, double ymax, const char *xlabel,
+                   const char *ylabel);
 void make_enumerated_yscale(char **label, double *yposition, long labels, char *editCommand, long interval, double scale, long thickness, char *ylabel, double ylableScale);
 void make_enumerated_xscale(char **label, double *xposition, long labels, char *editCommand, long interval, double scale, long thickness, char *xlabel, double xlabelScale);
 
@@ -237,7 +239,9 @@ void jxyplot_string(double *x, double *y, char *s, char xmode, char ymode);
 char *rearrange_by_index(char *data, long *index, long element_size, long num);
 long drawline_AP(DRAW_LINE_SPEC **drawLineSpec, long *drawlines, char **item, long items);
 void determine_drawline(DRAW_LINE_SPEC *drawLineSpec, long drawlines, SDDS_TABLE *table);
-void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax, double ymin, double ymax);
+void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
+                   double ymin, double ymax, const char *xlabel,
+                   const char *ylabel);
 void draw_lines(DRAW_LINE_SPEC *drawLineSpec, long drawlines, long linetypeDefault, double *limit);
 void get_xyaxis_value(char *xscalePar, char *xoffsetPar, char *yscalPar, char *yoffsetPar,
                       SDDS_DATASET *SDDS_table,
@@ -2857,7 +2861,8 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
     }
   }
   if (threeD) {
-    plot3DSurface(data_value, nx, ny, xmin, xmax, ymin, ymax);
+    plot3DSurface(data_value, nx, ny, xmin, xmax, ymin, ymax, xlabel,
+                  ylabel);
     if (xintervals)
       free(xintervals);
     if (yintervals)
@@ -3712,7 +3717,9 @@ void determine_drawline(DRAW_LINE_SPEC *drawLineSpec, long drawlines, SDDS_TABLE
   }
 }
 
-void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax, double ymin, double ymax) {
+void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
+                   double ymin, double ymax, const char *xlabel,
+                   const char *ylabel) {
 #if defined(_WIN32)
   char tmpName[L_tmpnam];
   if (!tmpnam(tmpName)) {
@@ -3743,11 +3750,12 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax, do
   char command[1024];
 #if defined(_WIN32)
   snprintf(command, sizeof(command),
-           "start /B cmd /c \"mpl_qt -3d \"%s\" && del \"%s\"\"", tmpName,
-           tmpName);
+           "start /B cmd /c \"mpl_qt -3d \"%s\" -xlabel \"%s\" -ylabel \"%s\" && del \"%s\"\"",
+           tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", tmpName);
 #else
   snprintf(command, sizeof(command),
-           "(mpl_qt -3d %s; rm %s) &", tmpName, tmpName);
+           "(mpl_qt -3d %s -xlabel \"%s\" -ylabel \"%s\"; rm %s) &",
+           tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", tmpName);
 #endif
   if (system(command) == -1)
     fprintf(stderr, "unable to run mpl_qt for 3D plot\n");
