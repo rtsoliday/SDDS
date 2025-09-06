@@ -19,6 +19,7 @@
 #include <QtDataVisualization/QSurfaceDataArray>
 #include <QtDataVisualization/QSurfaceDataProxy>
 #include <QtDataVisualization/Q3DTheme>
+#include <QtDataVisualization/Q3DCamera>
 #include <QLinearGradient>
 #include <QColor>
 #include <QFile>
@@ -89,6 +90,11 @@ QMainWindow *mainWindowPointer;
 static int run3d(const char *filename) {
   Q3DSurface *graph = new Q3DSurface();
   Q3DTheme *theme = graph->activeTheme();
+  Q3DCamera *camera = graph->scene()->activeCamera();
+  float defaultX = camera->xRotation();
+  float defaultY = camera->yRotation();
+  float defaultZoom = camera->zoomLevel();
+  QVector3D defaultTarget = camera->target();
   QWidget *container = QWidget::createWindowContainer(graph);
   container->setMinimumSize(QSize(640, 480));
   QWidget widget;
@@ -149,6 +155,23 @@ static int run3d(const char *filename) {
                        series->setDrawMode(QSurface3DSeries::DrawSurface);
                      }
                    });
+  QShortcut *resetView = new QShortcut(QKeySequence(QStringLiteral("r")), &widget);
+  QObject::connect(resetView, &QShortcut::activated,
+                   [camera, defaultX, defaultY, defaultZoom, defaultTarget]() {
+                     camera->setXRotation(defaultX);
+                     camera->setYRotation(defaultY);
+                     camera->setZoomLevel(defaultZoom);
+                     camera->setTarget(defaultTarget);
+                   });
+  QShortcut *snapX = new QShortcut(QKeySequence(QStringLiteral("x")), &widget);
+  QObject::connect(snapX, &QShortcut::activated,
+                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetRight); });
+  QShortcut *snapY = new QShortcut(QKeySequence(QStringLiteral("y")), &widget);
+  QObject::connect(snapY, &QShortcut::activated,
+                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetFront); });
+  QShortcut *snapZ = new QShortcut(QKeySequence(QStringLiteral("z")), &widget);
+  QObject::connect(snapZ, &QShortcut::activated,
+                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetDirectlyAbove); });
   graph->addSeries(series);
   widget.show();
   return QApplication::instance()->exec();
