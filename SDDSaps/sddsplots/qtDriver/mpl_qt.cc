@@ -14,6 +14,16 @@
 
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QtDataVisualization/Q3DSurface>
+#include <QtDataVisualization/QSurface3DSeries>
+#include <QtDataVisualization/QSurfaceDataArray>
+#include <QtDataVisualization/QSurfaceDataProxy>
+#include <QtDataVisualization/Q3DTheme>
+#include <QLinearGradient>
+#include <QColor>
+#include <QFile>
+#include <QTextStream>
+#include <QVector3D>
 #ifdef _WIN32
 #  include <windows.h>
 #elif defined(__APPLE__)
@@ -22,6 +32,8 @@
 #  include <objc/runtime.h>
 #  include <objc/message.h>
 #endif
+
+using namespace QtDataVisualization;
 
 double scalex, scaley;
 #define Xpixel(value) (int)(((value) - userx0) * scalex)
@@ -73,6 +85,53 @@ extern "C" {
 QAction *replotZoomAction;
 QFrame *canvas;
 QMainWindow *mainWindowPointer;
+
+static int run3d(const char *filename) {
+  Q3DSurface *graph = new Q3DSurface();
+  QWidget *container = QWidget::createWindowContainer(graph);
+  container->setMinimumSize(QSize(640, 480));
+  QWidget widget;
+  QVBoxLayout *vbox = new QVBoxLayout(&widget);
+  vbox->setContentsMargins(0, 0, 0, 0);
+  vbox->addWidget(container);
+  widget.setWindowTitle("MPL Outboard Driver 3D");
+
+  QFile dataFile(filename);
+  if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    fprintf(stderr, "Unable to open %s\n", filename);
+    return 1;
+  }
+  QTextStream in(&dataFile);
+  int nx, ny;
+  double xmin, xmax, ymin, ymax;
+  in >> nx >> ny >> xmin >> xmax >> ymin >> ymax;
+  double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
+  double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
+  QSurfaceDataArray *dataArray = new QSurfaceDataArray;
+  dataArray->reserve(ny);
+  for (int j = 0; j < ny; j++) {
+    QSurfaceDataRow *row = new QSurfaceDataRow(nx);
+    for (int i = 0; i < nx; i++) {
+      double z;
+      in >> z;
+      (*row)[i].setPosition(QVector3D(xmin + i * dx, z, ymin + j * dy));
+    }
+    dataArray->append(row);
+  }
+  QSurfaceDataProxy *proxy = new QSurfaceDataProxy;
+  proxy->resetArray(dataArray);
+  QSurface3DSeries *series = new QSurface3DSeries(proxy);
+  if (!spectrumallocated)
+    allocspectrum();
+  QLinearGradient gradient;
+  for (int i = 0; i < nspect; i++)
+    gradient.setColorAt((double)i / (nspect - 1), QColor::fromRgb(spectrum[i]));
+  series->setBaseGradient(gradient);
+  series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
+  graph->addSeries(series);
+  widget.show();
+  return QApplication::instance()->exec();
+}
 
 /**
  * @brief Ensure the window is visible and active.
@@ -586,6 +645,13 @@ int main(int argc, char *argv[]) {
   lineTypeTable.typeFlag = 0x0000;
 
   QApplication app(argc, argv);
+  char *file3d = NULL;
+  for (int i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "-3d") && i + 1 < argc)
+      file3d = argv[++i];
+  }
+  if (file3d)
+    return run3d(file3d);
 
   // Create main window
   QMainWindow mainWindow;

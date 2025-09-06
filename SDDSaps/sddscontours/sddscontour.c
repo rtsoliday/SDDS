@@ -80,7 +80,8 @@
 #define SET_CONVERTUNITS 54
 #define SET_YFLIP 55
 #define SET_SHOWGAPS 56
-#define OPTIONS 57
+#define SET_3D 57
+#define OPTIONS 58
 
 static char *option[OPTIONS] = {
   "quantity", "swapxy", "shade", "contours", "equation", "scales",
@@ -93,7 +94,9 @@ static char *option[OPTIONS] = {
   "thickness", "ticksettings", "pipe", "waterfall", "yrange", "xrange",
   "nocolorbar", "yaxis", "xaxis", "xyz", "drawline", "levellist",
   "symbols", "fillscreen", "xlog", "fixfontsize", "limitlevels",
-  "convertunits", "yflip", "showgaps"};
+  "convertunits", "yflip", "showgaps", "3d"};
+
+static long threeD = 0;
 
 char *USAGE = "sddscontour [-pipe] [<SDDSfilename>]\n\
  [{-quantity=<column-name> | -equation=<rpn-equation>[,algebraic] |\n\
@@ -101,6 +104,7 @@ char *USAGE = "sddscontour [-pipe] [<SDDSfilename>]\n\
   -columnmatch=<indep-column-name>,<expression> [-deltas[={fractional|normalize}]]}]]\n\
  [-array=<z-2d-array>[,<x-1d-array>,<y-id-array>]] [-swaparray]\n\
  [-xyz=<x-column>,<y-column>,<z-column>]\n\
+ [-3d]\n\
  [-rpndefinitionsfiles=<filename>[,...]]\n\
  [-rpnexpressions=<setup-expression>[,...][,algebraic]]\n\
  [-rpntransform=<expression>[,algebraic]] [-fixedrange] [-showGaps]\n\
@@ -196,6 +200,7 @@ char *getParameterLabel(SDDS_TABLE *SDDS_table, char *parameter_name, char *edit
 void checkParameter(SDDS_TABLE *SDDS_table, char *parameter_name);
 void checkLabelParameters(SDDS_TABLE *SDDS_table, char *p1, char *p2, char *p3, char *p4);
 void freeParameterLabel(char *users_label, char *label);
+void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax, double ymin, double ymax);
 void make_enumerated_yscale(char **label, double *yposition, long labels, char *editCommand, long interval, double scale, long thickness, char *ylabel, double ylableScale);
 void make_enumerated_xscale(char **label, double *xposition, long labels, char *editCommand, long interval, double scale, long thickness, char *xlabel, double xlabelScale);
 
@@ -232,6 +237,7 @@ void jxyplot_string(double *x, double *y, char *s, char xmode, char ymode);
 char *rearrange_by_index(char *data, long *index, long element_size, long num);
 long drawline_AP(DRAW_LINE_SPEC **drawLineSpec, long *drawlines, char **item, long items);
 void determine_drawline(DRAW_LINE_SPEC *drawLineSpec, long drawlines, SDDS_TABLE *table);
+void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax, double ymin, double ymax);
 void draw_lines(DRAW_LINE_SPEC *drawLineSpec, long drawlines, long linetypeDefault, double *limit);
 void get_xyaxis_value(char *xscalePar, char *xoffsetPar, char *yscalPar, char *yoffsetPar,
                       SDDS_DATASET *SDDS_table,
@@ -582,6 +588,9 @@ void sddscontour_main(char *input_line)
         break;
       case SET_SHOWGAPS:
         show_gaps = 1;
+        break;
+      case SET_3D:
+        threeD = 1;
         break;
       case SET_DEVICE:
         if (s_arg[i_arg].n_items < 2) {
@@ -2847,6 +2856,14 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
       yintervals[i] = ymin + dy * i;
     }
   }
+  if (threeD) {
+    plot3DSurface(data_value, nx, ny, xmin, xmax, ymin, ymax);
+    if (xintervals)
+      free(xintervals);
+    if (yintervals)
+      free(yintervals);
+    return 1;
+  }
   set_mapping(0.0, 0.0, 0.0, 0.0);
   *frameEnded = 0;
   if (min_level == max_level) {
@@ -3692,6 +3709,45 @@ void determine_drawline(DRAW_LINE_SPEC *drawLineSpec, long drawlines, SDDS_TABLE
       namePtr += 1;
     }
   }
+}
+
+void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax, double ymin, double ymax) {
+#if defined(_WIN32)
+  char tmpName[L_tmpnam];
+  if (!tmpnam(tmpName)) {
+    fprintf(stderr, "unable to create temporary file for 3D plot\n");
+    return;
+  }
+  FILE *fp = fopen(tmpName, "w");
+  if (!fp) {
+    fprintf(stderr, "unable to open temporary file for 3D plot\n");
+    return;
+  }
+#else
+  char tmpName[] = "sddscontour3dXXXXXX";
+  int fd = mkstemp(tmpName);
+  FILE *fp = NULL;
+  if (fd == -1 || !(fp = fdopen(fd, "w"))) {
+    fprintf(stderr, "unable to create temporary file for 3D plot\n");
+    return;
+  }
+#endif
+  fprintf(fp, "%ld %ld %g %g %g %g\n", nx, ny, xmin, xmax, ymin, ymax);
+  for (long j = 0; j < ny; j++) {
+    for (long i = 0; i < nx; i++)
+      fprintf(fp, "%g ", data[i][j]);
+    fprintf(fp, "\n");
+  }
+  fclose(fp);
+  char command[1024];
+  snprintf(command, sizeof(command), "mpl_qt -3d %s", tmpName);
+  if (system(command) == -1)
+    fprintf(stderr, "unable to run mpl_qt for 3D plot\n");
+#if defined(_WIN32)
+  remove(tmpName);
+#else
+  unlink(tmpName);
+#endif
 }
 
 void draw_lines(DRAW_LINE_SPEC *drawLineSpec, long drawlines, long linetypeDefault, double *limit) {
