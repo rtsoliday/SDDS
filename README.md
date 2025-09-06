@@ -142,6 +142,14 @@ For answers to common questions about the SDDS toolkit, see the [FAQ](SDDSaps/do
 ## ChatGPT Assistant
 A custom **[ChatGPT SDDS C/C++ Language Assistant](https://chatgpt.com/g/g-67376bce92308190a01b7056cdd3d74a-sdds-c-c-language-assistant)** is available to help write new SDDS software.
 
+## CODEX Environment Setup
+To develop SDDS features using the [chatgpt.com/codex](https://chatgpt.com/codex) environment, initialize the container with the required libraries:
+
+```bash
+apt-get update
+apt-get install -y zlib1g-dev libzstd-dev liblzma-dev libhdf5-dev libaec-dev libgsl-dev libpng-dev libgd-dev liblerc-dev libdeflate-dev libtiff-dev qtbase5-dev libblas-dev liblapack-dev liblapacke-dev mpich libmpich-dev libqt5datavisualization5-dev
+```
+
 ## License
 This library is distributed under the **Software License Agreement** found in the `LICENSE` file.
 
