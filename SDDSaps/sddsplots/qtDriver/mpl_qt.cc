@@ -26,6 +26,7 @@
 #include <QTextStream>
 #include <QVector3D>
 #include <QFont>
+#include <QShortcut>
 #include <cstdlib>
 #ifdef _WIN32
 #  include <windows.h>
@@ -190,6 +191,29 @@ static int run3d(const char *filename, const char *xlabel,
   QShortcut *snapZ = new QShortcut(QKeySequence(QStringLiteral("z")), &widget);
   QObject::connect(snapZ, &QShortcut::activated,
                    [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetDirectlyAbove); });
+  QShortcut *increaseFont =
+      new QShortcut(QKeySequence(Qt::Key_Up), &widget);
+  QObject::connect(increaseFont, &QShortcut::activated,
+                   [theme, graph]() {
+                     QFont f = theme->font();
+                     f.setPointSize(f.pointSize() + 1);
+                     theme->setFont(f);
+                     graph->axisX()->setTitle(graph->axisX()->title());
+                     graph->axisY()->setTitle(graph->axisY()->title());
+                     graph->axisZ()->setTitle(graph->axisZ()->title());
+                   });
+  QShortcut *decreaseFont =
+      new QShortcut(QKeySequence(Qt::Key_Down), &widget);
+  QObject::connect(decreaseFont, &QShortcut::activated,
+                   [theme, graph]() {
+                     QFont f = theme->font();
+                     if (f.pointSize() > 1)
+                       f.setPointSize(f.pointSize() - 1);
+                     theme->setFont(f);
+                     graph->axisX()->setTitle(graph->axisX()->title());
+                     graph->axisY()->setTitle(graph->axisY()->title());
+                     graph->axisZ()->setTitle(graph->axisZ()->title());
+                   });
   graph->addSeries(series);
   widget.show();
   return QApplication::instance()->exec();
