@@ -88,6 +88,7 @@ QMainWindow *mainWindowPointer;
 
 static int run3d(const char *filename) {
   Q3DSurface *graph = new Q3DSurface();
+  Q3DTheme *theme = graph->activeTheme();
   QWidget *container = QWidget::createWindowContainer(graph);
   container->setMinimumSize(QSize(640, 480));
   QWidget widget;
@@ -130,13 +131,24 @@ static int run3d(const char *filename) {
   series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
   series->setDrawMode(QSurface3DSeries::DrawSurface);
   series->setMeshSmooth(true);
-  bool wireframe = false;
+  int wireframeMode = 0;
   QShortcut *toggleLines = new QShortcut(QKeySequence(QStringLiteral("g")), &widget);
-  QObject::connect(toggleLines, &QShortcut::activated, [series, &wireframe]() {
-    wireframe = !wireframe;
-    series->setDrawMode(wireframe ? QSurface3DSeries::DrawSurfaceAndWireframe
-                                  : QSurface3DSeries::DrawSurface);
-  });
+  QObject::connect(toggleLines, &QShortcut::activated,
+                   [series, theme, &wireframeMode]() {
+                     wireframeMode = (wireframeMode + 1) % 3;
+                     switch (wireframeMode) {
+                     case 1:
+                       theme->setGridLineColor(Qt::white);
+                       series->setDrawMode(QSurface3DSeries::DrawSurfaceAndWireframe);
+                       break;
+                     case 2:
+                       theme->setGridLineColor(Qt::black);
+                       series->setDrawMode(QSurface3DSeries::DrawSurfaceAndWireframe);
+                       break;
+                     default:
+                       series->setDrawMode(QSurface3DSeries::DrawSurface);
+                     }
+                   });
   graph->addSeries(series);
   widget.show();
   return QApplication::instance()->exec();
