@@ -2862,6 +2862,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
       free(xintervals);
     if (yintervals)
       free(yintervals);
+    *frameEnded = 1;
     return 1;
   }
   set_mapping(0.0, 0.0, 0.0, 0.0);
@@ -3740,14 +3741,16 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax, do
   }
   fclose(fp);
   char command[1024];
-  snprintf(command, sizeof(command), "mpl_qt -3d %s", tmpName);
+#if defined(_WIN32)
+  snprintf(command, sizeof(command),
+           "start /B cmd /c \"mpl_qt -3d \"%s\" && del \"%s\"\"", tmpName,
+           tmpName);
+#else
+  snprintf(command, sizeof(command),
+           "(mpl_qt -3d %s; rm %s) &", tmpName, tmpName);
+#endif
   if (system(command) == -1)
     fprintf(stderr, "unable to run mpl_qt for 3D plot\n");
-#if defined(_WIN32)
-  remove(tmpName);
-#else
-  unlink(tmpName);
-#endif
 }
 
 void draw_lines(DRAW_LINE_SPEC *drawLineSpec, long drawlines, long linetypeDefault, double *limit) {
