@@ -103,6 +103,7 @@ static int run3d(const char *filename, const char *xlabel,
   }
   Q3DTheme *theme = graph->activeTheme();
   Q3DCamera *camera = graph->scene()->activeCamera();
+  camera->setCameraPreset(Q3DCamera::CameraPresetIsometricRightHigh); // Default orientation
   float defaultX = camera->xRotation();
   float defaultY = camera->yRotation();
   float defaultZoom = camera->zoomLevel();
