@@ -98,7 +98,7 @@ static int run3d(const char *filename, const char *xlabel,
                  const char *ylabel, const char *title,
                  const char *topline, int fontSize, bool equalAspect,
                  double shadeMin, double shadeMax, bool shadeRangeSet,
-                 bool gray) {
+                 bool gray, double hue0, double hue1) {
   Q3DSurface *graph = new Q3DSurface();
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
@@ -209,11 +209,17 @@ static int run3d(const char *filename, const char *xlabel,
   QLinearGradient gradient;
   for (int i = 0; i < nspect; i++) {
     double frac = (double)i / (nspect - 1);
-    if (gray)
+    if (gray) {
       gradient.setColorAt(frac,
                           QColor::fromRgbF(frac, frac, frac));
-    else
-      gradient.setColorAt(frac, QColor::fromRgb(spectrum[i]));
+    } else {
+      int index = (int)((hue0 + frac * (hue1 - hue0)) * (nspect - 1) + 0.5);
+      if (index < 0)
+        index = 0;
+      if (index >= nspect)
+        index = nspect - 1;
+      gradient.setColorAt(frac, QColor::fromRgb(spectrum[index]));
+    }
   }
   series->setBaseGradient(gradient);
   series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
@@ -806,6 +812,7 @@ int main(int argc, char *argv[]) {
   double shadeMin = 0.0, shadeMax = 0.0;
   bool shadeRangeSet = false;
   bool gray = false;
+  double hue0 = 0.0, hue1 = 1.0;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
       file3d = argv[++i];
@@ -842,11 +849,15 @@ int main(int argc, char *argv[]) {
         gray = true;
         i++;
       }
+    } else if (!strcmp(argv[i], "-mapshade") && i + 2 < argc) {
+      hue0 = atof(argv[++i]);
+      hue1 = atof(argv[++i]);
     }
   }
   if (file3d)
     return run3d(file3d, xlabel, ylabel, title, topline, fontSize,
-                 equalAspect, shadeMin, shadeMax, shadeRangeSet, gray);
+                 equalAspect, shadeMin, shadeMax, shadeRangeSet, gray,
+                 hue0, hue1);
 
   // Create main window
   QMainWindow mainWindow;

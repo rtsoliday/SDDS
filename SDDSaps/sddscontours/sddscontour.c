@@ -204,7 +204,8 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    double ymin, double ymax, const char *xlabel,
                    const char *ylabel, const char *title,
                    const char *topline, long flags, long levels,
-                   double min_level, double max_level, long gray);
+                   double min_level, double max_level, double hue0,
+                   double hue1, long gray);
 void make_enumerated_yscale(char **label, double *yposition, long labels, char *editCommand, long interval, double scale, long thickness, char *ylabel, double ylableScale);
 void make_enumerated_xscale(char **label, double *xposition, long labels, char *editCommand, long interval, double scale, long thickness, char *xlabel, double xlabelScale);
 
@@ -245,7 +246,8 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    double ymin, double ymax, const char *xlabel,
                    const char *ylabel, const char *title,
                    const char *topline, long flags, long levels,
-                   double min_level, double max_level, long gray);
+                   double min_level, double max_level, double hue0,
+                   double hue1, long gray);
 void draw_lines(DRAW_LINE_SPEC *drawLineSpec, long drawlines, long linetypeDefault, double *limit);
 void get_xyaxis_value(char *xscalePar, char *xoffsetPar, char *yscalPar, char *yoffsetPar,
                       SDDS_DATASET *SDDS_table,
@@ -2867,7 +2869,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
   if (threeD) {
     plot3DSurface(data_value, nx, ny, xmin, xmax, ymin, ymax, xlabel,
                   ylabel, title, topline, *flags, levels,
-                  min_level, max_level, do_shade == 2);
+                  min_level, max_level, hue0, hue1, do_shade == 2);
     if (xintervals)
       free(xintervals);
     if (yintervals)
@@ -3726,7 +3728,8 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    double ymin, double ymax, const char *xlabel,
                    const char *ylabel, const char *title,
                    const char *topline, long flags, long levels,
-                   double min_level, double max_level, long gray) {
+                   double min_level, double max_level, double hue0,
+                   double hue1, long gray) {
 #if defined(_WIN32)
   char tmpName[L_tmpnam];
   if (!tmpnam(tmpName)) {
@@ -3769,6 +3772,8 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
       snprintf(command + strlen(command), sizeof(command) - strlen(command),
                " gray");
   }
+  snprintf(command + strlen(command), sizeof(command) - strlen(command),
+           " -mapshade %g %g", hue0, hue1);
   if (topline && topline[0])
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -topline \"%s\"", topline);
@@ -3791,6 +3796,8 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
       snprintf(command + strlen(command), sizeof(command) - strlen(command),
                " gray");
   }
+  snprintf(command + strlen(command), sizeof(command) - strlen(command),
+           " -mapshade %g %g", hue0, hue1);
   if (topline && topline[0])
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -topline '%s'", topline);
