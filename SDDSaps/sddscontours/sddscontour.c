@@ -3777,6 +3777,9 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   if (topline && topline[0])
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -topline \"%s\"", topline);
+  if (flags & DATE_STAMP)
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -datestamp");
   if (flags & NO_BORDER)
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -noborder");
@@ -3810,6 +3813,9 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   if (topline && topline[0])
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -topline '%s'", topline);
+  if (flags & DATE_STAMP)
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -datestamp");
   if (flags & NO_BORDER)
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -noborder");

@@ -31,6 +31,7 @@
 #include <QLabel>
 #include <QPalette>
 #include <QSizePolicy>
+#include <QDateTime>
 #include <cstdlib>
 #include <float.h>
 #ifdef _WIN32
@@ -97,10 +98,10 @@ QMainWindow *mainWindowPointer;
 
 static int run3d(const char *filename, const char *xlabel,
                  const char *ylabel, const char *title,
-                 const char *topline, int fontSize, bool equalAspect,
-                 double shadeMin, double shadeMax, bool shadeRangeSet,
-                 bool gray, double hue0, double hue1, bool yFlip,
-                 bool hideAxes, bool hideZAxis) {
+                 const char *topline, bool datestamp, int fontSize,
+                 bool equalAspect, double shadeMin, double shadeMax,
+                 bool shadeRangeSet, bool gray, double hue0,
+                 double hue1, bool yFlip, bool hideAxes, bool hideZAxis) {
   Q3DSurface *graph = new Q3DSurface();
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
@@ -136,6 +137,22 @@ static int run3d(const char *filename, const char *xlabel,
     toplineLabel->setContentsMargins(0, 0, 0, 0);
     toplineLabel->setMargin(0);
     vbox->addWidget(toplineLabel);
+  }
+  if (datestamp) {
+    QString ds = QDateTime::currentDateTime().
+                    toString("ddd MMM d HH:mm:ss yyyy");
+    QLabel *dateLabel = new QLabel(ds);
+    dateLabel->setAlignment(Qt::AlignCenter);
+    dateLabel->setFont(theme->font());
+    dateLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    dateLabel->setMaximumHeight(dateLabel->sizeHint().height());
+    QPalette palette = dateLabel->palette();
+    palette.setColor(QPalette::Window, theme->backgroundColor());
+    dateLabel->setPalette(palette);
+    dateLabel->setAutoFillBackground(true);
+    dateLabel->setContentsMargins(0, 0, 0, 0);
+    dateLabel->setMargin(0);
+    vbox->addWidget(dateLabel);
   }
   container->setContentsMargins(0, 0, 0, 0);
   vbox->addWidget(container);
@@ -833,6 +850,7 @@ int main(int argc, char *argv[]) {
   bool yFlip = false;
   bool hideAxes = false;
   bool hideZAxis = false;
+  bool datestamp = false;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
       file3d = argv[++i];
@@ -879,12 +897,14 @@ int main(int argc, char *argv[]) {
     else if (!strcmp(argv[i], "-noscale")) {
       hideAxes = true;
       hideZAxis = true;
-    }
+    } else if (!strcmp(argv[i], "-datestamp"))
+      datestamp = true;
   }
   if (file3d)
-    return run3d(file3d, xlabel, ylabel, title, topline, fontSize,
-                 equalAspect, shadeMin, shadeMax, shadeRangeSet, gray,
-                 hue0, hue1, yFlip, hideAxes, hideZAxis);
+    return run3d(file3d, xlabel, ylabel, title, topline, datestamp,
+                 fontSize, equalAspect, shadeMin, shadeMax,
+                 shadeRangeSet, gray, hue0, hue1, yFlip, hideAxes,
+                 hideZAxis);
 
   // Create main window
   QMainWindow mainWindow;
