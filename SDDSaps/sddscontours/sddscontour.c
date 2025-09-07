@@ -205,7 +205,8 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    const char *ylabel, const char *title,
                    const char *topline, long flags, long levels,
                    double min_level, double max_level, double hue0,
-                   double hue1, long gray, short xlog);
+                   double hue1, long gray, short xlog,
+                   unsigned long long tsetFlags);
 void make_enumerated_yscale(char **label, double *yposition, long labels, char *editCommand, long interval, double scale, long thickness, char *ylabel, double ylableScale);
 void make_enumerated_xscale(char **label, double *xposition, long labels, char *editCommand, long interval, double scale, long thickness, char *xlabel, double xlabelScale);
 
@@ -247,7 +248,8 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    const char *ylabel, const char *title,
                    const char *topline, long flags, long levels,
                    double min_level, double max_level, double hue0,
-                   double hue1, long gray, short xlog);
+                   double hue1, long gray, short xlog,
+                   unsigned long long tsetFlags);
 void draw_lines(DRAW_LINE_SPEC *drawLineSpec, long drawlines, long linetypeDefault, double *limit);
 void get_xyaxis_value(char *xscalePar, char *xoffsetPar, char *yscalPar, char *yoffsetPar,
                       SDDS_DATASET *SDDS_table,
@@ -1199,6 +1201,7 @@ void sddscontour_main(char *input_line)
         s_arg[i_arg].n_items--;
         if (!scanItemListLong(&tsetFlags, s_arg[i_arg].list + 1, &s_arg[i_arg].n_items, 0,
                               "xtime", -1, NULL, 0, TICKSET_XTIME,
+                              "ytime", -1, NULL, 0, TICKSET_YTIME,
                               NULL)) {
           fprintf(stderr, "Error (sddscontour): invalid -ticksettings syntax\n");
           return (1);
@@ -2869,7 +2872,8 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
   if (threeD) {
     plot3DSurface(data_value, nx, ny, xmin, xmax, ymin, ymax, xlabel,
                   ylabel, title, topline, *flags, levels,
-                  min_level, max_level, hue0, hue1, do_shade == 2, xlog);
+                  min_level, max_level, hue0, hue1, do_shade == 2, xlog,
+                  tsetFlags);
     if (xintervals)
       free(xintervals);
     if (yintervals)
@@ -3729,7 +3733,8 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    const char *ylabel, const char *title,
                    const char *topline, long flags, long levels,
                    double min_level, double max_level, double hue0,
-                   double hue1, long gray, short xlog) {
+                   double hue1, long gray, short xlog,
+                   unsigned long long tsetFlags) {
 #if defined(_WIN32)
   char tmpName[L_tmpnam];
   if (!tmpnam(tmpName)) {
@@ -3777,6 +3782,13 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   if (xlog)
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -xlog");
+  if (tsetFlags & (TICKSET_XTIME | TICKSET_YTIME)) {
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -ticksettings=%s%s",
+             tsetFlags & TICKSET_XTIME ? "xtime" : "",
+             tsetFlags & TICKSET_YTIME ?
+                 (tsetFlags & TICKSET_XTIME ? ",ytime" : "ytime") : "");
+  }
   if (topline && topline[0])
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -topline \"%s\"", topline);
@@ -3816,6 +3828,13 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   if (xlog)
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -xlog");
+  if (tsetFlags & (TICKSET_XTIME | TICKSET_YTIME)) {
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -ticksettings=%s%s",
+             tsetFlags & TICKSET_XTIME ? "xtime" : "",
+             tsetFlags & TICKSET_YTIME ?
+                 (tsetFlags & TICKSET_XTIME ? ",ytime" : "ytime") : "");
+  }
   if (topline && topline[0])
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -topline '%s'", topline);

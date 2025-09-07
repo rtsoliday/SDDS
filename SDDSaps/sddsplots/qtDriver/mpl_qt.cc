@@ -22,6 +22,7 @@
 #include <QtDataVisualization/Q3DCamera>
 #include <QtDataVisualization/QValue3DAxis>
 #include <QtDataVisualization/QLogValue3DAxisFormatter>
+#include <QtDataVisualization/QValue3DAxisFormatter>
 #include <QLinearGradient>
 #include <QColor>
 #include <QFile>
@@ -33,6 +34,7 @@
 #include <QPalette>
 #include <QSizePolicy>
 #include <QDateTime>
+#include <cstring>
 #include <cstdlib>
 #include <float.h>
 #include <cmath>
@@ -98,13 +100,22 @@ QAction *replotZoomAction;
 QFrame *canvas;
 QMainWindow *mainWindowPointer;
 
+class Time3DAxisFormatter : public QValue3DAxisFormatter {
+public:
+  QString stringForValue(qreal value, const QString &format) const override {
+    Q_UNUSED(format);
+    return QDateTime::fromSecsSinceEpoch(static_cast<qint64>(value))
+        .toString("yyyy-MM-dd HH:mm:ss");
+  }
+};
+
 static int run3d(const char *filename, const char *xlabel,
                  const char *ylabel, const char *title,
                  const char *topline, bool datestamp, int fontSize,
                  bool equalAspect, double shadeMin, double shadeMax,
                  bool shadeRangeSet, bool gray, double hue0,
                  double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
-                 bool xLog) {
+                 bool xLog, bool xTime, bool yTime) {
   Q3DSurface *graph = new Q3DSurface();
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
@@ -211,6 +222,10 @@ static int run3d(const char *filename, const char *xlabel,
   double xmin, xmax, ymin, ymax;
   in >> nx >> ny >> xmin >> xmax >> ymin >> ymax;
   graph->axisZ()->setRange(ymin, ymax);
+  if (yTime) {
+    Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
+    graph->axisZ()->setFormatter(formatter);
+  }
   if (yFlip)
     graph->axisZ()->setReversed(true);
   double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
@@ -223,6 +238,10 @@ static int run3d(const char *filename, const char *xlabel,
     graph->axisX()->setRange(xminLinear, xmaxLinear);
   } else {
     graph->axisX()->setRange(xmin, xmax);
+  }
+  if (xTime) {
+    Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
+    graph->axisX()->setFormatter(formatter);
   }
   QSurfaceDataArray *dataArray = new QSurfaceDataArray;
   dataArray->reserve(ny);
@@ -864,6 +883,8 @@ int main(int argc, char *argv[]) {
   bool hideZAxis = false;
   bool datestamp = false;
   bool xLog = false;
+  bool xTime = false;
+  bool yTime = false;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
       file3d = argv[++i];
@@ -914,12 +935,25 @@ int main(int argc, char *argv[]) {
       datestamp = true;
     else if (!strcmp(argv[i], "-xlog"))
       xLog = true;
+    else if (!strncmp(argv[i], "-ticksettings", 13)) {
+      const char *arg = NULL;
+      if (argv[i][13] == '=')
+        arg = argv[i] + 14;
+      else if (i + 1 < argc)
+        arg = argv[++i];
+      if (arg) {
+        if (strstr(arg, "xtime"))
+          xTime = true;
+        if (strstr(arg, "ytime"))
+          yTime = true;
+      }
+    }
   }
   if (file3d)
     return run3d(file3d, xlabel, ylabel, title, topline, datestamp,
                  fontSize, equalAspect, shadeMin, shadeMax,
                  shadeRangeSet, gray, hue0, hue1, yFlip, hideAxes,
-                 hideZAxis, xLog);
+                 hideZAxis, xLog, xTime, yTime);
 
   // Create main window
   QMainWindow mainWindow;
