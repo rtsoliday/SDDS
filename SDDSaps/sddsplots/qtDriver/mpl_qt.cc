@@ -97,7 +97,7 @@ extern "C" {
   FILE* outfile;
 }
 QAction *replotZoomAction;
-QFrame *canvas;
+QWidget *canvas;
 QMainWindow *mainWindowPointer;
 
 class Time3DAxisFormatter : public QValue3DAxisFormatter {
@@ -109,13 +109,13 @@ public:
   }
 };
 
-static int run3d(const char *filename, const char *xlabel,
-                 const char *ylabel, const char *title,
-                 const char *topline, bool datestamp, int fontSize,
-                 bool equalAspect, double shadeMin, double shadeMax,
-                 bool shadeRangeSet, bool gray, double hue0,
-                 double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
-                 bool xLog, bool xTime, bool yTime) {
+static QWidget *run3d(const char *filename, const char *xlabel,
+                      const char *ylabel, const char *title,
+                      const char *topline, bool datestamp, int fontSize,
+                      bool equalAspect, double shadeMin, double shadeMax,
+                      bool shadeRangeSet, bool gray, double hue0,
+                      double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
+                      bool xLog, bool xTime, bool yTime) {
   Q3DSurface *graph = new Q3DSurface();
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
@@ -130,14 +130,14 @@ static int run3d(const char *filename, const char *xlabel,
   QVector3D defaultTarget = camera->target();
   QWidget *container = QWidget::createWindowContainer(graph);
   container->setMinimumSize(QSize(640, 480));
-  QWidget widget;
-  QVBoxLayout *vbox = new QVBoxLayout(&widget);
+  QWidget *widget = new QWidget;
+  QVBoxLayout *vbox = new QVBoxLayout(widget);
   vbox->setContentsMargins(0, 0, 0, 0);
   vbox->setSpacing(0);
-  QPalette widgetPalette = widget.palette();
+  QPalette widgetPalette = widget->palette();
   widgetPalette.setColor(QPalette::Window, theme->backgroundColor());
-  widget.setPalette(widgetPalette);
-  widget.setAutoFillBackground(true);
+  widget->setPalette(widgetPalette);
+  widget->setAutoFillBackground(true);
   if (topline && topline[0]) {
     QLabel *toplineLabel = new QLabel(QString::fromUtf8(topline));
     toplineLabel->setAlignment(Qt::AlignCenter);
@@ -184,7 +184,7 @@ static int run3d(const char *filename, const char *xlabel,
     titleLabel->setMargin(0);
     vbox->addWidget(titleLabel);
   }
-  widget.setWindowTitle("MPL Outboard Driver 3D");
+  widget->setWindowTitle("MPL Outboard Driver 3D");
 
   QFont font = theme->font();
   if (fontSize > 0)
@@ -215,7 +215,7 @@ static int run3d(const char *filename, const char *xlabel,
   QFile dataFile(filename);
   if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
     fprintf(stderr, "Unable to open %s\n", filename);
-    return 1;
+    return NULL;
   }
   QTextStream in(&dataFile);
   int nx, ny;
@@ -293,7 +293,7 @@ static int run3d(const char *filename, const char *xlabel,
   series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
   graph->axisY()->setRange(zmin, zmax);
   int wireframeMode = 0;
-  QShortcut *toggleLines = new QShortcut(QKeySequence(QStringLiteral("g")), &widget);
+  QShortcut *toggleLines = new QShortcut(QKeySequence(QStringLiteral("g")), widget);
   QObject::connect(toggleLines, &QShortcut::activated,
                    [series, theme, &wireframeMode]() {
                      wireframeMode = (wireframeMode + 1) % 3;
@@ -310,7 +310,7 @@ static int run3d(const char *filename, const char *xlabel,
                        series->setDrawMode(QSurface3DSeries::DrawSurface);
                      }
                    });
-  QShortcut *resetView = new QShortcut(QKeySequence(QStringLiteral("r")), &widget);
+  QShortcut *resetView = new QShortcut(QKeySequence(QStringLiteral("r")), widget);
   QObject::connect(resetView, &QShortcut::activated,
                    [camera, defaultX, defaultY, defaultZoom, defaultTarget]() {
                      camera->setXRotation(defaultX);
@@ -318,17 +318,17 @@ static int run3d(const char *filename, const char *xlabel,
                      camera->setZoomLevel(defaultZoom);
                      camera->setTarget(defaultTarget);
                    });
-  QShortcut *snapX = new QShortcut(QKeySequence(QStringLiteral("x")), &widget);
+  QShortcut *snapX = new QShortcut(QKeySequence(QStringLiteral("x")), widget);
   QObject::connect(snapX, &QShortcut::activated,
                    [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetRight); });
-  QShortcut *snapY = new QShortcut(QKeySequence(QStringLiteral("y")), &widget);
+  QShortcut *snapY = new QShortcut(QKeySequence(QStringLiteral("y")), widget);
   QObject::connect(snapY, &QShortcut::activated,
                    [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetFront); });
-  QShortcut *snapZ = new QShortcut(QKeySequence(QStringLiteral("z")), &widget);
+  QShortcut *snapZ = new QShortcut(QKeySequence(QStringLiteral("z")), widget);
   QObject::connect(snapZ, &QShortcut::activated,
                    [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetDirectlyAbove); });
   QShortcut *increaseFont =
-      new QShortcut(QKeySequence(Qt::Key_Up), &widget);
+      new QShortcut(QKeySequence(Qt::Key_Up), widget);
   QObject::connect(increaseFont, &QShortcut::activated,
                    [theme, graph]() {
                      QFont f = theme->font();
@@ -339,7 +339,7 @@ static int run3d(const char *filename, const char *xlabel,
                      graph->axisZ()->setTitle(graph->axisZ()->title());
                    });
   QShortcut *decreaseFont =
-      new QShortcut(QKeySequence(Qt::Key_Down), &widget);
+      new QShortcut(QKeySequence(Qt::Key_Down), widget);
   QObject::connect(decreaseFont, &QShortcut::activated,
                    [theme, graph]() {
                      QFont f = theme->font();
@@ -351,8 +351,7 @@ static int run3d(const char *filename, const char *xlabel,
                      graph->axisZ()->setTitle(graph->axisZ()->title());
                    });
   graph->addSeries(series);
-  widget.show();
-  return QApplication::instance()->exec();
+  return widget;
 }
 
 /**
@@ -949,11 +948,6 @@ int main(int argc, char *argv[]) {
       }
     }
   }
-  if (file3d)
-    return run3d(file3d, xlabel, ylabel, title, topline, datestamp,
-                 fontSize, equalAspect, shadeMin, shadeMax,
-                 shadeRangeSet, gray, hue0, hue1, yFlip, hideAxes,
-                 hideZAxis, xLog, xTime, yTime);
 
   // Create main window
   QMainWindow mainWindow;
@@ -1015,10 +1009,24 @@ int main(int argc, char *argv[]) {
     dialog.exec();
   });
 
-
   // Create a central widget with a layout
   QWidget *centralWidget = new QWidget;
   QVBoxLayout *layout = new QVBoxLayout(centralWidget);
+
+  if (file3d) {
+    QWidget *plotWidget = run3d(file3d, xlabel, ylabel, title, topline,
+                                datestamp, fontSize, equalAspect, shadeMin,
+                                shadeMax, shadeRangeSet, gray, hue0, hue1,
+                                yFlip, hideAxes, hideZAxis, xLog, xTime,
+                                yTime);
+    if (!plotWidget)
+      return 1;
+    canvas = plotWidget;
+    layout->addWidget(plotWidget);
+    mainWindow.setCentralWidget(centralWidget);
+    mainWindow.show();
+    return app.exec();
+  }
 
   QString shareName;
   for (int i = 1; i < argc; i++) {

@@ -101,7 +101,7 @@ extern struct COORDREC *lastcoord;
 extern struct COORDREC *usecoord;
 extern FILE *ifp;
 
-extern QFrame *canvas;
+extern QWidget *canvas;
 extern QAction *replotZoomAction;
 
 #define RGB_QT(r, g, b) (                                              \
