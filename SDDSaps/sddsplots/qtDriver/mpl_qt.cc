@@ -21,6 +21,7 @@
 #include <QtDataVisualization/Q3DTheme>
 #include <QtDataVisualization/Q3DCamera>
 #include <QtDataVisualization/QValue3DAxis>
+#include <QtDataVisualization/QLogValue3DAxisFormatter>
 #include <QLinearGradient>
 #include <QColor>
 #include <QFile>
@@ -34,6 +35,7 @@
 #include <QDateTime>
 #include <cstdlib>
 #include <float.h>
+#include <cmath>
 #ifdef _WIN32
 #  include <windows.h>
 #elif defined(__APPLE__)
@@ -101,7 +103,8 @@ static int run3d(const char *filename, const char *xlabel,
                  const char *topline, bool datestamp, int fontSize,
                  bool equalAspect, double shadeMin, double shadeMax,
                  bool shadeRangeSet, bool gray, double hue0,
-                 double hue1, bool yFlip, bool hideAxes, bool hideZAxis) {
+                 double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
+                 bool xLog) {
   Q3DSurface *graph = new Q3DSurface();
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
@@ -186,8 +189,6 @@ static int run3d(const char *filename, const char *xlabel,
     graph->axisZ()->setTitle(QString::fromUtf8(ylabel));
     graph->axisZ()->setTitleVisible(true);
   }
-  if (yFlip)
-    graph->axisZ()->setReversed(true);
   if (hideAxes) {
     theme->setGridEnabled(false);
     graph->axisX()->setTitleVisible(false);
@@ -209,10 +210,20 @@ static int run3d(const char *filename, const char *xlabel,
   int nx, ny;
   double xmin, xmax, ymin, ymax;
   in >> nx >> ny >> xmin >> xmax >> ymin >> ymax;
+  graph->axisZ()->setRange(ymin, ymax);
   if (yFlip)
-    graph->axisZ()->setRange(ymin, ymax);
+    graph->axisZ()->setReversed(true);
   double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
   double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
+  if (xLog) {
+    double xminLinear = pow(10.0, xmin);
+    double xmaxLinear = pow(10.0, xmax);
+    QLogValue3DAxisFormatter *formatter = new QLogValue3DAxisFormatter;
+    graph->axisX()->setFormatter(formatter);
+    graph->axisX()->setRange(xminLinear, xmaxLinear);
+  } else {
+    graph->axisX()->setRange(xmin, xmax);
+  }
   QSurfaceDataArray *dataArray = new QSurfaceDataArray;
   dataArray->reserve(ny);
   double zmin = DBL_MAX, zmax = -DBL_MAX;
@@ -225,7 +236,8 @@ static int run3d(const char *filename, const char *xlabel,
         zmin = z;
       if (z > zmax)
         zmax = z;
-      (*row)[i].setPosition(QVector3D(xmin + i * dx, z, ymin + j * dy));
+      double xval = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
+      (*row)[i].setPosition(QVector3D(xval, z, ymin + j * dy));
     }
     dataArray->append(row);
   }
@@ -851,6 +863,7 @@ int main(int argc, char *argv[]) {
   bool hideAxes = false;
   bool hideZAxis = false;
   bool datestamp = false;
+  bool xLog = false;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
       file3d = argv[++i];
@@ -899,12 +912,14 @@ int main(int argc, char *argv[]) {
       hideZAxis = true;
     } else if (!strcmp(argv[i], "-datestamp"))
       datestamp = true;
+    else if (!strcmp(argv[i], "-xlog"))
+      xLog = true;
   }
   if (file3d)
     return run3d(file3d, xlabel, ylabel, title, topline, datestamp,
                  fontSize, equalAspect, shadeMin, shadeMax,
                  shadeRangeSet, gray, hue0, hue1, yFlip, hideAxes,
-                 hideZAxis);
+                 hideZAxis, xLog);
 
   // Create main window
   QMainWindow mainWindow;
