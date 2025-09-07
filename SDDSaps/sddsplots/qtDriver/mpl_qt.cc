@@ -95,8 +95,12 @@ QMainWindow *mainWindowPointer;
 
 static int run3d(const char *filename, const char *xlabel,
                  const char *ylabel, const char *title,
-                 const char *topline, int fontSize) {
+                 const char *topline, int fontSize, bool equalAspect) {
   Q3DSurface *graph = new Q3DSurface();
+  if (equalAspect) {
+    graph->setHorizontalAspectRatio(1.0f);
+    graph->setAspectRatio(1.0f);
+  }
   Q3DTheme *theme = graph->activeTheme();
   Q3DCamera *camera = graph->scene()->activeCamera();
   float defaultX = camera->xRotation();
@@ -776,6 +780,7 @@ int main(int argc, char *argv[]) {
   char *title = NULL;
   char *topline = NULL;
   int fontSize = 0;
+  bool equalAspect = false;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
       file3d = argv[++i];
@@ -789,9 +794,11 @@ int main(int argc, char *argv[]) {
       topline = argv[++i];
     else if (!strcmp(argv[i], "-fontsize") && i + 1 < argc)
       fontSize = atoi(argv[++i]);
+    else if (!strcmp(argv[i], "-equalaspect"))
+      equalAspect = true;
   }
   if (file3d)
-    return run3d(file3d, xlabel, ylabel, title, topline, fontSize);
+    return run3d(file3d, xlabel, ylabel, title, topline, fontSize, equalAspect);
 
   // Create main window
   QMainWindow mainWindow;

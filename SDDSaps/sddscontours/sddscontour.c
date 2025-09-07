@@ -203,7 +203,7 @@ void freeParameterLabel(char *users_label, char *label);
 void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    double ymin, double ymax, const char *xlabel,
                    const char *ylabel, const char *title,
-                   const char *topline);
+                   const char *topline, long flags);
 void make_enumerated_yscale(char **label, double *yposition, long labels, char *editCommand, long interval, double scale, long thickness, char *ylabel, double ylableScale);
 void make_enumerated_xscale(char **label, double *xposition, long labels, char *editCommand, long interval, double scale, long thickness, char *xlabel, double xlabelScale);
 
@@ -243,7 +243,7 @@ void determine_drawline(DRAW_LINE_SPEC *drawLineSpec, long drawlines, SDDS_TABLE
 void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    double ymin, double ymax, const char *xlabel,
                    const char *ylabel, const char *title,
-                   const char *topline);
+                   const char *topline, long flags);
 void draw_lines(DRAW_LINE_SPEC *drawLineSpec, long drawlines, long linetypeDefault, double *limit);
 void get_xyaxis_value(char *xscalePar, char *xoffsetPar, char *yscalPar, char *yoffsetPar,
                       SDDS_DATASET *SDDS_table,
@@ -2864,7 +2864,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
   }
   if (threeD) {
     plot3DSurface(data_value, nx, ny, xmin, xmax, ymin, ymax, xlabel,
-                  ylabel, title, topline);
+                  ylabel, title, topline, *flags);
     if (xintervals)
       free(xintervals);
     if (yintervals)
@@ -3722,7 +3722,7 @@ void determine_drawline(DRAW_LINE_SPEC *drawLineSpec, long drawlines, SDDS_TABLE
 void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    double ymin, double ymax, const char *xlabel,
                    const char *ylabel, const char *title,
-                   const char *topline) {
+                   const char *topline, long flags) {
 #if defined(_WIN32)
   char tmpName[L_tmpnam];
   if (!tmpnam(tmpName)) {
@@ -3758,6 +3758,9 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   if (topline && topline[0])
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -topline \"%s\"", topline);
+  if (flags & (EQUAL_ASPECT1 | EQUAL_ASPECT_1))
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -equalaspect");
   snprintf(command + strlen(command), sizeof(command) - strlen(command),
            " && del \"%s\"\"", tmpName);
 #else
@@ -3767,6 +3770,9 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   if (topline && topline[0])
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -topline '%s'", topline);
+  if (flags & (EQUAL_ASPECT1 | EQUAL_ASPECT_1))
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -equalaspect");
   snprintf(command + strlen(command), sizeof(command) - strlen(command),
            "; rm %s) &", tmpName);
 #endif
