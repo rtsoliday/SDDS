@@ -3780,6 +3780,9 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   if (flags & (EQUAL_ASPECT1 | EQUAL_ASPECT_1))
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -equalaspect");
+  if (flags & Y_FLIP)
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -yflip");
   snprintf(command + strlen(command), sizeof(command) - strlen(command),
            " && del \"%s\"\"", tmpName);
 #else
@@ -3804,6 +3807,9 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   if (flags & (EQUAL_ASPECT1 | EQUAL_ASPECT_1))
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -equalaspect");
+  if (flags & Y_FLIP)
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -yflip");
   snprintf(command + strlen(command), sizeof(command) - strlen(command),
            "; rm %s) &", tmpName);
 #endif

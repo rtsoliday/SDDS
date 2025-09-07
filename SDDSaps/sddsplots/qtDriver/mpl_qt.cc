@@ -98,7 +98,7 @@ static int run3d(const char *filename, const char *xlabel,
                  const char *ylabel, const char *title,
                  const char *topline, int fontSize, bool equalAspect,
                  double shadeMin, double shadeMax, bool shadeRangeSet,
-                 bool gray, double hue0, double hue1) {
+                 bool gray, double hue0, double hue1, bool yFlip) {
   Q3DSurface *graph = new Q3DSurface();
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
@@ -167,6 +167,8 @@ static int run3d(const char *filename, const char *xlabel,
     graph->axisZ()->setTitle(QString::fromUtf8(ylabel));
     graph->axisZ()->setTitleVisible(true);
   }
+  if (yFlip)
+    graph->axisZ()->setReversed(true);
 
   QFile dataFile(filename);
   if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -177,6 +179,8 @@ static int run3d(const char *filename, const char *xlabel,
   int nx, ny;
   double xmin, xmax, ymin, ymax;
   in >> nx >> ny >> xmin >> xmax >> ymin >> ymax;
+  if (yFlip)
+    graph->axisZ()->setRange(ymin, ymax);
   double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
   double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
   QSurfaceDataArray *dataArray = new QSurfaceDataArray;
@@ -813,6 +817,7 @@ int main(int argc, char *argv[]) {
   bool shadeRangeSet = false;
   bool gray = false;
   double hue0 = 0.0, hue1 = 1.0;
+  bool yFlip = false;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
       file3d = argv[++i];
@@ -852,12 +857,13 @@ int main(int argc, char *argv[]) {
     } else if (!strcmp(argv[i], "-mapshade") && i + 2 < argc) {
       hue0 = atof(argv[++i]);
       hue1 = atof(argv[++i]);
-    }
+    } else if (!strcmp(argv[i], "-yflip"))
+      yFlip = true;
   }
   if (file3d)
     return run3d(file3d, xlabel, ylabel, title, topline, fontSize,
                  equalAspect, shadeMin, shadeMax, shadeRangeSet, gray,
-                 hue0, hue1);
+                 hue0, hue1, yFlip);
 
   // Create main window
   QMainWindow mainWindow;
