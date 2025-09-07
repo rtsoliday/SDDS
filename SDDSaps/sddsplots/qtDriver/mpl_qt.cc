@@ -194,6 +194,7 @@ static int run3d(const char *filename, const char *xlabel,
   series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
   series->setDrawMode(QSurface3DSeries::DrawSurface);
   series->setMeshSmooth(true);
+  series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
   int wireframeMode = 0;
   QShortcut *toggleLines = new QShortcut(QKeySequence(QStringLiteral("g")), &widget);
   QObject::connect(toggleLines, &QShortcut::activated,
