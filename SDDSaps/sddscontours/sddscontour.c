@@ -202,7 +202,7 @@ void checkLabelParameters(SDDS_TABLE *SDDS_table, char *p1, char *p2, char *p3, 
 void freeParameterLabel(char *users_label, char *label);
 void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    double ymin, double ymax, const char *xlabel,
-                   const char *ylabel);
+                   const char *ylabel, const char *title);
 void make_enumerated_yscale(char **label, double *yposition, long labels, char *editCommand, long interval, double scale, long thickness, char *ylabel, double ylableScale);
 void make_enumerated_xscale(char **label, double *xposition, long labels, char *editCommand, long interval, double scale, long thickness, char *xlabel, double xlabelScale);
 
@@ -241,7 +241,7 @@ long drawline_AP(DRAW_LINE_SPEC **drawLineSpec, long *drawlines, char **item, lo
 void determine_drawline(DRAW_LINE_SPEC *drawLineSpec, long drawlines, SDDS_TABLE *table);
 void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    double ymin, double ymax, const char *xlabel,
-                   const char *ylabel);
+                   const char *ylabel, const char *title);
 void draw_lines(DRAW_LINE_SPEC *drawLineSpec, long drawlines, long linetypeDefault, double *limit);
 void get_xyaxis_value(char *xscalePar, char *xoffsetPar, char *yscalPar, char *yoffsetPar,
                       SDDS_DATASET *SDDS_table,
@@ -2862,7 +2862,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
   }
   if (threeD) {
     plot3DSurface(data_value, nx, ny, xmin, xmax, ymin, ymax, xlabel,
-                  ylabel);
+                  ylabel, title);
     if (xintervals)
       free(xintervals);
     if (yintervals)
@@ -3719,7 +3719,7 @@ void determine_drawline(DRAW_LINE_SPEC *drawLineSpec, long drawlines, SDDS_TABLE
 
 void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    double ymin, double ymax, const char *xlabel,
-                   const char *ylabel) {
+                   const char *ylabel, const char *title) {
 #if defined(_WIN32)
   char tmpName[L_tmpnam];
   if (!tmpnam(tmpName)) {
@@ -3750,12 +3750,12 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   char command[1024];
 #if defined(_WIN32)
   snprintf(command, sizeof(command),
-           "start /B cmd /c \"mpl_qt -3d \"%s\" -xlabel \"%s\" -ylabel \"%s\" && del \"%s\"\"",
-           tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", tmpName);
+           "start /B cmd /c \"mpl_qt -3d \"%s\" -xlabel \"%s\" -ylabel \"%s\" -plottitle \"%s\" && del \"%s\"\"",
+           tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "", tmpName);
 #else
   snprintf(command, sizeof(command),
-           "(mpl_qt -3d %s -xlabel \"%s\" -ylabel \"%s\"; rm %s) &",
-           tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", tmpName);
+           "(mpl_qt -3d %s -xlabel '%s' -ylabel '%s' -plottitle '%s'; rm %s) &",
+           tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "", tmpName);
 #endif
   if (system(command) == -1)
     fprintf(stderr, "unable to run mpl_qt for 3D plot\n");

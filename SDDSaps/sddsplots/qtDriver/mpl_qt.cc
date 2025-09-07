@@ -27,6 +27,7 @@
 #include <QVector3D>
 #include <QFont>
 #include <QShortcut>
+#include <QLabel>
 #include <cstdlib>
 #ifdef _WIN32
 #  include <windows.h>
@@ -91,7 +92,7 @@ QFrame *canvas;
 QMainWindow *mainWindowPointer;
 
 static int run3d(const char *filename, const char *xlabel,
-                 const char *ylabel, int fontSize) {
+                 const char *ylabel, const char *title, int fontSize) {
   Q3DSurface *graph = new Q3DSurface();
   Q3DTheme *theme = graph->activeTheme();
   Q3DCamera *camera = graph->scene()->activeCamera();
@@ -105,6 +106,12 @@ static int run3d(const char *filename, const char *xlabel,
   QVBoxLayout *vbox = new QVBoxLayout(&widget);
   vbox->setContentsMargins(0, 0, 0, 0);
   vbox->addWidget(container);
+  if (title && title[0]) {
+    QLabel *titleLabel = new QLabel(QString::fromUtf8(title));
+    titleLabel->setAlignment(Qt::AlignCenter);
+    titleLabel->setFont(theme->font());
+    vbox->addWidget(titleLabel);
+  }
   widget.setWindowTitle("MPL Outboard Driver 3D");
 
   QFont font = theme->font();
@@ -734,6 +741,7 @@ int main(int argc, char *argv[]) {
   char *file3d = NULL;
   char *xlabel = NULL;
   char *ylabel = NULL;
+  char *title = NULL;
   int fontSize = 0;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
@@ -742,11 +750,13 @@ int main(int argc, char *argv[]) {
       xlabel = argv[++i];
     else if (!strcmp(argv[i], "-ylabel") && i + 1 < argc)
       ylabel = argv[++i];
+    else if (!strcmp(argv[i], "-plottitle") && i + 1 < argc)
+      title = argv[++i];
     else if (!strcmp(argv[i], "-fontsize") && i + 1 < argc)
       fontSize = atoi(argv[++i]);
   }
   if (file3d)
-    return run3d(file3d, xlabel, ylabel, fontSize);
+    return run3d(file3d, xlabel, ylabel, title, fontSize);
 
   // Create main window
   QMainWindow mainWindow;
