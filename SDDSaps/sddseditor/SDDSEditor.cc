@@ -865,10 +865,13 @@ bool SDDSEditor::writeFile(const QString &path) {
       return false;
     }
 
-    for (int i = 0; i < pcount && i < pd.parameters.size(); ++i) {
-      const char *name = dataset.layout.parameter_definition[i].name;
-      int32_t type = dataset.layout.parameter_definition[i].type;
-      QString text = pd.parameters[i];
+    for (int i = 0; i < pcount; ++i) {
+      const PARAMETER_DEFINITION &pdef = dataset.layout.parameter_definition[i];
+      if (pdef.fixed_value)
+        continue;
+      QString text = (i < pd.parameters.size()) ? pd.parameters[i] : QString();
+      const char *name = pdef.name;
+      int32_t type = pdef.type;
       switch (type) {
       case SDDS_SHORT:
         SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (short)text.toShort(), NULL);
@@ -1626,7 +1629,20 @@ void SDDSEditor::commitModels() {
   int32_t pcount = dataset.layout.n_parameters;
   pd.parameters.resize(pcount);
   for (int32_t i = 0; i < pcount && i < paramModel->rowCount(); ++i) {
-    pd.parameters[i] = paramModel->item(i, 0)->text();
+    QString val = paramModel->item(i, 0)->text();
+    pd.parameters[i] = val;
+    PARAMETER_DEFINITION *def = &dataset.layout.parameter_definition[i];
+    if (def->fixed_value) {
+      free(def->fixed_value);
+      def->fixed_value = val.isEmpty() ? nullptr : strdup(val.toLocal8Bit().constData());
+      for (int pg = 0; pg < pages.size(); ++pg) {
+        if (pg == currentPage)
+          continue;
+        if (pages[pg].parameters.size() < pcount)
+          pages[pg].parameters.resize(pcount);
+        pages[pg].parameters[i] = val;
+      }
+    }
   }
 
   int32_t ccount = dataset.layout.n_columns;
