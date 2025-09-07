@@ -20,6 +20,7 @@
 #include <QtDataVisualization/QSurfaceDataProxy>
 #include <QtDataVisualization/Q3DTheme>
 #include <QtDataVisualization/Q3DCamera>
+#include <QtDataVisualization/QValue3DAxis>
 #include <QLinearGradient>
 #include <QColor>
 #include <QFile>
@@ -98,7 +99,8 @@ static int run3d(const char *filename, const char *xlabel,
                  const char *ylabel, const char *title,
                  const char *topline, int fontSize, bool equalAspect,
                  double shadeMin, double shadeMax, bool shadeRangeSet,
-                 bool gray, double hue0, double hue1, bool yFlip) {
+                 bool gray, double hue0, double hue1, bool yFlip,
+                 bool hideAxes, bool hideZAxis) {
   Q3DSurface *graph = new Q3DSurface();
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
@@ -169,6 +171,17 @@ static int run3d(const char *filename, const char *xlabel,
   }
   if (yFlip)
     graph->axisZ()->setReversed(true);
+  if (hideAxes) {
+    theme->setGridEnabled(false);
+    graph->axisX()->setTitleVisible(false);
+    graph->axisX()->setLabelFormat("");
+    graph->axisZ()->setTitleVisible(false);
+    graph->axisZ()->setLabelFormat("");
+    if (hideZAxis) {
+      graph->axisY()->setTitleVisible(false);
+      graph->axisY()->setLabelFormat("");
+    }
+  }
 
   QFile dataFile(filename);
   if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -818,6 +831,8 @@ int main(int argc, char *argv[]) {
   bool gray = false;
   double hue0 = 0.0, hue1 = 1.0;
   bool yFlip = false;
+  bool hideAxes = false;
+  bool hideZAxis = false;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
       file3d = argv[++i];
@@ -859,11 +874,17 @@ int main(int argc, char *argv[]) {
       hue1 = atof(argv[++i]);
     } else if (!strcmp(argv[i], "-yflip"))
       yFlip = true;
+    else if (!strcmp(argv[i], "-noborder"))
+      hideAxes = true;
+    else if (!strcmp(argv[i], "-noscale")) {
+      hideAxes = true;
+      hideZAxis = true;
+    }
   }
   if (file3d)
     return run3d(file3d, xlabel, ylabel, title, topline, fontSize,
                  equalAspect, shadeMin, shadeMax, shadeRangeSet, gray,
-                 hue0, hue1, yFlip);
+                 hue0, hue1, yFlip, hideAxes, hideZAxis);
 
   // Create main window
   QMainWindow mainWindow;

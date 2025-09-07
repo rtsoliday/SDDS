@@ -3777,6 +3777,12 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   if (topline && topline[0])
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -topline \"%s\"", topline);
+  if (flags & NO_BORDER)
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -noborder");
+  if (flags & NO_SCALES)
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -noscale");
   if (flags & (EQUAL_ASPECT1 | EQUAL_ASPECT_1))
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -equalaspect");
@@ -3804,6 +3810,12 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   if (topline && topline[0])
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -topline '%s'", topline);
+  if (flags & NO_BORDER)
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -noborder");
+  if (flags & NO_SCALES)
+    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+             " -noscale");
   if (flags & (EQUAL_ASPECT1 | EQUAL_ASPECT_1))
     snprintf(command + strlen(command), sizeof(command) - strlen(command),
              " -equalaspect");
