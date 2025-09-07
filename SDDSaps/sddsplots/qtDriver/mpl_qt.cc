@@ -94,7 +94,8 @@ QFrame *canvas;
 QMainWindow *mainWindowPointer;
 
 static int run3d(const char *filename, const char *xlabel,
-                 const char *ylabel, const char *title, int fontSize) {
+                 const char *ylabel, const char *title,
+                 const char *topline, int fontSize) {
   Q3DSurface *graph = new Q3DSurface();
   Q3DTheme *theme = graph->activeTheme();
   Q3DCamera *camera = graph->scene()->activeCamera();
@@ -112,6 +113,20 @@ static int run3d(const char *filename, const char *xlabel,
   widgetPalette.setColor(QPalette::Window, theme->backgroundColor());
   widget.setPalette(widgetPalette);
   widget.setAutoFillBackground(true);
+  if (topline && topline[0]) {
+    QLabel *toplineLabel = new QLabel(QString::fromUtf8(topline));
+    toplineLabel->setAlignment(Qt::AlignCenter);
+    toplineLabel->setFont(theme->font());
+    toplineLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    toplineLabel->setMaximumHeight(toplineLabel->sizeHint().height());
+    QPalette palette = toplineLabel->palette();
+    palette.setColor(QPalette::Window, theme->backgroundColor());
+    toplineLabel->setPalette(palette);
+    toplineLabel->setAutoFillBackground(true);
+    toplineLabel->setContentsMargins(0, 0, 0, 0);
+    toplineLabel->setMargin(0);
+    vbox->addWidget(toplineLabel);
+  }
   container->setContentsMargins(0, 0, 0, 0);
   vbox->addWidget(container);
   if (title && title[0]) {
@@ -758,6 +773,7 @@ int main(int argc, char *argv[]) {
   char *xlabel = NULL;
   char *ylabel = NULL;
   char *title = NULL;
+  char *topline = NULL;
   int fontSize = 0;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
@@ -768,11 +784,13 @@ int main(int argc, char *argv[]) {
       ylabel = argv[++i];
     else if (!strcmp(argv[i], "-plottitle") && i + 1 < argc)
       title = argv[++i];
+    else if (!strcmp(argv[i], "-topline") && i + 1 < argc)
+      topline = argv[++i];
     else if (!strcmp(argv[i], "-fontsize") && i + 1 < argc)
       fontSize = atoi(argv[++i]);
   }
   if (file3d)
-    return run3d(file3d, xlabel, ylabel, title, fontSize);
+    return run3d(file3d, xlabel, ylabel, title, topline, fontSize);
 
   // Create main window
   QMainWindow mainWindow;
