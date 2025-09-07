@@ -31,6 +31,7 @@
 #include <QPalette>
 #include <QSizePolicy>
 #include <cstdlib>
+#include <float.h>
 #ifdef _WIN32
 #  include <windows.h>
 #elif defined(__APPLE__)
@@ -95,7 +96,9 @@ QMainWindow *mainWindowPointer;
 
 static int run3d(const char *filename, const char *xlabel,
                  const char *ylabel, const char *title,
-                 const char *topline, int fontSize, bool equalAspect) {
+                 const char *topline, int fontSize, bool equalAspect,
+                 double shadeMin, double shadeMax, bool shadeRangeSet,
+                 bool gray) {
   Q3DSurface *graph = new Q3DSurface();
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
@@ -178,28 +181,46 @@ static int run3d(const char *filename, const char *xlabel,
   double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
   QSurfaceDataArray *dataArray = new QSurfaceDataArray;
   dataArray->reserve(ny);
+  double zmin = DBL_MAX, zmax = -DBL_MAX;
   for (int j = 0; j < ny; j++) {
     QSurfaceDataRow *row = new QSurfaceDataRow(nx);
     for (int i = 0; i < nx; i++) {
       double z;
       in >> z;
+      if (z < zmin)
+        zmin = z;
+      if (z > zmax)
+        zmax = z;
       (*row)[i].setPosition(QVector3D(xmin + i * dx, z, ymin + j * dy));
     }
     dataArray->append(row);
   }
   QSurfaceDataProxy *proxy = new QSurfaceDataProxy;
   proxy->resetArray(dataArray);
+  if (shadeRangeSet) {
+    zmin = shadeMin;
+    zmax = shadeMax;
+  }
   QSurface3DSeries *series = new QSurface3DSeries(proxy);
-  if (!spectrumallocated)
-    allocspectrum();
+  if (!gray) {
+    if (!spectrumallocated)
+      allocspectrum();
+  }
   QLinearGradient gradient;
-  for (int i = 0; i < nspect; i++)
-    gradient.setColorAt((double)i / (nspect - 1), QColor::fromRgb(spectrum[i]));
+  for (int i = 0; i < nspect; i++) {
+    double frac = (double)i / (nspect - 1);
+    if (gray)
+      gradient.setColorAt(frac,
+                          QColor::fromRgbF(frac, frac, frac));
+    else
+      gradient.setColorAt(frac, QColor::fromRgb(spectrum[i]));
+  }
   series->setBaseGradient(gradient);
   series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
   series->setDrawMode(QSurface3DSeries::DrawSurface);
   series->setMeshSmooth(true);
   series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
+  graph->axisY()->setRange(zmin, zmax);
   int wireframeMode = 0;
   QShortcut *toggleLines = new QShortcut(QKeySequence(QStringLiteral("g")), &widget);
   QObject::connect(toggleLines, &QShortcut::activated,
@@ -782,6 +803,9 @@ int main(int argc, char *argv[]) {
   char *topline = NULL;
   int fontSize = 0;
   bool equalAspect = false;
+  double shadeMin = 0.0, shadeMax = 0.0;
+  bool shadeRangeSet = false;
+  bool gray = false;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-3d") && i + 1 < argc)
       file3d = argv[++i];
@@ -797,9 +821,32 @@ int main(int argc, char *argv[]) {
       fontSize = atoi(argv[++i]);
     else if (!strcmp(argv[i], "-equalaspect"))
       equalAspect = true;
+    else if (!strcmp(argv[i], "-shade") && i + 1 < argc) {
+      nspect = atoi(argv[++i]);
+      spectrumallocated = 0;
+      if (i + 1 < argc) {
+        char *endptr = NULL;
+        double val = strtod(argv[i + 1], &endptr);
+        if (endptr != argv[i + 1] && *endptr == '\0') {
+          shadeMin = val;
+          i++;
+          val = strtod(argv[i + 1], &endptr);
+          if (endptr != argv[i + 1] && *endptr == '\0') {
+            shadeMax = val;
+            shadeRangeSet = true;
+            i++;
+          }
+        }
+      }
+      if (i + 1 < argc && !strcmp(argv[i + 1], "gray")) {
+        gray = true;
+        i++;
+      }
+    }
   }
   if (file3d)
-    return run3d(file3d, xlabel, ylabel, title, topline, fontSize, equalAspect);
+    return run3d(file3d, xlabel, ylabel, title, topline, fontSize,
+                 equalAspect, shadeMin, shadeMax, shadeRangeSet, gray);
 
   // Create main window
   QMainWindow mainWindow;
