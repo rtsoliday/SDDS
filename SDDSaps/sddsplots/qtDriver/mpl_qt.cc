@@ -28,6 +28,8 @@
 #include <QFont>
 #include <QShortcut>
 #include <QLabel>
+#include <QPalette>
+#include <QSizePolicy>
 #include <cstdlib>
 #ifdef _WIN32
 #  include <windows.h>
@@ -105,11 +107,25 @@ static int run3d(const char *filename, const char *xlabel,
   QWidget widget;
   QVBoxLayout *vbox = new QVBoxLayout(&widget);
   vbox->setContentsMargins(0, 0, 0, 0);
+  vbox->setSpacing(0);
+  QPalette widgetPalette = widget.palette();
+  widgetPalette.setColor(QPalette::Window, theme->backgroundColor());
+  widget.setPalette(widgetPalette);
+  widget.setAutoFillBackground(true);
+  container->setContentsMargins(0, 0, 0, 0);
   vbox->addWidget(container);
   if (title && title[0]) {
     QLabel *titleLabel = new QLabel(QString::fromUtf8(title));
     titleLabel->setAlignment(Qt::AlignCenter);
     titleLabel->setFont(theme->font());
+    titleLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    titleLabel->setMaximumHeight(titleLabel->sizeHint().height());
+    QPalette palette = titleLabel->palette();
+    palette.setColor(QPalette::Window, theme->backgroundColor());
+    titleLabel->setPalette(palette);
+    titleLabel->setAutoFillBackground(true);
+    titleLabel->setContentsMargins(0, 0, 0, 0);
+    titleLabel->setMargin(0);
     vbox->addWidget(titleLabel);
   }
   widget.setWindowTitle("MPL Outboard Driver 3D");
