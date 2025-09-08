@@ -34,6 +34,7 @@
 #include <QPalette>
 #include <QSizePolicy>
 #include <QDateTime>
+#include <QList>
 #include <cstring>
 #include <cstdlib>
 #include <float.h>
@@ -363,6 +364,33 @@ static QWidget *run3d(const char *filename, const char *xlabel,
                      graph->axisX()->setTitle(graph->axisX()->title());
                      graph->axisY()->setTitle(graph->axisY()->title());
                      graph->axisZ()->setTitle(graph->axisZ()->title());
+                   });
+  QShortcut *toggleBW =
+      new QShortcut(QKeySequence(QStringLiteral("W")), widget);
+  QObject::connect(toggleBW, &QShortcut::activated,
+                   [theme, widget, container]() {
+                     static bool white = false;
+                     white = !white;
+                     QColor bg = white ? Qt::white : Qt::black;
+                     QColor fg = white ? Qt::black : Qt::white;
+                     theme->setBackgroundColor(bg);
+                     theme->setWindowColor(bg);
+                     theme->setLabelTextColor(fg);
+                     theme->setGridLineColor(fg);
+                     theme->setLabelBackgroundColor(bg);
+                     QPalette pal = widget->palette();
+                     pal.setColor(QPalette::Window, bg);
+                     pal.setColor(QPalette::WindowText, fg);
+                     widget->setPalette(pal);
+                     container->setPalette(pal);
+                     const QList<QLabel *> labels =
+                         widget->findChildren<QLabel *>();
+                     for (QLabel *label : labels) {
+                       QPalette lp = label->palette();
+                       lp.setColor(QPalette::Window, bg);
+                       lp.setColor(QPalette::WindowText, fg);
+                       label->setPalette(lp);
+                     }
                    });
   graph->addSeries(series);
   return widget;
@@ -859,6 +887,7 @@ z - toggle replotting to zoom\n\
 - - decrease window size\n\
 \n\
 Other keyboard shortcuts:\n\
+W - toggle white/black theme\n\
 . - toggle mouse tracking\n\
 q - quit");
         layout->addWidget(textEdit);
