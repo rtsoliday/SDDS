@@ -31,6 +31,10 @@ void save() {
             onWhite();
             QPainter painter(&printer);
             canvas->render(&painter);
+            if (surfaceGraph && surfaceContainer) {
+                QImage graphImage = surfaceGraph->renderToImage(0, surfaceContainer->size());
+                painter.drawImage(surfaceContainer->geometry().topLeft(), graphImage);
+            }
             painter.end();
             onBlack();
         } else {
