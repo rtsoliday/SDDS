@@ -120,7 +120,7 @@ extern QVector<QWidget *> surfaceContainers;
                       ((static_cast<uint32_t>(b) & 0xFF)))
 int allocspectrum();
 int alloccolors();
-void setup_shortcuts(QMainWindow *mainWindow);
+void setup_shortcuts(QMainWindow *mainWindow, bool for3D = false);
 struct COORDREC *makecoordrec();
 void destroycoordrecs();
 void destroyplotrec(struct PLOTREC *rec);

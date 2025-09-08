@@ -1282,7 +1282,7 @@ int main(int argc, char *argv[]) {
     mainWindow.setWindowTitle(wtitle);
     surfaceGraph = surfaceGraphs[0];
     surfaceContainer = surfaceContainers[0];
-    setup_shortcuts(&mainWindow);
+    setup_shortcuts(&mainWindow, true);
     mainWindow.show();
     return app.exec();
   }

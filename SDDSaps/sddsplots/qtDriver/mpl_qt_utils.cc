@@ -486,7 +486,7 @@ void to_number(QMainWindow *mainWindow) {
   }
 }
 
-void setup_shortcuts(QMainWindow *mainWindow) {
+void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
   QShortcut *shortcut_B = new QShortcut(QKeySequence(Qt::Key_B), mainWindow);
   QShortcut *shortcut_C = new QShortcut(QKeySequence(Qt::Key_C), mainWindow);
   QShortcut *shortcut_D = new QShortcut(QKeySequence(Qt::Key_D), mainWindow);
@@ -498,7 +498,9 @@ void setup_shortcuts(QMainWindow *mainWindow) {
   QShortcut *shortcut_R = new QShortcut(QKeySequence(Qt::Key_R), mainWindow);
   QShortcut *shortcut_T = new QShortcut(QKeySequence(Qt::Key_T), mainWindow);
   QShortcut *shortcut_W = new QShortcut(QKeySequence(Qt::Key_W), mainWindow);
-  QShortcut *shortcut_Z = new QShortcut(QKeySequence(Qt::Key_Z), mainWindow);
+  QShortcut *shortcut_Z = nullptr;
+  if (!for3D)
+    shortcut_Z = new QShortcut(QKeySequence(Qt::Key_Z), mainWindow);
   QShortcut *shortcut_0 = new QShortcut(QKeySequence(Qt::Key_0), mainWindow);
   QShortcut *shortcut_1 = new QShortcut(QKeySequence(Qt::Key_1), mainWindow);
   QShortcut *shortcut_2 = new QShortcut(QKeySequence(Qt::Key_2), mainWindow);
@@ -584,10 +586,12 @@ void setup_shortcuts(QMainWindow *mainWindow) {
     whiteTheme = !whiteTheme;
     apply_theme();
   });
-  QObject::connect(shortcut_Z, &QShortcut::activated, [](){
-    replotZoom = !replotZoom;
-    replotZoomAction->setChecked(replotZoom);
-  });
+  if (!for3D) {
+    QObject::connect(shortcut_Z, &QShortcut::activated, []() {
+      replotZoom = !replotZoom;
+      replotZoomAction->setChecked(replotZoom);
+    });
+  }
   QObject::connect(shortcut_0, &QShortcut::activated, [mainWindow](){
     mainWindow->showNormal();
     mainWindow->resize(WIDTH + 20, HEIGHT + 40);
