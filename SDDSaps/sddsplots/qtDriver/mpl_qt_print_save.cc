@@ -4,10 +4,14 @@ void print() {
     QPrinter printer;
     QPrintDialog dialog(&printer, canvas);
     if (dialog.exec() == QDialog::Accepted) {
-        QPainter painter(&printer);
-        // Render the frame’s contents onto the printer
         onWhite();
+        QPainter painter(&printer);
         canvas->render(&painter);
+        if (surfaceGraph && surfaceContainer) {
+            QImage graphImage = surfaceGraph->renderToImage(0, surfaceContainer->size());
+            painter.drawImage(surfaceContainer->geometry().topLeft(), graphImage);
+        }
+        painter.end();
         onBlack();
     }
 }
