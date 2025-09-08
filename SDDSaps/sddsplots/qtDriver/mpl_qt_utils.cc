@@ -399,6 +399,7 @@ void setup_shortcuts(QMainWindow *mainWindow) {
   QShortcut *shortcut_Q = new QShortcut(QKeySequence(Qt::Key_Q), mainWindow);
   QShortcut *shortcut_R = new QShortcut(QKeySequence(Qt::Key_R), mainWindow);
   QShortcut *shortcut_T = new QShortcut(QKeySequence(Qt::Key_T), mainWindow);
+  QShortcut *shortcut_W = new QShortcut(QKeySequence(Qt::Key_W), mainWindow);
   QShortcut *shortcut_Z = new QShortcut(QKeySequence(Qt::Key_Z), mainWindow);
   QShortcut *shortcut_0 = new QShortcut(QKeySequence(Qt::Key_0), mainWindow);
   QShortcut *shortcut_1 = new QShortcut(QKeySequence(Qt::Key_1), mainWindow);
@@ -479,6 +480,14 @@ void setup_shortcuts(QMainWindow *mainWindow) {
     int height = screenGeometry.height() / 2;
     mainWindow->showNormal();
     mainWindow->setGeometry(screenGeometry.x(), screenGeometry.y(), width, height);
+  });
+  QObject::connect(shortcut_W, &QShortcut::activated, [](){
+    static bool whiteTheme = false;
+    if (whiteTheme)
+      onBlack();
+    else
+      onWhite();
+    whiteTheme = !whiteTheme;
   });
   QObject::connect(shortcut_Z, &QShortcut::activated, [](){
     replotZoom = !replotZoom;
