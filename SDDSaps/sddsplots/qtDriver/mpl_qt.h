@@ -110,6 +110,8 @@ extern QWidget *surfaceContainer;
 extern QStackedWidget *plotStack;
 extern int current3DPlot;
 extern int total3DPlots;
+extern QVector<QtDataVisualization::Q3DSurface *> surfaceGraphs;
+extern QVector<QWidget *> surfaceContainers;
 
 #define RGB_QT(r, g, b) (                                              \
                       ((static_cast<uint32_t>(r) & 0xFF) << 16) |   \

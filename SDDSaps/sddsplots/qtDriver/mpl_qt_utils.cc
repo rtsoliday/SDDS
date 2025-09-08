@@ -1,4 +1,9 @@
 #include "mpl_qt.h"
+#include <QtDataVisualization/Q3DTheme>
+#include <QColor>
+#include <QLabel>
+#include <QList>
+#include <QPalette>
 
 int allocspectrum() {
   int n, ok = 1, k;
@@ -333,6 +338,8 @@ void nav_next(QMainWindow *mainWindow) {
       current3DPlot++;
       plotStack->setCurrentIndex(current3DPlot);
       canvas = plotStack->currentWidget();
+      surfaceGraph = surfaceGraphs[current3DPlot];
+      surfaceContainer = surfaceContainers[current3DPlot];
       QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(current3DPlot + 1).arg(total3DPlots);
       mainWindow->setWindowTitle(wtitle);
     }
@@ -358,6 +365,8 @@ void nav_previous(QMainWindow *mainWindow) {
       current3DPlot--;
       plotStack->setCurrentIndex(current3DPlot);
       canvas = plotStack->currentWidget();
+      surfaceGraph = surfaceGraphs[current3DPlot];
+      surfaceContainer = surfaceContainers[current3DPlot];
       QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(current3DPlot + 1).arg(total3DPlots);
       mainWindow->setWindowTitle(wtitle);
     }
@@ -405,6 +414,8 @@ void to_number(QMainWindow *mainWindow) {
         current3DPlot = number - 1;
         plotStack->setCurrentIndex(current3DPlot);
         canvas = plotStack->currentWidget();
+        surfaceGraph = surfaceGraphs[current3DPlot];
+        surfaceContainer = surfaceContainers[current3DPlot];
         QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(current3DPlot + 1).arg(total3DPlots);
         mainWindow->setWindowTitle(wtitle);
       }
@@ -525,12 +536,41 @@ void setup_shortcuts(QMainWindow *mainWindow) {
     mainWindow->showNormal();
     mainWindow->setGeometry(screenGeometry.x(), screenGeometry.y(), width, height);
   });
-  QObject::connect(shortcut_W, &QShortcut::activated, [](){
+  shortcut_W->setContext(Qt::ApplicationShortcut);
+  QObject::connect(shortcut_W, &QShortcut::activated, []() {
     static bool whiteTheme = false;
-    if (whiteTheme)
-      onBlack();
-    else
-      onWhite();
+    if (surfaceGraph) {
+      QtDataVisualization::Q3DTheme *theme = surfaceGraph->activeTheme();
+      QColor bg = whiteTheme ? Qt::black : Qt::white;
+      QColor fg = whiteTheme ? Qt::white : Qt::black;
+      theme->setBackgroundColor(bg);
+      theme->setWindowColor(bg);
+      theme->setLabelTextColor(fg);
+      theme->setGridLineColor(fg);
+      theme->setLabelBackgroundColor(bg);
+      if (surfaceContainer) {
+        QPalette pal = surfaceContainer->palette();
+        pal.setColor(QPalette::Window, bg);
+        pal.setColor(QPalette::WindowText, fg);
+        surfaceContainer->setPalette(pal);
+        QWidget *parent = surfaceContainer->parentWidget();
+        if (parent) {
+          parent->setPalette(pal);
+          const QList<QLabel *> labels = parent->findChildren<QLabel *>();
+          for (QLabel *label : labels) {
+            QPalette lp = label->palette();
+            lp.setColor(QPalette::Window, bg);
+            lp.setColor(QPalette::WindowText, fg);
+            label->setPalette(lp);
+          }
+        }
+      }
+    } else {
+      if (whiteTheme)
+        onBlack();
+      else
+        onWhite();
+    }
     whiteTheme = !whiteTheme;
   });
   QObject::connect(shortcut_Z, &QShortcut::activated, [](){

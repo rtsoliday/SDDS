@@ -29,6 +29,7 @@
 #include <QTextStream>
 #include <QVector3D>
 #include <QFont>
+#include <QVector>
 #include <QShortcut>
 #include <QLabel>
 #include <QPalette>
@@ -105,6 +106,8 @@ QWidget *surfaceContainer = nullptr;
 QStackedWidget *plotStack = nullptr;
 int current3DPlot = 0;
 int total3DPlots = 0;
+QVector<Q3DSurface *> surfaceGraphs;
+QVector<QWidget *> surfaceContainers;
 
 struct Plot3DArgs {
   QString file;
@@ -175,6 +178,8 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   QVector3D defaultTarget = camera->target();
   QWidget *container = QWidget::createWindowContainer(graph);
   surfaceContainer = container;
+  surfaceGraphs.append(graph);
+  surfaceContainers.append(container);
   container->setMinimumSize(QSize(640, 480));
   QWidget *widget = new QWidget;
   QVBoxLayout *vbox = new QVBoxLayout(widget);
@@ -399,33 +404,6 @@ static QWidget *run3d(const char *filename, const char *xlabel,
                      graph->axisX()->setTitle(graph->axisX()->title());
                      graph->axisY()->setTitle(graph->axisY()->title());
                      graph->axisZ()->setTitle(graph->axisZ()->title());
-                   });
-  QShortcut *toggleBW =
-      new QShortcut(QKeySequence(QStringLiteral("W")), widget);
-  QObject::connect(toggleBW, &QShortcut::activated,
-                   [theme, widget, container]() {
-                     static bool white = false;
-                     white = !white;
-                     QColor bg = white ? Qt::white : Qt::black;
-                     QColor fg = white ? Qt::black : Qt::white;
-                     theme->setBackgroundColor(bg);
-                     theme->setWindowColor(bg);
-                     theme->setLabelTextColor(fg);
-                     theme->setGridLineColor(fg);
-                     theme->setLabelBackgroundColor(bg);
-                     QPalette pal = widget->palette();
-                     pal.setColor(QPalette::Window, bg);
-                     pal.setColor(QPalette::WindowText, fg);
-                     widget->setPalette(pal);
-                     container->setPalette(pal);
-                     const QList<QLabel *> labels =
-                         widget->findChildren<QLabel *>();
-                     for (QLabel *label : labels) {
-                       QPalette lp = label->palette();
-                       lp.setColor(QPalette::Window, bg);
-                       lp.setColor(QPalette::WindowText, fg);
-                       label->setPalette(lp);
-                     }
                    });
   graph->addSeries(series);
   return widget;
@@ -922,7 +900,7 @@ z - toggle replotting to zoom\n\
 - - decrease window size\n\
 \n\
 Other keyboard shortcuts:\n\
-W - toggle white/black theme\n\
+w - toggle white/black theme\n\
 . - toggle mouse tracking\n\
 q - quit");
         layout->addWidget(textEdit);
@@ -1109,6 +1087,8 @@ int main(int argc, char *argv[]) {
     current3DPlot = 0;
     QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(1).arg(total3DPlots);
     mainWindow.setWindowTitle(wtitle);
+    surfaceGraph = surfaceGraphs[0];
+    surfaceContainer = surfaceContainers[0];
     setup_shortcuts(&mainWindow);
     mainWindow.show();
     return app.exec();
