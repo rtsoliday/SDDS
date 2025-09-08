@@ -166,7 +166,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   theme->setGridLineColor(fgColor);
   theme->setLabelBackgroundEnabled(true);
   theme->setLabelBackgroundColor(bgColor);
-  theme->setLabelBorderEnabled(false);
+  theme->setLabelBorderEnabled(true);
   Q3DCamera *camera = graph->scene()->activeCamera();
   camera->setCameraPreset(Q3DCamera::CameraPresetIsometricRightHigh); // Default orientation
   float defaultX = camera->xRotation();
