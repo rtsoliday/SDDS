@@ -97,6 +97,7 @@ static char *option[OPTIONS] = {
   "convertunits", "yflip", "showgaps", "3d"};
 
 static long threeD = 0;
+static long threeDBar = 0;
 static char *threeDCommand = NULL;
 static char **threeDFiles = NULL;
 static long threeDFileCount = 0;
@@ -107,7 +108,7 @@ char *USAGE = "sddscontour [-pipe] [<SDDSfilename>]\n\
   -columnmatch=<indep-column-name>,<expression> [-deltas[={fractional|normalize}]]}]]\n\
  [-array=<z-2d-array>[,<x-1d-array>,<y-id-array>]] [-swaparray]\n\
  [-xyz=<x-column>,<y-column>,<z-column>]\n\
- [-3d]\n\
+ [-3d[=surface|bar]]\n\
  [-rpndefinitionsfiles=<filename>[,...]]\n\
  [-rpnexpressions=<setup-expression>[,...][,algebraic]]\n\
  [-rpntransform=<expression>[,algebraic]] [-fixedrange] [-showGaps]\n\
@@ -607,6 +608,16 @@ void sddscontour_main(char *input_line)
         break;
       case SET_3D:
         threeD = 1;
+        if (s_arg[i_arg].n_items > 1) {
+          if (strcmp(s_arg[i_arg].list[1], "bar") == 0) {
+            threeDBar = 1;
+          } else if (strcmp(s_arg[i_arg].list[1], "surface") == 0) {
+            threeDBar = 0;
+          } else {
+            fprintf(stderr, "Error (sddscontour): invalid -3d option, use -3d=surface or -3d=bar\n");
+            return (1);
+          }
+        }
         break;
       case SET_DEVICE:
         if (s_arg[i_arg].n_items < 2) {
@@ -3770,12 +3781,12 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   char buffer[2048];
 #if defined(_WIN32)
   snprintf(buffer, sizeof(buffer),
-           " -3d \"%s\" -xlabel \"%s\" -ylabel \"%s\" -plottitle \"%s\"",
-           tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "");
+           " -3d%s \"%s\" -xlabel \"%s\" -ylabel \"%s\" -plottitle \"%s\"",
+           threeDBar ? "=bar" : "", tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "");
 #else
   snprintf(buffer, sizeof(buffer),
-           " -3d %s -xlabel '%s' -ylabel '%s' -plottitle '%s'",
-           tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "");
+           " -3d%s %s -xlabel '%s' -ylabel '%s' -plottitle '%s'",
+           threeDBar ? "=bar" : "", tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "");
 #endif
   if (gray || levels || min_level != max_level) {
     snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),

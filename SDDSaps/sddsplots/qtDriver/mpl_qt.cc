@@ -18,6 +18,11 @@
 #include <QtDataVisualization/QSurface3DSeries>
 #include <QtDataVisualization/QSurfaceDataArray>
 #include <QtDataVisualization/QSurfaceDataProxy>
+#include <QtDataVisualization/Q3DBars>
+#include <QtDataVisualization/QBar3DSeries>
+#include <QtDataVisualization/QBarDataArray>
+#include <QtDataVisualization/QBarDataProxy>
+#include <QtDataVisualization/QCategory3DAxis>
 #include <QtDataVisualization/Q3DTheme>
 #include <QtDataVisualization/Q3DCamera>
 #include <QtDataVisualization/QValue3DAxis>
@@ -30,6 +35,7 @@
 #include <QVector3D>
 #include <QFont>
 #include <QVector>
+#include <QStringList>
 #include <QShortcut>
 #include <QLabel>
 #include <QPalette>
@@ -101,12 +107,12 @@ extern "C" {
 QAction *replotZoomAction;
 QWidget *canvas;
 QMainWindow *mainWindowPointer;
-Q3DSurface *surfaceGraph = nullptr;
+QAbstract3DGraph *surfaceGraph = nullptr;
 QWidget *surfaceContainer = nullptr;
 QStackedWidget *plotStack = nullptr;
 int current3DPlot = 0;
 int total3DPlots = 0;
-QVector<Q3DSurface *> surfaceGraphs;
+QVector<QAbstract3DGraph *> surfaceGraphs;
 QVector<QWidget *> surfaceContainers;
 
 struct Plot3DArgs {
@@ -130,11 +136,12 @@ struct Plot3DArgs {
   bool xLog;
   bool xTime;
   bool yTime;
+  bool bar;
   Plot3DArgs()
       : fontSize(0), equalAspect(false), shadeMin(0.0), shadeMax(0.0),
         shadeRangeSet(false), gray(false), hue0(0.0), hue1(1.0), yFlip(false),
         hideAxes(false), hideZAxis(false), datestamp(false), xLog(false),
-        xTime(false), yTime(false) {}
+        xTime(false), yTime(false), bar(false) {}
 };
 
 class Time3DAxisFormatter : public QValue3DAxisFormatter {
@@ -146,13 +153,202 @@ public:
   }
 };
 
+static QWidget *run3dBar(const char *filename, const char *xlabel,
+                         const char *ylabel, const char *title,
+                         const char *topline, bool datestamp, int fontSize,
+                         bool equalAspect, double shadeMin, double shadeMax,
+                         bool shadeRangeSet, bool gray, double hue0,
+                         double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
+                         bool xLog, bool xTime, bool yTime) {
+  Q3DBars *graph = new Q3DBars();
+  surfaceGraph = graph;
+  if (equalAspect) {
+    graph->setHorizontalAspectRatio(1.0f);
+    graph->setAspectRatio(1.0f);
+  }
+  Q3DTheme *theme = graph->activeTheme();
+  QColor bgColor = Qt::black;
+  QColor fgColor = Qt::white;
+  theme->setBackgroundEnabled(true);
+  theme->setBackgroundColor(bgColor);
+  theme->setWindowColor(bgColor);
+  theme->setLabelTextColor(fgColor);
+  theme->setGridLineColor(fgColor);
+  theme->setLabelBackgroundEnabled(true);
+  theme->setLabelBackgroundColor(bgColor);
+  theme->setLabelBorderEnabled(true);
+  QWidget *container = QWidget::createWindowContainer(graph);
+  surfaceContainer = container;
+  surfaceGraphs.append(graph);
+  surfaceContainers.append(container);
+  container->setMinimumSize(QSize(640, 480));
+  QWidget *widget = new QWidget;
+  QVBoxLayout *vbox = new QVBoxLayout(widget);
+  vbox->setContentsMargins(0, 0, 0, 0);
+  vbox->setSpacing(0);
+  QPalette widgetPalette = widget->palette();
+  widgetPalette.setColor(QPalette::Window, theme->backgroundColor());
+  widgetPalette.setColor(QPalette::WindowText, fgColor);
+  widget->setPalette(widgetPalette);
+  widget->setAutoFillBackground(true);
+  if (topline && topline[0]) {
+    QLabel *toplineLabel = new QLabel(QString::fromUtf8(topline));
+    toplineLabel->setAlignment(Qt::AlignCenter);
+    toplineLabel->setFont(theme->font());
+    toplineLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    toplineLabel->setMaximumHeight(toplineLabel->sizeHint().height());
+    QPalette palette = toplineLabel->palette();
+    palette.setColor(QPalette::Window, theme->backgroundColor());
+    palette.setColor(QPalette::WindowText, fgColor);
+    toplineLabel->setPalette(palette);
+    toplineLabel->setAutoFillBackground(true);
+    toplineLabel->setContentsMargins(0, 0, 0, 0);
+    toplineLabel->setMargin(0);
+    vbox->addWidget(toplineLabel);
+  }
+  if (datestamp) {
+    QString ds = QDateTime::currentDateTime().toString("ddd MMM d HH:mm:ss yyyy");
+    QLabel *dateLabel = new QLabel(ds);
+    dateLabel->setAlignment(Qt::AlignCenter);
+    dateLabel->setFont(theme->font());
+    dateLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    dateLabel->setMaximumHeight(dateLabel->sizeHint().height());
+    QPalette palette = dateLabel->palette();
+    palette.setColor(QPalette::Window, theme->backgroundColor());
+    palette.setColor(QPalette::WindowText, fgColor);
+    dateLabel->setPalette(palette);
+    dateLabel->setAutoFillBackground(true);
+    vbox->addWidget(dateLabel);
+  }
+  if (title && title[0]) {
+    QLabel *titleLabel = new QLabel(QString::fromUtf8(title));
+    titleLabel->setAlignment(Qt::AlignCenter);
+    titleLabel->setFont(theme->font());
+    titleLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    titleLabel->setMaximumHeight(titleLabel->sizeHint().height());
+    QPalette palette = titleLabel->palette();
+    palette.setColor(QPalette::Window, theme->backgroundColor());
+    palette.setColor(QPalette::WindowText, fgColor);
+    titleLabel->setPalette(palette);
+    titleLabel->setAutoFillBackground(true);
+    vbox->addWidget(titleLabel);
+  }
+  vbox->addWidget(container);
+  widget->setWindowTitle("MPL Outboard Driver 3D");
+  QFont font = theme->font();
+  if (fontSize > 0)
+    font.setPointSize(fontSize);
+  else
+    font.setPointSize(font.pointSize() + 24);
+  theme->setFont(font);
+  if (xlabel) {
+    graph->rowAxis()->setTitle(QString::fromUtf8(xlabel));
+    graph->rowAxis()->setTitleVisible(true);
+  }
+  if (ylabel) {
+    graph->columnAxis()->setTitle(QString::fromUtf8(ylabel));
+    graph->columnAxis()->setTitleVisible(true);
+  }
+  if (hideAxes) {
+    theme->setGridEnabled(false);
+    graph->rowAxis()->setTitleVisible(false);
+    graph->rowAxis()->setLabels(QStringList());
+    graph->columnAxis()->setTitleVisible(false);
+    graph->columnAxis()->setLabels(QStringList());
+    if (hideZAxis) {
+      graph->valueAxis()->setTitleVisible(false);
+      graph->valueAxis()->setLabelFormat("");
+    }
+  }
+  QFile dataFile(filename);
+  if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    fprintf(stderr, "Unable to open %s\n", filename);
+    return NULL;
+  }
+  QTextStream in(&dataFile);
+  int nx, ny;
+  double xmin, xmax, ymin, ymax;
+  in >> nx >> ny >> xmin >> xmax >> ymin >> ymax;
+  double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
+  double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
+  QStringList rowLabels, colLabels;
+  for (int i = 0; i < nx; i++) {
+    double xval = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
+    if (xTime)
+      rowLabels << QDateTime::fromSecsSinceEpoch((qint64)xval).toString("yyyy-MM-dd HH:mm:ss");
+    else
+      rowLabels << QString::number(xval);
+  }
+  for (int j = 0; j < ny; j++) {
+    double yval = ymin + j * dy;
+    if (yTime)
+      colLabels << QDateTime::fromSecsSinceEpoch((qint64)yval).toString("yyyy-MM-dd HH:mm:ss");
+    else
+      colLabels << QString::number(yval);
+  }
+  graph->rowAxis()->setLabels(rowLabels);
+  graph->columnAxis()->setLabels(colLabels);
+  if (yFlip)
+    ;
+  QBarDataArray *dataArray = new QBarDataArray;
+  dataArray->reserve(nx);
+  double zmin = DBL_MAX, zmax = -DBL_MAX;
+  for (int i = 0; i < nx; i++) {
+    QBarDataRow *row = new QBarDataRow(ny);
+    for (int j = 0; j < ny; j++) {
+      double z;
+      in >> z;
+      (*row)[j].setValue(z);
+      if (z < zmin)
+        zmin = z;
+      if (z > zmax)
+        zmax = z;
+    }
+    dataArray->append(row);
+  }
+  QBarDataProxy *proxy = new QBarDataProxy;
+  proxy->resetArray(dataArray);
+  if (shadeRangeSet) {
+    zmin = shadeMin;
+    zmax = shadeMax;
+  }
+  QBar3DSeries *series = new QBar3DSeries(proxy);
+  if (!gray) {
+    if (!spectrumallocated)
+      allocspectrum();
+  }
+  QLinearGradient gradient;
+  for (int i = 0; i < nspect; i++) {
+    double frac = (double)i / (nspect - 1);
+    if (gray) {
+      gradient.setColorAt(frac, QColor::fromRgbF(frac, frac, frac));
+    } else {
+      int index = (int)((hue0 + frac * (hue1 - hue0)) * (nspect - 1) + 0.5);
+      if (index < 0)
+        index = 0;
+      if (index >= nspect)
+        index = nspect - 1;
+      gradient.setColorAt(frac, QColor::fromRgb(spectrum[index]));
+    }
+  }
+  series->setBaseGradient(gradient);
+  series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
+  graph->valueAxis()->setRange(zmin, zmax);
+  graph->addSeries(series);
+  return widget;
+}
+
 static QWidget *run3d(const char *filename, const char *xlabel,
                       const char *ylabel, const char *title,
-                      const char *topline, bool datestamp, int fontSize,
+                      const char *topline, bool barPlot, bool datestamp, int fontSize,
                       bool equalAspect, double shadeMin, double shadeMax,
                       bool shadeRangeSet, bool gray, double hue0,
                       double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
                       bool xLog, bool xTime, bool yTime) {
+  if (barPlot)
+    return run3dBar(filename, xlabel, ylabel, title, topline, datestamp, fontSize,
+                    equalAspect, shadeMin, shadeMax, shadeRangeSet, gray, hue0,
+                    hue1, yFlip, hideAxes, hideZAxis, xLog, xTime, yTime);
   Q3DSurface *graph = new Q3DSurface();
   surfaceGraph = graph;
   if (equalAspect) {
@@ -917,10 +1113,14 @@ int main(int argc, char *argv[]) {
   Plot3DArgs current;
   bool in3d = false;
   for (int i = 1; i < argc; i++) {
-    if (!strcmp(argv[i], "-3d") && i + 1 < argc) {
+    if (!strncmp(argv[i], "-3d", 3) && i + 1 < argc) {
       if (in3d)
         plots.append(current);
       current = Plot3DArgs();
+      if (argv[i][3] == '=' && argv[i][4]) {
+        if (!strcmp(argv[i] + 4, "bar"))
+          current.bar = true;
+      }
       current.file = argv[++i];
       in3d = true;
     } else if (!strcmp(argv[i], "-xlabel") && i + 1 < argc && in3d)
@@ -1060,7 +1260,7 @@ int main(int argc, char *argv[]) {
                                   p.ylabel.isEmpty() ? NULL : p.ylabel.toUtf8().constData(),
                                   p.title.isEmpty() ? NULL : p.title.toUtf8().constData(),
                                   p.topline.isEmpty() ? NULL : p.topline.toUtf8().constData(),
-                                  p.datestamp, p.fontSize, p.equalAspect,
+                                  p.bar, p.datestamp, p.fontSize, p.equalAspect,
                                   p.shadeMin, p.shadeMax, p.shadeRangeSet,
                                   p.gray, p.hue0, p.hue1, p.yFlip,
                                   p.hideAxes, p.hideZAxis, p.xLog, p.xTime,

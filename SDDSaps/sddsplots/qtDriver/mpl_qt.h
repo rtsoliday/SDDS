@@ -34,6 +34,7 @@
 #include <QDebug>    // for qDebug()
 #include <cmath>
 #include <QtDataVisualization/Q3DSurface>
+#include <QtDataVisualization/QAbstract3DGraph>
 #include "mdb.h"
 
 #define NSPECT 101
@@ -105,12 +106,12 @@ extern FILE *ifp;
 
 extern QWidget *canvas;
 extern QAction *replotZoomAction;
-extern QtDataVisualization::Q3DSurface *surfaceGraph;
+extern QtDataVisualization::QAbstract3DGraph *surfaceGraph;
 extern QWidget *surfaceContainer;
 extern QStackedWidget *plotStack;
 extern int current3DPlot;
 extern int total3DPlots;
-extern QVector<QtDataVisualization::Q3DSurface *> surfaceGraphs;
+extern QVector<QtDataVisualization::QAbstract3DGraph *> surfaceGraphs;
 extern QVector<QWidget *> surfaceContainers;
 
 #define RGB_QT(r, g, b) (                                              \
