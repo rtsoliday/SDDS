@@ -97,6 +97,9 @@ static char *option[OPTIONS] = {
   "convertunits", "yflip", "showgaps", "3d"};
 
 static long threeD = 0;
+static char *threeDCommand = NULL;
+static char **threeDFiles = NULL;
+static long threeDFileCount = 0;
 
 char *USAGE = "sddscontour [-pipe] [<SDDSfilename>]\n\
  [{-quantity=<column-name> | -equation=<rpn-equation>[,algebraic] |\n\
@@ -207,6 +210,7 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
                    double min_level, double max_level, double hue0,
                    double hue1, long gray, short xlog,
                    unsigned long long tsetFlags);
+void run3DPlots(void);
 void make_enumerated_yscale(char **label, double *yposition, long labels, char *editCommand, long interval, double scale, long thickness, char *ylabel, double ylableScale);
 void make_enumerated_xscale(char **label, double *xposition, long labels, char *editCommand, long interval, double scale, long thickness, char *xlabel, double xlabelScale);
 
@@ -2800,6 +2804,7 @@ void sddscontour_main(char *input_line)
     }
     free(columnname);
   }
+  run3DPlots();
   if (drawlines)
     free(drawLineSpec);
   free_scanargs(&s_arg, argc);
@@ -3762,102 +3767,109 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
     fprintf(fp, "\n");
   }
   fclose(fp);
-  char command[1024];
+  char buffer[2048];
 #if defined(_WIN32)
-  snprintf(command, sizeof(command),
-           "start /B cmd /c \"mpl_qt -3d \"%s\" -xlabel \"%s\" -ylabel \"%s\" -plottitle \"%s\"",
+  snprintf(buffer, sizeof(buffer),
+           " -3d \"%s\" -xlabel \"%s\" -ylabel \"%s\" -plottitle \"%s\"",
            tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "");
-  if (gray || levels || min_level != max_level) {
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
-             " -shade %ld", levels ? levels : 100);
-    if (min_level != max_level)
-      snprintf(command + strlen(command), sizeof(command) - strlen(command),
-               " %g %g", min_level, max_level);
-    if (gray)
-      snprintf(command + strlen(command), sizeof(command) - strlen(command),
-               " gray");
-  }
-  snprintf(command + strlen(command), sizeof(command) - strlen(command),
-           " -mapshade %g %g", hue0, hue1);
-  if (xlog)
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
-             " -xlog");
-  if (tsetFlags & (TICKSET_XTIME | TICKSET_YTIME)) {
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
-             " -ticksettings=%s%s",
-             tsetFlags & TICKSET_XTIME ? "xtime" : "",
-             tsetFlags & TICKSET_YTIME ?
-                 (tsetFlags & TICKSET_XTIME ? ",ytime" : "ytime") : "");
-  }
-  if (topline && topline[0])
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
-             " -topline \"%s\"", topline);
-  if (flags & DATE_STAMP)
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
-             " -datestamp");
-  if (flags & NO_BORDER)
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
-             " -noborder");
-  if (flags & NO_SCALES)
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
-             " -noscale");
-  if (flags & (EQUAL_ASPECT1 | EQUAL_ASPECT_1))
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
-             " -equalaspect");
-  if (flags & Y_FLIP)
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
-             " -yflip");
-  snprintf(command + strlen(command), sizeof(command) - strlen(command),
-           " && del \"%s\"\"", tmpName);
 #else
-  snprintf(command, sizeof(command),
-           "(mpl_qt -3d %s -xlabel '%s' -ylabel '%s' -plottitle '%s'",
+  snprintf(buffer, sizeof(buffer),
+           " -3d %s -xlabel '%s' -ylabel '%s' -plottitle '%s'",
            tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "");
+#endif
   if (gray || levels || min_level != max_level) {
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+    snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
              " -shade %ld", levels ? levels : 100);
     if (min_level != max_level)
-      snprintf(command + strlen(command), sizeof(command) - strlen(command),
+      snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
                " %g %g", min_level, max_level);
     if (gray)
-      snprintf(command + strlen(command), sizeof(command) - strlen(command),
+      snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
                " gray");
   }
-  snprintf(command + strlen(command), sizeof(command) - strlen(command),
+  snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
            " -mapshade %g %g", hue0, hue1);
   if (xlog)
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+    snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
              " -xlog");
   if (tsetFlags & (TICKSET_XTIME | TICKSET_YTIME)) {
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+    snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
              " -ticksettings=%s%s",
              tsetFlags & TICKSET_XTIME ? "xtime" : "",
              tsetFlags & TICKSET_YTIME ?
                  (tsetFlags & TICKSET_XTIME ? ",ytime" : "ytime") : "");
   }
   if (topline && topline[0])
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+#if defined(_WIN32)
+    snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
+             " -topline \"%s\"", topline);
+#else
+    snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
              " -topline '%s'", topline);
+#endif
   if (flags & DATE_STAMP)
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+    snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
              " -datestamp");
   if (flags & NO_BORDER)
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+    snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
              " -noborder");
   if (flags & NO_SCALES)
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+    snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
              " -noscale");
   if (flags & (EQUAL_ASPECT1 | EQUAL_ASPECT_1))
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+    snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
              " -equalaspect");
   if (flags & Y_FLIP)
-    snprintf(command + strlen(command), sizeof(command) - strlen(command),
+    snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),
              " -yflip");
-  snprintf(command + strlen(command), sizeof(command) - strlen(command),
-           "; rm %s) &", tmpName);
+  if (!threeDCommand)
+    threeDCommand = tmalloc(1);
+  threeDCommand = trealloc(threeDCommand, strlen(threeDCommand) + strlen(buffer) + 1);
+  strcat(threeDCommand, buffer);
+  threeDFiles = SDDS_Realloc(threeDFiles, sizeof(*threeDFiles) * (threeDFileCount + 1));
+  threeDFiles[threeDFileCount] = tmalloc(strlen(tmpName) + 1);
+  strcpy(threeDFiles[threeDFileCount], tmpName);
+  threeDFileCount++;
+}
+
+void run3DPlots(void) {
+  if (!threeDCommand)
+    return;
+#if defined(_WIN32)
+  long len = strlen("start /B cmd /c \"mpl_qt") + strlen(threeDCommand) + 10;
+  for (long i = 0; i < threeDFileCount; i++)
+    len += strlen(threeDFiles[i]) + 10;
+  char *command = tmalloc(len);
+  strcpy(command, "start /B cmd /c \"mpl_qt");
+  strcat(command, threeDCommand);
+  for (long i = 0; i < threeDFileCount; i++) {
+    strcat(command, " && del \"");
+    strcat(command, threeDFiles[i]);
+    strcat(command, "\"");
+  }
+  strcat(command, "\"");
+#else
+  long len = strlen("(mpl_qt") + strlen(threeDCommand) + 10;
+  for (long i = 0; i < threeDFileCount; i++)
+    len += strlen(threeDFiles[i]) + 5;
+  char *command = tmalloc(len);
+  strcpy(command, "(mpl_qt");
+  strcat(command, threeDCommand);
+  for (long i = 0; i < threeDFileCount; i++) {
+    strcat(command, "; rm ");
+    strcat(command, threeDFiles[i]);
+  }
+  strcat(command, ") &");
 #endif
-  if (system(command) == -1)
-    fprintf(stderr, "unable to run mpl_qt for 3D plot\n");
+  system(command);
+  free(command);
+  for (long i = 0; i < threeDFileCount; i++)
+    free(threeDFiles[i]);
+  free(threeDFiles);
+  threeDFiles = NULL;
+  threeDFileCount = 0;
+  free(threeDCommand);
+  threeDCommand = NULL;
 }
 
 void draw_lines(DRAW_LINE_SPEC *drawLineSpec, long drawlines, long linetypeDefault, double *limit) {

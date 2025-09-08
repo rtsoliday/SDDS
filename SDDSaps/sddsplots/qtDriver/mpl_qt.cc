@@ -102,6 +102,37 @@ QWidget *canvas;
 QMainWindow *mainWindowPointer;
 Q3DSurface *surfaceGraph = nullptr;
 QWidget *surfaceContainer = nullptr;
+QStackedWidget *plotStack = nullptr;
+int current3DPlot = 0;
+int total3DPlots = 0;
+
+struct Plot3DArgs {
+  QString file;
+  QString xlabel;
+  QString ylabel;
+  QString title;
+  QString topline;
+  int fontSize;
+  bool equalAspect;
+  double shadeMin;
+  double shadeMax;
+  bool shadeRangeSet;
+  bool gray;
+  double hue0;
+  double hue1;
+  bool yFlip;
+  bool hideAxes;
+  bool hideZAxis;
+  bool datestamp;
+  bool xLog;
+  bool xTime;
+  bool yTime;
+  Plot3DArgs()
+      : fontSize(0), equalAspect(false), shadeMin(0.0), shadeMax(0.0),
+        shadeRangeSet(false), gray(false), hue0(0.0), hue1(1.0), yFlip(false),
+        hideAxes(false), hideZAxis(false), datestamp(false), xLog(false),
+        xTime(false), yTime(false) {}
+};
 
 class Time3DAxisFormatter : public QValue3DAxisFormatter {
 public:
@@ -913,75 +944,64 @@ int main(int argc, char *argv[]) {
   lineTypeTable.typeFlag = 0x0000;
 
   QApplication app(argc, argv);
-  char *file3d = NULL;
-  char *xlabel = NULL;
-  char *ylabel = NULL;
-  char *title = NULL;
-  char *topline = NULL;
-  int fontSize = 0;
-  bool equalAspect = false;
-  double shadeMin = 0.0, shadeMax = 0.0;
-  bool shadeRangeSet = false;
-  bool gray = false;
-  double hue0 = 0.0, hue1 = 1.0;
-  bool yFlip = false;
-  bool hideAxes = false;
-  bool hideZAxis = false;
-  bool datestamp = false;
-  bool xLog = false;
-  bool xTime = false;
-  bool yTime = false;
+  QVector<Plot3DArgs> plots;
+  Plot3DArgs current;
+  bool in3d = false;
   for (int i = 1; i < argc; i++) {
-    if (!strcmp(argv[i], "-3d") && i + 1 < argc)
-      file3d = argv[++i];
-    else if (!strcmp(argv[i], "-xlabel") && i + 1 < argc)
-      xlabel = argv[++i];
-    else if (!strcmp(argv[i], "-ylabel") && i + 1 < argc)
-      ylabel = argv[++i];
-    else if (!strcmp(argv[i], "-plottitle") && i + 1 < argc)
-      title = argv[++i];
-    else if (!strcmp(argv[i], "-topline") && i + 1 < argc)
-      topline = argv[++i];
-    else if (!strcmp(argv[i], "-fontsize") && i + 1 < argc)
-      fontSize = atoi(argv[++i]);
-    else if (!strcmp(argv[i], "-equalaspect"))
-      equalAspect = true;
-    else if (!strcmp(argv[i], "-shade") && i + 1 < argc) {
+    if (!strcmp(argv[i], "-3d") && i + 1 < argc) {
+      if (in3d)
+        plots.append(current);
+      current = Plot3DArgs();
+      current.file = argv[++i];
+      in3d = true;
+    } else if (!strcmp(argv[i], "-xlabel") && i + 1 < argc && in3d)
+      current.xlabel = argv[++i];
+    else if (!strcmp(argv[i], "-ylabel") && i + 1 < argc && in3d)
+      current.ylabel = argv[++i];
+    else if (!strcmp(argv[i], "-plottitle") && i + 1 < argc && in3d)
+      current.title = argv[++i];
+    else if (!strcmp(argv[i], "-topline") && i + 1 < argc && in3d)
+      current.topline = argv[++i];
+    else if (!strcmp(argv[i], "-fontsize") && i + 1 < argc && in3d)
+      current.fontSize = atoi(argv[++i]);
+    else if (!strcmp(argv[i], "-equalaspect") && in3d)
+      current.equalAspect = true;
+    else if (!strcmp(argv[i], "-shade") && i + 1 < argc && in3d) {
       nspect = atoi(argv[++i]);
       spectrumallocated = 0;
       if (i + 1 < argc) {
         char *endptr = NULL;
         double val = strtod(argv[i + 1], &endptr);
         if (endptr != argv[i + 1] && *endptr == '\0') {
-          shadeMin = val;
+          current.shadeMin = val;
           i++;
           val = strtod(argv[i + 1], &endptr);
           if (endptr != argv[i + 1] && *endptr == '\0') {
-            shadeMax = val;
-            shadeRangeSet = true;
+            current.shadeMax = val;
+            current.shadeRangeSet = true;
             i++;
           }
         }
       }
       if (i + 1 < argc && !strcmp(argv[i + 1], "gray")) {
-        gray = true;
+        current.gray = true;
         i++;
       }
-    } else if (!strcmp(argv[i], "-mapshade") && i + 2 < argc) {
-      hue0 = atof(argv[++i]);
-      hue1 = atof(argv[++i]);
-    } else if (!strcmp(argv[i], "-yflip"))
-      yFlip = true;
-    else if (!strcmp(argv[i], "-noborder"))
-      hideAxes = true;
-    else if (!strcmp(argv[i], "-noscale")) {
-      hideAxes = true;
-      hideZAxis = true;
-    } else if (!strcmp(argv[i], "-datestamp"))
-      datestamp = true;
-    else if (!strcmp(argv[i], "-xlog"))
-      xLog = true;
-    else if (!strncmp(argv[i], "-ticksettings", 13)) {
+    } else if (!strcmp(argv[i], "-mapshade") && i + 2 < argc && in3d) {
+      current.hue0 = atof(argv[++i]);
+      current.hue1 = atof(argv[++i]);
+    } else if (!strcmp(argv[i], "-yflip") && in3d)
+      current.yFlip = true;
+    else if (!strcmp(argv[i], "-noborder") && in3d)
+      current.hideAxes = true;
+    else if (!strcmp(argv[i], "-noscale") && in3d) {
+      current.hideAxes = true;
+      current.hideZAxis = true;
+    } else if (!strcmp(argv[i], "-datestamp") && in3d)
+      current.datestamp = true;
+    else if (!strcmp(argv[i], "-xlog") && in3d)
+      current.xLog = true;
+    else if (!strncmp(argv[i], "-ticksettings", 13) && in3d) {
       const char *arg = NULL;
       if (argv[i][13] == '=')
         arg = argv[i] + 14;
@@ -989,12 +1009,14 @@ int main(int argc, char *argv[]) {
         arg = argv[++i];
       if (arg) {
         if (strstr(arg, "xtime"))
-          xTime = true;
+          current.xTime = true;
         if (strstr(arg, "ytime"))
-          yTime = true;
+          current.yTime = true;
       }
     }
   }
+  if (in3d)
+    plots.append(current);
 
   // Create main window
   QMainWindow mainWindow;
@@ -1060,17 +1082,33 @@ int main(int argc, char *argv[]) {
   QWidget *centralWidget = new QWidget;
   QVBoxLayout *layout = new QVBoxLayout(centralWidget);
 
-  if (file3d) {
-    QWidget *plotWidget = run3d(file3d, xlabel, ylabel, title, topline,
-                                datestamp, fontSize, equalAspect, shadeMin,
-                                shadeMax, shadeRangeSet, gray, hue0, hue1,
-                                yFlip, hideAxes, hideZAxis, xLog, xTime,
-                                yTime);
-    if (!plotWidget)
+  if (!plots.isEmpty()) {
+    plotStack = new QStackedWidget;
+    for (int i = 0; i < plots.size(); ++i) {
+      Plot3DArgs &p = plots[i];
+      QWidget *plotWidget = run3d(p.file.toUtf8().constData(),
+                                  p.xlabel.isEmpty() ? NULL : p.xlabel.toUtf8().constData(),
+                                  p.ylabel.isEmpty() ? NULL : p.ylabel.toUtf8().constData(),
+                                  p.title.isEmpty() ? NULL : p.title.toUtf8().constData(),
+                                  p.topline.isEmpty() ? NULL : p.topline.toUtf8().constData(),
+                                  p.datestamp, p.fontSize, p.equalAspect,
+                                  p.shadeMin, p.shadeMax, p.shadeRangeSet,
+                                  p.gray, p.hue0, p.hue1, p.yFlip,
+                                  p.hideAxes, p.hideZAxis, p.xLog, p.xTime,
+                                  p.yTime);
+      if (!plotWidget)
+        return 1;
+      plotStack->addWidget(plotWidget);
+    }
+    total3DPlots = plotStack->count();
+    if (total3DPlots == 0)
       return 1;
-    canvas = plotWidget;
-    layout->addWidget(plotWidget);
+    canvas = plotStack->widget(0);
+    layout->addWidget(plotStack);
     mainWindow.setCentralWidget(centralWidget);
+    current3DPlot = 0;
+    QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(1).arg(total3DPlots);
+    mainWindow.setWindowTitle(wtitle);
     mainWindow.show();
     return app.exec();
   }

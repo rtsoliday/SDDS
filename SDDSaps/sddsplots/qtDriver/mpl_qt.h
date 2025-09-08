@@ -8,6 +8,7 @@
 #include <QMenuBar>
 #include <QMenu>
 #include <QWidget>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QFrame>
 #include <QPainter>
@@ -106,6 +107,9 @@ extern QWidget *canvas;
 extern QAction *replotZoomAction;
 extern QtDataVisualization::Q3DSurface *surfaceGraph;
 extern QWidget *surfaceContainer;
+extern QStackedWidget *plotStack;
+extern int current3DPlot;
+extern int total3DPlots;
 
 #define RGB_QT(r, g, b) (                                              \
                       ((static_cast<uint32_t>(r) & 0xFF) << 16) |   \

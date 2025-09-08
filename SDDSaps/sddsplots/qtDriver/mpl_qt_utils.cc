@@ -326,6 +326,18 @@ void quit() {
 }
 
 void nav_next(QMainWindow *mainWindow) {
+  if (plotStack) {
+    if (current3DPlot >= total3DPlots - 1) {
+      QApplication::beep();
+    } else {
+      current3DPlot++;
+      plotStack->setCurrentIndex(current3DPlot);
+      canvas = plotStack->currentWidget();
+      QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(current3DPlot + 1).arg(total3DPlots);
+      mainWindow->setWindowTitle(wtitle);
+    }
+    return;
+  }
   if (cur == (struct PLOTREC *)NULL) {
     QApplication::beep();
   } else if (cur == last) {
@@ -339,6 +351,18 @@ void nav_next(QMainWindow *mainWindow) {
 }
 
 void nav_previous(QMainWindow *mainWindow) {
+  if (plotStack) {
+    if (current3DPlot == 0) {
+      QApplication::beep();
+    } else {
+      current3DPlot--;
+      plotStack->setCurrentIndex(current3DPlot);
+      canvas = plotStack->currentWidget();
+      QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(current3DPlot + 1).arg(total3DPlots);
+      mainWindow->setWindowTitle(wtitle);
+    }
+    return;
+  }
   if (cur == (struct PLOTREC *)NULL) {
     QApplication::beep();
   } else if (cur->prev == (struct PLOTREC *)NULL) {
@@ -352,6 +376,10 @@ void nav_previous(QMainWindow *mainWindow) {
 }
 
 void delete_current(QMainWindow *mainWindow) {
+  if (plotStack) {
+    QApplication::beep();
+    return;
+  }
   if (cur == (struct PLOTREC *)NULL) {
     QApplication::beep();
   } else {
@@ -367,6 +395,22 @@ void mouse_tracking(QMainWindow *mainWindow) {
 }
 
 void to_number(QMainWindow *mainWindow) {
+  if (plotStack) {
+    bool ok;
+    int number = QInputDialog::getInt(mainWindow, "Enter a Plot Number",
+                                      "Enter a Plot Number:", current3DPlot + 1, 1,
+                                      total3DPlots, 1, &ok);
+    if (ok) {
+      if (number >= 1 && number <= total3DPlots) {
+        current3DPlot = number - 1;
+        plotStack->setCurrentIndex(current3DPlot);
+        canvas = plotStack->currentWidget();
+        QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(current3DPlot + 1).arg(total3DPlots);
+        mainWindow->setWindowTitle(wtitle);
+      }
+    }
+    return;
+  }
   bool ok;
   int number = QInputDialog::getInt(
                                     mainWindow,
