@@ -554,7 +554,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
                                               ? QSurface3DSeries::DrawSurfaceAndWireframe
                                               : QSurface3DSeries::DrawSurface);
                    });
-  QShortcut *resetView = new QShortcut(QKeySequence(QStringLiteral("r")), widget);
+  QShortcut *resetView = new QShortcut(QKeySequence(QStringLiteral("i")), widget);
   QObject::connect(resetView, &QShortcut::activated,
                    [camera, defaultX, defaultY, defaultZoom, defaultTarget]() {
                      camera->setXRotation(defaultX);
