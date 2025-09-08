@@ -5,6 +5,8 @@
 #include <QList>
 #include <QPalette>
 
+bool whiteTheme = false;
+
 int allocspectrum() {
   int n, ok = 1, k;
   double hue;
@@ -330,6 +332,41 @@ void quit() {
   exit(0);
 }
 
+void apply_theme() {
+  if (surfaceGraph) {
+    QtDataVisualization::Q3DTheme *theme = surfaceGraph->activeTheme();
+    QColor bg = whiteTheme ? Qt::white : Qt::black;
+    QColor fg = whiteTheme ? Qt::black : Qt::white;
+    theme->setBackgroundColor(bg);
+    theme->setWindowColor(bg);
+    theme->setLabelTextColor(fg);
+    theme->setGridLineColor(fg);
+    theme->setLabelBackgroundColor(bg);
+    if (surfaceContainer) {
+      QPalette pal = surfaceContainer->palette();
+      pal.setColor(QPalette::Window, bg);
+      pal.setColor(QPalette::WindowText, fg);
+      surfaceContainer->setPalette(pal);
+      QWidget *parent = surfaceContainer->parentWidget();
+      if (parent) {
+        parent->setPalette(pal);
+        const QList<QLabel *> labels = parent->findChildren<QLabel *>();
+        for (QLabel *label : labels) {
+          QPalette lp = label->palette();
+          lp.setColor(QPalette::Window, bg);
+          lp.setColor(QPalette::WindowText, fg);
+          label->setPalette(lp);
+        }
+      }
+    }
+  } else {
+    if (whiteTheme)
+      onWhite();
+    else
+      onBlack();
+  }
+}
+
 void nav_next(QMainWindow *mainWindow) {
   if (plotStack) {
     if (current3DPlot >= total3DPlots - 1) {
@@ -340,6 +377,8 @@ void nav_next(QMainWindow *mainWindow) {
       canvas = plotStack->currentWidget();
       surfaceGraph = surfaceGraphs[current3DPlot];
       surfaceContainer = surfaceContainers[current3DPlot];
+      QApplication::processEvents();
+      apply_theme();
       QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(current3DPlot + 1).arg(total3DPlots);
       mainWindow->setWindowTitle(wtitle);
     }
@@ -367,6 +406,8 @@ void nav_previous(QMainWindow *mainWindow) {
       canvas = plotStack->currentWidget();
       surfaceGraph = surfaceGraphs[current3DPlot];
       surfaceContainer = surfaceContainers[current3DPlot];
+      QApplication::processEvents();
+      apply_theme();
       QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(current3DPlot + 1).arg(total3DPlots);
       mainWindow->setWindowTitle(wtitle);
     }
@@ -416,6 +457,8 @@ void to_number(QMainWindow *mainWindow) {
         canvas = plotStack->currentWidget();
         surfaceGraph = surfaceGraphs[current3DPlot];
         surfaceContainer = surfaceContainers[current3DPlot];
+        QApplication::processEvents();
+        apply_theme();
         QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(current3DPlot + 1).arg(total3DPlots);
         mainWindow->setWindowTitle(wtitle);
       }
@@ -538,40 +581,8 @@ void setup_shortcuts(QMainWindow *mainWindow) {
   });
   shortcut_W->setContext(Qt::ApplicationShortcut);
   QObject::connect(shortcut_W, &QShortcut::activated, []() {
-    static bool whiteTheme = false;
-    if (surfaceGraph) {
-      QtDataVisualization::Q3DTheme *theme = surfaceGraph->activeTheme();
-      QColor bg = whiteTheme ? Qt::black : Qt::white;
-      QColor fg = whiteTheme ? Qt::white : Qt::black;
-      theme->setBackgroundColor(bg);
-      theme->setWindowColor(bg);
-      theme->setLabelTextColor(fg);
-      theme->setGridLineColor(fg);
-      theme->setLabelBackgroundColor(bg);
-      if (surfaceContainer) {
-        QPalette pal = surfaceContainer->palette();
-        pal.setColor(QPalette::Window, bg);
-        pal.setColor(QPalette::WindowText, fg);
-        surfaceContainer->setPalette(pal);
-        QWidget *parent = surfaceContainer->parentWidget();
-        if (parent) {
-          parent->setPalette(pal);
-          const QList<QLabel *> labels = parent->findChildren<QLabel *>();
-          for (QLabel *label : labels) {
-            QPalette lp = label->palette();
-            lp.setColor(QPalette::Window, bg);
-            lp.setColor(QPalette::WindowText, fg);
-            label->setPalette(lp);
-          }
-        }
-      }
-    } else {
-      if (whiteTheme)
-        onBlack();
-      else
-        onWhite();
-    }
     whiteTheme = !whiteTheme;
+    apply_theme();
   });
   QObject::connect(shortcut_Z, &QShortcut::activated, [](){
     replotZoom = !replotZoom;
