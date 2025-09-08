@@ -37,6 +37,12 @@ void save() {
             // Save as image using QPixmap::save()
             onWhite();
             QPixmap pixmap = canvas->grab();
+            if (surfaceGraph && surfaceContainer) {
+                QImage graphImage = surfaceGraph->renderToImage(0, surfaceContainer->size());
+                QPainter painter(&pixmap);
+                painter.drawImage(surfaceContainer->geometry().topLeft(), graphImage);
+                painter.end();
+            }
             onBlack();
             QString format = (ext == "jpg" || ext == "jpeg") ? "JPG" : "PNG";
             pixmap.save(fileName, format.toUtf8().constData());

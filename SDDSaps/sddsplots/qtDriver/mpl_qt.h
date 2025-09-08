@@ -32,6 +32,7 @@
 //#include <QTest>
 #include <QDebug>    // for qDebug()
 #include <cmath>
+#include <QtDataVisualization/Q3DSurface>
 #include "mdb.h"
 
 #define NSPECT 101
@@ -103,6 +104,8 @@ extern FILE *ifp;
 
 extern QWidget *canvas;
 extern QAction *replotZoomAction;
+extern QtDataVisualization::Q3DSurface *surfaceGraph;
+extern QWidget *surfaceContainer;
 
 #define RGB_QT(r, g, b) (                                              \
                       ((static_cast<uint32_t>(r) & 0xFF) << 16) |   \

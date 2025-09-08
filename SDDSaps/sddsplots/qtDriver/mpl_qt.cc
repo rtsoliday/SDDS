@@ -100,6 +100,8 @@ extern "C" {
 QAction *replotZoomAction;
 QWidget *canvas;
 QMainWindow *mainWindowPointer;
+Q3DSurface *surfaceGraph = nullptr;
+QWidget *surfaceContainer = nullptr;
 
 class Time3DAxisFormatter : public QValue3DAxisFormatter {
 public:
@@ -118,6 +120,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
                       double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
                       bool xLog, bool xTime, bool yTime) {
   Q3DSurface *graph = new Q3DSurface();
+  surfaceGraph = graph;
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
     graph->setAspectRatio(1.0f);
@@ -140,6 +143,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   float defaultZoom = camera->zoomLevel();
   QVector3D defaultTarget = camera->target();
   QWidget *container = QWidget::createWindowContainer(graph);
+  surfaceContainer = container;
   container->setMinimumSize(QSize(640, 480));
   QWidget *widget = new QWidget;
   QVBoxLayout *vbox = new QVBoxLayout(widget);
