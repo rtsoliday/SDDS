@@ -609,14 +609,15 @@ void sddscontour_main(char *input_line)
       case SET_3D:
         threeD = 1;
         if (s_arg[i_arg].n_items > 1) {
-          if (strcmp(s_arg[i_arg].list[1], "bar") == 0) {
-            threeDBar = 1;
-          } else if (strcmp(s_arg[i_arg].list[1], "surface") == 0) {
-            threeDBar = 0;
-          } else {
-            fprintf(stderr, "Error (sddscontour): invalid -3d option, use -3d=surface or -3d=bar\n");
+          static char *threeDOptions[] = {"surface", "bar"};
+          long mode;
+          if ((mode = match_string(s_arg[i_arg].list[1], threeDOptions,
+                                   sizeof(threeDOptions) / sizeof(*threeDOptions), 0)) < 0) {
+            fprintf(stderr,
+                    "Error (sddscontour): invalid -3d option, use -3d=surface or -3d=bar\n");
             return (1);
           }
+          threeDBar = mode == 1;
         }
         break;
       case SET_DEVICE:
