@@ -1124,9 +1124,18 @@ f - toggle full screen\n\
 0 - original size\n\
 \n\
 Keyboard shortcuts for zooming:\n\
-z - toggle replotting to zoom\n\
+z - toggle replotting to zoom (2D)\n\
 + - increase window size\n\
 - - decrease window size\n\
+\n\
+Keyboard shortcuts for 3D plots:\n\
+g - toggle surface wireframe\n\
+i - reset view\n\
+x - snap view to X axis\n\
+y - snap view to Y axis\n\
+z - snap view to Z axis\n\
+Up arrow - increase font size\n\
+Down arrow - decrease font size\n\
 \n\
 Other keyboard shortcuts:\n\
 w - toggle white/black theme\n\
@@ -1237,7 +1246,9 @@ int main(int argc, char *argv[]) {
   // Add menus
   QMenu *fileMenu = mainWindow.menuBar()->addMenu("File");
   QMenu *navigateMenu = mainWindow.menuBar()->addMenu("Navigate");
-  QMenu *optionsMenu = mainWindow.menuBar()->addMenu("Options");
+  QMenu *optionsMenu = nullptr;
+  if (plots.isEmpty())
+    QMenu *optionsMenu = mainWindow.menuBar()->addMenu("Options");
   QMenu *helpMenu = mainWindow.menuBar()->addMenu("Help");
 
   QAction *printAction = new QAction("Print...", &mainWindow);
@@ -1276,12 +1287,14 @@ int main(int argc, char *argv[]) {
     to_number(&mainWindow);
   });
 
-  replotZoomAction = new QAction("Replot when zooming", &mainWindow);
-  replotZoomAction->setCheckable(true);
-  replotZoomAction->setChecked(replotZoom);
-  optionsMenu->addAction(replotZoomAction);
-  QObject::connect(replotZoomAction, &QAction::toggled, &app, [&](bool checked){replotZoom = checked;});
-
+  if (optionsMenu) {
+    replotZoomAction = new QAction("Replot when zooming", &mainWindow);
+    replotZoomAction->setCheckable(true);
+    replotZoomAction->setChecked(replotZoom);
+    optionsMenu->addAction(replotZoomAction);
+    QObject::connect(replotZoomAction, &QAction::toggled, &app, [&](bool checked){replotZoom = checked;});
+  }
+  
   QAction *contentsAction = new QAction("Contents", &mainWindow);
   helpMenu->addAction(contentsAction);
   QObject::connect(contentsAction, &QAction::triggered, [&mainWindow]() {
