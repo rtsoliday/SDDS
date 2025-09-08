@@ -179,6 +179,10 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   theme->setLabelBorderEnabled(true);
   Q3DCamera *camera = graph->scene()->activeCamera();
   camera->setCameraPreset(Q3DCamera::CameraPresetIsometricRightHigh); // Default orientation
+  float defaultX = camera->xRotation();
+  float defaultY = camera->yRotation();
+  float defaultZoom = camera->zoomLevel();
+  QVector3D defaultTarget = camera->target();
   QWidget *container = QWidget::createWindowContainer(graph);
   surfaceContainer = container;
   surfaceGraphs.append(graph);
@@ -337,6 +341,23 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
   graph->valueAxis()->setRange(zmin, zmax);
   graph->addSeries(series);
+  QShortcut *resetView = new QShortcut(QKeySequence(QStringLiteral("i")), widget);
+  QObject::connect(resetView, &QShortcut::activated,
+                   [camera, defaultX, defaultY, defaultZoom, defaultTarget]() {
+                     camera->setXRotation(defaultX);
+                     camera->setYRotation(defaultY);
+                     camera->setZoomLevel(defaultZoom);
+                     camera->setTarget(defaultTarget);
+                   });
+  QShortcut *snapX = new QShortcut(QKeySequence(QStringLiteral("x")), widget);
+  QObject::connect(snapX, &QShortcut::activated,
+                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetRight); });
+  QShortcut *snapY = new QShortcut(QKeySequence(QStringLiteral("y")), widget);
+  QObject::connect(snapY, &QShortcut::activated,
+                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetFront); });
+  QShortcut *snapZ = new QShortcut(QKeySequence(QStringLiteral("z")), widget);
+  QObject::connect(snapZ, &QShortcut::activated,
+                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetDirectlyAbove); });
   return widget;
 }
 
