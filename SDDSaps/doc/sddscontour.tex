@@ -2,8 +2,10 @@
   \item \textbf{description:}
   \verb|sddscontour| makes contour and color-map plots from an SDDS data set column, array data, or from a \verb|rpn| expression
   in terms of the values in the columns of a data set. It supports FFT interpolation and filtering and also provides
-  \verb|-columnmatch| and waterfall modes for plotting multiple columns or pages. If the
-  data set contains more than one data page, data from successive pages is plotted on separate pages.
+  \verb|-columnmatch| and waterfall modes for plotting multiple columns or pages. With the \verb|-3d| option, it
+  can display the data as an interactive three-dimensional surface or bar plot that can be rotated with the mouse.
+  If the data set contains more than one data page, data from successive pages is plotted on separate pages. This mode
+  requires the Qt device.
 
   \item \textbf{examples:}
   This will generate a two-dimensional color-shaded map of the function ${\rm sin(4\pi (x^2 + y^2))}$ on
@@ -48,8 +50,7 @@ sddscontour [-pipe[=input][,output]] [<inputfile>] [options]
         \item \verb|xyz| --- Specifies the names of two independent columns {\em xColumnName} and {\em yColumnName}, along with
           a third dependent column {\em zColumnName} that is plotted as a function of the others.
           The x and y values must form a grid.
-        \item \verb|3d| --- Displays the data as an interactive 3-dimensional surface (\verb|-3d| or \verb|-3d=surface|) or bar plot (\verb|-3d=bar|) that can be rotated with the mouse.\
-          Requires the Qt device.
+        \item \verb|-3d| --- Displays the data as an interactive 3-dimensional surface (\verb|-3d| or \verb|-3d=surface|) or bar plot (\verb|-3d=bar|) that can be rotated with the mouse. Requires the Qt device.
         \end{itemize}
 
         In the case of the first two choices, the file must contain
