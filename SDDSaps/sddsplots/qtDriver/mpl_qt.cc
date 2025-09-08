@@ -177,6 +177,8 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   theme->setLabelBackgroundEnabled(true);
   theme->setLabelBackgroundColor(bgColor);
   theme->setLabelBorderEnabled(true);
+  Q3DCamera *camera = graph->scene()->activeCamera();
+  camera->setCameraPreset(Q3DCamera::CameraPresetIsometricRightHigh); // Default orientation
   QWidget *container = QWidget::createWindowContainer(graph);
   surfaceContainer = container;
   surfaceGraphs.append(graph);
