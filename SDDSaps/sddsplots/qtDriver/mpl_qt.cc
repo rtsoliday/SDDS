@@ -226,6 +226,8 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
     dateLabel->setAutoFillBackground(true);
     vbox->addWidget(dateLabel);
   }
+  container->setContentsMargins(0, 0, 0, 0);
+  vbox->addWidget(container);
   if (title && title[0]) {
     QLabel *titleLabel = new QLabel(QString::fromUtf8(title));
     titleLabel->setAlignment(Qt::AlignCenter);
@@ -237,9 +239,10 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
     palette.setColor(QPalette::WindowText, fgColor);
     titleLabel->setPalette(palette);
     titleLabel->setAutoFillBackground(true);
+    titleLabel->setContentsMargins(0, 0, 0, 0);
+    titleLabel->setMargin(0);
     vbox->addWidget(titleLabel);
   }
-  vbox->addWidget(container);
   widget->setWindowTitle("MPL Outboard Driver 3D");
   QFont font = theme->font();
   if (fontSize > 0)
