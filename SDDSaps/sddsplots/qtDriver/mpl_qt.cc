@@ -377,6 +377,29 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   QShortcut *snapZ = new QShortcut(QKeySequence(QStringLiteral("z")), widget);
   QObject::connect(snapZ, &QShortcut::activated,
                    [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetDirectlyAbove); });
+  QShortcut *increaseFont =
+      new QShortcut(QKeySequence(Qt::Key_Up), widget);
+  QObject::connect(increaseFont, &QShortcut::activated,
+                   [theme, graph]() {
+                     QFont f = theme->font();
+                     f.setPointSize(f.pointSize() + 1);
+                     theme->setFont(f);
+                     graph->rowAxis()->setTitle(graph->rowAxis()->title());
+                     graph->columnAxis()->setTitle(graph->columnAxis()->title());
+                     graph->valueAxis()->setTitle(graph->valueAxis()->title());
+                   });
+  QShortcut *decreaseFont =
+      new QShortcut(QKeySequence(Qt::Key_Down), widget);
+  QObject::connect(decreaseFont, &QShortcut::activated,
+                   [theme, graph]() {
+                     QFont f = theme->font();
+                     if (f.pointSize() > 1)
+                       f.setPointSize(f.pointSize() - 1);
+                     theme->setFont(f);
+                     graph->rowAxis()->setTitle(graph->rowAxis()->title());
+                     graph->columnAxis()->setTitle(graph->columnAxis()->title());
+                     graph->valueAxis()->setTitle(graph->valueAxis()->title());
+                   });
   return widget;
 }
 
