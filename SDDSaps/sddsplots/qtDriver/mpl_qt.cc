@@ -349,21 +349,12 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   graph->axisY()->setRange(zmin, zmax);
   QShortcut *toggleLines = new QShortcut(QKeySequence(QStringLiteral("g")), widget);
   QObject::connect(toggleLines, &QShortcut::activated,
-                   [series, theme]() {
-                     static int wireframeMode = 0;
-                     wireframeMode = (wireframeMode + 1) % 3;
-                     switch (wireframeMode) {
-                     case 1:
-                       theme->setGridLineColor(Qt::white);
-                       series->setDrawMode(QSurface3DSeries::DrawSurfaceAndWireframe);
-                       break;
-                     case 2:
-                       theme->setGridLineColor(Qt::black);
-                       series->setDrawMode(QSurface3DSeries::DrawSurfaceAndWireframe);
-                       break;
-                     default:
-                       series->setDrawMode(QSurface3DSeries::DrawSurface);
-                     }
+                   [series]() {
+                     static bool wireframe = false;
+                     wireframe = !wireframe;
+                     series->setDrawMode(wireframe
+                                              ? QSurface3DSeries::DrawSurfaceAndWireframe
+                                              : QSurface3DSeries::DrawSurface);
                    });
   QShortcut *resetView = new QShortcut(QKeySequence(QStringLiteral("r")), widget);
   QObject::connect(resetView, &QShortcut::activated,
