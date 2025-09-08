@@ -1109,6 +1109,7 @@ int main(int argc, char *argv[]) {
     current3DPlot = 0;
     QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(1).arg(total3DPlots);
     mainWindow.setWindowTitle(wtitle);
+    setup_shortcuts(&mainWindow);
     mainWindow.show();
     return app.exec();
   }
