@@ -122,6 +122,16 @@ static QWidget *run3d(const char *filename, const char *xlabel,
     graph->setAspectRatio(1.0f);
   }
   Q3DTheme *theme = graph->activeTheme();
+  QColor bgColor = Qt::black;
+  QColor fgColor = Qt::white;
+  theme->setBackgroundEnabled(true);
+  theme->setBackgroundColor(bgColor);
+  theme->setWindowColor(bgColor);
+  theme->setLabelTextColor(fgColor);
+  theme->setGridLineColor(fgColor);
+  theme->setLabelBackgroundEnabled(true);
+  theme->setLabelBackgroundColor(bgColor);
+  theme->setLabelBorderEnabled(false);
   Q3DCamera *camera = graph->scene()->activeCamera();
   camera->setCameraPreset(Q3DCamera::CameraPresetIsometricRightHigh); // Default orientation
   float defaultX = camera->xRotation();
@@ -136,6 +146,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   vbox->setSpacing(0);
   QPalette widgetPalette = widget->palette();
   widgetPalette.setColor(QPalette::Window, theme->backgroundColor());
+  widgetPalette.setColor(QPalette::WindowText, fgColor);
   widget->setPalette(widgetPalette);
   widget->setAutoFillBackground(true);
   if (topline && topline[0]) {
@@ -146,6 +157,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
     toplineLabel->setMaximumHeight(toplineLabel->sizeHint().height());
     QPalette palette = toplineLabel->palette();
     palette.setColor(QPalette::Window, theme->backgroundColor());
+    palette.setColor(QPalette::WindowText, fgColor);
     toplineLabel->setPalette(palette);
     toplineLabel->setAutoFillBackground(true);
     toplineLabel->setContentsMargins(0, 0, 0, 0);
@@ -162,6 +174,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
     dateLabel->setMaximumHeight(dateLabel->sizeHint().height());
     QPalette palette = dateLabel->palette();
     palette.setColor(QPalette::Window, theme->backgroundColor());
+    palette.setColor(QPalette::WindowText, fgColor);
     dateLabel->setPalette(palette);
     dateLabel->setAutoFillBackground(true);
     dateLabel->setContentsMargins(0, 0, 0, 0);
@@ -178,6 +191,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
     titleLabel->setMaximumHeight(titleLabel->sizeHint().height());
     QPalette palette = titleLabel->palette();
     palette.setColor(QPalette::Window, theme->backgroundColor());
+    palette.setColor(QPalette::WindowText, fgColor);
     titleLabel->setPalette(palette);
     titleLabel->setAutoFillBackground(true);
     titleLabel->setContentsMargins(0, 0, 0, 0);
@@ -292,10 +306,10 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   series->setMeshSmooth(true);
   series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
   graph->axisY()->setRange(zmin, zmax);
-  int wireframeMode = 0;
   QShortcut *toggleLines = new QShortcut(QKeySequence(QStringLiteral("g")), widget);
   QObject::connect(toggleLines, &QShortcut::activated,
-                   [series, theme, &wireframeMode]() {
+                   [series, theme]() {
+                     static int wireframeMode = 0;
                      wireframeMode = (wireframeMode + 1) % 3;
                      switch (wireframeMode) {
                      case 1:
