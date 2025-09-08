@@ -343,6 +343,7 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   series->setBaseGradient(gradient);
   series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
   graph->valueAxis()->setRange(zmin, zmax);
+  graph->setFloorLevel(zmin);
   graph->addSeries(series);
   QShortcut *resetView = new QShortcut(QKeySequence(QStringLiteral("i")), widget);
   QObject::connect(resetView, &QShortcut::activated,
