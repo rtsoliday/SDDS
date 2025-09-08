@@ -251,12 +251,12 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
     font.setPointSize(font.pointSize() + 24);
   theme->setFont(font);
   if (xlabel) {
-    graph->rowAxis()->setTitle(QString::fromUtf8(xlabel));
-    graph->rowAxis()->setTitleVisible(true);
+    graph->columnAxis()->setTitle(QString::fromUtf8(xlabel));
+    graph->columnAxis()->setTitleVisible(true);
   }
   if (ylabel) {
-    graph->columnAxis()->setTitle(QString::fromUtf8(ylabel));
-    graph->columnAxis()->setTitleVisible(true);
+    graph->rowAxis()->setTitle(QString::fromUtf8(ylabel));
+    graph->rowAxis()->setTitleVisible(true);
   }
   if (hideAxes) {
     theme->setGridEnabled(false);
@@ -280,34 +280,49 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   in >> nx >> ny >> xmin >> xmax >> ymin >> ymax;
   double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
   double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
-  QStringList rowLabels, colLabels;
+  QStringList xLabels, yLabels;
   for (int i = 0; i < nx; i++) {
     double xval = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
     if (xTime)
-      rowLabels << QDateTime::fromSecsSinceEpoch((qint64)xval).toString("yyyy-MM-dd HH:mm:ss");
+      xLabels <<
+          QDateTime::fromSecsSinceEpoch((qint64)xval).toString("yyyy-MM-dd HH:mm:ss");
     else
-      rowLabels << QString::number(xval);
+      xLabels << QString::number(xval);
   }
   for (int j = 0; j < ny; j++) {
     double yval = ymin + j * dy;
     if (yTime)
-      colLabels << QDateTime::fromSecsSinceEpoch((qint64)yval).toString("yyyy-MM-dd HH:mm:ss");
+      yLabels <<
+          QDateTime::fromSecsSinceEpoch((qint64)yval).toString("yyyy-MM-dd HH:mm:ss");
     else
-      colLabels << QString::number(yval);
+      yLabels << QString::number(yval);
   }
-  graph->rowAxis()->setLabels(rowLabels);
-  graph->columnAxis()->setLabels(colLabels);
+  const int maxLabels = 6;
+  if (nx > maxLabels) {
+    int step = (nx - 1) / (maxLabels - 1);
+    for (int i = 1; i < nx - 1; i++)
+      if (i % step)
+        xLabels[i].clear();
+  }
+  if (ny > maxLabels) {
+    int step = (ny - 1) / (maxLabels - 1);
+    for (int j = 1; j < ny - 1; j++)
+      if (j % step)
+        yLabels[j].clear();
+  }
+  graph->columnAxis()->setLabels(xLabels);
+  graph->rowAxis()->setLabels(yLabels);
   if (yFlip)
     ;
   QBarDataArray *dataArray = new QBarDataArray;
-  dataArray->reserve(nx);
+  dataArray->reserve(ny);
   double zmin = DBL_MAX, zmax = -DBL_MAX;
-  for (int i = 0; i < nx; i++) {
-    QBarDataRow *row = new QBarDataRow(ny);
-    for (int j = 0; j < ny; j++) {
+  for (int j = 0; j < ny; j++) {
+    QBarDataRow *row = new QBarDataRow(nx);
+    for (int i = 0; i < nx; i++) {
       double z;
       in >> z;
-      (*row)[j].setValue(z);
+      (*row)[i].setValue(z);
       if (z < zmin)
         zmin = z;
       if (z > zmax)
