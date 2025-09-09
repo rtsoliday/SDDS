@@ -97,7 +97,7 @@ static char *option[OPTIONS] = {
   "convertunits", "yflip", "showgaps", "3d"};
 
 static long threeD = 0;
-static long threeDBar = 0;
+static long threeDMode = 0; /* 0=surface,1=bar,2=scatter */
 static char *threeDCommand = NULL;
 static char **threeDFiles = NULL;
 static long threeDFileCount = 0;
@@ -108,7 +108,7 @@ char *USAGE = "sddscontour [-pipe] [<SDDSfilename>]\n\
   -columnmatch=<indep-column-name>,<expression> [-deltas[={fractional|normalize}]]}]]\n\
  [-array=<z-2d-array>[,<x-1d-array>,<y-id-array>]] [-swaparray]\n\
  [-xyz=<x-column>,<y-column>,<z-column>]\n\
- [-3d[=surface|bar]]\n\
+ [-3d[=surface|bar|scatter]]\n\
  [-rpndefinitionsfiles=<filename>[,...]]\n\
  [-rpnexpressions=<setup-expression>[,...][,algebraic]]\n\
  [-rpntransform=<expression>[,algebraic]] [-fixedrange] [-showGaps]\n\
@@ -609,15 +609,15 @@ void sddscontour_main(char *input_line)
       case SET_3D:
         threeD = 1;
         if (s_arg[i_arg].n_items > 1) {
-          static char *threeDOptions[] = {"surface", "bar"};
+          static char *threeDOptions[] = {"surface", "bar", "scatter"};
           long mode;
           if ((mode = match_string(s_arg[i_arg].list[1], threeDOptions,
                                    sizeof(threeDOptions) / sizeof(*threeDOptions), 0)) < 0) {
             fprintf(stderr,
-                    "Error (sddscontour): invalid -3d option, use -3d=surface or -3d=bar\n");
+                    "Error (sddscontour): invalid -3d option, use -3d=surface, -3d=bar, or -3d=scatter\n");
             return (1);
           }
-          threeDBar = mode == 1;
+          threeDMode = mode;
         }
         break;
       case SET_DEVICE:
@@ -3780,14 +3780,15 @@ void plot3DSurface(double **data, long nx, long ny, double xmin, double xmax,
   }
   fclose(fp);
   char buffer[2048];
+  const char *modeString = threeDMode == 1 ? "=bar" : (threeDMode == 2 ? "=scatter" : "");
 #if defined(_WIN32)
   snprintf(buffer, sizeof(buffer),
            " -3d%s \"%s\" -xlabel \"%s\" -ylabel \"%s\" -plottitle \"%s\"",
-           threeDBar ? "=bar" : "", tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "");
+           modeString, tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "");
 #else
   snprintf(buffer, sizeof(buffer),
            " -3d%s %s -xlabel '%s' -ylabel '%s' -plottitle '%s'",
-           threeDBar ? "=bar" : "", tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "");
+           modeString, tmpName, xlabel ? xlabel : "", ylabel ? ylabel : "", title ? title : "");
 #endif
   if (gray || levels || min_level != max_level) {
     snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer),

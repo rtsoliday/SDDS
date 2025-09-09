@@ -29,7 +29,7 @@ sddscontour [-pipe[=input][,output]] [<inputfile>] [options]
              colorColumn=<colorColumn>[,scroll=vertical|horizontal]]
 [-array=<zArray>[,<xArray>,<yArray>]] [-swaparray]
 [-xyz={\em xColumnName},{\em yColumnName},{\em zColumnName}]
-[-3d[=surface|bar]]
+[-3d[=surface|bar|scatter]]
 }\end{flushleft}
 \begin{itemize}
         \item \verb|quantity| --- Specifies the name of the column to make a contour or color map of.
@@ -50,7 +50,7 @@ sddscontour [-pipe[=input][,output]] [<inputfile>] [options]
         \item \verb|xyz| --- Specifies the names of two independent columns {\em xColumnName} and {\em yColumnName}, along with
           a third dependent column {\em zColumnName} that is plotted as a function of the others.
           The x and y values must form a grid.
-        \item \verb|-3d| --- Displays the data as an interactive 3-dimensional surface (\verb|-3d| or \verb|-3d=surface|) or bar plot (\verb|-3d=bar|) that can be rotated with the mouse. Requires the Qt device.
+        \item \verb|-3d| --- Displays the data as an interactive 3-dimensional surface (\verb|-3d| or \verb|-3d=surface|), bar plot (\verb|-3d=bar|), or scatter plot (\verb|-3d=scatter|) that can be rotated with the mouse. Requires the Qt device.
         \end{itemize}
 
         In the case of the first two choices, the file must contain
