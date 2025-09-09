@@ -8,13 +8,50 @@
   requires the Qt device.
 
   \item \textbf{examples:}
-  This will generate a two-dimensional color-shaded map of the function ${\rm sin(4\pi (x^2 + y^2))}$ on
-  the region x:[-1, 1] and y:[-1, 1]:
-  \begin{verbatim}
-sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 \
-  -zEquation="x x * y y * + 4 * pi * sin"
-sddscontour example.sdds -shade -equalaspect
-  \end{verbatim}
+    Generate a two-dimensional color-shaded map of the function ${\rm sin(4\pi (x^2 + y^2))}$ on the region x:[-1, 1] and y:[-1, 1]:
+    \begin{verbatim}
+sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y * + 4 * pi * sin"
+sddscontour example.sdds -scales=0,1,0,1 -shade
+    \end{verbatim}
+    \centerline{\includegraphics[width=3in]{2D-shade-plot.eps}}
+
+    Generate a three-dimensional surface plot:
+    \begin{verbatim}
+sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y * + 4 * pi * sin"
+sddscontour example.sdds -scales=0,1,0,1 -3d
+    \end{verbatim}
+    \centerline{\includegraphics[width=3in]{3D-surface-plot.eps}}
+
+    Toggle wireframe on with \verb|g|:
+    \begin{verbatim}
+sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y * + 4 * pi * sin"
+sddscontour example.sdds -scales=0,1,0,1 -3d
+# toggle wireframe on with 'g'
+    \end{verbatim}
+    \centerline{\includegraphics[width=3in]{3D-surface-plot2.eps}}
+
+    Toggle wireframe on and surface off with \verb|g|:
+    \begin{verbatim}
+sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y * + 4 * pi * sin"
+sddscontour example.sdds -scales=0,1,0,1 -3d
+# toggle wireframe on and surface off with 'g'
+    \end{verbatim}
+    \centerline{\includegraphics[width=3in]{3D-surface-plot3.eps}}
+
+    Generate a three-dimensional bar plot:
+    \begin{verbatim}
+sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y * + 4 * pi * sin"
+sddscontour example.sdds -scales=0,1,0,1 -3d=bar
+    \end{verbatim}
+    \centerline{\includegraphics[width=3in]{3D-bar-plot.eps}}
+
+    Generate a three-dimensional scatter plot:
+    \begin{verbatim}
+sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y * + 4 * pi * sin"
+sddscontour example.sdds -scales=0,1,0,1 -3d=scatter
+    \end{verbatim}
+    \centerline{\includegraphics[width=3in]{3D-scatter-plot.eps}}
+
   \item \textbf{synopsis:}
   \begin{verbatim}
 sddscontour [-pipe[=input][,output]] [<inputfile>] [options]
