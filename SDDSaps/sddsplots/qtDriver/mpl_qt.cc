@@ -611,11 +611,19 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   QShortcut *toggleLines = new QShortcut(QKeySequence(QStringLiteral("g")), widget);
   QObject::connect(toggleLines, &QShortcut::activated,
                    [series]() {
-                     static bool wireframe = false;
-                     wireframe = !wireframe;
-                     series->setDrawMode(wireframe
-                                              ? QSurface3DSeries::DrawSurfaceAndWireframe
-                                              : QSurface3DSeries::DrawSurface);
+                     static int mode = 0;
+                     mode = (mode + 1) % 3;
+                     switch (mode) {
+                     case 0:
+                       series->setDrawMode(QSurface3DSeries::DrawSurface);
+                       break;
+                     case 1:
+                       series->setDrawMode(QSurface3DSeries::DrawSurfaceAndWireframe);
+                       break;
+                     case 2:
+                       series->setDrawMode(QSurface3DSeries::DrawWireframe);
+                       break;
+                     }
                    });
   QShortcut *resetView = new QShortcut(QKeySequence(QStringLiteral("i")), widget);
   QObject::connect(resetView, &QShortcut::activated,
@@ -1152,7 +1160,7 @@ z - toggle replotting to zoom (2D)\n\
 - - decrease window size\n\
 \n\
 Keyboard shortcuts for 3D plots:\n\
-g - toggle surface wireframe\n\
+g - cycle surface/wireframe modes\n\
 i - reset view\n\
 x - snap view to X axis\n\
 y - snap view to Y axis\n\
