@@ -14,7 +14,7 @@ SDDStoolkit.pdf: SDDStoolkit.ps
 html:
 	mkdir -p SDDStoolkit
 	htlatex SDDStoolkit "html,3" "" "-dSDDStoolkit/"
-	rm -f *.html *.png *.css *.4ct *.tmp *.dvi *.idv *.4tc *.lg *.xref *.log *.aux
+	rm -f *.html *.css *.4ct *.tmp *.dvi *.idv *.4tc *.lg *.xref *.log *.aux
 
 clean::
 	rm -f SDDStoolkit.aux SDDStoolkit.dvi SDDStoolkit.log SDDStoolkit.toc SDDStoolkit.ps SDDStoolkit.pdf
