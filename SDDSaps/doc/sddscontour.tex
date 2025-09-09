@@ -13,14 +13,14 @@
 sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y * + 4 * pi * sin"
 sddscontour example.sdds -scales=0,1,0,1 -shade
     \end{verbatim}
-    \centerline{\includegraphics[width=3in]{2D-shade-plot.eps}}
+    \centerline{\includegraphics[width=4in]{2D-shade-plot.eps}}
 
     Generate a three-dimensional surface plot:
     \begin{verbatim}
 sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y * + 4 * pi * sin"
 sddscontour example.sdds -scales=0,1,0,1 -3d
     \end{verbatim}
-    \centerline{\includegraphics[width=3in]{3D-surface-plot.eps}}
+    \centerline{\includegraphics[width=4in]{3D-surface-plot.eps}}
 
     Toggle wireframe on with \verb|g|:
     \begin{verbatim}
@@ -28,7 +28,7 @@ sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y 
 sddscontour example.sdds -scales=0,1,0,1 -3d
 # toggle wireframe on with 'g'
     \end{verbatim}
-    \centerline{\includegraphics[width=3in]{3D-surface-plot2.eps}}
+    \centerline{\includegraphics[width=4in]{3D-surface-plot2.eps}}
 
     Toggle wireframe on and surface off with \verb|g|:
     \begin{verbatim}
@@ -36,21 +36,21 @@ sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y 
 sddscontour example.sdds -scales=0,1,0,1 -3d
 # toggle wireframe on and surface off with 'g'
     \end{verbatim}
-    \centerline{\includegraphics[width=3in]{3D-surface-plot3.eps}}
+    \centerline{\includegraphics[width=4in]{3D-surface-plot3.eps}}
 
     Generate a three-dimensional bar plot:
     \begin{verbatim}
 sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y * + 4 * pi * sin"
 sddscontour example.sdds -scales=0,1,0,1 -3d=bar
     \end{verbatim}
-    \centerline{\includegraphics[width=3in]{3D-bar-plot.eps}}
+    \centerline{\includegraphics[width=4in]{3D-bar-plot.eps}}
 
     Generate a three-dimensional scatter plot:
     \begin{verbatim}
 sddscongen example.sdds -xRange=-1,1,101 -yRange=-1,1,101 -zEquation="x x * y y * + 4 * pi * sin"
 sddscontour example.sdds -scales=0,1,0,1 -3d=scatter
     \end{verbatim}
-    \centerline{\includegraphics[width=3in]{3D-scatter-plot.eps}}
+    \centerline{\includegraphics[width=4in]{3D-scatter-plot.eps}}
 
   \item \textbf{synopsis:}
   \begin{verbatim}
@@ -272,7 +272,7 @@ Use \verb|-v1v2preferred| to force the first method to be used when both paramet
 \begin{flushleft}{\tt
 [-scales={\em xl},{\em xh},{\em yl},{\em yh}]
 [-swapxy] [-yflip] [-equalaspect[={-1,1}]]
-[-layout={\em nx},{\em ny}] [-ticksettings={xy}time]
+[-layout={\em nx},{\em ny}] [-ticksettings=xtime|ytime]
 [-nocolorbar] [-thickness={\em integer}] [-fillscreen]
 [-shapes={\em filename},{\em xColumn},{\em yColumn}[,type={\em lineType}][,thickness={\em value}]]
 [-symbols={\em filename},{\em xColumn},{\em yColumn}[,type={\em symbolType}][,fill][,thickness={\em value}][,scale={\em factor}]]
