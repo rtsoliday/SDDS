@@ -643,6 +643,10 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   series->setColorStyle(QT_DATAVIS_NAMESPACE::Q3DTheme::ColorStyleRangeGradient);
   series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshSphere);
   series->setMeshSmooth(true);
+  // Make scatter points small spheres (barely larger than a point)
+  // This only affects 3D scatter plots invoked by sddsplot.
+  // Default item size is larger; reduce to improve readability in dense clouds.
+  series->setItemSize(0.08f);
   series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
   graph->axisY()->setRange(zmin, zmax);
   graph->addSeries(series);
