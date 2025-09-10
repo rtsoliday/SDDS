@@ -124,6 +124,7 @@ struct Plot3DArgs {
   QString file;
   QString xlabel;
   QString ylabel;
+  QString zlabel;
   QString title;
   QString topline;
   int fontSize;
@@ -159,9 +160,10 @@ public:
 };
 
 static QWidget *run3dBar(const char *filename, const char *xlabel,
-                         const char *ylabel, const char *title,
-                         const char *topline, bool datestamp, int fontSize,
-                         bool equalAspect, double shadeMin, double shadeMax,
+                         const char *ylabel, const char *zlabel,
+                         const char *title, const char *topline,
+                         bool datestamp, int fontSize, bool equalAspect,
+                         double shadeMin, double shadeMax,
                          bool shadeRangeSet, bool gray, double hue0,
                          double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
                          bool xLog, bool xTime, bool yTime) {
@@ -262,6 +264,10 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   if (ylabel) {
     graph->rowAxis()->setTitle(QString::fromUtf8(ylabel));
     graph->rowAxis()->setTitleVisible(true);
+  }
+  if (zlabel) {
+    graph->valueAxis()->setTitle(QString::fromUtf8(zlabel));
+    graph->valueAxis()->setTitleVisible(true);
   }
   if (hideAxes) {
     theme->setGridEnabled(false);
@@ -409,9 +415,10 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
 }
 
 static QWidget *run3dScatter(const char *filename, const char *xlabel,
-                             const char *ylabel, const char *title,
-                             const char *topline, bool datestamp, int fontSize,
-                             bool equalAspect, double shadeMin, double shadeMax,
+                             const char *ylabel, const char *zlabel,
+                             const char *title, const char *topline,
+                             bool datestamp, int fontSize, bool equalAspect,
+                             double shadeMin, double shadeMax,
                              bool shadeRangeSet, bool gray, double hue0,
                              double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
                              bool xLog, bool xTime, bool yTime) {
@@ -513,6 +520,10 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     graph->axisZ()->setTitle(QString::fromUtf8(ylabel));
     graph->axisZ()->setTitleVisible(true);
   }
+  if (zlabel) {
+    graph->axisY()->setTitle(QString::fromUtf8(zlabel));
+    graph->axisY()->setTitleVisible(true);
+  }
   if (hideAxes) {
     theme->setGridEnabled(false);
     graph->axisX()->setTitleVisible(false);
@@ -530,9 +541,58 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     return NULL;
   }
   QTextStream in(&dataFile);
-  int nx, ny;
-  double xmin, xmax, ymin, ymax;
-  in >> nx >> ny >> xmin >> xmax >> ymin >> ymax;
+  QT_DATAVIS_NAMESPACE::QScatterDataArray *dataArray = new QT_DATAVIS_NAMESPACE::QScatterDataArray;
+  double xmin = DBL_MAX, xmax = -DBL_MAX;
+  double ymin = DBL_MAX, ymax = -DBL_MAX;
+  double zmin = DBL_MAX, zmax = -DBL_MAX;
+  QString firstLine = in.readLine();
+  QStringList header = firstLine.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+  if (header.size() == 1) {
+    int n = header[0].toInt();
+    dataArray->reserve(n);
+    for (int i = 0; i < n; i++) {
+      double x, y, z;
+      in >> x >> y >> z;
+      if (x < xmin)
+        xmin = x;
+      if (x > xmax)
+        xmax = x;
+      if (y < ymin)
+        ymin = y;
+      if (y > ymax)
+        ymax = y;
+      if (z < zmin)
+        zmin = z;
+      if (z > zmax)
+        zmax = z;
+      double xval = xLog ? pow(10.0, x) : x;
+      dataArray->append(
+          QT_DATAVIS_NAMESPACE::QScatterDataItem(QVector3D(xval, z, y)));
+    }
+  } else {
+    int nx = header[0].toInt();
+    int ny = header[1].toInt();
+    xmin = header[2].toDouble();
+    xmax = header[3].toDouble();
+    ymin = header[4].toDouble();
+    ymax = header[5].toDouble();
+    double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
+    double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
+    dataArray->reserve(nx * ny);
+    for (int j = 0; j < ny; j++) {
+      for (int i = 0; i < nx; i++) {
+        double z;
+        in >> z;
+        if (z < zmin)
+          zmin = z;
+        if (z > zmax)
+          zmax = z;
+        double xval = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
+        dataArray->append(QT_DATAVIS_NAMESPACE::QScatterDataItem(
+            QVector3D(xval, z, ymin + j * dy)));
+      }
+    }
+  }
   graph->axisZ()->setRange(ymin, ymax);
   if (yTime) {
     Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
@@ -540,12 +600,11 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   }
   if (yFlip)
     graph->axisZ()->setReversed(true);
-  double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
-  double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
   if (xLog) {
     double xminLinear = pow(10.0, xmin);
     double xmaxLinear = pow(10.0, xmax);
-    QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter *formatter = new QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter;
+    QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter *formatter =
+        new QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
     graph->axisX()->setRange(xminLinear, xmaxLinear);
   } else {
@@ -554,21 +613,6 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   if (xTime) {
     Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
-  }
-  QT_DATAVIS_NAMESPACE::QScatterDataArray *dataArray = new QT_DATAVIS_NAMESPACE::QScatterDataArray;
-  dataArray->reserve(nx * ny);
-  double zmin = DBL_MAX, zmax = -DBL_MAX;
-  for (int j = 0; j < ny; j++) {
-    for (int i = 0; i < nx; i++) {
-      double z;
-      in >> z;
-      if (z < zmin)
-        zmin = z;
-      if (z > zmax)
-        zmax = z;
-      double xval = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
-      dataArray->append(QT_DATAVIS_NAMESPACE::QScatterDataItem(QVector3D(xval, z, ymin + j * dy)));
-    }
   }
   QT_DATAVIS_NAMESPACE::QScatterDataProxy *proxy = new QT_DATAVIS_NAMESPACE::QScatterDataProxy;
   proxy->resetArray(dataArray);
@@ -597,8 +641,8 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   }
   series->setBaseGradient(gradient);
   series->setColorStyle(QT_DATAVIS_NAMESPACE::Q3DTheme::ColorStyleRangeGradient);
-  series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshCube);
-  series->setMeshSmooth(false);
+  series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshSphere);
+  series->setMeshSmooth(true);
   series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
   graph->axisY()->setRange(zmin, zmax);
   graph->addSeries(series);
@@ -646,21 +690,23 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
 }
 
 static QWidget *run3d(const char *filename, const char *xlabel,
-                      const char *ylabel, const char *title,
-                      const char *topline, int mode, bool datestamp, int fontSize,
-                      bool equalAspect, double shadeMin, double shadeMax,
-                      bool shadeRangeSet, bool gray, double hue0,
-                      double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
-                      bool xLog, bool xTime, bool yTime) {
+                      const char *ylabel, const char *zlabel,
+                      const char *title, const char *topline, int mode,
+                      bool datestamp, int fontSize, bool equalAspect,
+                      double shadeMin, double shadeMax, bool shadeRangeSet,
+                      bool gray, double hue0, double hue1, bool yFlip,
+                      bool hideAxes, bool hideZAxis, bool xLog, bool xTime,
+                      bool yTime) {
   if (mode == PLOT3D_BAR)
-    return run3dBar(filename, xlabel, ylabel, title, topline, datestamp, fontSize,
-                    equalAspect, shadeMin, shadeMax, shadeRangeSet, gray, hue0,
-                    hue1, yFlip, hideAxes, hideZAxis, xLog, xTime, yTime);
+    return run3dBar(filename, xlabel, ylabel, zlabel, title, topline,
+                    datestamp, fontSize, equalAspect, shadeMin, shadeMax,
+                    shadeRangeSet, gray, hue0, hue1, yFlip, hideAxes,
+                    hideZAxis, xLog, xTime, yTime);
   if (mode == PLOT3D_SCATTER)
-    return run3dScatter(filename, xlabel, ylabel, title, topline, datestamp,
-                        fontSize, equalAspect, shadeMin, shadeMax,
-                        shadeRangeSet, gray, hue0, hue1, yFlip, hideAxes,
-                        hideZAxis, xLog, xTime, yTime);
+    return run3dScatter(filename, xlabel, ylabel, zlabel, title, topline,
+                        datestamp, fontSize, equalAspect, shadeMin,
+                        shadeMax, shadeRangeSet, gray, hue0, hue1, yFlip,
+                        hideAxes, hideZAxis, xLog, xTime, yTime);
   QT_DATAVIS_NAMESPACE::Q3DSurface *graph = new QT_DATAVIS_NAMESPACE::Q3DSurface();
   surfaceGraph = graph;
   if (equalAspect) {
@@ -762,6 +808,10 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   if (ylabel) {
     graph->axisZ()->setTitle(QString::fromUtf8(ylabel));
     graph->axisZ()->setTitleVisible(true);
+  }
+  if (zlabel) {
+    graph->axisY()->setTitle(QString::fromUtf8(zlabel));
+    graph->axisY()->setTitleVisible(true);
   }
   if (hideAxes) {
     theme->setGridEnabled(false);
@@ -1458,6 +1508,8 @@ int main(int argc, char *argv[]) {
       current.xlabel = argv[++i];
     else if (!strcmp(argv[i], "-ylabel") && i + 1 < argc && in3d)
       current.ylabel = argv[++i];
+    else if (!strcmp(argv[i], "-zlabel") && i + 1 < argc && in3d)
+      current.zlabel = argv[++i];
     else if (!strcmp(argv[i], "-plottitle") && i + 1 < argc && in3d)
       current.title = argv[++i];
     else if (!strcmp(argv[i], "-topline") && i + 1 < argc && in3d)
@@ -1590,16 +1642,16 @@ int main(int argc, char *argv[]) {
     plotStack = new QStackedWidget;
     for (int i = 0; i < plots.size(); ++i) {
       Plot3DArgs &p = plots[i];
-      QWidget *plotWidget = run3d(p.file.toUtf8().constData(),
-                                  p.xlabel.isEmpty() ? NULL : p.xlabel.toUtf8().constData(),
-                                  p.ylabel.isEmpty() ? NULL : p.ylabel.toUtf8().constData(),
-                                  p.title.isEmpty() ? NULL : p.title.toUtf8().constData(),
-                                  p.topline.isEmpty() ? NULL : p.topline.toUtf8().constData(),
-                                  p.mode, p.datestamp, p.fontSize, p.equalAspect,
-                                  p.shadeMin, p.shadeMax, p.shadeRangeSet,
-                                  p.gray, p.hue0, p.hue1, p.yFlip,
-                                  p.hideAxes, p.hideZAxis, p.xLog, p.xTime,
-                                  p.yTime);
+      QWidget *plotWidget = run3d(
+          p.file.toUtf8().constData(),
+          p.xlabel.isEmpty() ? NULL : p.xlabel.toUtf8().constData(),
+          p.ylabel.isEmpty() ? NULL : p.ylabel.toUtf8().constData(),
+          p.zlabel.isEmpty() ? NULL : p.zlabel.toUtf8().constData(),
+          p.title.isEmpty() ? NULL : p.title.toUtf8().constData(),
+          p.topline.isEmpty() ? NULL : p.topline.toUtf8().constData(),
+          p.mode, p.datestamp, p.fontSize, p.equalAspect, p.shadeMin,
+          p.shadeMax, p.shadeRangeSet, p.gray, p.hue0, p.hue1, p.yFlip,
+          p.hideAxes, p.hideZAxis, p.xLog, p.xTime, p.yTime);
       if (!plotWidget)
         return 1;
       plotStack->addWidget(plotWidget);
