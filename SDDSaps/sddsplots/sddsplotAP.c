@@ -20,10 +20,19 @@
 #include "SDDS.h"
 #include "sddsplot.h"
 #include <ctype.h>
+#include <string.h>
+#if defined(_WIN32)
+#  include <windows.h>
+#else
+#  include <unistd.h>
+#endif
 #include "hersheyfont.h"
 
 static char *NO_REQUESTS_MESSAGE = "no plot requests";
 long defaultLineThickness = 0;
+
+extern int savedCommandlineArgc;
+extern char **savedCommandlineArgv;
 
 long graphic_AP1(GRAPHIC_SPEC *graphic_spec, long element, char **item, long items);
 long plotnames_AP1(PLOT_SPEC *plotspec, char **item, long items, char *plotnames_usage, long class);
@@ -35,6 +44,219 @@ long keepfilenames_AP1(PLOT_SPEC *plotspec);
 long add_filename(PLOT_SPEC *plotspec, char *filename);
 long count_chars(char *string, char c);
 void SetupFontSize(FONT_SIZE *fs);
+
+static int handle3DScatter(int argc, char **argv)
+{
+  int i;
+  char *spec = NULL;
+  for (i = 1; i < argc; i++) {
+    if (!strncmp(argv[i], "-3d=", 4)) {
+      spec = argv[i] + 4;
+      break;
+    }
+  }
+  if (!spec)
+    return 0;
+  char *copy = strdup(spec);
+  char *type = strtok(copy, ",");
+  char *xname = strtok(NULL, ",");
+  char *yname = strtok(NULL, ",");
+  char *zname = strtok(NULL, ",");
+  if (!type || !xname || !yname || !zname)
+    SDDS_Bomb("invalid -3d specification");
+  long mode = 0;
+  if (!strcmp(type, "column"))
+    mode = 1;
+  else if (!strcmp(type, "array"))
+    mode = 2;
+  else
+    SDDS_Bomb("invalid -3d mode");
+  char *filename = NULL;
+  for (i = 1; i < argc; i++) {
+    if (argv[i][0] != '-')
+      filename = argv[i];
+  }
+  if (!filename)
+    SDDS_Bomb("no input file given for -3d");
+  SDDS_DATASET SDDSin;
+  if (!SDDS_InitializeInput(&SDDSin, filename))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  if (SDDS_ReadPage(&SDDSin) <= 0)
+    SDDS_Bomb("unable to read page for -3d plot");
+  double *xData = NULL, *yData = NULL, *zData = NULL;
+  SDDS_ARRAY *xArr = NULL, *yArr = NULL, *zArr = NULL;
+  long n = 0;
+  char *xUnits = NULL, *yUnits = NULL, *zUnits = NULL;
+  char xLabel[256], yLabel[256], zLabel[256];
+  if (mode == 1) {
+    xData = SDDS_GetColumnInDoubles(&SDDSin, xname);
+    yData = SDDS_GetColumnInDoubles(&SDDSin, yname);
+    zData = SDDS_GetColumnInDoubles(&SDDSin, zname);
+    if (!xData || !yData || !zData)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    n = SDDS_CountRowsOfInterest(&SDDSin);
+    SDDS_GetColumnInformation(&SDDSin, "units", &xUnits, SDDS_GET_BY_NAME, xname);
+    SDDS_GetColumnInformation(&SDDSin, "units", &yUnits, SDDS_GET_BY_NAME, yname);
+    SDDS_GetColumnInformation(&SDDSin, "units", &zUnits, SDDS_GET_BY_NAME, zname);
+  } else {
+    xArr = SDDS_GetArray(&SDDSin, xname, NULL);
+    yArr = SDDS_GetArray(&SDDSin, yname, NULL);
+    zArr = SDDS_GetArray(&SDDSin, zname, NULL);
+    if (!xArr || !yArr || !zArr)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    n = xArr->elements;
+    xData = (double *)xArr->data;
+    yData = (double *)yArr->data;
+    zData = (double *)zArr->data;
+    SDDS_GetArrayInformation(&SDDSin, "units", &xUnits, SDDS_GET_BY_NAME, xname);
+    SDDS_GetArrayInformation(&SDDSin, "units", &yUnits, SDDS_GET_BY_NAME, yname);
+    SDDS_GetArrayInformation(&SDDSin, "units", &zUnits, SDDS_GET_BY_NAME, zname);
+  }
+  if (xUnits && xUnits[0])
+    snprintf(xLabel, sizeof(xLabel), "%s (%s)", xname, xUnits);
+  else
+    strncpy(xLabel, xname, sizeof(xLabel) - 1);
+  xLabel[sizeof(xLabel) - 1] = '\0';
+  if (yUnits && yUnits[0])
+    snprintf(yLabel, sizeof(yLabel), "%s (%s)", yname, yUnits);
+  else
+    strncpy(yLabel, yname, sizeof(yLabel) - 1);
+  yLabel[sizeof(yLabel) - 1] = '\0';
+  if (zUnits && zUnits[0])
+    snprintf(zLabel, sizeof(zLabel), "%s (%s)", zname, zUnits);
+  else
+    strncpy(zLabel, zname, sizeof(zLabel) - 1);
+  zLabel[sizeof(zLabel) - 1] = '\0';
+  free(xUnits);
+  free(yUnits);
+  free(zUnits);
+#if defined(_WIN32)
+  char tmpName[L_tmpnam];
+  if (!tmpnam(tmpName))
+    SDDS_Bomb("unable to create temporary file for 3D plot");
+  FILE *fp = fopen(tmpName, "w");
+  if (!fp)
+    SDDS_Bomb("unable to open temporary file for 3D plot");
+#else
+  char tmpName[] = "sddsplot3dXXXXXX";
+  int fd = mkstemp(tmpName);
+  FILE *fp = NULL;
+  if (fd == -1 || !(fp = fdopen(fd, "w")))
+    SDDS_Bomb("unable to create temporary file for 3D plot");
+#endif
+  fprintf(fp, "%ld\n", n);
+  for (long j = 0; j < n; j++)
+    fprintf(fp, "%g %g %g\n", xData[j], yData[j], zData[j]);
+  fclose(fp);
+  if (mode == 1) {
+    free(xData);
+    free(yData);
+    free(zData);
+  } else {
+    SDDS_FreeArray(xArr);
+    SDDS_FreeArray(yArr);
+    SDDS_FreeArray(zArr);
+  }
+  SDDS_Terminate(&SDDSin);
+  char command[4096];
+  snprintf(command, sizeof(command), "mpl_qt -3d=scatter %s", tmpName);
+  int hasXLabel = 0, hasYLabel = 0, hasZLabel = 0;
+  for (i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "-xlabel") && i + 1 < argc) {
+      strcat(command, " -xlabel \"");
+      strcat(command, argv[++i]);
+      strcat(command, "\"");
+      hasXLabel = 1;
+    } else if (!strcmp(argv[i], "-ylabel") && i + 1 < argc) {
+      strcat(command, " -ylabel \"");
+      strcat(command, argv[++i]);
+      strcat(command, "\"");
+      hasYLabel = 1;
+    } else if (!strcmp(argv[i], "-zlabel") && i + 1 < argc) {
+      strcat(command, " -zlabel \"");
+      strcat(command, argv[++i]);
+      strcat(command, "\"");
+      hasZLabel = 1;
+    } else if (!strcmp(argv[i], "-title") && i + 1 < argc) {
+      strcat(command, " -plottitle \"");
+      strcat(command, argv[++i]);
+      strcat(command, "\"");
+    } else if (!strcmp(argv[i], "-topline") && i + 1 < argc) {
+      strcat(command, " -topline \"");
+      strcat(command, argv[++i]);
+      strcat(command, "\"");
+    } else if (!strcmp(argv[i], "-fontsize") && i + 1 < argc) {
+      strcat(command, " -fontsize ");
+      strcat(command, argv[++i]);
+    } else if (!strcmp(argv[i], "-equalaspect"))
+      strcat(command, " -equalaspect");
+    else if (!strcmp(argv[i], "-yflip"))
+      strcat(command, " -yflip");
+    else if (!strcmp(argv[i], "-noborder"))
+      strcat(command, " -noborder");
+    else if (!strcmp(argv[i], "-noscale"))
+      strcat(command, " -noscale");
+    else if (!strcmp(argv[i], "-datestamp"))
+      strcat(command, " -datestamp");
+    else if (!strcmp(argv[i], "-xlog"))
+      strcat(command, " -xlog");
+    else if (!strncmp(argv[i], "-ticksettings", 13)) {
+      strcat(command, " -ticksettings");
+      if (argv[i][13] == '=')
+        strcat(command, argv[i] + 13);
+      else if (i + 1 < argc)
+        strcat(command, argv[++i]);
+    } else if (!strcmp(argv[i], "-shade") && i + 1 < argc) {
+      strcat(command, " -shade ");
+      strcat(command, argv[++i]);
+      while (i + 1 < argc && argv[i + 1][0] != '-') {
+        strcat(command, " ");
+        strcat(command, argv[++i]);
+      }
+    } else if (!strcmp(argv[i], "-mapshade") && i + 2 < argc) {
+      strcat(command, " -mapshade ");
+      strcat(command, argv[++i]);
+      strcat(command, " ");
+      strcat(command, argv[++i]);
+    }
+  }
+  if (!hasXLabel) {
+    strcat(command, " -xlabel \"");
+    strcat(command, xLabel);
+    strcat(command, "\"");
+  }
+  if (!hasYLabel) {
+    strcat(command, " -ylabel \"");
+    strcat(command, yLabel);
+    strcat(command, "\"");
+  }
+  if (!hasZLabel) {
+    strcat(command, " -zlabel \"");
+    strcat(command, zLabel);
+    strcat(command, "\"");
+  }
+  char wrapper[8192];
+#if defined(_WIN32)
+  snprintf(wrapper, sizeof(wrapper),
+           "start /B cmd /c \"%s && del \\\"%s\\\"\"",
+           command, tmpName);
+#else
+  snprintf(wrapper, sizeof(wrapper),
+           "(%s; rm %s) &",
+           command, tmpName);
+#endif
+  int sysret = system(wrapper);
+  (void)sysret;
+  free(copy);
+  return 1;
+}
+
+long threeD_AP(PLOT_SPEC *plotspec, char **item, long items)
+{
+  if (handle3DScatter(savedCommandlineArgc, savedCommandlineArgv))
+    exit(0);
+  return 1;
+}
 
 long convertUnits_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
