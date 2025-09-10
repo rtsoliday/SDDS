@@ -3874,7 +3874,8 @@ void run3DPlots(void) {
   }
   strcat(command, ") &");
 #endif
-  system(command);
+  int sysret = system(command);
+  (void)sysret;
   free(command);
   for (long i = 0; i < threeDFileCount; i++)
     free(threeDFiles[i]);
