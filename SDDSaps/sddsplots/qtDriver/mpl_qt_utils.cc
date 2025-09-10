@@ -334,7 +334,7 @@ void quit() {
 
 void apply_theme() {
   if (surfaceGraph) {
-    QtDataVisualization::Q3DTheme *theme = surfaceGraph->activeTheme();
+    QT_DATAVIS_NAMESPACE::Q3DTheme *theme = surfaceGraph->activeTheme();
     QColor bg = whiteTheme ? Qt::white : Qt::black;
     QColor fg = whiteTheme ? Qt::black : Qt::white;
     theme->setBackgroundColor(bg);

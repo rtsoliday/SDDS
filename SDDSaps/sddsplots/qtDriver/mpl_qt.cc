@@ -60,10 +60,6 @@
 #  include <objc/message.h>
 #endif
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-using namespace QtDataVisualization;
-#endif
-
 double scalex, scaley;
 #define Xpixel(value) (int)(((value) - userx0) * scalex)
 #define Ypixel(value) (int)((usery1 - (value)) * scaley)
@@ -114,12 +110,12 @@ extern "C" {
 QAction *replotZoomAction;
 QWidget *canvas;
 QMainWindow *mainWindowPointer;
-QAbstract3DGraph *surfaceGraph = nullptr;
+QT_DATAVIS_NAMESPACE::QAbstract3DGraph *surfaceGraph = nullptr;
 QWidget *surfaceContainer = nullptr;
 QStackedWidget *plotStack = nullptr;
 int current3DPlot = 0;
 int total3DPlots = 0;
-QVector<QAbstract3DGraph *> surfaceGraphs;
+QVector<QT_DATAVIS_NAMESPACE::QAbstract3DGraph *> surfaceGraphs;
 QVector<QWidget *> surfaceContainers;
 
 enum Plot3DMode { PLOT3D_SURFACE, PLOT3D_BAR, PLOT3D_SCATTER };
@@ -153,7 +149,7 @@ struct Plot3DArgs {
         xTime(false), yTime(false), mode(PLOT3D_SURFACE) {}
 };
 
-class Time3DAxisFormatter : public QValue3DAxisFormatter {
+class Time3DAxisFormatter : public QT_DATAVIS_NAMESPACE::QValue3DAxisFormatter {
 public:
   QString stringForValue(qreal value, const QString &format) const override {
     Q_UNUSED(format);
@@ -169,13 +165,13 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
                          bool shadeRangeSet, bool gray, double hue0,
                          double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
                          bool xLog, bool xTime, bool yTime) {
-  Q3DBars *graph = new Q3DBars();
+  QT_DATAVIS_NAMESPACE::Q3DBars *graph = new QT_DATAVIS_NAMESPACE::Q3DBars();
   surfaceGraph = graph;
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
     graph->setAspectRatio(1.0f);
   }
-  Q3DTheme *theme = graph->activeTheme();
+  QT_DATAVIS_NAMESPACE::Q3DTheme *theme = graph->activeTheme();
   QColor bgColor = Qt::black;
   QColor fgColor = Qt::white;
   theme->setBackgroundEnabled(true);
@@ -186,8 +182,8 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   theme->setLabelBackgroundEnabled(true);
   theme->setLabelBackgroundColor(bgColor);
   theme->setLabelBorderEnabled(true);
-  Q3DCamera *camera = graph->scene()->activeCamera();
-  camera->setCameraPreset(Q3DCamera::CameraPresetIsometricRightHigh); // Default orientation
+  QT_DATAVIS_NAMESPACE::Q3DCamera *camera = graph->scene()->activeCamera();
+  camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetIsometricRightHigh); // Default orientation
   float defaultX = camera->xRotation();
   float defaultY = camera->yRotation();
   float defaultZoom = camera->zoomLevel();
@@ -323,11 +319,11 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   graph->rowAxis()->setLabels(yLabels);
   if (yFlip)
     ;
-  QBarDataArray *dataArray = new QBarDataArray;
+  QT_DATAVIS_NAMESPACE::QBarDataArray *dataArray = new QT_DATAVIS_NAMESPACE::QBarDataArray;
   dataArray->reserve(ny);
   double zmin = DBL_MAX, zmax = -DBL_MAX;
   for (int j = 0; j < ny; j++) {
-    QBarDataRow *row = new QBarDataRow(nx);
+    QT_DATAVIS_NAMESPACE::QBarDataRow *row = new QT_DATAVIS_NAMESPACE::QBarDataRow(nx);
     for (int i = 0; i < nx; i++) {
       double z;
       in >> z;
@@ -339,13 +335,13 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
     }
     dataArray->append(row);
   }
-  QBarDataProxy *proxy = new QBarDataProxy;
+  QT_DATAVIS_NAMESPACE::QBarDataProxy *proxy = new QT_DATAVIS_NAMESPACE::QBarDataProxy;
   proxy->resetArray(dataArray);
   if (shadeRangeSet) {
     zmin = shadeMin;
     zmax = shadeMax;
   }
-  QBar3DSeries *series = new QBar3DSeries(proxy);
+  QT_DATAVIS_NAMESPACE::QBar3DSeries *series = new QT_DATAVIS_NAMESPACE::QBar3DSeries(proxy);
   if (!gray) {
     if (!spectrumallocated)
       allocspectrum();
@@ -365,7 +361,7 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
     }
   }
   series->setBaseGradient(gradient);
-  series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
+  series->setColorStyle(QT_DATAVIS_NAMESPACE::Q3DTheme::ColorStyleRangeGradient);
   graph->valueAxis()->setRange(zmin, zmax);
   graph->setFloorLevel(zmin);
   graph->addSeries(series);
@@ -379,13 +375,13 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
                    });
   QShortcut *snapX = new QShortcut(QKeySequence(QStringLiteral("x")), widget);
   QObject::connect(snapX, &QShortcut::activated,
-                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetRight); });
+                   [camera]() { camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetRight); });
   QShortcut *snapY = new QShortcut(QKeySequence(QStringLiteral("y")), widget);
   QObject::connect(snapY, &QShortcut::activated,
-                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetFront); });
+                   [camera]() { camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetFront); });
   QShortcut *snapZ = new QShortcut(QKeySequence(QStringLiteral("z")), widget);
   QObject::connect(snapZ, &QShortcut::activated,
-                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetDirectlyAbove); });
+                   [camera]() { camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetDirectlyAbove); });
   QShortcut *increaseFont =
       new QShortcut(QKeySequence(Qt::Key_Up), widget);
   QObject::connect(increaseFont, &QShortcut::activated,
@@ -419,13 +415,13 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
                              bool shadeRangeSet, bool gray, double hue0,
                              double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
                              bool xLog, bool xTime, bool yTime) {
-  Q3DScatter *graph = new Q3DScatter();
+  QT_DATAVIS_NAMESPACE::Q3DScatter *graph = new QT_DATAVIS_NAMESPACE::Q3DScatter();
   surfaceGraph = graph;
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
     graph->setAspectRatio(1.0f);
   }
-  Q3DTheme *theme = graph->activeTheme();
+  QT_DATAVIS_NAMESPACE::Q3DTheme *theme = graph->activeTheme();
   QColor bgColor = Qt::black;
   QColor fgColor = Qt::white;
   theme->setBackgroundEnabled(true);
@@ -436,8 +432,8 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   theme->setLabelBackgroundEnabled(true);
   theme->setLabelBackgroundColor(bgColor);
   theme->setLabelBorderEnabled(true);
-  Q3DCamera *camera = graph->scene()->activeCamera();
-  camera->setCameraPreset(Q3DCamera::CameraPresetIsometricRightHigh);
+  QT_DATAVIS_NAMESPACE::Q3DCamera *camera = graph->scene()->activeCamera();
+  camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetIsometricRightHigh);
   float defaultX = camera->xRotation();
   float defaultY = camera->yRotation();
   float defaultZoom = camera->zoomLevel();
@@ -549,7 +545,7 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   if (xLog) {
     double xminLinear = pow(10.0, xmin);
     double xmaxLinear = pow(10.0, xmax);
-    QLogValue3DAxisFormatter *formatter = new QLogValue3DAxisFormatter;
+    QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter *formatter = new QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
     graph->axisX()->setRange(xminLinear, xmaxLinear);
   } else {
@@ -559,7 +555,7 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
   }
-  QScatterDataArray *dataArray = new QScatterDataArray;
+  QT_DATAVIS_NAMESPACE::QScatterDataArray *dataArray = new QT_DATAVIS_NAMESPACE::QScatterDataArray;
   dataArray->reserve(nx * ny);
   double zmin = DBL_MAX, zmax = -DBL_MAX;
   for (int j = 0; j < ny; j++) {
@@ -571,16 +567,16 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
       if (z > zmax)
         zmax = z;
       double xval = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
-      dataArray->append(QScatterDataItem(QVector3D(xval, z, ymin + j * dy)));
+      dataArray->append(QT_DATAVIS_NAMESPACE::QScatterDataItem(QVector3D(xval, z, ymin + j * dy)));
     }
   }
-  QScatterDataProxy *proxy = new QScatterDataProxy;
+  QT_DATAVIS_NAMESPACE::QScatterDataProxy *proxy = new QT_DATAVIS_NAMESPACE::QScatterDataProxy;
   proxy->resetArray(dataArray);
   if (shadeRangeSet) {
     zmin = shadeMin;
     zmax = shadeMax;
   }
-  QScatter3DSeries *series = new QScatter3DSeries(proxy);
+  QT_DATAVIS_NAMESPACE::QScatter3DSeries *series = new QT_DATAVIS_NAMESPACE::QScatter3DSeries(proxy);
   if (!gray) {
     if (!spectrumallocated)
       allocspectrum();
@@ -600,8 +596,8 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     }
   }
   series->setBaseGradient(gradient);
-  series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
-  series->setMesh(QAbstract3DSeries::MeshCube);
+  series->setColorStyle(QT_DATAVIS_NAMESPACE::Q3DTheme::ColorStyleRangeGradient);
+  series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshCube);
   series->setMeshSmooth(false);
   series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
   graph->axisY()->setRange(zmin, zmax);
@@ -616,13 +612,13 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
                    });
   QShortcut *snapX = new QShortcut(QKeySequence(QStringLiteral("x")), widget);
   QObject::connect(snapX, &QShortcut::activated,
-                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetRight); });
+                   [camera]() { camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetRight); });
   QShortcut *snapY = new QShortcut(QKeySequence(QStringLiteral("y")), widget);
   QObject::connect(snapY, &QShortcut::activated,
-                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetFront); });
+                   [camera]() { camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetFront); });
   QShortcut *snapZ = new QShortcut(QKeySequence(QStringLiteral("z")), widget);
   QObject::connect(snapZ, &QShortcut::activated,
-                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetDirectlyAbove); });
+                   [camera]() { camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetDirectlyAbove); });
   QShortcut *increaseFont =
       new QShortcut(QKeySequence(Qt::Key_Up), widget);
   QObject::connect(increaseFont, &QShortcut::activated,
@@ -665,13 +661,13 @@ static QWidget *run3d(const char *filename, const char *xlabel,
                         fontSize, equalAspect, shadeMin, shadeMax,
                         shadeRangeSet, gray, hue0, hue1, yFlip, hideAxes,
                         hideZAxis, xLog, xTime, yTime);
-  Q3DSurface *graph = new Q3DSurface();
+  QT_DATAVIS_NAMESPACE::Q3DSurface *graph = new QT_DATAVIS_NAMESPACE::Q3DSurface();
   surfaceGraph = graph;
   if (equalAspect) {
     graph->setHorizontalAspectRatio(1.0f);
     graph->setAspectRatio(1.0f);
   }
-  Q3DTheme *theme = graph->activeTheme();
+  QT_DATAVIS_NAMESPACE::Q3DTheme *theme = graph->activeTheme();
   QColor bgColor = Qt::black;
   QColor fgColor = Qt::white;
   theme->setBackgroundEnabled(true);
@@ -682,8 +678,8 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   theme->setLabelBackgroundEnabled(true);
   theme->setLabelBackgroundColor(bgColor);
   theme->setLabelBorderEnabled(true);
-  Q3DCamera *camera = graph->scene()->activeCamera();
-  camera->setCameraPreset(Q3DCamera::CameraPresetIsometricRightHigh); // Default orientation
+  QT_DATAVIS_NAMESPACE::Q3DCamera *camera = graph->scene()->activeCamera();
+  camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetIsometricRightHigh); // Default orientation
   float defaultX = camera->xRotation();
   float defaultY = camera->yRotation();
   float defaultZoom = camera->zoomLevel();
@@ -800,7 +796,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   if (xLog) {
     double xminLinear = pow(10.0, xmin);
     double xmaxLinear = pow(10.0, xmax);
-    QLogValue3DAxisFormatter *formatter = new QLogValue3DAxisFormatter;
+    QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter *formatter = new QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
     graph->axisX()->setRange(xminLinear, xmaxLinear);
   } else {
@@ -810,11 +806,11 @@ static QWidget *run3d(const char *filename, const char *xlabel,
     Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
   }
-  QSurfaceDataArray *dataArray = new QSurfaceDataArray;
+  QT_DATAVIS_NAMESPACE::QSurfaceDataArray *dataArray = new QT_DATAVIS_NAMESPACE::QSurfaceDataArray;
   dataArray->reserve(ny);
   double zmin = DBL_MAX, zmax = -DBL_MAX;
   for (int j = 0; j < ny; j++) {
-    QSurfaceDataRow *row = new QSurfaceDataRow(nx);
+    QT_DATAVIS_NAMESPACE::QSurfaceDataRow *row = new QT_DATAVIS_NAMESPACE::QSurfaceDataRow(nx);
     for (int i = 0; i < nx; i++) {
       double z;
       in >> z;
@@ -827,13 +823,13 @@ static QWidget *run3d(const char *filename, const char *xlabel,
     }
     dataArray->append(row);
   }
-  QSurfaceDataProxy *proxy = new QSurfaceDataProxy;
+  QT_DATAVIS_NAMESPACE::QSurfaceDataProxy *proxy = new QT_DATAVIS_NAMESPACE::QSurfaceDataProxy;
   proxy->resetArray(dataArray);
   if (shadeRangeSet) {
     zmin = shadeMin;
     zmax = shadeMax;
   }
-  QSurface3DSeries *series = new QSurface3DSeries(proxy);
+  QT_DATAVIS_NAMESPACE::QSurface3DSeries *series = new QT_DATAVIS_NAMESPACE::QSurface3DSeries(proxy);
   if (!gray) {
     if (!spectrumallocated)
       allocspectrum();
@@ -854,8 +850,8 @@ static QWidget *run3d(const char *filename, const char *xlabel,
     }
   }
   series->setBaseGradient(gradient);
-  series->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
-  series->setDrawMode(QSurface3DSeries::DrawSurface);
+  series->setColorStyle(QT_DATAVIS_NAMESPACE::Q3DTheme::ColorStyleRangeGradient);
+  series->setDrawMode(QT_DATAVIS_NAMESPACE::QSurface3DSeries::DrawSurface);
   series->setMeshSmooth(true);
   series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
   graph->axisY()->setRange(zmin, zmax);
@@ -866,13 +862,13 @@ static QWidget *run3d(const char *filename, const char *xlabel,
                      mode = (mode + 1) % 3;
                      switch (mode) {
                      case 0:
-                       series->setDrawMode(QSurface3DSeries::DrawSurface);
+                       series->setDrawMode(QT_DATAVIS_NAMESPACE::QSurface3DSeries::DrawSurface);
                        break;
                      case 1:
-                       series->setDrawMode(QSurface3DSeries::DrawSurfaceAndWireframe);
+                       series->setDrawMode(QT_DATAVIS_NAMESPACE::QSurface3DSeries::DrawSurfaceAndWireframe);
                        break;
                      case 2:
-                       series->setDrawMode(QSurface3DSeries::DrawWireframe);
+                       series->setDrawMode(QT_DATAVIS_NAMESPACE::QSurface3DSeries::DrawWireframe);
                        break;
                      }
                    });
@@ -886,13 +882,13 @@ static QWidget *run3d(const char *filename, const char *xlabel,
                    });
   QShortcut *snapX = new QShortcut(QKeySequence(QStringLiteral("x")), widget);
   QObject::connect(snapX, &QShortcut::activated,
-                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetRight); });
+                   [camera]() { camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetRight); });
   QShortcut *snapY = new QShortcut(QKeySequence(QStringLiteral("y")), widget);
   QObject::connect(snapY, &QShortcut::activated,
-                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetFront); });
+                   [camera]() { camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetFront); });
   QShortcut *snapZ = new QShortcut(QKeySequence(QStringLiteral("z")), widget);
   QObject::connect(snapZ, &QShortcut::activated,
-                   [camera]() { camera->setCameraPreset(Q3DCamera::CameraPresetDirectlyAbove); });
+                   [camera]() { camera->setCameraPreset(QT_DATAVIS_NAMESPACE::Q3DCamera::CameraPresetDirectlyAbove); });
   QShortcut *increaseFont =
       new QShortcut(QKeySequence(Qt::Key_Up), widget);
   QObject::connect(increaseFont, &QShortcut::activated,

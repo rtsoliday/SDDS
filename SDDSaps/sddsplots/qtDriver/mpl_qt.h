@@ -11,7 +11,6 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QFrame>
-#include <QPainter>
 #include <QPixmap>
 #include <QTimer>
 #include <QObject>
@@ -36,7 +35,9 @@
 #include <QtDataVisualization/Q3DSurface>
 #include <QtDataVisualization/QAbstract3DGraph>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-#  define QtDataVisualization
+#  define QT_DATAVIS_NAMESPACE
+#else
+#  define QT_DATAVIS_NAMESPACE QtDataVisualization
 #endif
 #include "mdb.h"
 
@@ -109,12 +110,12 @@ extern FILE *ifp;
 
 extern QWidget *canvas;
 extern QAction *replotZoomAction;
-extern QtDataVisualization::QAbstract3DGraph *surfaceGraph;
+extern QT_DATAVIS_NAMESPACE::QAbstract3DGraph *surfaceGraph;
 extern QWidget *surfaceContainer;
 extern QStackedWidget *plotStack;
 extern int current3DPlot;
 extern int total3DPlots;
-extern QVector<QtDataVisualization::QAbstract3DGraph *> surfaceGraphs;
+extern QVector<QT_DATAVIS_NAMESPACE::QAbstract3DGraph *> surfaceGraphs;
 extern QVector<QWidget *> surfaceContainers;
 
 #define RGB_QT(r, g, b) (                                              \
@@ -136,7 +137,6 @@ void newzoom();
 long readdata();
 void print();
 void save();
-long readdata();
 void nav_next(QMainWindow *mainWindow);
 void nav_previous(QMainWindow *mainWindow);
 void delete_current(QMainWindow *mainWindow);
