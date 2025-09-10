@@ -129,6 +129,7 @@ char *USAGE5 = "  -offset=[{x|y}change={value>][,{x|y}parameter=<name>][,{x|y}in
   -timeFilter={column|parameter},<name>[,before=YYYY/MM/DD@HH:MM:SS][,after=YYYY/MM/DD@HH:MM:SS][,invert]\n\
   -intensityBar=[text=<string>,][labelsize=<value>][,unitsize=<value>][,xadjust=<value>]\n\
   -convertunits={column|parameter},<name>,<new-units-name>,<old-units-name>[,<factor>]\n\
+  -3d={column|array},<x-name>,<y-name>,<z-name>[,<intensity-name>]\n\
   -orderColors={temperature|rtemperature|spectral|rspectral|start=(<red>,<green>,<blue>){[,finish=(<red>,<green>,<blue>)]|[,increment=(<red>,<green>,<blue>)]}}\n\
   All colors range from 0 to 65535.\n\
   -device={qt|motif|png|postscript}[,dashes,linetypetable=<lineDefineFile>,movie,interval=<seconds>,keep=<number>,share=<name>,timeoutHours=<hours>,spectrum]\n\

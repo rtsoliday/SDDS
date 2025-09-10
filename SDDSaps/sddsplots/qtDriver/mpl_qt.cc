@@ -545,29 +545,52 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   double xmin = DBL_MAX, xmax = -DBL_MAX;
   double ymin = DBL_MAX, ymax = -DBL_MAX;
   double zmin = DBL_MAX, zmax = -DBL_MAX;
+  // Optional 4th column (intensity) is used to color via series binning.
+  bool hasIntensity = false;
+  double imin = DBL_MAX, imax = -DBL_MAX;
+  bool outsideDefaultIntensityRange = false;
+  const double defaultImin = 0.0, defaultImax = 100.0;
+  QVector<double> intensities;
+  QVector<QVector3D> points;
   QString firstLine = in.readLine();
   QStringList header = firstLine.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
   if (header.size() == 1) {
     int n = header[0].toInt();
     dataArray->reserve(n);
+    intensities.reserve(n);
+    points.reserve(n);
     for (int i = 0; i < n; i++) {
-      double x, y, z;
-      in >> x >> y >> z;
-      if (x < xmin)
-        xmin = x;
-      if (x > xmax)
-        xmax = x;
-      if (y < ymin)
-        ymin = y;
-      if (y > ymax)
-        ymax = y;
-      if (z < zmin)
-        zmin = z;
-      if (z > zmax)
-        zmax = z;
+      QString line = in.readLine();
+      while (line.trimmed().isEmpty() && !in.atEnd())
+        line = in.readLine();
+      QStringList parts = line.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+      if (parts.size() < 3)
+        continue;
+      double x = parts[0].toDouble();
+      double y = parts[1].toDouble();
+      double z = parts[2].toDouble();
       double xval = xLog ? pow(10.0, x) : x;
-      dataArray->append(
-          QT_DATAVIS_NAMESPACE::QScatterDataItem(QVector3D(xval, z, y)));
+      if (x < xmin) xmin = x;
+      if (x > xmax) xmax = x;
+      if (y < ymin) ymin = y;
+      if (y > ymax) ymax = y;
+      if (z < zmin) zmin = z;
+      if (z > zmax) zmax = z;
+      QVector3D vec(xval, z, y);
+      points.append(vec);
+      QT_DATAVIS_NAMESPACE::QScatterDataItem item(vec);
+      dataArray->append(item);
+      if (parts.size() >= 4) {
+        double inten = parts[3].toDouble();
+        intensities.append(inten);
+        hasIntensity = true;
+        if (inten < imin) imin = inten;
+        if (inten > imax) imax = inten;
+        if (inten < defaultImin || inten > defaultImax)
+          outsideDefaultIntensityRange = true;
+      } else {
+        intensities.append(qQNaN());
+      }
     }
   } else {
     int nx = header[0].toInt();
@@ -614,42 +637,99 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
   }
-  QT_DATAVIS_NAMESPACE::QScatterDataProxy *proxy = new QT_DATAVIS_NAMESPACE::QScatterDataProxy;
-  proxy->resetArray(dataArray);
-  if (shadeRangeSet) {
-    zmin = shadeMin;
-    zmax = shadeMax;
-  }
-  QT_DATAVIS_NAMESPACE::QScatter3DSeries *series = new QT_DATAVIS_NAMESPACE::QScatter3DSeries(proxy);
-  if (!gray) {
-    if (!spectrumallocated)
-      allocspectrum();
-  }
-  QLinearGradient gradient;
-  for (int i = 0; i < nspect; i++) {
-    double frac = (double)i / (nspect - 1);
-    if (gray) {
-      gradient.setColorAt(frac, QColor::fromRgbF(frac, frac, frac));
-    } else {
-      int index = (int)((hue0 + frac * (hue1 - hue0)) * (nspect - 1) + 0.5);
-      if (index < 0)
-        index = 0;
-      if (index >= nspect)
-        index = nspect - 1;
-      gradient.setColorAt(frac, QColor::fromRgb(spectrum[index]));
+  if (hasIntensity && points.size() == intensities.size()) {
+    double lo = defaultImin, hi = defaultImax;
+    if (outsideDefaultIntensityRange) {
+      lo = imin;
+      hi = imax;
+      if (hi == lo)
+        hi = lo + 1.0;
     }
+    if (!gray) {
+      if (!spectrumallocated)
+        allocspectrum();
+    }
+    const int bins = qMin(nspect, 64);
+    QVector<QT_DATAVIS_NAMESPACE::QScatterDataArray *> binArrays(bins);
+    for (int b = 0; b < bins; b++)
+      binArrays[b] = new QT_DATAVIS_NAMESPACE::QScatterDataArray;
+    for (int i = 0; i < points.size(); i++) {
+      double inten = intensities[i];
+      if (std::isnan(inten))
+        continue;
+      double frac = (inten - lo) / (hi - lo);
+      if (frac < 0)
+        frac = 0;
+      if (frac > 1)
+        frac = 1;
+      int bin = (int)floor(frac * (bins - 1) + 0.5);
+      binArrays[bin]->append(QT_DATAVIS_NAMESPACE::QScatterDataItem(points[i]));
+    }
+    for (int b = 0; b < bins; b++) {
+      if (binArrays[b]->size() == 0) {
+        delete binArrays[b];
+        continue;
+      }
+      QT_DATAVIS_NAMESPACE::QScatterDataProxy *p = new QT_DATAVIS_NAMESPACE::QScatterDataProxy;
+      p->resetArray(binArrays[b]);
+      QT_DATAVIS_NAMESPACE::QScatter3DSeries *s = new QT_DATAVIS_NAMESPACE::QScatter3DSeries(p);
+      double frac = (double)b / (bins - 1);
+      QColor c;
+      if (gray)
+        c = QColor::fromRgbF(frac, frac, frac);
+      else {
+        int index = (int)((hue0 + frac * (hue1 - hue0)) * (nspect - 1) + 0.5);
+        if (index < 0)
+          index = 0;
+        if (index >= nspect)
+          index = nspect - 1;
+        c = QColor::fromRgb(spectrum[index]);
+      }
+      s->setBaseColor(c);
+      s->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshSphere);
+      s->setMeshSmooth(true);
+      s->setItemSize(0.08f);
+      s->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
+      graph->addSeries(s);
+    }
+  } else {
+    QT_DATAVIS_NAMESPACE::QScatterDataProxy *proxy = new QT_DATAVIS_NAMESPACE::QScatterDataProxy;
+    proxy->resetArray(dataArray);
+    if (shadeRangeSet) {
+      zmin = shadeMin;
+      zmax = shadeMax;
+    }
+    QT_DATAVIS_NAMESPACE::QScatter3DSeries *series = new QT_DATAVIS_NAMESPACE::QScatter3DSeries(proxy);
+    if (!gray) {
+      if (!spectrumallocated)
+        allocspectrum();
+    }
+    QLinearGradient gradient;
+    for (int i = 0; i < nspect; i++) {
+      double frac = (double)i / (nspect - 1);
+      if (gray) {
+        gradient.setColorAt(frac, QColor::fromRgbF(frac, frac, frac));
+      } else {
+        int index = (int)((hue0 + frac * (hue1 - hue0)) * (nspect - 1) + 0.5);
+        if (index < 0)
+          index = 0;
+        if (index >= nspect)
+          index = nspect - 1;
+        gradient.setColorAt(frac, QColor::fromRgb(spectrum[index]));
+      }
+    }
+    series->setBaseGradient(gradient);
+    series->setColorStyle(QT_DATAVIS_NAMESPACE::Q3DTheme::ColorStyleRangeGradient);
+    series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshSphere);
+    series->setMeshSmooth(true);
+    // Make scatter points small spheres (barely larger than a point)
+    // This only affects 3D scatter plots invoked by sddsplot.
+    // Default item size is larger; reduce to improve readability in dense clouds.
+    series->setItemSize(0.08f);
+    series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
+    graph->addSeries(series);
   }
-  series->setBaseGradient(gradient);
-  series->setColorStyle(QT_DATAVIS_NAMESPACE::Q3DTheme::ColorStyleRangeGradient);
-  series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshSphere);
-  series->setMeshSmooth(true);
-  // Make scatter points small spheres (barely larger than a point)
-  // This only affects 3D scatter plots invoked by sddsplot.
-  // Default item size is larger; reduce to improve readability in dense clouds.
-  series->setItemSize(0.08f);
-  series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
   graph->axisY()->setRange(zmin, zmax);
-  graph->addSeries(series);
   QShortcut *resetView = new QShortcut(QKeySequence(QStringLiteral("i")), widget);
   QObject::connect(resetView, &QShortcut::activated,
                    [camera, defaultX, defaultY, defaultZoom, defaultTarget]() {

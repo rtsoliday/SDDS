@@ -62,6 +62,7 @@ static int handle3DScatter(int argc, char **argv)
   char *xname = strtok(NULL, ",");
   char *yname = strtok(NULL, ",");
   char *zname = strtok(NULL, ",");
+  char *iname = strtok(NULL, ",");
   if (!type || !xname || !yname || !zname)
     SDDS_Bomb("invalid -3d specification");
   long mode = 0;
@@ -83,8 +84,8 @@ static int handle3DScatter(int argc, char **argv)
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (SDDS_ReadPage(&SDDSin) <= 0)
     SDDS_Bomb("unable to read page for -3d plot");
-  double *xData = NULL, *yData = NULL, *zData = NULL;
-  SDDS_ARRAY *xArr = NULL, *yArr = NULL, *zArr = NULL;
+  double *xData = NULL, *yData = NULL, *zData = NULL, *iData = NULL;
+  SDDS_ARRAY *xArr = NULL, *yArr = NULL, *zArr = NULL, *iArr = NULL;
   long n = 0;
   char *xUnits = NULL, *yUnits = NULL, *zUnits = NULL;
   char xLabel[256], yLabel[256], zLabel[256];
@@ -98,6 +99,11 @@ static int handle3DScatter(int argc, char **argv)
     SDDS_GetColumnInformation(&SDDSin, "units", &xUnits, SDDS_GET_BY_NAME, xname);
     SDDS_GetColumnInformation(&SDDSin, "units", &yUnits, SDDS_GET_BY_NAME, yname);
     SDDS_GetColumnInformation(&SDDSin, "units", &zUnits, SDDS_GET_BY_NAME, zname);
+    if (iname) {
+      iData = SDDS_GetColumnInDoubles(&SDDSin, iname);
+      if (!iData)
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    }
   } else {
     xArr = SDDS_GetArray(&SDDSin, xname, NULL);
     yArr = SDDS_GetArray(&SDDSin, yname, NULL);
@@ -111,6 +117,12 @@ static int handle3DScatter(int argc, char **argv)
     SDDS_GetArrayInformation(&SDDSin, "units", &xUnits, SDDS_GET_BY_NAME, xname);
     SDDS_GetArrayInformation(&SDDSin, "units", &yUnits, SDDS_GET_BY_NAME, yname);
     SDDS_GetArrayInformation(&SDDSin, "units", &zUnits, SDDS_GET_BY_NAME, zname);
+    if (iname) {
+      iArr = SDDS_GetArray(&SDDSin, iname, NULL);
+      if (!iArr)
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      iData = (double *)iArr->data;
+    }
   }
   if (xUnits && xUnits[0])
     snprintf(xLabel, sizeof(xLabel), "%s (%s)", xname, xUnits);
@@ -145,17 +157,25 @@ static int handle3DScatter(int argc, char **argv)
     SDDS_Bomb("unable to create temporary file for 3D plot");
 #endif
   fprintf(fp, "%ld\n", n);
-  for (long j = 0; j < n; j++)
-    fprintf(fp, "%g %g %g\n", xData[j], yData[j], zData[j]);
+  for (long j = 0; j < n; j++) {
+    if (iData)
+      fprintf(fp, "%g %g %g %g\n", xData[j], yData[j], zData[j], iData[j]);
+    else
+      fprintf(fp, "%g %g %g\n", xData[j], yData[j], zData[j]);
+  }
   fclose(fp);
   if (mode == 1) {
     free(xData);
     free(yData);
     free(zData);
+    if (iData)
+      free(iData);
   } else {
     SDDS_FreeArray(xArr);
     SDDS_FreeArray(yArr);
     SDDS_FreeArray(zArr);
+    if (iArr)
+      SDDS_FreeArray(iArr);
   }
   SDDS_Terminate(&SDDSin);
   char command[4096];
