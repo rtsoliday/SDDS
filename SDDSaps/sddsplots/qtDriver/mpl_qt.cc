@@ -60,7 +60,9 @@
 #  include <objc/message.h>
 #endif
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 using namespace QtDataVisualization;
+#endif
 
 double scalex, scaley;
 #define Xpixel(value) (int)(((value) - userx0) * scalex)
@@ -1530,7 +1532,7 @@ int main(int argc, char *argv[]) {
   QMenu *navigateMenu = mainWindow.menuBar()->addMenu("Navigate");
   QMenu *optionsMenu = nullptr;
   if (plots.isEmpty())
-    QMenu *optionsMenu = mainWindow.menuBar()->addMenu("Options");
+    optionsMenu = mainWindow.menuBar()->addMenu("Options");
   QMenu *helpMenu = mainWindow.menuBar()->addMenu("Help");
 
   QAction *printAction = new QAction("Print...", &mainWindow);

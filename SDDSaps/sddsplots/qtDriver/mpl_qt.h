@@ -35,6 +35,9 @@
 #include <cmath>
 #include <QtDataVisualization/Q3DSurface>
 #include <QtDataVisualization/QAbstract3DGraph>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#  define QtDataVisualization
+#endif
 #include "mdb.h"
 
 #define NSPECT 101
