@@ -144,6 +144,22 @@ ICONV_LIB = $(firstword $(wildcard \
           $(addsuffix /libiconv.dylib, $(LIB_DIRS)) \
           $(addsuffix /libiconv.so, $(LIB_DIRS)) \
           $(addsuffix /libiconv.a, $(LIB_DIRS))))
+GLFW_LIB = $(firstword $(wildcard \
+          $(addsuffix /libglfw.dylib, $(LIB_DIRS)) \
+          $(addsuffix /libglfw.so, $(LIB_DIRS)) \
+          $(addsuffix /libglfw.a, $(LIB_DIRS))))
+GL_LIB = $(firstword $(wildcard \
+          $(addsuffix /libGL.dylib, $(LIB_DIRS)) \
+          $(addsuffix /libGL.so, $(LIB_DIRS)) \
+          $(addsuffix /libGL.a, $(LIB_DIRS))))
+GLU_LIB = $(firstword $(wildcard \
+          $(addsuffix /libGLU.dylib, $(LIB_DIRS)) \
+          $(addsuffix /libGLU.so, $(LIB_DIRS)) \
+          $(addsuffix /libGLU.a, $(LIB_DIRS))))
+GLUT_LIB = $(firstword $(wildcard \
+          $(addsuffix /libglut.dylib, $(LIB_DIRS)) \
+          $(addsuffix /libglut.so, $(LIB_DIRS)) \
+          $(addsuffix /libglut.a, $(LIB_DIRS))))
 
 ifneq ($(wildcard /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0),)
   IMPROV_BUILD=1

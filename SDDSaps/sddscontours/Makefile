@@ -12,10 +12,13 @@ sddscontour_SRC = sddscontour.c \
 CFLAGS += -DRPN_SUPPORT -DzLib -I../../include -I../sddsplots
 
 ifeq ($(OS), Linux)
+  ifeq ($(words $(GLFW_LIB)),1)
+    PROD += sddswaterfall
+  endif
   CFLAGS += -fopenmp
   CCFLAGS += -fopenmp
   LDFLAGS += -fopenmp
-  PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+  PROD_SYS_LIBS := $(GLFW_LIB) $(GL_LIB) $(GLU_LIB) $(GLUT_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lmdbplt -lmdbcommon -lfftpack -lSDDS1 -lrpnlib -lmdbmth -lmdblib
 endif
 
