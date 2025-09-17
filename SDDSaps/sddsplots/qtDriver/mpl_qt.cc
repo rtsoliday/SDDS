@@ -291,6 +291,22 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   int nx, ny;
   double xmin, xmax, ymin, ymax;
   in >> nx >> ny >> xmin >> xmax >> ymin >> ymax;
+  if (equalAspect && nx > 0 && ny > 0) {
+    QSizeF defaultSpacing = graph->barSpacing();
+    double baseSpacing = std::max(defaultSpacing.width(), defaultSpacing.height());
+    double ratio = static_cast<double>(ny) / static_cast<double>(nx);
+    double sqrtRatio = std::sqrt(ratio);
+    double invSqrtRatio = sqrtRatio > 0 ? 1.0 / sqrtRatio : 1.0;
+    double minScale = std::max(sqrtRatio, invSqrtRatio);
+    double spacingScale = std::max(baseSpacing + 1.0, minScale);
+    double spacingX = spacingScale * sqrtRatio - 1.0;
+    double spacingY = spacingScale * invSqrtRatio - 1.0;
+    spacingX = std::max(spacingX, 0.0);
+    spacingY = std::max(spacingY, 0.0);
+    graph->setBarSpacingRelative(true);
+    graph->setBarSpacing(QSizeF(spacingX, spacingY));
+    graph->setBarThickness(1.0f);
+  }
   double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
   double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
   QStringList xLabels, yLabels;
