@@ -51,6 +51,7 @@
 #include <cstdlib>
 #include <float.h>
 #include <cmath>
+#include <algorithm>
 #ifdef _WIN32
 #  include <windows.h>
 #elif defined(__APPLE__)
@@ -542,6 +543,7 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   }
   QTextStream in(&dataFile);
   QT_DATAVIS_NAMESPACE::QScatterDataArray *dataArray = new QT_DATAVIS_NAMESPACE::QScatterDataArray;
+  int totalPoints = 0;
   double xmin = DBL_MAX, xmax = -DBL_MAX;
   double ymin = DBL_MAX, ymax = -DBL_MAX;
   double zmin = DBL_MAX, zmax = -DBL_MAX;
@@ -601,7 +603,15 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     ymax = header[5].toDouble();
     double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
     double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
-    dataArray->reserve(nx * ny);
+    totalPoints = nx * ny;
+    dataArray->resize(totalPoints);
+    QVector<double> xPositions(nx);
+    QVector<double> yPositions(ny);
+    for (int i = 0; i < nx; i++)
+      xPositions[i] = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
+    for (int j = 0; j < ny; j++)
+      yPositions[j] = ymin + j * dy;
+    int index = 0;
     for (int j = 0; j < ny; j++) {
       for (int i = 0; i < nx; i++) {
         double z;
@@ -610,12 +620,17 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
           zmin = z;
         if (z > zmax)
           zmax = z;
-        double xval = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
-        dataArray->append(QT_DATAVIS_NAMESPACE::QScatterDataItem(
-            QVector3D(xval, z, ymin + j * dy)));
+        QT_DATAVIS_NAMESPACE::QScatterDataItem &item = (*dataArray)[index++];
+        item.setPosition(QVector3D(xPositions[i], z, yPositions[j]));
       }
     }
+    if (index < totalPoints) {
+      dataArray->resize(index);
+      totalPoints = index;
+    }
   }
+  if (!totalPoints)
+    totalPoints = dataArray->size();
   graph->axisZ()->setRange(ymin, ymax);
   if (yTime) {
     Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
@@ -637,6 +652,10 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
   }
+  const int largeDatasetThreshold = 100000;
+  bool largeDataset = totalPoints > largeDatasetThreshold;
+  if (largeDataset)
+    graph->setShadowQuality(QT_DATAVIS_NAMESPACE::QAbstract3DGraph::ShadowQualityNone);
   if (hasIntensity && points.size() == intensities.size()) {
     double lo = defaultImin, hi = defaultImax;
     if (outsideDefaultIntensityRange) {
@@ -651,8 +670,12 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     }
     const int bins = qMin(nspect, 64);
     QVector<QT_DATAVIS_NAMESPACE::QScatterDataArray *> binArrays(bins);
-    for (int b = 0; b < bins; b++)
+    int reservePerBin = largeDataset ? std::max(1, totalPoints / bins) : 0;
+    for (int b = 0; b < bins; b++) {
       binArrays[b] = new QT_DATAVIS_NAMESPACE::QScatterDataArray;
+      if (reservePerBin)
+        binArrays[b]->reserve(reservePerBin);
+    }
     for (int i = 0; i < points.size(); i++) {
       double inten = intensities[i];
       if (std::isnan(inten))
@@ -686,9 +709,15 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
         c = QColor::fromRgb(spectrum[index]);
       }
       s->setBaseColor(c);
-      s->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshSphere);
-      s->setMeshSmooth(true);
-      s->setItemSize(0.08f);
+      if (largeDataset) {
+        s->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshPoint);
+        s->setMeshSmooth(false);
+        s->setItemSize(0.02f);
+      } else {
+        s->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshSphere);
+        s->setMeshSmooth(true);
+        s->setItemSize(0.08f);
+      }
       s->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
       graph->addSeries(s);
     }
@@ -720,12 +749,18 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     }
     series->setBaseGradient(gradient);
     series->setColorStyle(QT_DATAVIS_NAMESPACE::Q3DTheme::ColorStyleRangeGradient);
-    series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshSphere);
-    series->setMeshSmooth(true);
-    // Make scatter points small spheres (barely larger than a point)
-    // This only affects 3D scatter plots invoked by sddsplot.
-    // Default item size is larger; reduce to improve readability in dense clouds.
-    series->setItemSize(0.08f);
+    if (largeDataset) {
+      series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshPoint);
+      series->setMeshSmooth(false);
+      series->setItemSize(0.02f);
+    } else {
+      series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshSphere);
+      series->setMeshSmooth(true);
+      // Make scatter points small spheres (barely larger than a point)
+      // This only affects 3D scatter plots invoked by sddsplot.
+      // Default item size is larger; reduce to improve readability in dense clouds.
+      series->setItemSize(0.08f);
+    }
     series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
     graph->addSeries(series);
   }
