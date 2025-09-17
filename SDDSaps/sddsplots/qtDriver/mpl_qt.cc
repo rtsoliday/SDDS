@@ -38,6 +38,7 @@
 #include <QColor>
 #include <QFile>
 #include <QTextStream>
+#include <QByteArray>
 #include <QVector3D>
 #include <QFont>
 #include <QVector>
@@ -53,6 +54,8 @@
 #include <float.h>
 #include <cmath>
 #include <algorithm>
+#include <cctype>
+#include <limits>
 #ifdef _WIN32
 #  include <windows.h>
 #elif defined(__APPLE__)
@@ -151,6 +154,109 @@ struct Plot3DArgs {
         hideAxes(false), hideZAxis(false), datestamp(false), xLog(false),
         xTime(false), yTime(false), mode(PLOT3D_SURFACE) {}
 };
+
+struct Plot3DGridData {
+  int nx = 0;
+  int ny = 0;
+  double xmin = 0.0;
+  double xmax = 0.0;
+  double ymin = 0.0;
+  double ymax = 0.0;
+  QVector<double> values;
+};
+
+static bool loadGridData(const char *filename, Plot3DGridData &data,
+                         QString *errorMessage = nullptr) {
+  QFile dataFile(filename);
+  if (!dataFile.open(QIODevice::ReadOnly)) {
+    if (errorMessage)
+      *errorMessage =
+          QStringLiteral("Unable to open %1").arg(QString::fromUtf8(filename));
+    return false;
+  }
+
+  QByteArray content = dataFile.readAll();
+  if (content.isEmpty()) {
+    if (errorMessage)
+      *errorMessage =
+          QStringLiteral("No data in %1").arg(QString::fromUtf8(filename));
+    return false;
+  }
+
+  const char *ptr = content.constData();
+  const char *end = ptr + content.size();
+  auto skipWhitespace = [&]() {
+    while (ptr < end && std::isspace(static_cast<unsigned char>(*ptr)))
+      ++ptr;
+  };
+  auto readInt = [&](int &value) -> bool {
+    skipWhitespace();
+    if (ptr >= end)
+      return false;
+    char *nextPtr = nullptr;
+    long parsed = std::strtol(ptr, &nextPtr, 10);
+    if (nextPtr == ptr)
+      return false;
+    if (parsed < std::numeric_limits<int>::min() ||
+        parsed > std::numeric_limits<int>::max())
+      return false;
+    value = static_cast<int>(parsed);
+    ptr = nextPtr;
+    return true;
+  };
+  auto readDouble = [&](double &value) -> bool {
+    skipWhitespace();
+    if (ptr >= end)
+      return false;
+    char *nextPtr = nullptr;
+    value = std::strtod(ptr, &nextPtr);
+    if (nextPtr == ptr)
+      return false;
+    ptr = nextPtr;
+    return true;
+  };
+
+  if (!readInt(data.nx) || !readInt(data.ny) || !readDouble(data.xmin) ||
+      !readDouble(data.xmax) || !readDouble(data.ymin) ||
+      !readDouble(data.ymax)) {
+    if (errorMessage)
+      *errorMessage = QStringLiteral("Invalid grid header in %1")
+                           .arg(QString::fromUtf8(filename));
+    return false;
+  }
+  if (data.nx <= 0 || data.ny <= 0) {
+    if (errorMessage)
+      *errorMessage = QStringLiteral("Invalid grid dimensions in %1")
+                           .arg(QString::fromUtf8(filename));
+    return false;
+  }
+
+  const qint64 totalPoints =
+      static_cast<qint64>(data.nx) * static_cast<qint64>(data.ny);
+  if (totalPoints <= 0 ||
+      totalPoints > static_cast<qint64>(std::numeric_limits<int>::max())) {
+    if (errorMessage)
+      *errorMessage = QStringLiteral("Grid size is too large in %1")
+                           .arg(QString::fromUtf8(filename));
+    return false;
+  }
+
+  data.values.resize(static_cast<int>(totalPoints));
+  for (int j = 0; j < data.ny; ++j) {
+    for (int i = 0; i < data.nx; ++i) {
+      double z = 0.0;
+      if (!readDouble(z)) {
+        if (errorMessage)
+          *errorMessage = QStringLiteral("Insufficient grid data in %1")
+                               .arg(QString::fromUtf8(filename));
+        return false;
+      }
+      data.values[j * data.nx + i] = z;
+    }
+  }
+
+  return true;
+}
 
 class Time3DAxisFormatter : public QT_DATAVIS_NAMESPACE::QValue3DAxisFormatter {
 public:
@@ -282,15 +388,20 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
       graph->valueAxis()->setLabelFormat("");
     }
   }
-  QFile dataFile(filename);
-  if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    fprintf(stderr, "Unable to open %s\n", filename);
+  Plot3DGridData gridData;
+  QString loadError;
+  if (!loadGridData(filename, gridData, &loadError)) {
+    fprintf(stderr, "%s\n", loadError.toLocal8Bit().constData());
     return NULL;
   }
-  QTextStream in(&dataFile);
-  int nx, ny;
-  double xmin, xmax, ymin, ymax;
-  in >> nx >> ny >> xmin >> xmax >> ymin >> ymax;
+
+  int nx = gridData.nx;
+  int ny = gridData.ny;
+  double xmin = gridData.xmin;
+  double xmax = gridData.xmax;
+  double ymin = gridData.ymin;
+  double ymax = gridData.ymax;
+
   if (equalAspect && nx > 0 && ny > 0) {
     QSizeF defaultSpacing = graph->barSpacing();
     double baseSpacing = std::max(defaultSpacing.width(), defaultSpacing.height());
@@ -310,34 +421,40 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
   double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
   QStringList xLabels, yLabels;
-  for (int i = 0; i < nx; i++) {
+  xLabels.reserve(nx);
+  yLabels.reserve(ny);
+  const int maxLabels = 6;
+  int xLabelStep = 1;
+  if (nx > maxLabels)
+    xLabelStep = std::max(1, (nx - 1) / (maxLabels - 1));
+  for (int i = 0; i < nx; ++i) {
+    bool drawLabel = (nx <= maxLabels) || i == 0 || i == nx - 1 || (i % xLabelStep == 0);
+    if (!drawLabel) {
+      xLabels.append(QString());
+      continue;
+    }
     double xval = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
     if (xTime)
-      xLabels <<
-          QDateTime::fromSecsSinceEpoch((qint64)xval).toString("yyyy-MM-dd HH:mm:ss");
+      xLabels.append(QDateTime::fromSecsSinceEpoch(static_cast<qint64>(xval))
+                         .toString("yyyy-MM-dd HH:mm:ss"));
     else
-      xLabels << QString::number(xval);
+      xLabels.append(QString::number(xval));
   }
-  for (int j = 0; j < ny; j++) {
+  int yLabelStep = 1;
+  if (ny > maxLabels)
+    yLabelStep = std::max(1, (ny - 1) / (maxLabels - 1));
+  for (int j = 0; j < ny; ++j) {
+    bool drawLabel = (ny <= maxLabels) || j == 0 || j == ny - 1 || (j % yLabelStep == 0);
+    if (!drawLabel) {
+      yLabels.append(QString());
+      continue;
+    }
     double yval = ymin + j * dy;
     if (yTime)
-      yLabels <<
-          QDateTime::fromSecsSinceEpoch((qint64)yval).toString("yyyy-MM-dd HH:mm:ss");
+      yLabels.append(QDateTime::fromSecsSinceEpoch(static_cast<qint64>(yval))
+                         .toString("yyyy-MM-dd HH:mm:ss"));
     else
-      yLabels << QString::number(yval);
-  }
-  const int maxLabels = 6;
-  if (nx > maxLabels) {
-    int step = (nx - 1) / (maxLabels - 1);
-    for (int i = 1; i < nx - 1; i++)
-      if (i % step)
-        xLabels[i].clear();
-  }
-  if (ny > maxLabels) {
-    int step = (ny - 1) / (maxLabels - 1);
-    for (int j = 1; j < ny - 1; j++)
-      if (j % step)
-        yLabels[j].clear();
+      yLabels.append(QString::number(yval));
   }
   graph->columnAxis()->setLabels(xLabels);
   graph->rowAxis()->setLabels(yLabels);
@@ -346,11 +463,12 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   QT_DATAVIS_NAMESPACE::QBarDataArray *dataArray = new QT_DATAVIS_NAMESPACE::QBarDataArray;
   dataArray->reserve(ny);
   double zmin = DBL_MAX, zmax = -DBL_MAX;
+  const double *gridPtr = gridData.values.constData();
   for (int j = 0; j < ny; j++) {
     QT_DATAVIS_NAMESPACE::QBarDataRow *row = new QT_DATAVIS_NAMESPACE::QBarDataRow(nx);
+    const double *rowValues = gridPtr + j * nx;
     for (int i = 0; i < nx; i++) {
-      double z;
-      in >> z;
+      double z = rowValues[i];
       (*row)[i].setValue(z);
       if (z < zmin)
         zmin = z;
@@ -980,15 +1098,20 @@ static QWidget *run3d(const char *filename, const char *xlabel,
     }
   }
 
-  QFile dataFile(filename);
-  if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    fprintf(stderr, "Unable to open %s\n", filename);
+  Plot3DGridData gridData;
+  QString loadError;
+  if (!loadGridData(filename, gridData, &loadError)) {
+    fprintf(stderr, "%s\n", loadError.toLocal8Bit().constData());
     return NULL;
   }
-  QTextStream in(&dataFile);
-  int nx, ny;
-  double xmin, xmax, ymin, ymax;
-  in >> nx >> ny >> xmin >> xmax >> ymin >> ymax;
+
+  int nx = gridData.nx;
+  int ny = gridData.ny;
+  double xmin = gridData.xmin;
+  double xmax = gridData.xmax;
+  double ymin = gridData.ymin;
+  double ymax = gridData.ymax;
+
   graph->axisZ()->setRange(ymin, ymax);
   if (yTime) {
     Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
@@ -996,12 +1119,14 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   }
   if (yFlip)
     graph->axisZ()->setReversed(true);
+
   double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
   double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
   if (xLog) {
     double xminLinear = pow(10.0, xmin);
     double xmaxLinear = pow(10.0, xmax);
-    QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter *formatter = new QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter;
+    QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter *formatter =
+        new QT_DATAVIS_NAMESPACE::QLogValue3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
     graph->axisX()->setRange(xminLinear, xmaxLinear);
   } else {
@@ -1011,20 +1136,25 @@ static QWidget *run3d(const char *filename, const char *xlabel,
     Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
   }
-  QT_DATAVIS_NAMESPACE::QSurfaceDataArray *dataArray = new QT_DATAVIS_NAMESPACE::QSurfaceDataArray;
+
+  QT_DATAVIS_NAMESPACE::QSurfaceDataArray *dataArray =
+      new QT_DATAVIS_NAMESPACE::QSurfaceDataArray;
   dataArray->reserve(ny);
   double zmin = DBL_MAX, zmax = -DBL_MAX;
+  const double *gridPtr = gridData.values.constData();
   for (int j = 0; j < ny; j++) {
-    QT_DATAVIS_NAMESPACE::QSurfaceDataRow *row = new QT_DATAVIS_NAMESPACE::QSurfaceDataRow(nx);
+    QT_DATAVIS_NAMESPACE::QSurfaceDataRow *row =
+        new QT_DATAVIS_NAMESPACE::QSurfaceDataRow(nx);
+    const double *rowValues = gridPtr + j * nx;
+    double yval = ymin + j * dy;
     for (int i = 0; i < nx; i++) {
-      double z;
-      in >> z;
+      double z = rowValues[i];
       if (z < zmin)
         zmin = z;
       if (z > zmax)
         zmax = z;
       double xval = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
-      (*row)[i].setPosition(QVector3D(xval, z, ymin + j * dy));
+      (*row)[i].setPosition(QVector3D(xval, z, yval));
     }
     dataArray->append(row);
   }
