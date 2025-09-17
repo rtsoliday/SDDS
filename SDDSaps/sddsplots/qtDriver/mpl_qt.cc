@@ -27,6 +27,7 @@
 #include <QtDataVisualization/QScatterDataArray>
 #include <QtDataVisualization/QScatterDataProxy>
 #include <QtDataVisualization/QAbstract3DSeries>
+#include <QtDataVisualization/QAbstract3DGraph>
 #include <QtDataVisualization/QCategory3DAxis>
 #include <QtDataVisualization/Q3DTheme>
 #include <QtDataVisualization/Q3DCamera>
@@ -612,19 +613,26 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     for (int j = 0; j < ny; j++)
       yPositions[j] = ymin + j * dy;
     int index = 0;
-    for (int j = 0; j < ny; j++) {
+    bool readFailed = false;
+    QT_DATAVIS_NAMESPACE::QScatterDataItem *itemPtr = dataArray->data();
+    for (int j = 0; j < ny && !readFailed; j++) {
       for (int i = 0; i < nx; i++) {
         double z;
         in >> z;
+        if (in.status() != QTextStream::Ok) {
+          readFailed = true;
+          break;
+        }
         if (z < zmin)
           zmin = z;
         if (z > zmax)
           zmax = z;
-        QT_DATAVIS_NAMESPACE::QScatterDataItem &item = (*dataArray)[index++];
-        item.setPosition(QVector3D(xPositions[i], z, yPositions[j]));
+        itemPtr->setPosition(QVector3D(xPositions[i], z, yPositions[j]));
+        itemPtr++;
+        index++;
       }
     }
-    if (index < totalPoints) {
+    if (readFailed && index < totalPoints) {
       dataArray->resize(index);
       totalPoints = index;
     }
@@ -653,9 +661,15 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     graph->axisX()->setFormatter(formatter);
   }
   const int largeDatasetThreshold = 100000;
+  const int aggressiveOptimizationThreshold = 200000;
   bool largeDataset = totalPoints > largeDatasetThreshold;
-  if (largeDataset)
+  bool enableItemLabels = totalPoints <= aggressiveOptimizationThreshold;
+  if (largeDataset) {
     graph->setShadowQuality(QT_DATAVIS_NAMESPACE::QAbstract3DGraph::ShadowQualityNone);
+    graph->setOptimizationHints(QT_DATAVIS_NAMESPACE::QAbstract3DGraph::OptimizationStatic);
+  }
+  if (totalPoints > aggressiveOptimizationThreshold)
+    graph->setSelectionMode(QT_DATAVIS_NAMESPACE::QAbstract3DGraph::SelectionNone);
   if (hasIntensity && points.size() == intensities.size()) {
     double lo = defaultImin, hi = defaultImax;
     if (outsideDefaultIntensityRange) {
@@ -718,7 +732,10 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
         s->setMeshSmooth(true);
         s->setItemSize(0.08f);
       }
-      s->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
+      if (enableItemLabels)
+        s->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
+      else
+        s->setItemLabelFormat(QString());
       graph->addSeries(s);
     }
   } else {
@@ -761,7 +778,10 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
       // Default item size is larger; reduce to improve readability in dense clouds.
       series->setItemSize(0.08f);
     }
-    series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
+    if (enableItemLabels)
+      series->setItemLabelFormat(QStringLiteral("(@xLabel, @zLabel, @yLabel)"));
+    else
+      series->setItemLabelFormat(QString());
     graph->addSeries(series);
   }
   graph->axisY()->setRange(zmin, zmax);
