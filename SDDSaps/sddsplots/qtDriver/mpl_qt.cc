@@ -51,6 +51,7 @@
 #include <QList>
 #include <cstring>
 #include <cstdlib>
+#include <cstdio>
 #include <float.h>
 #include <cmath>
 #include <algorithm>
@@ -167,6 +168,7 @@ struct Plot3DGridData {
 
 static const long long kLargeDatasetThreshold = 100000;
 static const long long kAggressiveOptimizationThreshold = 200000;
+static const int kMax3DBarAxisResolution = 256;
 
 static void applyLargeDatasetGraphSettings(
     QT_DATAVIS_NAMESPACE::QAbstract3DGraph *graph, long long totalPoints) {
@@ -426,6 +428,71 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   const bool disableItemLabels =
       totalPoints > kAggressiveOptimizationThreshold;
 
+  const int originalNx = nx;
+  const int originalNy = ny;
+  const double originalDx =
+      originalNx > 1 ? (xmax - xmin) / (originalNx - 1) : 0.0;
+  const double originalDy =
+      originalNy > 1 ? (ymax - ymin) / (originalNy - 1) : 0.0;
+  const int downsampleStepX =
+      originalNx > kMax3DBarAxisResolution
+          ? (originalNx + kMax3DBarAxisResolution - 1) /
+                kMax3DBarAxisResolution
+          : 1;
+  const int downsampleStepY =
+      originalNy > kMax3DBarAxisResolution
+          ? (originalNy + kMax3DBarAxisResolution - 1) /
+                kMax3DBarAxisResolution
+          : 1;
+  QVector<int> xSampleIndices;
+  QVector<int> ySampleIndices;
+  if (downsampleStepX > 1 || downsampleStepY > 1) {
+    int newNx = (originalNx + downsampleStepX - 1) / downsampleStepX;
+    int newNy = (originalNy + downsampleStepY - 1) / downsampleStepY;
+    QVector<double> downsampledValues(newNx * newNy);
+    xSampleIndices.resize(newNx);
+    ySampleIndices.resize(newNy);
+    const double *originalValues = gridData.values.constData();
+    for (int j = 0; j < newNy; ++j) {
+      int origYStart = j * downsampleStepY;
+      int origYEnd = std::min(origYStart + downsampleStepY, originalNy);
+      if (origYStart >= origYEnd)
+        origYEnd = std::min(origYStart + 1, originalNy);
+      ySampleIndices[j] = (origYStart + origYEnd - 1) / 2;
+      for (int i = 0; i < newNx; ++i) {
+        int origXStart = i * downsampleStepX;
+        int origXEnd = std::min(origXStart + downsampleStepX, originalNx);
+        if (origXStart >= origXEnd)
+          origXEnd = std::min(origXStart + 1, originalNx);
+        if (j == 0)
+          xSampleIndices[i] = (origXStart + origXEnd - 1) / 2;
+        double sum = 0.0;
+        int count = 0;
+        for (int yIndex = origYStart; yIndex < origYEnd; ++yIndex) {
+          const double *row = originalValues + yIndex * originalNx;
+          for (int xIndex = origXStart; xIndex < origXEnd; ++xIndex) {
+            sum += row[xIndex];
+            ++count;
+          }
+        }
+        downsampledValues[j * newNx + i] = count ? sum / count : 0.0;
+      }
+    }
+    gridData.values = std::move(downsampledValues);
+    nx = newNx;
+    ny = newNy;
+    fprintf(stderr,
+            "mpl_qt: downsampled 3D bar grid from %d x %d to %d x %d to improve performance.\n",
+            originalNx, originalNy, nx, ny);
+  } else {
+    xSampleIndices.resize(nx);
+    ySampleIndices.resize(ny);
+    for (int i = 0; i < nx; ++i)
+      xSampleIndices[i] = i;
+    for (int j = 0; j < ny; ++j)
+      ySampleIndices[j] = j;
+  }
+
   if (equalAspect && nx > 0 && ny > 0) {
     QSizeF defaultSpacing = graph->barSpacing();
     double baseSpacing = std::max(defaultSpacing.width(), defaultSpacing.height());
@@ -442,8 +509,6 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
     graph->setBarSpacing(QSizeF(spacingX, spacingY));
     graph->setBarThickness(1.0f);
   }
-  double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
-  double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
   QStringList xLabels, yLabels;
   xLabels.reserve(nx);
   yLabels.reserve(ny);
@@ -457,7 +522,12 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
       xLabels.append(QString());
       continue;
     }
-    double xval = xLog ? pow(10.0, xmin + i * dx) : (xmin + i * dx);
+    int sampleIndex = xSampleIndices[i];
+    double xval = xmin;
+    if (originalNx > 1)
+      xval = xmin + sampleIndex * originalDx;
+    if (xLog)
+      xval = pow(10.0, xval);
     if (xTime)
       xLabels.append(QDateTime::fromSecsSinceEpoch(static_cast<qint64>(xval))
                          .toString("yyyy-MM-dd HH:mm:ss"));
@@ -473,7 +543,10 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
       yLabels.append(QString());
       continue;
     }
-    double yval = ymin + j * dy;
+    int sampleIndex = ySampleIndices[j];
+    double yval = ymin;
+    if (originalNy > 1)
+      yval = ymin + sampleIndex * originalDy;
     if (yTime)
       yLabels.append(QDateTime::fromSecsSinceEpoch(static_cast<qint64>(yval))
                          .toString("yyyy-MM-dd HH:mm:ss"));
