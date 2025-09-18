@@ -2137,11 +2137,17 @@ int main(int argc, char *argv[]) {
       current.file = argv[++i];
       in3d = true;
     } else if (!strcmp(argv[i], "-xlabel") && i + 1 < argc && in3d)
-      current.xlabel = argv[++i];
+      current.xlabel = QString::fromUtf8(argv[++i]);
+    else if (!strncmp(argv[i], "-xlabel=", 8) && in3d)
+      current.xlabel = QString::fromUtf8(argv[i] + 8);
     else if (!strcmp(argv[i], "-ylabel") && i + 1 < argc && in3d)
-      current.ylabel = argv[++i];
+      current.ylabel = QString::fromUtf8(argv[++i]);
+    else if (!strncmp(argv[i], "-ylabel=", 8) && in3d)
+      current.ylabel = QString::fromUtf8(argv[i] + 8);
     else if (!strcmp(argv[i], "-zlabel") && i + 1 < argc && in3d)
-      current.zlabel = argv[++i];
+      current.zlabel = QString::fromUtf8(argv[++i]);
+    else if (!strncmp(argv[i], "-zlabel=", 8) && in3d)
+      current.zlabel = QString::fromUtf8(argv[i] + 8);
     else if (!strcmp(argv[i], "-plottitle") && i + 1 < argc && in3d)
       current.title = argv[++i];
     else if (!strcmp(argv[i], "-topline") && i + 1 < argc && in3d)

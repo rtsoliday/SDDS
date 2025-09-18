@@ -34,6 +34,50 @@ long defaultLineThickness = 0;
 extern int savedCommandlineArgc;
 extern char **savedCommandlineArgv;
 
+static const char *consumeOptionValue(int argc, char **argv, int *index, const char *option) {
+  size_t optionLen;
+  if (!argv || !option || !index)
+    return NULL;
+  optionLen = strlen(option);
+  if (!strcmp(argv[*index], option)) {
+    if (*index + 1 >= argc)
+      return NULL;
+    (*index)++;
+    return argv[*index];
+  }
+  if (optionLen && !strncmp(argv[*index], option, optionLen) && argv[*index][optionLen] == '=')
+    return argv[*index] + optionLen + 1;
+  return NULL;
+}
+
+static void appendQuotedOption(char *command, size_t commandSize, const char *option, const char *value) {
+  size_t len, remaining, extra = 0;
+  char *escaped, *dst;
+  const char *src;
+  int written;
+  if (!command || !option || !value || !commandSize)
+    return;
+  len = strlen(command);
+  if (len >= commandSize - 1)
+    return;
+  for (src = value; *src; src++)
+    if (*src == '"' || *src == '\\')
+      extra++;
+  escaped = tmalloc(strlen(value) + extra + 1);
+  dst = escaped;
+  for (src = value; *src; src++) {
+    if (*src == '"' || *src == '\\')
+      *dst++ = '\\';
+    *dst++ = *src;
+  }
+  *dst = '\0';
+  remaining = commandSize - len;
+  written = snprintf(command + len, remaining, " %s \"%s\"", option, escaped);
+  free(escaped);
+  if (written < 0 || (size_t)written >= remaining)
+    command[commandSize - 1] = '\0';
+}
+
 long graphic_AP1(GRAPHIC_SPEC *graphic_spec, long element, char **item, long items);
 long plotnames_AP1(PLOT_SPEC *plotspec, char **item, long items, char *plotnames_usage, long class);
 void add_plot_request(PLOT_SPEC *plspec);
@@ -182,22 +226,26 @@ static int handle3DScatter(int argc, char **argv)
   snprintf(command, sizeof(command), "mpl_qt -3d=scatter %s", tmpName);
   int hasXLabel = 0, hasYLabel = 0, hasZLabel = 0;
   for (i = 1; i < argc; i++) {
-    if (!strcmp(argv[i], "-xlabel") && i + 1 < argc) {
-      strcat(command, " -xlabel \"");
-      strcat(command, argv[++i]);
-      strcat(command, "\"");
+    const char *value;
+    value = consumeOptionValue(argc, argv, &i, "-xlabel");
+    if (value) {
+      appendQuotedOption(command, sizeof(command), "-xlabel", value);
       hasXLabel = 1;
-    } else if (!strcmp(argv[i], "-ylabel") && i + 1 < argc) {
-      strcat(command, " -ylabel \"");
-      strcat(command, argv[++i]);
-      strcat(command, "\"");
+      continue;
+    }
+    value = consumeOptionValue(argc, argv, &i, "-ylabel");
+    if (value) {
+      appendQuotedOption(command, sizeof(command), "-ylabel", value);
       hasYLabel = 1;
-    } else if (!strcmp(argv[i], "-zlabel") && i + 1 < argc) {
-      strcat(command, " -zlabel \"");
-      strcat(command, argv[++i]);
-      strcat(command, "\"");
+      continue;
+    }
+    value = consumeOptionValue(argc, argv, &i, "-zlabel");
+    if (value) {
+      appendQuotedOption(command, sizeof(command), "-zlabel", value);
       hasZLabel = 1;
-    } else if (!strcmp(argv[i], "-title") && i + 1 < argc) {
+      continue;
+    }
+    if (!strcmp(argv[i], "-title") && i + 1 < argc) {
       strcat(command, " -plottitle \"");
       strcat(command, argv[++i]);
       strcat(command, "\"");
@@ -241,19 +289,13 @@ static int handle3DScatter(int argc, char **argv)
     }
   }
   if (!hasXLabel) {
-    strcat(command, " -xlabel \"");
-    strcat(command, xLabel);
-    strcat(command, "\"");
+    appendQuotedOption(command, sizeof(command), "-xlabel", xLabel);
   }
   if (!hasYLabel) {
-    strcat(command, " -ylabel \"");
-    strcat(command, yLabel);
-    strcat(command, "\"");
+    appendQuotedOption(command, sizeof(command), "-ylabel", yLabel);
   }
   if (!hasZLabel) {
-    strcat(command, " -zlabel \"");
-    strcat(command, zLabel);
-    strcat(command, "\"");
+    appendQuotedOption(command, sizeof(command), "-zlabel", zLabel);
   }
   char wrapper[8192];
 #if defined(_WIN32)
