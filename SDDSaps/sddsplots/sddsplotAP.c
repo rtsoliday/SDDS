@@ -245,15 +245,17 @@ static int handle3DScatter(int argc, char **argv)
       hasZLabel = 1;
       continue;
     }
-    if (!strcmp(argv[i], "-title") && i + 1 < argc) {
-      strcat(command, " -plottitle \"");
-      strcat(command, argv[++i]);
-      strcat(command, "\"");
-    } else if (!strcmp(argv[i], "-topline") && i + 1 < argc) {
-      strcat(command, " -topline \"");
-      strcat(command, argv[++i]);
-      strcat(command, "\"");
-    } else if (!strcmp(argv[i], "-fontsize") && i + 1 < argc) {
+    value = consumeOptionValue(argc, argv, &i, "-title");
+    if (value) {
+      appendQuotedOption(command, sizeof(command), "-plottitle", value);
+      continue;
+    }
+    value = consumeOptionValue(argc, argv, &i, "-topline");
+    if (value) {
+      appendQuotedOption(command, sizeof(command), "-topline", value);
+      continue;
+    }
+    if (!strcmp(argv[i], "-fontsize") && i + 1 < argc) {
       strcat(command, " -fontsize ");
       strcat(command, argv[++i]);
     } else if (!strcmp(argv[i], "-equalaspect"))

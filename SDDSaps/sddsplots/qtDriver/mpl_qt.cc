@@ -2149,9 +2149,13 @@ int main(int argc, char *argv[]) {
     else if (!strncmp(argv[i], "-zlabel=", 8) && in3d)
       current.zlabel = QString::fromUtf8(argv[i] + 8);
     else if (!strcmp(argv[i], "-plottitle") && i + 1 < argc && in3d)
-      current.title = argv[++i];
+      current.title = QString::fromUtf8(argv[++i]);
+    else if (!strncmp(argv[i], "-plottitle=", 11) && in3d)
+      current.title = QString::fromUtf8(argv[i] + 11);
     else if (!strcmp(argv[i], "-topline") && i + 1 < argc && in3d)
-      current.topline = argv[++i];
+      current.topline = QString::fromUtf8(argv[++i]);
+    else if (!strncmp(argv[i], "-topline=", 9) && in3d)
+      current.topline = QString::fromUtf8(argv[i] + 9);
     else if (!strcmp(argv[i], "-fontsize") && i + 1 < argc && in3d)
       current.fontSize = atoi(argv[++i]);
     else if (!strcmp(argv[i], "-equalaspect") && in3d)
