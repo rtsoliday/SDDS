@@ -151,7 +151,7 @@ struct Plot3DArgs {
   double hue1;
   bool yFlip;
   bool hideAxes;
-  bool hideZAxis;
+  bool hideGrid;
   bool datestamp;
   bool xLog;
   bool xTime;
@@ -160,7 +160,7 @@ struct Plot3DArgs {
   Plot3DArgs()
       : fontSize(0), equalAspect(false), shadeMin(0.0), shadeMax(0.0),
         shadeRangeSet(false), gray(false), hue0(0.0), hue1(1.0), yFlip(false),
-        hideAxes(false), hideZAxis(false), datestamp(false), xLog(false),
+        hideAxes(false), hideGrid(false), datestamp(false), xLog(false),
         xTime(false), yTime(false), mode(PLOT3D_SURFACE) {}
 };
 
@@ -525,7 +525,7 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
                          bool datestamp, int fontSize, bool equalAspect,
                          double shadeMin, double shadeMax,
                          bool shadeRangeSet, bool gray, double hue0,
-                         double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
+                         double hue1, bool yFlip, bool hideAxes, bool hideGrid,
                          bool xLog, bool xTime, bool yTime) {
   QT_DATAVIS_NAMESPACE::Q3DBars *graph = new QT_DATAVIS_NAMESPACE::Q3DBars();
   surfaceGraph = graph;
@@ -630,16 +630,16 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
     graph->valueAxis()->setTitle(QString::fromUtf8(zlabel));
     graph->valueAxis()->setTitleVisible(true);
   }
-  if (hideAxes) {
+  if (hideGrid) {
     theme->setGridEnabled(false);
+  }
+  if (hideAxes) {
     graph->rowAxis()->setTitleVisible(false);
     graph->rowAxis()->setLabels(QStringList());
     graph->columnAxis()->setTitleVisible(false);
     graph->columnAxis()->setLabels(QStringList());
-    if (hideZAxis) {
-      graph->valueAxis()->setTitleVisible(false);
-      graph->valueAxis()->setLabelFormat("");
-    }
+    graph->valueAxis()->setTitleVisible(false);
+    graph->valueAxis()->setLabelFormat("");
   }
   Plot3DGridData gridData;
   QString loadError;
@@ -896,7 +896,7 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
                              bool datestamp, int fontSize, bool equalAspect,
                              double shadeMin, double shadeMax,
                              bool shadeRangeSet, bool gray, double hue0,
-                             double hue1, bool yFlip, bool hideAxes, bool hideZAxis,
+                             double hue1, bool yFlip, bool hideAxes, bool hideGrid,
                              bool xLog, bool xTime, bool yTime) {
   QT_DATAVIS_NAMESPACE::Q3DScatter *graph = new QT_DATAVIS_NAMESPACE::Q3DScatter();
   surfaceGraph = graph;
@@ -1001,16 +1001,16 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     graph->axisY()->setTitle(QString::fromUtf8(zlabel));
     graph->axisY()->setTitleVisible(true);
   }
-  if (hideAxes) {
+  if (hideGrid) {
     theme->setGridEnabled(false);
+  }
+  if (hideAxes) {
     graph->axisX()->setTitleVisible(false);
     graph->axisX()->setLabelFormat("");
     graph->axisZ()->setTitleVisible(false);
     graph->axisZ()->setLabelFormat("");
-    if (hideZAxis) {
-      graph->axisY()->setTitleVisible(false);
-      graph->axisY()->setLabelFormat("");
-    }
+    graph->axisY()->setTitleVisible(false);
+    graph->axisY()->setLabelFormat("");
   }
   QFile dataFile(filename);
   if (!dataFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -1302,18 +1302,18 @@ static QWidget *run3d(const char *filename, const char *xlabel,
                       bool datestamp, int fontSize, bool equalAspect,
                       double shadeMin, double shadeMax, bool shadeRangeSet,
                       bool gray, double hue0, double hue1, bool yFlip,
-                      bool hideAxes, bool hideZAxis, bool xLog, bool xTime,
+                      bool hideAxes, bool hideGrid, bool xLog, bool xTime,
                       bool yTime) {
   if (mode == PLOT3D_BAR)
     return run3dBar(filename, xlabel, ylabel, zlabel, title, topline,
                     datestamp, fontSize, equalAspect, shadeMin, shadeMax,
                     shadeRangeSet, gray, hue0, hue1, yFlip, hideAxes,
-                    hideZAxis, xLog, xTime, yTime);
+                    hideGrid, xLog, xTime, yTime);
   if (mode == PLOT3D_SCATTER)
     return run3dScatter(filename, xlabel, ylabel, zlabel, title, topline,
                         datestamp, fontSize, equalAspect, shadeMin,
                         shadeMax, shadeRangeSet, gray, hue0, hue1, yFlip,
-                        hideAxes, hideZAxis, xLog, xTime, yTime);
+                        hideAxes, hideGrid, xLog, xTime, yTime);
   QT_DATAVIS_NAMESPACE::Q3DSurface *graph = new QT_DATAVIS_NAMESPACE::Q3DSurface();
   surfaceGraph = graph;
   if (equalAspect) {
@@ -1421,16 +1421,16 @@ static QWidget *run3d(const char *filename, const char *xlabel,
     graph->axisY()->setTitle(QString::fromUtf8(zlabel));
     graph->axisY()->setTitleVisible(true);
   }
-  if (hideAxes) {
+  if (hideGrid) {
     theme->setGridEnabled(false);
+  }
+  if (hideAxes) {
     graph->axisX()->setTitleVisible(false);
     graph->axisX()->setLabelFormat("");
     graph->axisZ()->setTitleVisible(false);
     graph->axisZ()->setLabelFormat("");
-    if (hideZAxis) {
-      graph->axisY()->setTitleVisible(false);
-      graph->axisY()->setLabelFormat("");
-    }
+    graph->axisY()->setTitleVisible(false);
+    graph->axisY()->setLabelFormat("");
   }
 
   Plot3DGridData gridData;
@@ -2187,10 +2187,9 @@ int main(int argc, char *argv[]) {
     } else if (!strcmp(argv[i], "-yflip") && in3d)
       current.yFlip = true;
     else if (!strcmp(argv[i], "-noborder") && in3d)
-      current.hideAxes = true;
+      current.hideGrid = true;
     else if (!strcmp(argv[i], "-noscale") && in3d) {
       current.hideAxes = true;
-      current.hideZAxis = true;
     } else if (!strcmp(argv[i], "-datestamp") && in3d)
       current.datestamp = true;
     else if (!strcmp(argv[i], "-xlog") && in3d)
@@ -2293,7 +2292,7 @@ int main(int argc, char *argv[]) {
           p.topline.isEmpty() ? NULL : p.topline.toUtf8().constData(),
           p.mode, p.datestamp, p.fontSize, p.equalAspect, p.shadeMin,
           p.shadeMax, p.shadeRangeSet, p.gray, p.hue0, p.hue1, p.yFlip,
-          p.hideAxes, p.hideZAxis, p.xLog, p.xTime, p.yTime);
+          p.hideAxes, p.hideGrid, p.xLog, p.xTime, p.yTime);
       if (!plotWidget)
         return 1;
       plotStack->addWidget(plotWidget);
