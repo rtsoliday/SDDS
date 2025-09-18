@@ -2076,15 +2076,26 @@ z - toggle replotting to zoom (2D)\n\
 + - increase window size\n\
 - - decrease window size\n\
 \n\
+Mouse controls for 2D plots:\n\
+Left mouse drag - draw zoom rectangle\n\
+Middle mouse click - zoom to selection\n\
+Right mouse click - reset zoom to full extent\n\
+\n\
 Keyboard shortcuts for 3D plots:\n\
 g - cycle surface/wireframe modes\n\
 i - reset view\n\
 x - snap view to X axis\n\
 y - snap view to Y axis\n\
 z - snap view to Z axis\n\
-Ctrl + Right mouse drag - pan camera\n\
 Up arrow - increase font size\n\
 Down arrow - decrease font size\n\
+\n\
+Mouse controls for 3D plots:\n\
+Left mouse drag - rotate view\n\
+Right mouse drag - zoom view\n\
+Mouse wheel - zoom view\n\
+Ctrl + Right mouse drag - pan camera\n\
+Ctrl + Mouse wheel (scatter plots) - adjust point size\n\
 \n\
 Other keyboard shortcuts:\n\
 w - toggle white/black theme\n\
