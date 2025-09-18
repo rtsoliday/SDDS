@@ -53,6 +53,7 @@
 #include <QDateTime>
 #include <QList>
 #include <QMatrix4x4>
+#include <QWheelEvent>
 #include <QtGlobal>
 #include <cstring>
 #include <cstdlib>
@@ -328,6 +329,34 @@ protected:
     Q3DInputHandler::mouseReleaseEvent(event, mousePos);
   }
 
+  void wheelEvent(QWheelEvent *event) override {
+    if (!m_graph) {
+      Q3DInputHandler::wheelEvent(event);
+      return;
+    }
+    if ((event->modifiers() & Qt::ControlModifier)) {
+      auto *scatter =
+          qobject_cast<QT_DATAVIS_NAMESPACE::Q3DScatter *>(m_graph);
+      if (scatter) {
+        QPoint degrees = event->angleDelta();
+        float stepCount = 0.0f;
+        if (!degrees.isNull())
+          stepCount = static_cast<float>(degrees.y()) / 120.0f;
+        else {
+          QPoint pixels = event->pixelDelta();
+          if (!pixels.isNull())
+            stepCount = static_cast<float>(pixels.y()) / 40.0f;
+        }
+        if (!qFuzzyIsNull(stepCount)) {
+          adjustScatterItemSize(scatter, stepCount);
+          event->accept();
+          return;
+        }
+      }
+    }
+    Q3DInputHandler::wheelEvent(event);
+  }
+
   void mouseMoveEvent(QMouseEvent *event, const QPoint &mousePos) override {
     if (m_isPanning) {
       if (!(event->buttons() & Qt::RightButton) ||
@@ -349,6 +378,45 @@ protected:
   }
 
 private:
+  void adjustScatterItemSize(QT_DATAVIS_NAMESPACE::Q3DScatter *scatter,
+                             float wheelSteps) {
+    if (!scatter || qFuzzyIsNull(wheelSteps))
+      return;
+    const qreal devicePixelRatio = scatter->devicePixelRatio();
+    qreal width = scatter->size().width() * devicePixelRatio;
+    qreal height = scatter->size().height() * devicePixelRatio;
+    qreal reference = qMin(width, height);
+    if (reference <= 0.0)
+      reference = 1.0;
+    const float minPixelSize = 1.0f;
+    const float pixelStep = 2.0f;
+    float deltaPixels = wheelSteps * pixelStep;
+    if (qFuzzyIsNull(deltaPixels))
+      return;
+    QList<QT_DATAVIS_NAMESPACE::QScatter3DSeries *> seriesList =
+        scatter->seriesList();
+    if (seriesList.isEmpty())
+      return;
+    for (QT_DATAVIS_NAMESPACE::QScatter3DSeries *series : seriesList) {
+      if (!series)
+        continue;
+      float currentSize = series->itemSize();
+      if (currentSize <= 0.0f)
+        currentSize = 0.05f;
+      float currentPixels = currentSize * reference;
+      float newPixelSize = currentPixels + deltaPixels;
+      if (newPixelSize < minPixelSize)
+        newPixelSize = minPixelSize;
+      float newSize = newPixelSize / reference;
+      float minSize = minPixelSize / reference;
+      if (newSize < minSize)
+        newSize = minSize;
+      if (newSize > 1.0f)
+        newSize = 1.0f;
+      series->setItemSize(newSize);
+    }
+  }
+
   double axisSpan(QT_DATAVIS_NAMESPACE::QAbstract3DAxis *axis) const {
     if (!axis)
       return 1.0;
