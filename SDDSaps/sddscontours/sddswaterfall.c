@@ -12,25 +12,36 @@
  * 
  * DESCRIPTION:
  *   Creates interactive 3D waterfall plots from SDDS data files. The program
- *   reads X, Y, Z data columns and generates either an interactive OpenGL
- *   visualization or exports to gnuplot format. Supports both waterfall curve
- *   display and 3D surface contour modes. Now includes movie export capability
- *   for rotation animations.
+ *   reads X, Y, Z data columns for a single page file or reads the independent
+ *   column (X data), spectra data (Z column) and Y data in the parameter for multiple page file
+ *   and generates either an interactive OpenGL visualization or exports to gnuplot format. 
+ *   Supports both waterfall curve display and 3D surface contour modes. Now includes movie 
+ *   export capability for rotation animations.
  * 
  * FEATURES:
  *   - Interactive 3D visualization with mouse controls
  *   - Multiple display modes: waterfall curves and 3D surface contours
- *   - Gnuplot export capability
- *   - Customizable viewing angles and zoom
- *   - Professional color schemes and axis labeling
- *   - PNG screenshot export
- *   - Movie export for rotation animations (MP4, GIF)
+ *   - Gnuplot export capability for external plotting
+ *   - Customizable viewing angles and zoom levels
+ *   - Professional color schemes and axis labeling with improved single-character label visibility
+ *   - PNG screenshot export with high-quality rendering
+ *   - Movie export for rotation animations (MP4, GIF, or frame sequences)
+ *   - Enhanced axis label rendering with automatic scaling for optimal readability
+ *   - Support for both single-page and multi-page SDDS data formats
+ *   - Automatic background process management for non-blocking operation
+ * 
+ * RECENT IMPROVEMENTS:
+ *   - Fixed single-character axis label visibility issues for small data ranges
+ *   - Enhanced label scaling algorithm to ensure readability regardless of data scale
+ *   - Improved stroke text rendering with minimum size constraints
+ *   - Added comprehensive debug output for troubleshooting label rendering
  * 
  * COMPILATION:
  *   Requires: OpenGL, GLFW, GLUT, SDDS libraries
- *   gcc -o sddswaterfall_movie sddswaterfall_movie.c -lglfw -lGL -lGLU -lglut -lSDDS1 -lmdbcommon -lm
+ *   gcc -o sddswaterfall sddswaterfall.c -lglfw -lGL -lGLU -lglut -lSDDS1 -lmdbcommon -lm
  * 
  * AUTHOR: SDDS Development Team
+ * VERSION: Enhanced with improved axis label rendering (2024)
  * 
  */
 
@@ -54,23 +65,27 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-#define SET_XYZ 0
-#define SET_OUTPUT 1
-#define SET_SURFACE 2
-#define SET_GNUPLOTSURFACE 3
-#define SET_VIEWANGLE 4
-#define SET_ZOOM 5
-#define SET_ROTATEVIEW 6
-#define SET_MOVIEEXPORT 7
-#define SET_MULTIPAGE 8
+#define SET_SINGLEPAGE 0
+#define SET_MULTIPAGE 1
+#define SET_OUTPUT 2
+#define SET_SURFACE 3
+#define SET_GNUPLOTSURFACE 4
+#define SET_VIEWANGLE 5
+#define SET_ZOOM 6
+#define SET_ROTATEVIEW 7
+#define SET_MOVIEEXPORT 8
 #define SET_SWAPXY 9
 #define SET_CMAP 10
 #define SET_XSCALE 11
 #define SET_YSCALE 12
+#define SET_XLABEL 13
+#define SET_YLABEL 14
+#define SET_ZLABEL 15
+#define SET_LABELSCALE 16
 
-#define OPTIONS 13
+#define OPTIONS 17
 static char *option[OPTIONS]={
-  "xyz", "outputFile", "surface", "gnuplotSurface", "viewAngle", "zoom", "rotateView", "movieExport", "multipage", "swapxy", "cmap", "xscale", "yscale" };
+  "singlePage", "multiPage", "outputFile", "surface", "gnuplotSurface", "viewAngle", "zoom", "rotateView", "movieExport", "swapxy", "cmap", "xscale", "yscale", "xlabel", "ylabel", "zlabel", "labelScale" };
 
 // Movie export parameters
 typedef struct {
@@ -137,20 +152,27 @@ bool yscale_set = false;
 bool xscale_set = false;
 bool swap_xy = false;
 bool multi_page=false;
+bool single_page=false;
 ColorMap color_map = CMAP_JET;
 /*
  * USAGE INFORMATION
  */
 char *USAGE = "\
+sddswaterfall creates interactive 3D waterfall plots from SDDS data files. The program \n\
+reads X, Y, Z data columns for a single page file or reads the independent column (X data), \n\
+spectra data (Z column) and Y data in the parameter for multiple page file. \n\
+and generates either an interactive OpenGL visualization or exports to gnuplot format. \n\
+Supports both waterfall curve display and 3D surface contour modes. Now includes movie \n\
+export capability for rotation animations.\n\
+\n\
 sddswaterfall [<inputfile>] [<options>]\n\
 \n\
-PURPOSE:\n\
-  Creates interactive 3D waterfall plots from SDDS data files containing X, Y, Z data.\n\
-  Supports multiple visualization modes and export options including movie generation.\n\
-\n\
 REQUIRED OPTIONS:\n\
-  -xyz=<xcol>,<ycol>,<zcol>  Specify column names for X, Y, and Z data; for multi-page data, zcol will be the parameter name\n\
+  -singlePage=<xcol>,<ycol>,<zcol>  Specify column names for X, Y, and Z data for the single-page data \n\
+or \n\
+  -multiPage=<xcol>,<zcol>,<parameter>  for multi-page data, the x and z data are provided by the xcol and zcol, the y data is provided by the parameter.\n\
 \n\
+either -singlePage or -multiPage need to be provided, but can not be provided at the same time. \n\
 OPTIONAL PARAMETERS:\n\
   -outputFile=<filename>     Output PNG filename (default: screenshot.png)\n\
   -surface                   Enable 3D surface contour mode instead of waterfall curves\n\
@@ -172,9 +194,11 @@ OPTIONAL PARAMETERS:\n\
                             fps: frames per second (default: 10)\n\
                             width/height: movie dimensions (default: 1200x900)\n\
                             Example: -movieExport=format=mp4,filename=my_rotation,fps=15\n\
-  -multipage                multipage data, the zcol is the parameter name and will be plotted in y-axis, ycol will be plotted in z-axis\n\
   -yscale=<min>,<max>       Sets the y-axis limits to a specific range\n\
   -xscale=<min>,<max>       Sets the x-axis limits to a specific range\n\
+  -xlabel=<string>          Sets a custom label for the x-axis (overrides column name)\n\
+  -ylabel=<string>          Sets a custom label for the y-axis (overrides column name)\n\
+  -zlabel=<string>          Sets a custom label for the z-axis (overrides column name)\n\
   -cmap=<colormap>          'jet', 'coolwarm', 'viridis', or 'plasma' (default: jet)\n\
   -swapxy                   swap x and y axis in the plot.\n\
 \n\
@@ -202,16 +226,22 @@ MOVIE EXPORT:\n\
 \n\
 EXAMPLES:\n\
   # Basic 3D plot\n\
-  sddswaterfall waterfall3d.sdds -xyz=x,y,z\n\
+  sddswaterfall waterfall3d.sdds -singlePage=x,y,z\n\
+ # surface 3D plot\n\
+  sddswaterfall waterfall3d.sdds -singlePage=x,y,z -surface\n\
+  #gnuplot \n\
+  sddswaterfall waterfall3d.sdds -singlePage=x,y,z -gnu \n\
+  #multiplage example \n\
+  sddswaterfall S-LFB:Z:SRAM:SPEC-01.gz  -multipage=S-LFB:Z:SRAM:FREQ,S-LFB:Z:SRAM:SPEC,S-DCCT:CurrentM \n\
   \n\
   # Create rotation animation and export as MP4\n\
-  sddswaterfall waterfall3d.sdds -xyz=x,y,z -rotateView=axis=z,min=-45,max=45,positions=36,pause=0.1 -movieExport=format=mp4,filename=rotation_z_axis,fps=10\n\
+  sddswaterfall waterfall3d.sdds -singlePage=x,y,z -rotateView=axis=z,min=-45,max=45,positions=36,pause=0.1 -movieExport=format=mp4,filename=rotation_z_axis,fps=10\n\
   \n\
   # Create GIF animation\n\
-  sddswaterfall waterfall3d.sdds -xyz=x,y,z -rotateView=axis=y,min=-90,max=90,positions=60,pause=0.05 -movieExport=format=gif,filename=rotation_y_axis,fps=20\n\
+  sddswaterfall waterfall3d.sdds -singlePage=x,y,z -rotateView=axis=y,min=-90,max=90,positions=60,pause=0.05 -movieExport=format=gif,filename=rotation_y_axis,fps=20\n\
   \n\
   # Save individual frames only\n\
-  sddswaterfall waterfall3d.sdds -xyz=x,y,z -rotateView=axis=x,min=0,max=360,positions=72,pause=0.1 -movieExport=format=frames,filename=rotation_frames\n\
+  sddswaterfall waterfall3d.sdds -singelPage=x,y,z -rotateView=axis=x,min=0,max=360,positions=72,pause=0.1 -movieExport=format=frames,filename=rotation_frames\n\
 \n\
 DATA REQUIREMENTS:\n\
   - Input file must be in SDDS format\n\
@@ -245,7 +275,6 @@ void cleanup_temp_files();
 void get_color_from_map(double value, double min_val, double max_val, ColorMap cmap, float *r, float *g, float *b);
 void load_sdds_data(char *filename, char *xcol, char *ycol, char *zcol);
 void prepare_multi_page_grid_data();
-
 /*
  * Print usage information
  */
@@ -263,6 +292,11 @@ double angleX = -75.0f, angleY = 0.0f, angleZ = -45.0f, zoomZ = -5.0f;
 char xlabel[128] = "X";
 char ylabel[128] = "Y";
 char zlabel[128] = "Z";
+
+// Label scaling factors
+double xlabel_scale = 1.0;
+double ylabel_scale = 1.0;
+double zlabel_scale = 1.0;
 
 bool surface_mode = false;  // Flag for 3D surface contour mode
 bool gnuplot_surface = false;  // Flag for gnuplot surface mode
@@ -351,7 +385,7 @@ void get_palette_color(float t, float* r, float* g, float* b) {
 // Generate gnuplot surface plot (similar to test3dwaterfall1.c)
 void generate_gnuplot_surface() {
     FILE *gnuplotPipe = popen("gnuplot -persistent", "w");
-    
+
     if (gnuplotPipe) {
         fprintf(gnuplotPipe, "set term qt\n");
         fprintf(gnuplotPipe, "set view 60, 30\n");
@@ -380,11 +414,23 @@ void generate_gnuplot_surface() {
     }
 }
 
+static float computeStrokeTextWidth(void *font, const char *text) {
+    float width = 0.0f;
+
+    if (!font || !text)
+        return width;
+
+    for (const unsigned char *c = (const unsigned char *)text; *c; ++c)
+        width += glutStrokeWidth(font, *c);
+
+    return width;
+}
+
 void draw_axes(float xMin, float xMax, float yMin, float yMax, float zMin, float zMax) {
     // Draw main axis lines in conventional 3D layout (like matplotlib)
     glLineWidth(2.0f);
     glColor3f(0.8f, 0.8f, 0.8f);  // Light gray for main axes visibility against black background
-    
+
     glBegin(GL_LINES);
     // X axis - along bottom front edge
     glVertex3f(xMin, yMin, zMin);
@@ -431,29 +477,206 @@ void draw_axes(float xMin, float xMax, float yMin, float yMax, float zMin, float
 
     // Draw axis labels and tick labels
     glColor3f(1.0f, 1.0f, 1.0f);  // White text for visibility against black background
-    
+
     // === Axis labels (parallel to axes) ===
-    
+
     // X-axis label - positioned at center of X-axis, below the axis
-    float x_label_pos = (xMin + xMax) / 2.0f;
-    glRasterPos3f(x_label_pos, yMin - 0.15f * (yMax - yMin), zMin);
-    for (const char* c = xlabel; *c; c++) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+    const float kStrokeRomanHeight = 119.05f;
+    
+    // Dynamic scaling factor based on xlabel length to maintain consistent visual font size
+    int xlabel_len = strlen(xlabel);
+    float kAxisLabelScaleFactor = 0.01;
+    
+    float x_range = fabs(xMax - xMin);
+    float y_range = fabs(yMax - yMin);
+    float z_range = fabs(zMax - zMin);
+    if (x_range < 1e-6f)
+        x_range = 1.0f;
+    if (y_range < 1e-6f)
+        y_range = x_range;
+    if (z_range < 1e-6f)
+        z_range = x_range;
+
+    float global_scale_x = 2.0f / x_range;
+    float global_scale_y = 2.0f / y_range;
+    float global_scale_z = 2.0f / z_range;
+
+    float inv_scale_x = global_scale_x ? 1.0f / global_scale_x : 1.0f;
+    float inv_scale_y = global_scale_y ? 1.0f / global_scale_y : 1.0f;
+    float inv_scale_z = global_scale_z ? 1.0f / global_scale_z : 1.0f;
+
+    float label_center_x = (xMin + xMax) / 2.0f;
+    float baseline_y = yMin - 0.15f * y_range;
+    float label_z = zMin;
+
+    float xStrokeWidthUnits = computeStrokeTextWidth(GLUT_STROKE_ROMAN, xlabel);
+    if (xStrokeWidthUnits <= 0.0f)
+        xStrokeWidthUnits = 1.0f;
+
+    // Set minimum width for single character labels to ensure they're visible
+    float min_width_for_single_char = 150.0f;  // Increased minimum stroke width units for single characters
+    if (strlen(xlabel) == 1 && xStrokeWidthUnits < min_width_for_single_char) {
+        xStrokeWidthUnits = min_width_for_single_char;
     }
     
-    // Y-axis label - positioned at center of Y-axis, to the right
-    float y_label_pos = (yMin + yMax) / 2.0f;
-    glRasterPos3f(xMax + 0.15f * (xMax - xMin), y_label_pos, zMin);
-    for (const char* c = ylabel; *c; c++) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+    float xMaxWidth = 0.35f * x_range;
+    float xMaxHeight = 0.12f * y_range;
+    
+    // For single character labels, ensure minimum readable size regardless of data range
+    if (strlen(xlabel) == 1) {
+        float min_label_width = 0.05f * x_range;  // Minimum 5% of x_range for single chars
+        if (xMaxWidth < min_label_width) {
+            xMaxWidth = min_label_width;
+        }
     }
     
-    // Z-axis label - positioned at center of Z-axis, to the left
-    float z_label_pos = (zMin + zMax) / 2.0f;
-    glRasterPos3f(xMin - 0.25f * (xMax - xMin), yMin - 0.05f * (yMax - yMin), z_label_pos);
-    for (const char* c = zlabel; *c; c++) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+    float xWidthScale = xMaxWidth / xStrokeWidthUnits;
+    float xHeightScale = xMaxHeight / kStrokeRomanHeight;
+    float xStrokeScale = xWidthScale < xHeightScale ? xWidthScale : xHeightScale;
+    if (xStrokeScale <= 0.0f)
+        xStrokeScale = (0.1f * x_range) / xStrokeWidthUnits;
+    xStrokeScale *= kAxisLabelScaleFactor*strlen(xlabel);
+    
+    // Apply user-specified label scaling
+    xStrokeScale *= xlabel_scale;
+    
+    // For single character labels, ensure minimum scale factor
+    if (strlen(xlabel) == 1 && xStrokeScale < 0.001f) {
+        xStrokeScale = 0.001f;  // Minimum scale factor for single characters
     }
+    
+    float text_height = xStrokeScale * kStrokeRomanHeight;
+    if (baseline_y + text_height > yMin)
+        baseline_y = yMin - (text_height + 0.03f * y_range);
+
+    glPushMatrix();
+    glTranslatef(label_center_x, baseline_y, label_z);
+    glScalef(inv_scale_x, inv_scale_y, inv_scale_z);
+    glScalef(xStrokeScale, xStrokeScale, xStrokeScale);
+    glTranslatef(-0.5f * xStrokeWidthUnits, 0.0f, 0.0f);
+    glLineWidth(1.5f);  // Thicker for better visibility
+    for (const char *c = xlabel; *c; c++)
+      glutStrokeCharacter(GLUT_STROKE_ROMAN, *c);  // Use proportional font for natural readability
+    glLineWidth(1.0f);
+    glPopMatrix();
+
+    // Y-axis label - centered and rotated so it tracks the axis direction
+    float y_label_center = (yMin + yMax) / 2.0f;
+    float y_label_x = xMax + 0.18f * x_range;
+    float y_label_z = zMin;
+
+    float yStrokeWidthUnits = computeStrokeTextWidth(GLUT_STROKE_ROMAN, ylabel);
+    if (yStrokeWidthUnits <= 0.0f)
+        yStrokeWidthUnits = 1.0f;
+
+    // Calculate Y-axis label scaling independently
+    float yMaxWidth = 0.35f * y_range;  // Use y_range for Y-axis
+    float yMaxHeight = 0.12f * x_range;  // Use x_range for Y-axis height constraint
+    
+    // For single character labels, ensure minimum readable size
+    if (strlen(ylabel) == 1) {
+        float min_label_width = 0.05f * y_range;
+        if (yMaxWidth < min_label_width) {
+            yMaxWidth = min_label_width;
+        }
+    }
+    
+    float yWidthScale = yMaxWidth / yStrokeWidthUnits;
+    float yHeightScale = yMaxHeight / kStrokeRomanHeight;
+    float yStrokeScale = yWidthScale < yHeightScale ? yWidthScale : yHeightScale;
+    if (yStrokeScale <= 0.0f)
+        yStrokeScale = (0.1f * y_range) / yStrokeWidthUnits;
+    yStrokeScale *= kAxisLabelScaleFactor*strlen(ylabel)/4.0;
+    
+    // Apply user-specified label scaling
+    yStrokeScale *= ylabel_scale;
+    
+    // For single character labels, ensure minimum scale factor
+    if (strlen(ylabel) == 1 && yStrokeScale < 0.001f) {
+        yStrokeScale = 0.001f;
+    }
+
+    float half_length = 0.5f * yStrokeWidthUnits * yStrokeScale * inv_scale_y;
+    if (y_label_center - half_length < yMin)
+        y_label_center = yMin + half_length + 0.02f * y_range;
+    if (y_label_center + half_length > yMax)
+        y_label_center = yMax - half_length - 0.02f * y_range;
+
+    float glyph_extent_x = kStrokeRomanHeight * yStrokeScale * inv_scale_x;
+    float min_clearance = 0.05f * x_range;
+    if (y_label_x - glyph_extent_x < xMax + min_clearance)
+        y_label_x = xMax + min_clearance + glyph_extent_x;
+
+    glPushMatrix();
+    glTranslatef(y_label_x, y_label_center, y_label_z);
+    glScalef(inv_scale_x, inv_scale_y, inv_scale_z);
+    glScalef(yStrokeScale, yStrokeScale, yStrokeScale);
+    glRotatef(90.0f, 0.0f, 0.0f, 1.0f);
+    glTranslatef(-0.5f * yStrokeWidthUnits, 0.0f, 0.0f);
+    glLineWidth(1.5f);  // Thicker for better visibility
+    for (const char *c = ylabel; *c; ++c)
+        glutStrokeCharacter(GLUT_STROKE_ROMAN, *c);  // Use proportional font for natural readability
+    glLineWidth(1.0f);
+    glPopMatrix();
+    
+    // Z-axis label - centered along the axis and rendered with stroke text parallel to Z
+    float z_label_center = (zMin + zMax) / 2.0f;
+    float z_label_x = xMin - 0.12f * x_range;
+    float z_label_y = yMin - 0.10f * y_range;
+
+    float zStrokeWidthUnits = computeStrokeTextWidth(GLUT_STROKE_ROMAN, zlabel);
+    if (zStrokeWidthUnits <= 0.0f)
+        zStrokeWidthUnits = 1.0f;
+
+    // Calculate Z-axis label scaling independently
+    float zMaxWidth = 0.35f * z_range;  // Use z_range for Z-axis
+    float zMaxHeight = 0.12f * y_range;  // Use y_range for Z-axis height constraint
+    
+    // For single character labels, ensure minimum readable size
+    if (strlen(zlabel) == 1) {
+        float min_label_width = 0.05f * z_range;
+        if (zMaxWidth < min_label_width) {
+            zMaxWidth = min_label_width;
+        }
+    }
+    
+    float zWidthScale = zMaxWidth / zStrokeWidthUnits;
+    float zHeightScale = zMaxHeight / kStrokeRomanHeight;
+    float zStrokeScale = zWidthScale < zHeightScale ? zWidthScale : zHeightScale;
+    if (zStrokeScale <= 0.0f)
+        zStrokeScale = (0.1f * z_range) / zStrokeWidthUnits;
+    zStrokeScale *= kAxisLabelScaleFactor*strlen(zlabel)/4.0;
+    
+    // Apply user-specified label scaling
+    zStrokeScale *= zlabel_scale;
+    
+    // For single character labels, ensure minimum scale factor
+    if (strlen(zlabel) == 1 && zStrokeScale < 0.001f) {
+        zStrokeScale = 0.001f;
+    }
+
+    float zGlyphHeight = kStrokeRomanHeight * zStrokeScale * inv_scale_y;
+    float y_clearance = 0.03f * y_range;
+    float max_y_for_label = yMin - y_clearance;
+    if (z_label_y + zGlyphHeight > max_y_for_label)
+        z_label_y = max_y_for_label - zGlyphHeight;
+
+    float x_clearance = 0.05f * x_range;
+    float min_x_for_label = xMin - x_clearance;
+    if (z_label_x > min_x_for_label)
+        z_label_x = min_x_for_label;
+
+    glPushMatrix();
+    glTranslatef(z_label_x, z_label_y, z_label_center);
+    glScalef(inv_scale_x, inv_scale_y, inv_scale_z);
+    glScalef(zStrokeScale, zStrokeScale, zStrokeScale);
+    glRotatef(90.0f, 0.0f, 1.0f, 0.0f);
+    glTranslatef(-0.5f * zStrokeWidthUnits, 0.0f, 0.0f);
+    glLineWidth(1.5f);  // Thicker for better visibility
+    for (const char *c = zlabel; *c; ++c)
+        glutStrokeCharacter(GLUT_STROKE_ROMAN, *c);  // Use proportional font for natural readability
+    glLineWidth(1.0f);
+    glPopMatrix();
    
  
     // X tick labels with better alignment - moved further from axis for better spacing
@@ -767,6 +990,9 @@ void draw_scene(void) {
             }
             glEnd();
         }
+        
+        // Draw colorbar for waterfall mode (same as surface mode)
+        draw_colorbar(xMin, xMax, yMin, yMax, zMin, zMax);
     }
     
     glLineWidth(1.0f);
@@ -886,7 +1112,8 @@ int main(int argc, char** argv) {
 	delete_chars(s_arg[i_arg].list[0], "_");
 	/* process options here */
 	switch (match_string(s_arg[i_arg].list[0], option, OPTIONS, 0)) {
-	case SET_XYZ:
+	case SET_SINGLEPAGE:
+	  single_page=true;
 	  if (s_arg[i_arg].n_items <4) {
 	     fprintf(stderr, "Error (sddswaterfall): invalid -xyz syntax\n");
 	     return (1);
@@ -894,6 +1121,17 @@ int main(int argc, char** argv) {
 	  xcol = s_arg[i_arg].list[1];
 	  ycol = s_arg[i_arg].list[2];
 	  zcol = s_arg[i_arg].list[3];
+	  break;
+	case SET_MULTIPAGE:
+	  multi_page=true;
+	  if (s_arg[i_arg].n_items <4) {
+	     fprintf(stderr, "Error (sddswaterfall): invalid -xyz syntax\n");
+	     return (1);
+	  }
+	  /*multipage data, two columns: xcol, zcol, and y data is from the parameter, the third*/
+	  xcol = s_arg[i_arg].list[1];
+	  zcol = s_arg[i_arg].list[2];
+	  ycol = s_arg[i_arg].list[3]; /*it is actually the parameter name */
 	  break;
 	case SET_OUTPUT:
 	  if (s_arg[i_arg].n_items < 2) {
@@ -1034,9 +1272,6 @@ int main(int argc, char** argv) {
 	  printf("Movie export enabled: format=%s, filename=%s, fps=%d, size=%dx%d\n",
 	         movie.format, movie.filename, movie.fps, movie.width, movie.height);
 	  break;
-	case SET_MULTIPAGE:
-	  multi_page = true;
-	  break;
 	case SET_SWAPXY:
 	  swap_xy = true;
 	  break;
@@ -1082,6 +1317,49 @@ int main(int argc, char** argv) {
 	  }
 	  yscale_set = true;
 	  break;
+	case SET_XLABEL:
+	  if (s_arg[i_arg].n_items < 2) {
+	    fprintf(stderr, "Error (sddswaterfall): invalid -xlabel syntax\n");
+	    return (1);
+	  }
+	  strncpy(xlabel, s_arg[i_arg].list[1], sizeof(xlabel)-1);
+	  xlabel[sizeof(xlabel)-1] = '\0';
+	  break;
+	case SET_YLABEL:
+	  if (s_arg[i_arg].n_items < 2) {
+	    fprintf(stderr, "Error (sddswaterfall): invalid -ylabel syntax\n");
+	    return (1);
+	  }
+	  strncpy(ylabel, s_arg[i_arg].list[1], sizeof(ylabel)-1);
+	  ylabel[sizeof(ylabel)-1] = '\0';
+	  break;
+	case SET_ZLABEL:
+	  if (s_arg[i_arg].n_items < 2) {
+	    fprintf(stderr, "Error (sddswaterfall): invalid -zlabel syntax\n");
+	    return (1);
+	  }
+	  strncpy(zlabel, s_arg[i_arg].list[1], sizeof(zlabel)-1);
+	  zlabel[sizeof(zlabel)-1] = '\0';
+	  break;
+	case SET_LABELSCALE:
+	  if (s_arg[i_arg].n_items < 4) {
+	    fprintf(stderr, "Error (sddswaterfall): invalid -labelScale syntax\n");
+	    fprintf(stderr, "Usage: -labelScale=<xlabelScale>,<ylabelScale>,<zlabelScale>\n");
+	    return (1);
+	  }
+	  if (!get_double(&xlabel_scale, s_arg[i_arg].list[1]) ||
+	      !get_double(&ylabel_scale, s_arg[i_arg].list[2]) ||
+	      !get_double(&zlabel_scale, s_arg[i_arg].list[3])) {
+	    fprintf(stderr, "Error (sddswaterfall): invalid -labelScale values\n");
+	    return (1);
+	  }
+	  if (xlabel_scale <= 0.0 || ylabel_scale <= 0.0 || zlabel_scale <= 0.0) {
+	    fprintf(stderr, "Error (sddswaterfall): labelScale values must be positive\n");
+	    return (1);
+	  }
+	  printf("Label scaling set: X=%.2f, Y=%.2f, Z=%.2f\n", 
+	         xlabel_scale, ylabel_scale, zlabel_scale);
+	  break;
 	default:
 	  fprintf(stderr, "unknown option - %s given.\n", s_arg[i_arg].list[0]);
 	  exit(1);
@@ -1095,14 +1373,16 @@ int main(int argc, char** argv) {
     }
     if (!inputfile) {
         fprintf(stderr, "Error: No input file specified.\n");
-        print_usage();
         return 1;
     }
     
     if (!xcol || !ycol || !zcol) {
-        fprintf(stderr, "Error: -xyz option is required. Please specify column names for X, Y, and Z data.\n");
-        print_usage();
+        fprintf(stderr, "Error: -singlePage or multiPage is required. Please specify column/parameter names for X, Y, and Z data.\n");
         return 1;
+    }
+    if (single_page && multi_page) {
+      fprintf(stderr, "Error: singlePage and multiPage option can not both be provided!");
+      return 1;
     }
     
     // Validate movie export requirements
@@ -1114,18 +1394,20 @@ int main(int argc, char** argv) {
     if (!outputfile) {
         outputfile = "screenshot.png";
     }
-    strncpy(xlabel, xcol, sizeof(xlabel)-1);
-    if (multi_page) {
-      /*ycol is the z-axis and zcol (parameter) is the y-axis*/
-      strncpy(ylabel, zcol, sizeof(ylabel)-1);
-      strncpy(zlabel, ycol, sizeof(zlabel)-1);
-    } else {
-      strncpy(ylabel, ycol, sizeof(ylabel)-1);
-      strncpy(zlabel, zcol, sizeof(zlabel)-1);
+    
+    // Set axis labels from column names only if not already set by command line options
+    if (strcmp(xlabel, "X") == 0) {  // Only set if still default value
+        strncpy(xlabel, xcol, sizeof(xlabel)-1);
+        xlabel[sizeof(xlabel)-1] = '\0';
     }
-    xlabel[sizeof(xlabel)-1] = '\0';
-    ylabel[sizeof(ylabel)-1] = '\0';
-    zlabel[sizeof(zlabel)-1] = '\0';
+    if (strcmp(ylabel, "Y") == 0) {  // Only set if still default value
+        strncpy(ylabel, zcol, sizeof(ylabel)-1);
+        ylabel[sizeof(ylabel)-1] = '\0';
+    }
+    if (strcmp(zlabel, "Z") == 0) {  // Only set if still default value
+        strncpy(zlabel, ycol, sizeof(zlabel)-1);
+        zlabel[sizeof(zlabel)-1] = '\0';
+    }
     
     // Setup movie export if enabled
     if (movie.enabled) {
@@ -1575,11 +1857,12 @@ void load_sdds_data(char *filename, char *xcol, char *ycol, char *zcol) {
 	fprintf(stderr, "Error: Failed to get column data %s\n", xcol );
 	exit(1);
       }
-      if (!(pages[n_pages-1].y_data = SDDS_GetColumnInDoubles(&SDDS_table, ycol))) {
+      if (!(pages[n_pages-1].y_data = SDDS_GetColumnInDoubles(&SDDS_table, zcol))) {
 	fprintf(stderr, "Error: Failed to get column data %s\n", ycol );
 	exit(1);
       }
-      if (!SDDS_GetParameterAsDouble(&SDDS_table, zcol, &pages[n_pages-1].z_param)) {
+      /*for multipage option, -multipage=<xcol>,<zcol>,<parameter> but ycol is assigned to <parameter>*/
+      if (!SDDS_GetParameterAsDouble(&SDDS_table, ycol, &pages[n_pages-1].z_param)) {
 	fprintf(stderr, "Error: Failed to get parameter data %s\n", zcol );
 	exit(1);
       }
