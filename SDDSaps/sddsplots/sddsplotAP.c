@@ -266,7 +266,20 @@ static int handle3DScatter(int argc, char **argv)
       strcat(command, " -noborder");
     else if (!strcmp(argv[i], "-noscale"))
       strcat(command, " -noscale");
-    else if (!strcmp(argv[i], "-datestamp"))
+    else if (!strncmp(argv[i], "-noscales", 9)) {
+      if (argv[i][9] == '=') {
+        strcat(command, " ");
+        strcat(command, argv[i]);
+      } else {
+        const char *value = NULL;
+        if (!argv[i][9] && i + 1 < argc && argv[i + 1][0] != '-')
+          value = argv[++i];
+        if (value && value[0])
+          appendQuotedOption(command, sizeof(command), "-noscales", value);
+        else
+          strcat(command, " -noscales");
+      }
+    } else if (!strcmp(argv[i], "-datestamp"))
       strcat(command, " -datestamp");
     else if (!strcmp(argv[i], "-xlog"))
       strcat(command, " -xlog");
