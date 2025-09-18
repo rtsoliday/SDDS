@@ -26,8 +26,11 @@
 #include <QtDataVisualization/QScatter3DSeries>
 #include <QtDataVisualization/QScatterDataArray>
 #include <QtDataVisualization/QScatterDataProxy>
+#include <QtDataVisualization/Q3DInputHandler>
 #include <QtDataVisualization/QAbstract3DSeries>
 #include <QtDataVisualization/QAbstract3DGraph>
+#include <QtDataVisualization/QAbstract3DAxis>
+#include <QtDataVisualization/QAbstract3DInputHandler>
 #include <QtDataVisualization/QCategory3DAxis>
 #include <QtDataVisualization/Q3DTheme>
 #include <QtDataVisualization/Q3DCamera>
@@ -49,6 +52,8 @@
 #include <QSizePolicy>
 #include <QDateTime>
 #include <QList>
+#include <QMatrix4x4>
+#include <QtGlobal>
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
@@ -65,6 +70,8 @@
 #  include <objc/runtime.h>
 #  include <objc/message.h>
 #endif
+
+using QT_DATAVIS_NAMESPACE::Q3DInputHandler;
 
 double scalex, scaley;
 #define Xpixel(value) (int)(((value) - userx0) * scalex)
@@ -286,6 +293,164 @@ public:
   }
 };
 
+class Pan3DInputHandler : public Q3DInputHandler {
+  Q_OBJECT
+public:
+  explicit Pan3DInputHandler(QT_DATAVIS_NAMESPACE::QAbstract3DGraph *graph,
+                             QObject *parent = nullptr)
+      : Q3DInputHandler(parent), m_graph(graph),
+        m_isPanning(false) {}
+
+protected:
+  void mousePressEvent(QMouseEvent *event,
+                       const QPoint &mousePos) override {
+    if (event->button() == Qt::RightButton &&
+        (event->modifiers() & Qt::ControlModifier)) {
+      m_isPanning = true;
+      m_lastPos = mousePos;
+      setInputPosition(mousePos);
+      setPreviousInputPos(mousePos);
+      event->accept();
+      return;
+    }
+    Q3DInputHandler::mousePressEvent(event, mousePos);
+  }
+
+  void mouseReleaseEvent(QMouseEvent *event,
+                         const QPoint &mousePos) override {
+    if (m_isPanning && event->button() == Qt::RightButton) {
+      m_isPanning = false;
+      setInputPosition(mousePos);
+      setPreviousInputPos(mousePos);
+      event->accept();
+      return;
+    }
+    Q3DInputHandler::mouseReleaseEvent(event, mousePos);
+  }
+
+  void mouseMoveEvent(QMouseEvent *event, const QPoint &mousePos) override {
+    if (m_isPanning) {
+      if (!(event->buttons() & Qt::RightButton) ||
+          !(event->modifiers() & Qt::ControlModifier)) {
+        m_isPanning = false;
+        Q3DInputHandler::mouseMoveEvent(event, mousePos);
+        return;
+      }
+      QPoint delta = mousePos - m_lastPos;
+      if (!delta.isNull())
+        panCamera(delta);
+      m_lastPos = mousePos;
+      setInputPosition(mousePos);
+      setPreviousInputPos(mousePos);
+      event->accept();
+      return;
+    }
+    Q3DInputHandler::mouseMoveEvent(event, mousePos);
+  }
+
+private:
+  double axisSpan(QT_DATAVIS_NAMESPACE::QAbstract3DAxis *axis) const {
+    if (!axis)
+      return 1.0;
+    if (auto valueAxis = qobject_cast<QT_DATAVIS_NAMESPACE::QValue3DAxis *>(axis))
+      return qMax(1e-9, static_cast<double>(valueAxis->max() - valueAxis->min()));
+    if (auto categoryAxis =
+            qobject_cast<QT_DATAVIS_NAMESPACE::QCategory3DAxis *>(axis))
+      return qMax(1.0, static_cast<double>(categoryAxis->labels().size()));
+    return 1.0;
+  }
+
+  void panCamera(const QPoint &delta) {
+    if (!m_graph)
+      return;
+    QT_DATAVIS_NAMESPACE::Q3DScene *graphScene = scene();
+    if (!graphScene)
+      return;
+    QT_DATAVIS_NAMESPACE::Q3DCamera *camera = graphScene->activeCamera();
+    if (!camera)
+      return;
+
+    QT_DATAVIS_NAMESPACE::QAbstract3DAxis *axisX = nullptr;
+    QT_DATAVIS_NAMESPACE::QAbstract3DAxis *axisY = nullptr;
+    QT_DATAVIS_NAMESPACE::QAbstract3DAxis *axisZ = nullptr;
+    if (auto surface =
+            qobject_cast<QT_DATAVIS_NAMESPACE::Q3DSurface *>(m_graph)) {
+      axisX = surface->axisX();
+      axisY = surface->axisY();
+      axisZ = surface->axisZ();
+    } else if (auto scatter =
+                   qobject_cast<QT_DATAVIS_NAMESPACE::Q3DScatter *>(m_graph)) {
+      axisX = scatter->axisX();
+      axisY = scatter->axisY();
+      axisZ = scatter->axisZ();
+    } else if (auto bars =
+                   qobject_cast<QT_DATAVIS_NAMESPACE::Q3DBars *>(m_graph)) {
+      axisX = bars->columnAxis();
+      axisY = bars->valueAxis();
+      axisZ = bars->rowAxis();
+    }
+    double spanX = axisSpan(axisX);
+    double spanY = axisSpan(axisY);
+    double spanZ = axisSpan(axisZ);
+    double spanAvg = (spanX + spanY + spanZ) / 3.0;
+    if (spanAvg <= 0.0)
+      spanAvg = 1.0;
+
+    float zoomLevel = camera->zoomLevel();
+    double zoomFactor = 100.0 / qMax(1.0f, zoomLevel);
+    double panFactor = spanAvg * 0.002 * zoomFactor;
+
+    QMatrix4x4 rotation;
+    rotation.rotate(camera->yRotation(), 0.0f, 1.0f, 0.0f);
+    rotation.rotate(camera->xRotation(), 1.0f, 0.0f, 0.0f);
+    QVector3D forward = rotation * QVector3D(0.0f, 0.0f, -1.0f);
+    QVector3D up = rotation * QVector3D(0.0f, 1.0f, 0.0f);
+    QVector3D right = QVector3D::crossProduct(forward, up).normalized();
+    up = QVector3D::crossProduct(right, forward).normalized();
+
+    QVector3D translation = (-delta.x() * panFactor * right) +
+                            (delta.y() * panFactor * up);
+    QVector3D target = camera->target();
+    target += translation;
+
+    if (auto valueAxis =
+            qobject_cast<QT_DATAVIS_NAMESPACE::QValue3DAxis *>(axisX))
+      target.setX(qBound(valueAxis->min(), target.x(), valueAxis->max()));
+    if (auto valueAxis =
+            qobject_cast<QT_DATAVIS_NAMESPACE::QValue3DAxis *>(axisY))
+      target.setY(qBound(valueAxis->min(), target.y(), valueAxis->max()));
+    if (auto valueAxis =
+            qobject_cast<QT_DATAVIS_NAMESPACE::QValue3DAxis *>(axisZ))
+      target.setZ(qBound(valueAxis->min(), target.z(), valueAxis->max()));
+
+    camera->setTarget(target);
+  }
+
+  QT_DATAVIS_NAMESPACE::QAbstract3DGraph *m_graph;
+  bool m_isPanning;
+  QPoint m_lastPos;
+};
+
+static void installPanHandler(QT_DATAVIS_NAMESPACE::QAbstract3DGraph *graph) {
+  if (!graph)
+    return;
+  QT_DATAVIS_NAMESPACE::QAbstract3DInputHandler *baseHandler =
+      graph->activeInputHandler();
+  Q3DInputHandler *existingHandler = qobject_cast<Q3DInputHandler *>(baseHandler);
+  Pan3DInputHandler *panHandler = new Pan3DInputHandler(graph);
+  panHandler->setScene(graph->scene());
+  if (existingHandler) {
+    panHandler->setInputView(existingHandler->inputView());
+    panHandler->setRotationEnabled(existingHandler->isRotationEnabled());
+    panHandler->setZoomEnabled(existingHandler->isZoomEnabled());
+    panHandler->setSelectionEnabled(existingHandler->isSelectionEnabled());
+    panHandler->setZoomAtTargetEnabled(existingHandler->isZoomAtTargetEnabled());
+  } else if (baseHandler) {
+    panHandler->setInputView(baseHandler->inputView());
+  }
+  graph->setActiveInputHandler(panHandler);
+}
+
 static QWidget *run3dBar(const char *filename, const char *xlabel,
                          const char *ylabel, const char *zlabel,
                          const char *title, const char *topline,
@@ -317,6 +482,7 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   float defaultY = camera->yRotation();
   float defaultZoom = camera->zoomLevel();
   QVector3D defaultTarget = camera->target();
+  installPanHandler(graph);
   QWidget *container = QWidget::createWindowContainer(graph);
   surfaceContainer = container;
   surfaceGraphs.append(graph);
@@ -687,6 +853,7 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   float defaultY = camera->yRotation();
   float defaultZoom = camera->zoomLevel();
   QVector3D defaultTarget = camera->target();
+  installPanHandler(graph);
   QWidget *container = QWidget::createWindowContainer(graph);
   surfaceContainer = container;
   surfaceGraphs.append(graph);
@@ -1102,6 +1269,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   float defaultY = camera->yRotation();
   float defaultZoom = camera->zoomLevel();
   QVector3D defaultTarget = camera->target();
+  installPanHandler(graph);
   QWidget *container = QWidget::createWindowContainer(graph);
   surfaceContainer = container;
   surfaceGraphs.append(graph);
@@ -1846,6 +2014,7 @@ i - reset view\n\
 x - snap view to X axis\n\
 y - snap view to Y axis\n\
 z - snap view to Z axis\n\
+Ctrl + Right mouse drag - pan camera\n\
 Up arrow - increase font size\n\
 Down arrow - decrease font size\n\
 \n\
