@@ -165,6 +165,23 @@ struct Plot3DGridData {
   QVector<double> values;
 };
 
+static const long long kLargeDatasetThreshold = 100000;
+static const long long kAggressiveOptimizationThreshold = 200000;
+
+static void applyLargeDatasetGraphSettings(
+    QT_DATAVIS_NAMESPACE::QAbstract3DGraph *graph, long long totalPoints) {
+  if (!graph)
+    return;
+  if (totalPoints > kLargeDatasetThreshold) {
+    graph->setShadowQuality(
+        QT_DATAVIS_NAMESPACE::QAbstract3DGraph::ShadowQualityNone);
+    graph->setOptimizationHints(
+        QT_DATAVIS_NAMESPACE::QAbstract3DGraph::OptimizationStatic);
+  }
+  if (totalPoints > kAggressiveOptimizationThreshold)
+    graph->setSelectionMode(QT_DATAVIS_NAMESPACE::QAbstract3DGraph::SelectionNone);
+}
+
 static bool loadGridData(const char *filename, Plot3DGridData &data,
                          QString *errorMessage = nullptr) {
   QFile dataFile(filename);
@@ -402,6 +419,13 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   double ymin = gridData.ymin;
   double ymax = gridData.ymax;
 
+  const long long totalPoints =
+      static_cast<long long>(nx) * static_cast<long long>(ny);
+  applyLargeDatasetGraphSettings(graph, totalPoints);
+  const bool largeDataset = totalPoints > kLargeDatasetThreshold;
+  const bool disableItemLabels =
+      totalPoints > kAggressiveOptimizationThreshold;
+
   if (equalAspect && nx > 0 && ny > 0) {
     QSizeF defaultSpacing = graph->barSpacing();
     double baseSpacing = std::max(defaultSpacing.width(), defaultSpacing.height());
@@ -423,7 +447,7 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
   QStringList xLabels, yLabels;
   xLabels.reserve(nx);
   yLabels.reserve(ny);
-  const int maxLabels = 6;
+  const int maxLabels = largeDataset ? 4 : 6;
   int xLabelStep = 1;
   if (nx > maxLabels)
     xLabelStep = std::max(1, (nx - 1) / (maxLabels - 1));
@@ -484,6 +508,15 @@ static QWidget *run3dBar(const char *filename, const char *xlabel,
     zmax = shadeMax;
   }
   QT_DATAVIS_NAMESPACE::QBar3DSeries *series = new QT_DATAVIS_NAMESPACE::QBar3DSeries(proxy);
+  if (disableItemLabels)
+    series->setItemLabelFormat(QString());
+  if (largeDataset) {
+    series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshCube);
+    series->setMeshSmooth(false);
+  } else {
+    series->setMesh(QT_DATAVIS_NAMESPACE::QAbstract3DSeries::MeshBevelBar);
+    series->setMeshSmooth(true);
+  }
   if (!gray) {
     if (!spectrumallocated)
       allocspectrum();
@@ -678,7 +711,7 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   }
   QTextStream in(&dataFile);
   QT_DATAVIS_NAMESPACE::QScatterDataArray *dataArray = new QT_DATAVIS_NAMESPACE::QScatterDataArray;
-  int totalPoints = 0;
+  long long totalPoints = 0;
   double xmin = DBL_MAX, xmax = -DBL_MAX;
   double ymin = DBL_MAX, ymax = -DBL_MAX;
   double zmin = DBL_MAX, zmax = -DBL_MAX;
@@ -738,8 +771,8 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     ymax = header[5].toDouble();
     double dx = nx > 1 ? (xmax - xmin) / (nx - 1) : 1;
     double dy = ny > 1 ? (ymax - ymin) / (ny - 1) : 1;
-    totalPoints = nx * ny;
-    dataArray->resize(totalPoints);
+    totalPoints = static_cast<long long>(nx) * static_cast<long long>(ny);
+    dataArray->resize(static_cast<int>(totalPoints));
     QVector<double> xPositions(nx);
     QVector<double> yPositions(ny);
     for (int i = 0; i < nx; i++)
@@ -794,16 +827,9 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     Time3DAxisFormatter *formatter = new Time3DAxisFormatter;
     graph->axisX()->setFormatter(formatter);
   }
-  const int largeDatasetThreshold = 100000;
-  const int aggressiveOptimizationThreshold = 200000;
-  bool largeDataset = totalPoints > largeDatasetThreshold;
-  bool enableItemLabels = totalPoints <= aggressiveOptimizationThreshold;
-  if (largeDataset) {
-    graph->setShadowQuality(QT_DATAVIS_NAMESPACE::QAbstract3DGraph::ShadowQualityNone);
-    graph->setOptimizationHints(QT_DATAVIS_NAMESPACE::QAbstract3DGraph::OptimizationStatic);
-  }
-  if (totalPoints > aggressiveOptimizationThreshold)
-    graph->setSelectionMode(QT_DATAVIS_NAMESPACE::QAbstract3DGraph::SelectionNone);
+  applyLargeDatasetGraphSettings(graph, totalPoints);
+  bool largeDataset = totalPoints > kLargeDatasetThreshold;
+  bool enableItemLabels = totalPoints <= kAggressiveOptimizationThreshold;
   if (hasIntensity && points.size() == intensities.size()) {
     double lo = defaultImin, hi = defaultImax;
     if (outsideDefaultIntensityRange) {
@@ -818,7 +844,7 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
     }
     const int bins = qMin(nspect, 64);
     QVector<QT_DATAVIS_NAMESPACE::QScatterDataArray *> binArrays(bins);
-    int reservePerBin = largeDataset ? std::max(1, totalPoints / bins) : 0;
+    int reservePerBin = largeDataset ? std::max(1, static_cast<int>(totalPoints / bins)) : 0;
     for (int b = 0; b < bins; b++) {
       binArrays[b] = new QT_DATAVIS_NAMESPACE::QScatterDataArray;
       if (reservePerBin)
