@@ -196,6 +196,35 @@ static void applyLargeDatasetGraphSettings(
     graph->setSelectionMode(QT_DATAVIS_NAMESPACE::QAbstract3DGraph::SelectionNone);
 }
 
+static bool parseTicksettingsArgument(int argc, char **argv, int &index,
+                                      const char **value) {
+  if (!argv || index < 0 || index >= argc)
+    return false;
+  const char *arg = argv[index];
+  if (!arg)
+    return false;
+  const char *valueStart = nullptr;
+  if (!strncmp(arg, "-ticksettings", 13))
+    valueStart = arg + 13;
+  else if (!strncmp(arg, "-tick", 5) &&
+           (arg[5] == '\0' || arg[5] == '='))
+    valueStart = arg + 5;
+  else
+    return false;
+
+  if (valueStart && *valueStart == '\0') {
+    if (index + 1 < argc)
+      valueStart = argv[++index];
+    else
+      valueStart = nullptr;
+  } else if (valueStart && *valueStart == '=')
+    valueStart++;
+
+  if (value)
+    *value = (valueStart && *valueStart) ? valueStart : nullptr;
+  return true;
+}
+
 static bool loadGridData(const char *filename, Plot3DGridData &data,
                          QString *errorMessage = nullptr) {
   QFile dataFile(filename);
@@ -2147,6 +2176,20 @@ int main(int argc, char *argv[]) {
   Plot3DArgs current;
   bool in3d = false;
   for (int i = 1; i < argc; i++) {
+    if (in3d) {
+      const char *tickArg = nullptr;
+      int savedIndex = i;
+      if (parseTicksettingsArgument(argc, argv, i, &tickArg)) {
+        if (tickArg) {
+          if (strstr(tickArg, "xtime"))
+            current.xTime = true;
+          if (strstr(tickArg, "ytime"))
+            current.yTime = true;
+        }
+        continue;
+      }
+      i = savedIndex;
+    }
     if (!strncmp(argv[i], "-3d", 3) && i + 1 < argc) {
       if (in3d)
         plots.append(current);
@@ -2271,18 +2314,17 @@ int main(int argc, char *argv[]) {
       current.datestamp = true;
     else if (!strcmp(argv[i], "-xlog") && in3d)
       current.xLog = true;
-    else if (!strncmp(argv[i], "-ticksettings", 13) && in3d) {
-      const char *arg = NULL;
-      if (argv[i][13] == '=')
-        arg = argv[i] + 14;
-      else if (i + 1 < argc)
-        arg = argv[++i];
-      if (arg) {
-        if (strstr(arg, "xtime"))
-          current.xTime = true;
-        if (strstr(arg, "ytime"))
-          current.yTime = true;
-      }
+    else if (in3d) {
+      const char *tickArg = nullptr;
+      if (parseTicksettingsArgument(argc, argv, i, &tickArg)) {
+        if (tickArg) {
+          if (strstr(tickArg, "xtime"))
+            current.xTime = true;
+          if (strstr(tickArg, "ytime"))
+            current.yTime = true;
+        }
+      } else
+        continue;
     }
   }
   if (in3d)

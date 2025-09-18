@@ -89,7 +89,37 @@ long add_filename(PLOT_SPEC *plotspec, char *filename);
 long count_chars(char *string, char c);
 void SetupFontSize(FONT_SIZE *fs);
 
-static int handle3DScatter(int argc, char **argv)
+static int extractTicksettingsOption(int argc, char **argv, int *index,
+                                     const char **value) {
+  const char *arg;
+  const char *valueStart = NULL;
+  if (!argv || !index || *index < 0 || *index >= argc)
+    return 0;
+  arg = argv[*index];
+  if (!arg)
+    return 0;
+  if (!strncmp(arg, "-ticksettings", 13))
+    valueStart = arg + 13;
+  else if (!strncmp(arg, "-tick", 5) &&
+           (arg[5] == '\0' || arg[5] == '='))
+    valueStart = arg + 5;
+  else
+    return 0;
+
+  if (valueStart && *valueStart == '\0') {
+    if (*index + 1 < argc)
+      valueStart = argv[++(*index)];
+    else
+      valueStart = NULL;
+  } else if (valueStart && *valueStart == '=')
+    valueStart++;
+
+  if (value)
+    *value = (valueStart && *valueStart) ? valueStart : NULL;
+  return 1;
+}
+
+static int handle3DScatter(int argc, char **argv, const TICK_SETTINGS *tickSettings)
 {
   int i;
   char *spec = NULL;
@@ -225,6 +255,7 @@ static int handle3DScatter(int argc, char **argv)
   char command[4096];
   snprintf(command, sizeof(command), "mpl_qt -3d=scatter %s", tmpName);
   int hasXLabel = 0, hasYLabel = 0, hasZLabel = 0;
+  int hasTicksettingsArg = 0;
   for (i = 1; i < argc; i++) {
     const char *value;
     value = consumeOptionValue(argc, argv, &i, "-xlabel");
@@ -283,12 +314,15 @@ static int handle3DScatter(int argc, char **argv)
       strcat(command, " -datestamp");
     else if (!strcmp(argv[i], "-xlog"))
       strcat(command, " -xlog");
-    else if (!strncmp(argv[i], "-ticksettings", 13)) {
-      strcat(command, " -ticksettings");
-      if (argv[i][13] == '=')
-        strcat(command, argv[i] + 13);
-      else if (i + 1 < argc)
-        strcat(command, argv[++i]);
+    else if (extractTicksettingsOption(argc, argv, &i, &value)) {
+      size_t len;
+      hasTicksettingsArg = 1;
+      len = strlen(command);
+      if (value && *value)
+        snprintf(command + len, sizeof(command) - len,
+                 " -ticksettings=%s", value);
+      else
+        snprintf(command + len, sizeof(command) - len, " -ticksettings");
     } else if (!strcmp(argv[i], "-shade") && i + 1 < argc) {
       strcat(command, " -shade ");
       strcat(command, argv[++i]);
@@ -312,6 +346,21 @@ static int handle3DScatter(int argc, char **argv)
   if (!hasZLabel) {
     appendQuotedOption(command, sizeof(command), "-zlabel", zLabel);
   }
+  if (!hasTicksettingsArg && tickSettings &&
+      (tickSettings->flags & (TICKSET_XTIME | TICKSET_YTIME))) {
+    const int wantX = (tickSettings->flags & TICKSET_XTIME) != 0;
+    const int wantY = (tickSettings->flags & TICKSET_YTIME) != 0;
+    size_t len = strlen(command);
+    if (len < sizeof(command) - 1) {
+      int written = snprintf(command + len, sizeof(command) - len,
+                             " -ticksettings=%s%s%s",
+                             wantX ? "xtime" : "",
+                             (wantX && wantY) ? "," : "",
+                             wantY ? "ytime" : "");
+      if (written < 0 || (size_t)written >= sizeof(command) - len)
+        command[sizeof(command) - 1] = '\0';
+    }
+  }
   char wrapper[8192];
 #if defined(_WIN32)
   snprintf(wrapper, sizeof(wrapper),
@@ -330,7 +379,10 @@ static int handle3DScatter(int argc, char **argv)
 
 long threeD_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
-  if (handle3DScatter(savedCommandlineArgc, savedCommandlineArgv))
+  TICK_SETTINGS *tickSettings = NULL;
+  if (plotspec && plotspec->plot_requests > 0)
+    tickSettings = &plotspec->plot_request[plotspec->plot_requests - 1].tick_settings;
+  if (handle3DScatter(savedCommandlineArgc, savedCommandlineArgv, tickSettings))
     exit(0);
   return 1;
 }
