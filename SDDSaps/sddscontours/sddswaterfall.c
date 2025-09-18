@@ -227,13 +227,19 @@ MOVIE EXPORT:\n\
 EXAMPLES:\n\
   # Basic 3D plot\n\
   sddswaterfall waterfall3d.sdds -singlePage=x,y,z\n\
+\n\
  # surface 3D plot\n\
   sddswaterfall waterfall3d.sdds -singlePage=x,y,z -surface\n\
-  #gnuplot \n\
+\n\
+#gnuplot \n\
   sddswaterfall waterfall3d.sdds -singlePage=x,y,z -gnu \n\
+\n\
   #multiplage example \n\
   sddswaterfall S-LFB:Z:SRAM:SPEC-01.gz  -multipage=S-LFB:Z:SRAM:FREQ,S-LFB:Z:SRAM:SPEC,S-DCCT:CurrentM \n\
   \n\
+  #with cmap option \n\
+  sddswaterfall S-LFB:Z:SRAM:SPEC-01.gz  -multipage=S-LFB:Z:SRAM:FREQ,S-LFB:Z:SRAM:SPEC,S-DCCT:CurrentM -surface -cmap=plasma \n\
+\n\
   # Create rotation animation and export as MP4\n\
   sddswaterfall waterfall3d.sdds -singlePage=x,y,z -rotateView=axis=z,min=-45,max=45,positions=36,pause=0.1 -movieExport=format=mp4,filename=rotation_z_axis,fps=10\n\
   \n\
@@ -348,7 +354,7 @@ void format_tick_improved(float val, char* base_buf, char* exp_buf, size_t bufle
     }
 }
 
-// Color palette function similar to gnuplot (yellow-red-purple-black)
+// Color palette function similar to gnuplot (yellow-red-purple-black) - kept for backward compatibility
 void get_palette_color(float t, float* r, float* g, float* b) {
     // Clamp t to [0,1] range
     if (t < 0.0f) t = 0.0f;
@@ -379,6 +385,116 @@ void get_palette_color(float t, float* r, float* g, float* b) {
         *r = 0.5f - local_t * 0.4f;
         *g = 0.0f;
         *b = 0.5f - local_t * 0.3f;
+    }
+}
+
+// Unified color mapping function that supports different color maps
+void get_color_from_map(double value, double min_val, double max_val, ColorMap cmap, float *r, float *g, float *b) {
+    // Normalize value to [0,1] range
+    float t = 0.0f;
+    if (max_val != min_val) {
+        t = (float)((value - min_val) / (max_val - min_val));
+    }
+    
+    // Clamp t to [0,1] range
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    
+    switch (cmap) {
+        case CMAP_JET:
+            // Jet colormap: blue -> cyan -> green -> yellow -> red
+            if (t < 0.125f) {
+                *r = 0.0f;
+                *g = 0.0f;
+                *b = 0.5f + 4.0f * t;
+            } else if (t < 0.375f) {
+                *r = 0.0f;
+                *g = 4.0f * (t - 0.125f);
+                *b = 1.0f;
+            } else if (t < 0.625f) {
+                *r = 4.0f * (t - 0.375f);
+                *g = 1.0f;
+                *b = 1.0f - 4.0f * (t - 0.375f);
+            } else if (t < 0.875f) {
+                *r = 1.0f;
+                *g = 1.0f - 4.0f * (t - 0.625f);
+                *b = 0.0f;
+            } else {
+                *r = 1.0f - 2.0f * (t - 0.875f);
+                *g = 0.0f;
+                *b = 0.0f;
+            }
+            break;
+            
+        case CMAP_COOLWARM:
+            // Cool-warm colormap: blue -> white -> red
+            if (t < 0.5f) {
+                float local_t = 2.0f * t;
+                *r = local_t;
+                *g = local_t;
+                *b = 1.0f;
+            } else {
+                float local_t = 2.0f * (t - 0.5f);
+                *r = 1.0f;
+                *g = 1.0f - local_t;
+                *b = 1.0f - local_t;
+            }
+            break;
+            
+        case CMAP_VIRIDIS:
+            // Viridis colormap: dark purple -> blue -> green -> yellow
+            if (t < 0.25f) {
+                float local_t = 4.0f * t;
+                *r = 0.267f * local_t;
+                *g = 0.004f + 0.349f * local_t;
+                *b = 0.329f + 0.344f * local_t;
+            } else if (t < 0.5f) {
+                float local_t = 4.0f * (t - 0.25f);
+                *r = 0.267f + 0.081f * local_t;
+                *g = 0.353f + 0.196f * local_t;
+                *b = 0.673f - 0.064f * local_t;
+            } else if (t < 0.75f) {
+                float local_t = 4.0f * (t - 0.5f);
+                *r = 0.348f + 0.478f * local_t;
+                *g = 0.549f + 0.302f * local_t;
+                *b = 0.609f - 0.475f * local_t;
+            } else {
+                float local_t = 4.0f * (t - 0.75f);
+                *r = 0.826f + 0.167f * local_t;
+                *g = 0.851f + 0.145f * local_t;
+                *b = 0.134f + 0.866f * local_t;
+            }
+            break;
+            
+        case CMAP_PLASMA:
+            // Plasma colormap: dark purple -> magenta -> orange -> yellow
+            if (t < 0.25f) {
+                float local_t = 4.0f * t;
+                *r = 0.050f + 0.498f * local_t;
+                *g = 0.030f + 0.074f * local_t;
+                *b = 0.528f + 0.349f * local_t;
+            } else if (t < 0.5f) {
+                float local_t = 4.0f * (t - 0.25f);
+                *r = 0.548f + 0.339f * local_t;
+                *g = 0.104f + 0.215f * local_t;
+                *b = 0.877f - 0.184f * local_t;
+            } else if (t < 0.75f) {
+                float local_t = 4.0f * (t - 0.5f);
+                *r = 0.887f + 0.100f * local_t;
+                *g = 0.319f + 0.434f * local_t;
+                *b = 0.693f - 0.549f * local_t;
+            } else {
+                float local_t = 4.0f * (t - 0.75f);
+                *r = 0.987f + 0.013f * local_t;
+                *g = 0.753f + 0.247f * local_t;
+                *b = 0.144f + 0.856f * local_t;
+            }
+            break;
+            
+        default:
+            // Fallback to jet colormap
+            get_color_from_map(value, min_val, max_val, CMAP_JET, r, g, b);
+            break;
     }
 }
 
@@ -484,18 +600,17 @@ void draw_axes(float xMin, float xMax, float yMin, float yMax, float zMin, float
     const float kStrokeRomanHeight = 119.05f;
     
     // Dynamic scaling factor based on xlabel length to maintain consistent visual font size
-    int xlabel_len = strlen(xlabel);
     float kAxisLabelScaleFactor = 0.01;
     
     float x_range = fabs(xMax - xMin);
     float y_range = fabs(yMax - yMin);
     float z_range = fabs(zMax - zMin);
-    if (x_range < 1e-6f)
+    /* if (x_range < 1e-6f)
         x_range = 1.0f;
     if (y_range < 1e-6f)
         y_range = x_range;
     if (z_range < 1e-6f)
-        z_range = x_range;
+    z_range = x_range; */
 
     float global_scale_x = 2.0f / x_range;
     float global_scale_y = 2.0f / y_range;
@@ -679,16 +794,36 @@ void draw_axes(float xMin, float xMax, float yMin, float yMax, float zMin, float
     glPopMatrix();
    
  
-    // X tick labels with better alignment - moved further from axis for better spacing
+    // Determine overall X-axis exponent for display
+    float abs_max_x = fmax(fabs(xMin), fabs(xMax));
+    int x_overall_exponent = 0;
+    if (abs_max_x != 0) {
+        x_overall_exponent = (int)floor(log10(abs_max_x));
+        x_overall_exponent = (x_overall_exponent / 3) * 3; // Engineering notation
+    }
+
+    // X tick labels with exponential scaling when needed
     for (int i = 0; i <= ticks; ++i) {
         float frac = i / (float)ticks;
-        float x = xMin + frac * (xMax - xMin);
+        float x_actual = xMin + frac * (xMax - xMin);
         char label[24];
-        snprintf(label, sizeof(label), "%.2f", x);
+        
+        // Apply the overall scaling factor to the tick values
+        float x_display_value = x_actual * powf(10.0f, -x_overall_exponent);
+        snprintf(label, sizeof(label), "%.2f", x_display_value);
         
         // Keep exact horizontal positioning, but move further down for better spacing
-        glRasterPos3f(x, yMin - 0.08 * (yMax - yMin), zMin);  // Moved further down
+        glRasterPos3f(x_actual, yMin - 0.08 * (yMax - yMin), zMin);  // Moved further down
         for (char* c = label; *c; c++) glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
+    }
+    
+    // Add dynamic scale indicator for X-axis if exponent is not zero
+    if (x_overall_exponent != 0) {
+        char x_scale_label_str[32];
+        snprintf(x_scale_label_str, sizeof(x_scale_label_str), "x1e%d", x_overall_exponent);
+        glRasterPos3f(xMax, yMin - 0.12f * (yMax - yMin), zMin);
+        for (const char* c = x_scale_label_str; *c; ++c)
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
     }
 
 
@@ -744,12 +879,12 @@ void draw_axes(float xMin, float xMax, float yMin, float yMax, float zMin, float
         glRasterPos3f(xMin - label_offset * (xMax - xMin), yMin, z_actual);
         for (char* c = label; *c; c++) glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
     }
-
-    // Add dynamic scale indicator near Z-axis label if exponent is not zero
+    
+    // Add dynamic scale indicator at the top end of Z-axis if exponent is not zero
     if (z_overall_exponent != 0) {
         char scale_label_str[32];
         snprintf(scale_label_str, sizeof(scale_label_str), "x1e%d", z_overall_exponent);
-        glRasterPos3f(xMin - 0.12f * (xMax - xMin), yMin - 0.08f * (yMax - yMin), (zMin + zMax) / 2 + 0.15f * (zMax - zMin));
+        glRasterPos3f(xMin - 0.15f * (xMax - xMin), yMin, zMax + 0.08f * (zMax - zMin));
         for (const char* c = scale_label_str; *c; ++c)
             glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
     }
@@ -783,12 +918,12 @@ void draw_colorbar(float xMin, float xMax, float yMin, float yMax, float zMin, f
     float segment_height = (bar_z_end - bar_z_start) / color_segments;
     
     for (int i = 0; i < color_segments; i++) {
-        float t = (float)i / (color_segments - 1);  // Normalized position (0 to 1)
+        float z_value = bar_z_start + i * segment_height;  // Actual Z value for this segment
         float r, g, b;
-        get_palette_color(t, &r, &g, &b);
+        get_color_from_map(z_value, zMin, zMax, color_map, &r, &g, &b);
         glColor3f(r, g, b);
         
-        float z_bottom = bar_z_start + i * segment_height;
+        float z_bottom = z_value;
         float z_top = z_bottom + segment_height;
         
         // Draw a colored quad for this segment (vertical along Z-axis)
@@ -811,7 +946,17 @@ void draw_colorbar(float xMin, float xMax, float yMin, float yMax, float zMin, f
     glEnd();
     glLineWidth(1.0f);
     
-    // Add tick marks and labels
+    // Determine overall exponent for scientific notation display (same logic as Z-axis)
+    float abs_max_z = fmax(fabs(zMin), fabs(zMax));
+    int overall_exponent = 0;
+    bool use_scientific = false;
+    if (abs_max_z != 0) {
+        overall_exponent = (int)floor(log10(abs_max_z));
+        overall_exponent = (overall_exponent / 3) * 3; // Engineering notation (same as Z-axis)
+        use_scientific = (abs_max_z < 1e-3 || abs_max_z > 1e4);
+    }
+    
+    // Add tick marks and labels (without individual scientific notation)
     int num_ticks = 5;
     for (int i = 0; i <= num_ticks; i++) {
         float frac = (float)i / num_ticks;
@@ -825,13 +970,11 @@ void draw_colorbar(float xMin, float xMax, float yMin, float yMax, float zMin, f
         glVertex3f(bar_x + bar_width + 0.02f * (xMax - xMin), bar_y, z_pos);
         glEnd();
         
-        // Draw label
+        // Draw label (scaled by overall exponent if using scientific notation)
         char label[32];
-        if (fabs(z_value) < 1e-3 || fabs(z_value) > 1e4) {
-            // Use scientific notation for very small or large numbers
-            int exp = (int)floor(log10(fabs(z_value)));
-            float base = z_value / pow(10, exp);
-            snprintf(label, sizeof(label), "%.1fe%d", base, exp);
+        if (use_scientific) {
+            float scaled_value = z_value / pow(10, overall_exponent);
+            snprintf(label, sizeof(label), "%.2f", scaled_value);
         } else {
             snprintf(label, sizeof(label), "%.3f", z_value);
         }
@@ -842,10 +985,26 @@ void draw_colorbar(float xMin, float xMax, float yMin, float yMax, float zMin, f
         }
     }
     
-    // Add colorbar title
-    glRasterPos3f(bar_x, bar_y, bar_z_end + 0.05f * (zMax - zMin));
+    // Add colorbar title and scientific notation at the top
+    float title_z_pos = bar_z_end + 0.05f * (zMax - zMin);
+    glRasterPos3f(bar_x, bar_y, title_z_pos);
     for (const char* c = zlabel; *c; c++) {
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
+    }
+    
+    // Add scientific notation beside the title if needed
+    if (use_scientific) {
+        char sci_notation[32];
+        snprintf(sci_notation, sizeof(sci_notation), " x10^%d", overall_exponent);
+        
+        // Calculate approximate width of the title to position scientific notation beside it
+        float title_width = strlen(zlabel) * 8.0f;  // Approximate character width
+        float sci_x_pos = bar_x + title_width * 0.001f * (xMax - xMin);  // Scale to world coordinates
+        
+        glRasterPos3f(sci_x_pos, bar_y, title_z_pos);
+        for (const char* c = sci_notation; *c; c++) {
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_10, *c);
+        }
     }
 }
 
@@ -910,17 +1069,15 @@ void draw_scene(void) {
             for (int i = 0; i < POINTS_PER_CURVE; ++i) {
                 // Bottom vertex
                 float z1 = zdata[j][i];
-                float t1 = (z1 - zMin) / (zMax - zMin);  // Normalize for color
                 float r1, g1, b1;
-                get_palette_color(t1, &r1, &g1, &b1);
+                get_color_from_map(z1, zMin, zMax, color_map, &r1, &g1, &b1);
                 glColor3f(r1, g1, b1);
                 glVertex3f(xgrid[i], ygrid[j], z1);
                 
                 // Top vertex
                 float z2 = zdata[j+1][i];
-                float t2 = (z2 - zMin) / (zMax - zMin);  // Normalize for color
                 float r2, g2, b2;
-                get_palette_color(t2, &r2, &g2, &b2);
+                get_color_from_map(z2, zMin, zMax, color_map, &r2, &g2, &b2);
                 glColor3f(r2, g2, b2);
                 glVertex3f(xgrid[i], ygrid[j+1], z2);
             }
@@ -953,35 +1110,12 @@ void draw_scene(void) {
         draw_colorbar(xMin, xMax, yMin, yMax, zMin, zMax);
         
     } else {
-        // Draw waterfall curves with professional color scheme (matching Python)
+        // Draw waterfall curves using the selected color map
         glLineWidth(2.2f);  // Slightly thicker for better visibility
         for (int j = 0; j < NUM_CURVES; ++j) {
-            float t = (float)j / (NUM_CURVES - 1);
-            
-            // Python matplotlib-style color scheme (blue to red via cyan, green, yellow)
+            // Use Y position (ygrid[j]) to determine color based on the selected color map
             float r, g, b;
-            if (t <= 0.25f) {
-                // Blue to cyan
-                r = 0.0f;
-                g = t * 4.0f;
-                b = 1.0f;
-            } else if (t <= 0.5f) {
-                // Cyan to green
-                r = 0.0f;
-                g = 1.0f;
-                b = 1.0f - (t - 0.25f) * 4.0f;
-            } else if (t <= 0.75f) {
-                // Green to yellow
-                r = (t - 0.5f) * 4.0f;
-                g = 1.0f;
-                b = 0.0f;
-            } else {
-                // Yellow to red
-                r = 1.0f;
-                g = 1.0f - (t - 0.75f) * 4.0f;
-                b = 0.0f;
-            }
-            
+            get_color_from_map(ygrid[j], ygrid[0], ygrid[NUM_CURVES-1], color_map, &r, &g, &b);
             glColor3f(r, g, b);
 
             glBegin(GL_LINE_STRIP);
@@ -1278,6 +1412,9 @@ int main(int argc, char** argv) {
 	case SET_CMAP:
 	  if (s_arg[i_arg].n_items < 2) {
 	    fprintf(stderr, "Error: invalid -cmap syntax\n");
+	    fprintf(stderr, "Usage: -cmap=<colormap>\n");
+	    fprintf(stderr, "Available colormaps: 'jet', 'coolwarm', 'viridis', 'plasma'\n");
+	    fprintf(stderr, "Example: -cmap=plasma\n");
 	    exit(1);
 	  }
 	  if (strcmp(s_arg[i_arg].list[1], "jet") == 0) {
@@ -1289,7 +1426,10 @@ int main(int argc, char** argv) {
 	  } else if (strcmp(s_arg[i_arg].list[1], "plasma") == 0) {
 	    color_map = CMAP_PLASMA;
 	  } else {
-	    fprintf(stderr, "Error: invalid colormap. Use 'jet', 'coolwarm', 'viridis', or 'plasma'\n");
+	    fprintf(stderr, "Error: invalid colormap '%s'\n", s_arg[i_arg].list[1]);
+	    fprintf(stderr, "Usage: -cmap=<colormap>\n");
+	    fprintf(stderr, "Available colormaps: 'jet', 'coolwarm', 'viridis', 'plasma'\n");
+	    fprintf(stderr, "Example: -cmap=plasma\n");
 	    exit(1);
 	  }
 	  break;
@@ -1401,11 +1541,11 @@ int main(int argc, char** argv) {
         xlabel[sizeof(xlabel)-1] = '\0';
     }
     if (strcmp(ylabel, "Y") == 0) {  // Only set if still default value
-        strncpy(ylabel, zcol, sizeof(ylabel)-1);
+        strncpy(ylabel, ycol, sizeof(ylabel)-1);
         ylabel[sizeof(ylabel)-1] = '\0';
     }
     if (strcmp(zlabel, "Z") == 0) {  // Only set if still default value
-        strncpy(zlabel, ycol, sizeof(zlabel)-1);
+        strncpy(zlabel, zcol, sizeof(zlabel)-1);
         zlabel[sizeof(zlabel)-1] = '\0';
     }
     
