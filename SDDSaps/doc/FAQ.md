@@ -52,6 +52,7 @@ Use the table of contents below to jump to a specific topic.
 * [3.11 How should I structure commands with multiple `-col` and `-leg` to avoid warnings?](#faq63)
 * [3.12 How can I use a parameter value to define a plot filter range?](#faq38)
 * [3.13 How can I save a plot from sddsplot as an image or PDF file?](#faq73)
+* [3.14 How can I change this command to plot with a log scale?](#faq75)
 
 ---
 
@@ -2475,5 +2476,29 @@ The `-device` option selects the format (e.g., `png` or `postscript`), and `-out
 ### Answer
 
 Yes. `sddseditor` offers an interactive GUI for browsing pages, examining columns and parameters, and performing modifications. It is helpful for quick data checks or manual corrections without writing command-line scripts.
+
+---
+
+## <a id="faq75"></a>How can I change this command to plot with a log scale?
+
+I have the command:
+
+```
+sddsplot logscale_data_random.sdds "-col=Index,(Values)"
+```
+
+### Answer
+
+Add the `-mode` option to request a logarithmic y-axis so that `sddsplot` performs the base-ten transform and draws logarithmic tick marks. Replace the expression with the original data column you want to plot and append `-mode=y=logarithmic,y=specialScales`:
+
+```
+sddsplot logscale_data_random.sdds \
+  "-col=Index,Values" \
+  -mode=y=logarithmic,y=specialScales
+```
+
+Replace `Values` with the actual column name you want on the log axis. `logarithmic` instructs `sddsplot` to take the logarithm of the y data, and `specialScales` enables log-style scales for the axis so the tick marks and labels reflect the logarithmic spacing.
+
+If you already created a `log10` column, keep the existing `-col` request and add `-tickSettings=ylogarithmic` instead so the axis labeling matches the logarithmic data without applying the transform twice.
 
 ---
