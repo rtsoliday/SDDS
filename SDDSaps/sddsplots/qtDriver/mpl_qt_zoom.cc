@@ -89,6 +89,30 @@ void newzoom() {
               xlog_global = 1;
           }
 
+          if (!limitAdded) {
+            if (useScales)
+              snprintf(tmp, strlen(op) + 256,
+                       "-scales=%.10g,%.10g,%.10g,%.10g ",
+                       xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+                       xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+                       ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+                       ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+            else
+              snprintf(tmp, strlen(op) + 256,
+                       "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
+                       xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+                       xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+                       ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+                       ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+            cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
+            strcat(cmd, tmp);
+            limitAdded = 1;
+          }
+        }
+      }
+
+      if ((strncmp(tmp, "-col", 4) == 0) || (strncmp(tmp, "-par", 4) == 0)) {
+        if (!limitAdded) {
           if (useScales)
             snprintf(tmp, strlen(op) + 256,
                      "-scales=%.10g,%.10g,%.10g,%.10g ",
@@ -103,31 +127,11 @@ void newzoom() {
                      xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
                      ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
                      ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+
           cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
           strcat(cmd, tmp);
           limitAdded = 1;
         }
-      }
-
-      if ((strncmp(tmp, "-col", 4) == 0) || (strncmp(tmp, "-par", 4) == 0)) {
-        if (useScales)
-          snprintf(tmp, strlen(op) + 256,
-                   "-scales=%.10g,%.10g,%.10g,%.10g ",
-                   xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                   xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                   ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                   ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-        else
-          snprintf(tmp, strlen(op) + 256,
-                   "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                   xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                   xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                   ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                   ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-
-        cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
-        strcat(cmd, tmp);
-        limitAdded = 1;
         if (is_global)
           is_global = 0;
         xmult = xmult_global;
@@ -151,24 +155,26 @@ void newzoom() {
           if (is_global)
             xmult_global = atof(_tmp2 + 1);
         }
-        if (useScales)
-          snprintf(tmp, strlen(op) + 256,
-                   "-scales=%.10g,%.10g,%.10g,%.10g ",
-                   xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                   xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                   ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                   ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-        else
-          snprintf(tmp, strlen(op) + 256,
-                   "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                   xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                   xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                   ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                   ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+        if (!limitAdded) {
+          if (useScales)
+            snprintf(tmp, strlen(op) + 256,
+                     "-scales=%.10g,%.10g,%.10g,%.10g ",
+                     xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+                     xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+                     ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+                     ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+          else
+            snprintf(tmp, strlen(op) + 256,
+                     "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
+                     xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+                     xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+                     ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+                     ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
 
-        cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
-        strcat(cmd, tmp);
-        limitAdded = 1;
+          cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
+          strcat(cmd, tmp);
+          limitAdded = 1;
+        }
       }
 
       if (strncmp(tmp, "-of", 3) == 0) {
@@ -184,24 +190,26 @@ void newzoom() {
           if (is_global)
             xoff_global = atof(_tmp2 + 1);
         }
-        if (useScales)
-          snprintf(tmp, strlen(op) + 256,
-                   "-scales=%.10g,%.10g,%.10g,%.10g ",
-                   xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                   xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                   ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                   ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-        else
-          snprintf(tmp, strlen(op) + 256,
-                   "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                   xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                   xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                   ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                   ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+        if (!limitAdded) {
+          if (useScales)
+            snprintf(tmp, strlen(op) + 256,
+                     "-scales=%.10g,%.10g,%.10g,%.10g ",
+                     xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+                     xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+                     ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+                     ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+          else
+            snprintf(tmp, strlen(op) + 256,
+                     "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
+                     xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+                     xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+                     ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+                     ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
 
-        cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
-        strcat(cmd, tmp);
-        limitAdded = 1;
+          cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
+          strcat(cmd, tmp);
+          limitAdded = 1;
+        }
       }
 
       if (op[0] != '"') {
