@@ -257,6 +257,7 @@ typedef struct {
 #define SPLIT_POINTS          0x00000040
 #define SPLIT_COMPLETELY      0x00000080
 #define SPLIT_NOCOLORBAR      0x00000100
+#define SPLIT_REVERSE_ORDER   0x00000200
 
 typedef struct {
   char *symbol, *units, *description;
