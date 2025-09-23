@@ -2352,23 +2352,23 @@ int main(int argc, char *argv[]) {
   fileMenu->addAction(saveAction);
   QObject::connect(saveAction, &QAction::triggered, &app, [](bool){ save(); });
 
-  QAction *quitAction = new QAction("Quit", &mainWindow);
+  QAction *quitAction = new QAction("Quit (Q)", &mainWindow);
   fileMenu->addAction(quitAction);
   QObject::connect(quitAction, &QAction::triggered, &app, &QApplication::quit);
 
-  QAction *nextAction = new QAction("Next", &mainWindow);
+  QAction *nextAction = new QAction("Next (N)", &mainWindow);
   navigateMenu->addAction(nextAction);
   QObject::connect(nextAction, &QAction::triggered, [&mainWindow]() {
     nav_next(&mainWindow);
   });
 
-  QAction *previousAction = new QAction("Previous", &mainWindow);
+  QAction *previousAction = new QAction("Previous (P)", &mainWindow);
   navigateMenu->addAction(previousAction);
   QObject::connect(previousAction, &QAction::triggered, [&mainWindow]() {
     nav_previous(&mainWindow);
   });
 
-  QAction *deleteAction = new QAction("Delete", &mainWindow);
+  QAction *deleteAction = new QAction("Delete (D)", &mainWindow);
   navigateMenu->addAction(deleteAction);
   QObject::connect(deleteAction, &QAction::triggered, [&mainWindow]() {
     delete_current(&mainWindow);
@@ -2381,58 +2381,58 @@ int main(int argc, char *argv[]) {
   });
 
   if (optionsMenu) {
-    replotZoomAction = new QAction("Replot when zooming", &mainWindow);
+    replotZoomAction = new QAction("Replot when zooming (Z)", &mainWindow);
     replotZoomAction->setCheckable(true);
     replotZoomAction->setChecked(replotZoom);
     optionsMenu->addAction(replotZoomAction);
     QObject::connect(replotZoomAction, &QAction::toggled, &app, [&](bool checked){replotZoom = checked;});
-    mouseTrackerAction = new QAction("Mouse Tracker", &mainWindow);
+    mouseTrackerAction = new QAction("Mouse Tracker (.)", &mainWindow);
     mouseTrackerAction->setCheckable(true);
     mouseTrackerAction->setChecked(tracking);
     optionsMenu->addAction(mouseTrackerAction);
     QObject::connect(mouseTrackerAction, &QAction::toggled, &app,
                      [&](bool checked) { tracking = checked; });
     QMenu *placementMenu = optionsMenu->addMenu("Placement/Size");
-    QAction *topHalfAction = placementMenu->addAction("Top Half");
+    QAction *topHalfAction = placementMenu->addAction("Top Half (T)");
     QObject::connect(topHalfAction, &QAction::triggered,
                      [&mainWindow]() { placeTopHalf(&mainWindow); });
-    QAction *bottomHalfAction = placementMenu->addAction("Bottom Half");
+    QAction *bottomHalfAction = placementMenu->addAction("Bottom Half (B)");
     QObject::connect(bottomHalfAction, &QAction::triggered,
                      [&mainWindow]() { placeBottomHalf(&mainWindow); });
-    QAction *leftHalfAction = placementMenu->addAction("Left Half");
+    QAction *leftHalfAction = placementMenu->addAction("Left Half (L)");
     QObject::connect(leftHalfAction, &QAction::triggered,
                      [&mainWindow]() { placeLeftHalf(&mainWindow); });
-    QAction *rightHalfAction = placementMenu->addAction("Right Half");
+    QAction *rightHalfAction = placementMenu->addAction("Right Half (R)");
     QObject::connect(rightHalfAction, &QAction::triggered,
                      [&mainWindow]() { placeRightHalf(&mainWindow); });
-    QAction *centerAction = placementMenu->addAction("Center");
+    QAction *centerAction = placementMenu->addAction("Center (C)");
     QObject::connect(centerAction, &QAction::triggered,
                      [&mainWindow]() { placeCenter(&mainWindow); });
     placementMenu->addSeparator();
-    QAction *topLeftAction = placementMenu->addAction("Top-Left Quadrant");
+    QAction *topLeftAction = placementMenu->addAction("Top-Left Quadrant (1)");
     QObject::connect(topLeftAction, &QAction::triggered,
                      [&mainWindow]() { placeQuadrant(&mainWindow, 1); });
-    QAction *topRightAction = placementMenu->addAction("Top-Right Quadrant");
+    QAction *topRightAction = placementMenu->addAction("Top-Right Quadrant (2)");
     QObject::connect(topRightAction, &QAction::triggered,
                      [&mainWindow]() { placeQuadrant(&mainWindow, 2); });
-    QAction *bottomLeftAction = placementMenu->addAction("Bottom-Left Quadrant");
+    QAction *bottomLeftAction = placementMenu->addAction("Bottom-Left Quadrant (3)");
     QObject::connect(bottomLeftAction, &QAction::triggered,
                      [&mainWindow]() { placeQuadrant(&mainWindow, 3); });
-    QAction *bottomRightAction = placementMenu->addAction("Bottom-Right Quadrant");
+    QAction *bottomRightAction = placementMenu->addAction("Bottom-Right Quadrant (4)");
     QObject::connect(bottomRightAction, &QAction::triggered,
                      [&mainWindow]() { placeQuadrant(&mainWindow, 4); });
     placementMenu->addSeparator();
-    QAction *originalSizeAction = placementMenu->addAction("Original Size");
+    QAction *originalSizeAction = placementMenu->addAction("Original Size (0)");
     QObject::connect(originalSizeAction, &QAction::triggered,
                      [&mainWindow]() { restoreOriginalSize(&mainWindow); });
-    QAction *increaseSizeAction = placementMenu->addAction("Increase Size");
+    QAction *increaseSizeAction = placementMenu->addAction("Increase Size (+)");
     QObject::connect(increaseSizeAction, &QAction::triggered,
                      [&mainWindow]() { increaseWindowSize(&mainWindow); });
-    QAction *decreaseSizeAction = placementMenu->addAction("Decrease Size");
+    QAction *decreaseSizeAction = placementMenu->addAction("Decrease Size (-)");
     QObject::connect(decreaseSizeAction, &QAction::triggered,
                      [&mainWindow]() { decreaseWindowSize(&mainWindow); });
     placementMenu->addSeparator();
-    QAction *toggleFullScreenAction = placementMenu->addAction("Toggle Full Screen");
+    QAction *toggleFullScreenAction = placementMenu->addAction("Toggle Full Screen (F)");
     QObject::connect(toggleFullScreenAction, &QAction::triggered,
                      [&mainWindow]() { toggleFullScreen(&mainWindow); });
   }
