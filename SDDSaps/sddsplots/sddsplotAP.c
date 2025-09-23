@@ -1631,7 +1631,7 @@ static char *split_option[SPLIT_OPTIONS] = {
 
 static char *split_usage = "-split={parameterChange=<parameter-name>[,width=<value>][,start=<value>] |\n\
  columnBin=<column-name>,width=<value>[,start=<value>][,completely] |\n\
- pages[,interval=<interval>][,nocolorbar] }\n";
+ pages[,interval=<interval>][,nocolorbar][,reverseOrder] }\n";
 
 long split_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
@@ -1641,7 +1641,7 @@ long split_AP(PLOT_SPEC *plotspec, char **item, long items)
         return bombre("invalid -split syntax", split_usage, 0);
     split = &plotspec->plot_request[plotspec->plot_requests-1].split;
     split->flags = 0;
-    if (!scanItemList(&split->flags, 
+    if (!scanItemList(&split->flags,
                         item, &items,  0,
                         "parameterchange", SDDS_STRING, &split->name, 1, SPLIT_PARAMETERCHANGE,
                         "columnbin", SDDS_STRING, &split->name, 1, SPLIT_COLUMNBIN,
@@ -1649,9 +1649,10 @@ long split_AP(PLOT_SPEC *plotspec, char **item, long items)
                         "interval", SDDS_LONG, &split->interval, 1, SPLIT_PAGES_INTERVAL,
                         "width", SDDS_DOUBLE, &split->width, 1, SPLIT_CHANGE_WIDTH,
                         "start", SDDS_DOUBLE, &split->start, 1, SPLIT_CHANGE_START,
-                        "points", -1, NULL, 0, SPLIT_POINTS, 
+                        "points", -1, NULL, 0, SPLIT_POINTS,
                         "completely", -1, NULL, 0, SPLIT_COMPLETELY,
                         "nocolorbar", -1, NULL, 0, SPLIT_NOCOLORBAR,
+                        "reverseorder", -1, NULL, 0, SPLIT_REVERSE_ORDER,
                       NULL)) {
       return bombre("invalid -split syntax", split_usage, 0);
     }
