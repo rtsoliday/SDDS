@@ -122,6 +122,7 @@ extern "C" {
   FILE* outfile;
 }
 QAction *replotZoomAction;
+QAction *mouseTrackerAction = nullptr;
 QWidget *canvas;
 QMainWindow *mainWindowPointer;
 QT_DATAVIS_NAMESPACE::QAbstract3DGraph *surfaceGraph = nullptr;
@@ -2385,6 +2386,55 @@ int main(int argc, char *argv[]) {
     replotZoomAction->setChecked(replotZoom);
     optionsMenu->addAction(replotZoomAction);
     QObject::connect(replotZoomAction, &QAction::toggled, &app, [&](bool checked){replotZoom = checked;});
+    mouseTrackerAction = new QAction("Mouse Tracker", &mainWindow);
+    mouseTrackerAction->setCheckable(true);
+    mouseTrackerAction->setChecked(tracking);
+    optionsMenu->addAction(mouseTrackerAction);
+    QObject::connect(mouseTrackerAction, &QAction::toggled, &app,
+                     [&](bool checked) { tracking = checked; });
+    QMenu *placementMenu = optionsMenu->addMenu("Placement/Size");
+    QAction *topHalfAction = placementMenu->addAction("Top Half");
+    QObject::connect(topHalfAction, &QAction::triggered,
+                     [&mainWindow]() { placeTopHalf(&mainWindow); });
+    QAction *bottomHalfAction = placementMenu->addAction("Bottom Half");
+    QObject::connect(bottomHalfAction, &QAction::triggered,
+                     [&mainWindow]() { placeBottomHalf(&mainWindow); });
+    QAction *leftHalfAction = placementMenu->addAction("Left Half");
+    QObject::connect(leftHalfAction, &QAction::triggered,
+                     [&mainWindow]() { placeLeftHalf(&mainWindow); });
+    QAction *rightHalfAction = placementMenu->addAction("Right Half");
+    QObject::connect(rightHalfAction, &QAction::triggered,
+                     [&mainWindow]() { placeRightHalf(&mainWindow); });
+    QAction *centerAction = placementMenu->addAction("Center");
+    QObject::connect(centerAction, &QAction::triggered,
+                     [&mainWindow]() { placeCenter(&mainWindow); });
+    placementMenu->addSeparator();
+    QAction *topLeftAction = placementMenu->addAction("Top-Left Quadrant");
+    QObject::connect(topLeftAction, &QAction::triggered,
+                     [&mainWindow]() { placeQuadrant(&mainWindow, 1); });
+    QAction *topRightAction = placementMenu->addAction("Top-Right Quadrant");
+    QObject::connect(topRightAction, &QAction::triggered,
+                     [&mainWindow]() { placeQuadrant(&mainWindow, 2); });
+    QAction *bottomLeftAction = placementMenu->addAction("Bottom-Left Quadrant");
+    QObject::connect(bottomLeftAction, &QAction::triggered,
+                     [&mainWindow]() { placeQuadrant(&mainWindow, 3); });
+    QAction *bottomRightAction = placementMenu->addAction("Bottom-Right Quadrant");
+    QObject::connect(bottomRightAction, &QAction::triggered,
+                     [&mainWindow]() { placeQuadrant(&mainWindow, 4); });
+    placementMenu->addSeparator();
+    QAction *originalSizeAction = placementMenu->addAction("Original Size");
+    QObject::connect(originalSizeAction, &QAction::triggered,
+                     [&mainWindow]() { restoreOriginalSize(&mainWindow); });
+    QAction *increaseSizeAction = placementMenu->addAction("Increase Size");
+    QObject::connect(increaseSizeAction, &QAction::triggered,
+                     [&mainWindow]() { increaseWindowSize(&mainWindow); });
+    QAction *decreaseSizeAction = placementMenu->addAction("Decrease Size");
+    QObject::connect(decreaseSizeAction, &QAction::triggered,
+                     [&mainWindow]() { decreaseWindowSize(&mainWindow); });
+    placementMenu->addSeparator();
+    QAction *toggleFullScreenAction = placementMenu->addAction("Toggle Full Screen");
+    QObject::connect(toggleFullScreenAction, &QAction::triggered,
+                     [&mainWindow]() { toggleFullScreen(&mainWindow); });
   }
   
   QAction *contentsAction = new QAction("Contents", &mainWindow);

@@ -1,6 +1,7 @@
 #include "mpl_qt.h"
 #include <QtDataVisualization/Q3DTheme>
 #include <QColor>
+#include <QGuiApplication>
 #include <QLabel>
 #include <QList>
 #include <QPalette>
@@ -444,6 +445,125 @@ void mouse_tracking(QMainWindow *mainWindow) {
   tracking = !tracking;
 }
 
+static QRect availableGeometry(QMainWindow *mainWindow) {
+  QScreen *screen = nullptr;
+  if (mainWindow->windowHandle())
+    screen = mainWindow->windowHandle()->screen();
+  if (!screen)
+    screen = QGuiApplication::primaryScreen();
+  if (screen)
+    return screen->availableGeometry();
+  return QRect();
+}
+
+void placeBottomHalf(QMainWindow *mainWindow) {
+  QRect screenGeometry = availableGeometry(mainWindow);
+  if (!screenGeometry.isValid())
+    return;
+  int width = screenGeometry.width();
+  int height = screenGeometry.height() / 2;
+  mainWindow->showNormal();
+  mainWindow->setGeometry(screenGeometry.x(), screenGeometry.y() + height,
+                          width, height);
+}
+
+void placeTopHalf(QMainWindow *mainWindow) {
+  QRect screenGeometry = availableGeometry(mainWindow);
+  if (!screenGeometry.isValid())
+    return;
+  int width = screenGeometry.width();
+  int height = screenGeometry.height() / 2;
+  mainWindow->showNormal();
+  mainWindow->setGeometry(screenGeometry.x(), screenGeometry.y(), width,
+                          height);
+}
+
+void placeLeftHalf(QMainWindow *mainWindow) {
+  QRect screenGeometry = availableGeometry(mainWindow);
+  if (!screenGeometry.isValid())
+    return;
+  int width = screenGeometry.width() / 2;
+  int height = screenGeometry.height();
+  mainWindow->showNormal();
+  mainWindow->setGeometry(screenGeometry.x(), screenGeometry.y(), width,
+                          height);
+}
+
+void placeRightHalf(QMainWindow *mainWindow) {
+  QRect screenGeometry = availableGeometry(mainWindow);
+  if (!screenGeometry.isValid())
+    return;
+  int width = screenGeometry.width() / 2;
+  int height = screenGeometry.height();
+  mainWindow->showNormal();
+  mainWindow->setGeometry(screenGeometry.x() + width, screenGeometry.y(),
+                          width, height);
+}
+
+void placeCenter(QMainWindow *mainWindow) {
+  QRect screenGeometry = availableGeometry(mainWindow);
+  if (!screenGeometry.isValid())
+    return;
+  int width = screenGeometry.width() / 2;
+  int height = screenGeometry.height() / 2;
+  int x = screenGeometry.x() + (screenGeometry.width() - width) / 2;
+  int y = screenGeometry.y() + (screenGeometry.height() - height) / 2;
+  mainWindow->showNormal();
+  mainWindow->setGeometry(x, y, width, height);
+}
+
+void placeQuadrant(QMainWindow *mainWindow, int quadrant) {
+  QRect screenGeometry = availableGeometry(mainWindow);
+  if (!screenGeometry.isValid())
+    return;
+  int width = screenGeometry.width() / 2;
+  int height = screenGeometry.height() / 2;
+  int x = screenGeometry.x();
+  int y = screenGeometry.y();
+  switch (quadrant) {
+  case 2:
+    x += width;
+    break;
+  case 3:
+    y += height;
+    break;
+  case 4:
+    x += width;
+    y += height;
+    break;
+  default:
+    break;
+  }
+  mainWindow->showNormal();
+  mainWindow->setGeometry(x, y, width, height);
+}
+
+void restoreOriginalSize(QMainWindow *mainWindow) {
+  mainWindow->showNormal();
+  mainWindow->resize(WIDTH + 20, HEIGHT + 40);
+}
+
+void increaseWindowSize(QMainWindow *mainWindow) {
+  mainWindow->showNormal();
+  QSize size = mainWindow->size();
+  mainWindow->resize(static_cast<int>(size.width() * 1.2),
+                     static_cast<int>(size.height() * 1.2));
+}
+
+void decreaseWindowSize(QMainWindow *mainWindow) {
+  mainWindow->showNormal();
+  QSize size = mainWindow->size();
+  mainWindow->resize(static_cast<int>(size.width() * 0.8),
+                     static_cast<int>(size.height() * 0.8));
+}
+
+void toggleFullScreen(QMainWindow *mainWindow) {
+  if (mainWindow->isMaximized())
+    mainWindow->showNormal();
+  else
+    mainWindow->showMaximized();
+}
+
 void to_number(QMainWindow *mainWindow) {
   if (plotStack) {
     bool ok;
@@ -512,75 +632,30 @@ void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
   QShortcut *shortcut_M = new QShortcut(QKeySequence(Qt::Key_M), mainWindow);
   QShortcut *shortcut_LT = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Comma), mainWindow);
   QShortcut *shortcut_GT = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Period), mainWindow);
-  QObject::connect(shortcut_B, &QShortcut::activated, [mainWindow](){
-    QScreen *screen = mainWindow->windowHandle()->screen();
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    QRect screenGeometry = screen->availableGeometry();
-    int width = screenGeometry.width();
-    int height = screenGeometry.height() / 2;
-    mainWindow->showNormal();
-    mainWindow->setGeometry(screenGeometry.x(), screenGeometry.y() + height, width, height);
-  });
-  QObject::connect(shortcut_C, &QShortcut::activated, [mainWindow](){
-    QScreen *screen = mainWindow->windowHandle()->screen();
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    QRect screenGeometry = screen->availableGeometry();
-    int width = screenGeometry.width() / 2;
-    int height = screenGeometry.height() / 2;
-    mainWindow->showNormal();
-    mainWindow->setGeometry(screenGeometry.x() + (width / 2), screenGeometry.y() + (height / 2), width, height);
-  });
+  QObject::connect(shortcut_B, &QShortcut::activated,
+                   [mainWindow]() { placeBottomHalf(mainWindow); });
+  QObject::connect(shortcut_C, &QShortcut::activated,
+                   [mainWindow]() { placeCenter(mainWindow); });
   QObject::connect(shortcut_D, &QShortcut::activated, [mainWindow](){
     delete_current(mainWindow);
   });
-  QObject::connect(shortcut_F, &QShortcut::activated, [mainWindow](){
-    if (mainWindow->isMaximized()) {
-      mainWindow->showNormal();
-    } else {
-      mainWindow->showMaximized();
-    }
-  });
-  QObject::connect(shortcut_L, &QShortcut::activated, [mainWindow](){
-    QScreen *screen = mainWindow->windowHandle()->screen();
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    QRect screenGeometry = screen->availableGeometry();
-    int width = screenGeometry.width() / 2;
-    int height = screenGeometry.height();
-    mainWindow->showNormal();
-    mainWindow->setGeometry(screenGeometry.x(), screenGeometry.y(), width, height);
-  });
+  QObject::connect(shortcut_F, &QShortcut::activated,
+                   [mainWindow]() { toggleFullScreen(mainWindow); });
+  QObject::connect(shortcut_L, &QShortcut::activated,
+                   [mainWindow]() { placeLeftHalf(mainWindow); });
   QObject::connect(shortcut_N, &QShortcut::activated, [mainWindow](){
     nav_next(mainWindow);
   });
   QObject::connect(shortcut_P, &QShortcut::activated, [mainWindow](){
     nav_previous(mainWindow);
   });
-  QObject::connect(shortcut_R, &QShortcut::activated, [mainWindow](){
-    QScreen *screen = mainWindow->windowHandle()->screen();
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    QRect screenGeometry = screen->availableGeometry();
-    int width = screenGeometry.width() / 2;
-    int height = screenGeometry.height();
-    mainWindow->showNormal();
-    mainWindow->setGeometry(screenGeometry.x() + width, screenGeometry.y(), width, height);
-  });
+  QObject::connect(shortcut_R, &QShortcut::activated,
+                   [mainWindow]() { placeRightHalf(mainWindow); });
   QObject::connect(shortcut_Q, &QShortcut::activated, [](){
     quit();
   });
-  QObject::connect(shortcut_T, &QShortcut::activated, [mainWindow](){
-    QScreen *screen = mainWindow->windowHandle()->screen();
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    QRect screenGeometry = screen->availableGeometry();
-    int width = screenGeometry.width();
-    int height = screenGeometry.height() / 2;
-    mainWindow->showNormal();
-    mainWindow->setGeometry(screenGeometry.x(), screenGeometry.y(), width, height);
-  });
+  QObject::connect(shortcut_T, &QShortcut::activated,
+                   [mainWindow]() { placeTopHalf(mainWindow); });
   shortcut_W->setContext(Qt::ApplicationShortcut);
   QObject::connect(shortcut_W, &QShortcut::activated, []() {
     whiteTheme = !whiteTheme;
@@ -592,60 +667,24 @@ void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
       replotZoomAction->setChecked(replotZoom);
     });
   }
-  QObject::connect(shortcut_0, &QShortcut::activated, [mainWindow](){
-    mainWindow->showNormal();
-    mainWindow->resize(WIDTH + 20, HEIGHT + 40);
-  });
-  QObject::connect(shortcut_1, &QShortcut::activated, [mainWindow](){
-    QScreen *screen = mainWindow->windowHandle()->screen();
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    QRect screenGeometry = screen->availableGeometry();
-    int width = screenGeometry.width() / 2;
-    int height = screenGeometry.height() / 2;
-    mainWindow->showNormal();
-    mainWindow->setGeometry(screenGeometry.x(), screenGeometry.y(), width, height);
-  });
-  QObject::connect(shortcut_2, &QShortcut::activated, [mainWindow](){
-    QScreen *screen = mainWindow->windowHandle()->screen();
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    QRect screenGeometry = screen->availableGeometry();
-    int width = screenGeometry.width() / 2;
-    int height = screenGeometry.height() / 2;
-    mainWindow->showNormal();
-    mainWindow->setGeometry(screenGeometry.x() + width, screenGeometry.y(), width, height);
-  });
-  QObject::connect(shortcut_3, &QShortcut::activated, [mainWindow](){
-    QScreen *screen = mainWindow->windowHandle()->screen();
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    QRect screenGeometry = screen->availableGeometry();
-    int width = screenGeometry.width() / 2;
-    int height = screenGeometry.height() / 2;
-    mainWindow->showNormal();
-    mainWindow->setGeometry(screenGeometry.x(), screenGeometry.y() + height, width, height);
-  });
-  QObject::connect(shortcut_4, &QShortcut::activated, [mainWindow](){
-    QScreen *screen = mainWindow->windowHandle()->screen();
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    QRect screenGeometry = screen->availableGeometry();
-    int width = screenGeometry.width() / 2;
-    int height = screenGeometry.height() / 2;
-    mainWindow->showNormal();
-    mainWindow->setGeometry(screenGeometry.x() + width, screenGeometry.y() + height, width, height);
-  });
-  QObject::connect(shortcut_Plus, &QShortcut::activated, [mainWindow](){
-    mainWindow->showNormal();
-    mainWindow->resize(mainWindow->size().width() * 1.2, mainWindow->size().height() * 1.2);
-  });
-  QObject::connect(shortcut_Minus, &QShortcut::activated, [mainWindow](){
-    mainWindow->showNormal();
-    mainWindow->resize(mainWindow->size().width() * .8, mainWindow->size().height() * .8);
-  });
-  QObject::connect(shortcut_Period, &QShortcut::activated, [mainWindow](){
+  QObject::connect(shortcut_0, &QShortcut::activated,
+                   [mainWindow]() { restoreOriginalSize(mainWindow); });
+  QObject::connect(shortcut_1, &QShortcut::activated,
+                   [mainWindow]() { placeQuadrant(mainWindow, 1); });
+  QObject::connect(shortcut_2, &QShortcut::activated,
+                   [mainWindow]() { placeQuadrant(mainWindow, 2); });
+  QObject::connect(shortcut_3, &QShortcut::activated,
+                   [mainWindow]() { placeQuadrant(mainWindow, 3); });
+  QObject::connect(shortcut_4, &QShortcut::activated,
+                   [mainWindow]() { placeQuadrant(mainWindow, 4); });
+  QObject::connect(shortcut_Plus, &QShortcut::activated,
+                   [mainWindow]() { increaseWindowSize(mainWindow); });
+  QObject::connect(shortcut_Minus, &QShortcut::activated,
+                   [mainWindow]() { decreaseWindowSize(mainWindow); });
+  QObject::connect(shortcut_Period, &QShortcut::activated, [mainWindow]() {
     mouse_tracking(mainWindow);
+    if (mouseTrackerAction)
+      mouseTrackerAction->setChecked(tracking);
   });
   QObject::connect(shortcut_M, &QShortcut::activated, [mainWindow](){
     // Play movie: iterate through all plots

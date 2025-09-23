@@ -110,6 +110,7 @@ extern FILE *ifp;
 
 extern QWidget *canvas;
 extern QAction *replotZoomAction;
+extern QAction *mouseTrackerAction;
 extern QT_DATAVIS_NAMESPACE::QAbstract3DGraph *surfaceGraph;
 extern QWidget *surfaceContainer;
 extern QStackedWidget *plotStack;
@@ -142,6 +143,16 @@ void nav_previous(QMainWindow *mainWindow);
 void delete_current(QMainWindow *mainWindow);
 void to_number(QMainWindow *mainWindow);
 void mouse_tracking(QMainWindow *mainWindow);
+void placeBottomHalf(QMainWindow *mainWindow);
+void placeTopHalf(QMainWindow *mainWindow);
+void placeLeftHalf(QMainWindow *mainWindow);
+void placeRightHalf(QMainWindow *mainWindow);
+void placeCenter(QMainWindow *mainWindow);
+void placeQuadrant(QMainWindow *mainWindow, int quadrant);
+void restoreOriginalSize(QMainWindow *mainWindow);
+void increaseWindowSize(QMainWindow *mainWindow);
+void decreaseWindowSize(QMainWindow *mainWindow);
+void toggleFullScreen(QMainWindow *mainWindow);
 
 #define LINE_TABLE_DEFINE_COLOR 0x0001
 #define LINE_TABLE_DEFINE_THICKNESS 0x0002
