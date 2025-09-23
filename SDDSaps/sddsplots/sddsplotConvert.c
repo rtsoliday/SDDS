@@ -1085,6 +1085,18 @@ void columnbin_sddsplot_data(PLOT_SPEC *plspec)
           plspec->dataset[jset].points = keepers;
           start = end;
         }
+        /* Reverse the order of binned datasets if requested */
+        if (plreq->split.flags&SPLIT_REVERSE_ORDER) {
+          for (j=0; j<bins/2; j++) {
+            PLOT_DATA tmp = plspec->dataset[iset + j];
+            plspec->dataset[iset + j] = plspec->dataset[iset + bins - 1 - j];
+            plspec->dataset[iset + bins - 1 - j] = tmp;
+          }
+          /* Renumber subpages to reflect new order */
+          for (j=0; j<bins; j++) {
+            plspec->dataset[iset + j].subpage = j;
+          }
+        }
         iset += bins-1;
         plspec->datasets += bins-1;
       }
