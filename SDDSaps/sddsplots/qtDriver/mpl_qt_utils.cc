@@ -671,7 +671,16 @@ void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
       replotZoom = !replotZoom;
       replotZoomAction->setChecked(replotZoom);
     });
-    QObject::connect(shortcut_Colon, &QShortcut::activated, []() {
+    QObject::connect(shortcut_Colon, &QShortcut::activated, [mainWindow]() {
+      if (!tracking) {
+        mouse_tracking(mainWindow);
+        if (mouseTrackerAction)
+          mouseTrackerAction->setChecked(tracking);
+      }
+      if (hasRelativeMouseAnchor()) {
+        clearRelativeMouseAnchor();
+        return;
+      }
       captureRelativeMouseAnchor();
     });
   }

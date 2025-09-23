@@ -1775,6 +1775,9 @@ public:
     m_anchorX = 0.0;
     m_anchorY = 0.0;
   }
+  bool hasRelativeAnchor() const {
+    return m_hasRelativeAnchor;
+  }
 protected:
   void mousePressEvent(QMouseEvent *event) override {
     if (event->button() == Qt::LeftButton) {
@@ -2141,6 +2144,15 @@ void clearRelativeMouseAnchor() {
   if (!plotCanvas)
     return;
   plotCanvas->clearRelativeAnchor();
+}
+
+bool hasRelativeMouseAnchor() {
+  if (!canvas)
+    return false;
+  Canvas *plotCanvas = qobject_cast<Canvas *>(canvas);
+  if (!plotCanvas)
+    return false;
+  return plotCanvas->hasRelativeAnchor();
 }
 
 class HelpDialog : public QDialog {
