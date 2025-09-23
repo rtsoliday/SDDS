@@ -143,6 +143,8 @@ void nav_previous(QMainWindow *mainWindow);
 void delete_current(QMainWindow *mainWindow);
 void to_number(QMainWindow *mainWindow);
 void mouse_tracking(QMainWindow *mainWindow);
+void captureRelativeMouseAnchor();
+void clearRelativeMouseAnchor();
 void placeBottomHalf(QMainWindow *mainWindow);
 void placeTopHalf(QMainWindow *mainWindow);
 void placeLeftHalf(QMainWindow *mainWindow);

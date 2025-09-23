@@ -443,6 +443,8 @@ void delete_current(QMainWindow *mainWindow) {
 
 void mouse_tracking(QMainWindow *mainWindow) {
   tracking = !tracking;
+  if (!tracking)
+    clearRelativeMouseAnchor();
 }
 
 static QRect availableGeometry(QMainWindow *mainWindow) {
@@ -629,6 +631,9 @@ void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
   QShortcut *shortcut_Plus = new QShortcut(QKeySequence(Qt::Key_Plus), mainWindow);
   QShortcut *shortcut_Minus = new QShortcut(QKeySequence(Qt::Key_Minus), mainWindow);
   QShortcut *shortcut_Period = new QShortcut(QKeySequence(Qt::Key_Period), mainWindow);
+  QShortcut *shortcut_Colon = nullptr;
+  if (!for3D)
+    shortcut_Colon = new QShortcut(QKeySequence(Qt::Key_Colon), mainWindow);
   QShortcut *shortcut_M = new QShortcut(QKeySequence(Qt::Key_M), mainWindow);
   QShortcut *shortcut_LT = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Comma), mainWindow);
   QShortcut *shortcut_GT = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Period), mainWindow);
@@ -665,6 +670,9 @@ void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
     QObject::connect(shortcut_Z, &QShortcut::activated, []() {
       replotZoom = !replotZoom;
       replotZoomAction->setChecked(replotZoom);
+    });
+    QObject::connect(shortcut_Colon, &QShortcut::activated, []() {
+      captureRelativeMouseAnchor();
     });
   }
   QObject::connect(shortcut_0, &QShortcut::activated,

@@ -38,6 +38,7 @@
 #include <QtDataVisualization/QLogValue3DAxisFormatter>
 #include <QtDataVisualization/QValue3DAxisFormatter>
 #include <QLinearGradient>
+#include <QCursor>
 #include <QColor>
 #include <QFile>
 #include <QTextStream>
@@ -1757,6 +1758,23 @@ public:
     connect(m_resizeTimer, &QTimer::timeout, this, &Canvas::resizeFinished);
     setMouseTracking(true);
   }
+  void setRelativeAnchorFromGlobal(const QPoint &globalPos) {
+    QPoint localPos = mapFromGlobal(globalPos);
+    if (!rect().contains(localPos)) {
+      m_hasRelativeAnchor = false;
+      return;
+    }
+    double userX = Xvalue(localPos.x());
+    double userY = Yvalue(localPos.y());
+    m_anchorX = MTRACKX(userX);
+    m_anchorY = MTRACKY(userY);
+    m_hasRelativeAnchor = true;
+  }
+  void clearRelativeAnchor() {
+    m_hasRelativeAnchor = false;
+    m_anchorX = 0.0;
+    m_anchorY = 0.0;
+  }
 protected:
   void mousePressEvent(QMouseEvent *event) override {
     if (event->button() == Qt::LeftButton) {
@@ -1816,9 +1834,18 @@ protected:
             rubberBand->setGeometry(QRect(origin, pos).normalized());
         }
         if (tracking) {
+            double displayX = MTRACKX(Xvalue(pos.x()));
+            double displayY = MTRACKY(Yvalue(pos.y()));
             QString tipText = QString("x: %1, y: %2")
-                .arg(MTRACKX(Xvalue(pos.x())), 0, 'g', 10)
-                .arg(MTRACKY(Yvalue(pos.y())), 0, 'g', 10);
+                .arg(displayX, 0, 'g', 10)
+                .arg(displayY, 0, 'g', 10);
+            if (m_hasRelativeAnchor) {
+                double relX = displayX - m_anchorX;
+                double relY = displayY - m_anchorY;
+                tipText += QString("\nxrel: %1, yrel: %2")
+                               .arg(relX, 0, 'g', 10)
+                               .arg(relY, 0, 'g', 10);
+            }
             QToolTip::showText(globalPos, tipText, this);
             QFrame::mouseMoveEvent(event);
         }
@@ -2090,10 +2117,31 @@ private slots:
 private:
   QRubberBand *rubberBand;
   QPoint origin;
-  bool m_resizing;
+  bool m_resizing = false;
   QPixmap m_buffer;
   QTimer *m_resizeTimer;
+  bool m_hasRelativeAnchor = false;
+  double m_anchorX = 0.0;
+  double m_anchorY = 0.0;
 };
+
+void captureRelativeMouseAnchor() {
+  if (!canvas)
+    return;
+  Canvas *plotCanvas = qobject_cast<Canvas *>(canvas);
+  if (!plotCanvas)
+    return;
+  plotCanvas->setRelativeAnchorFromGlobal(QCursor::pos());
+}
+
+void clearRelativeMouseAnchor() {
+  if (!canvas)
+    return;
+  Canvas *plotCanvas = qobject_cast<Canvas *>(canvas);
+  if (!plotCanvas)
+    return;
+  plotCanvas->clearRelativeAnchor();
+}
 
 class HelpDialog : public QDialog {
     Q_OBJECT
@@ -2153,6 +2201,7 @@ Ctrl + Mouse wheel (scatter plots) - adjust point size\n\
 Other keyboard shortcuts:\n\
 w - toggle white/black theme\n\
 . - toggle mouse tracking\n\
+: - set mouse tracker origin\n\
 q - quit");
         layout->addWidget(textEdit);
         setLayout(layout);
@@ -2386,12 +2435,16 @@ int main(int argc, char *argv[]) {
     replotZoomAction->setChecked(replotZoom);
     optionsMenu->addAction(replotZoomAction);
     QObject::connect(replotZoomAction, &QAction::toggled, &app, [&](bool checked){replotZoom = checked;});
-    mouseTrackerAction = new QAction("Mouse Tracker (.)", &mainWindow);
+    mouseTrackerAction = new QAction("Mouse Tracker (.) / Origin (:)", &mainWindow);
     mouseTrackerAction->setCheckable(true);
     mouseTrackerAction->setChecked(tracking);
     optionsMenu->addAction(mouseTrackerAction);
     QObject::connect(mouseTrackerAction, &QAction::toggled, &app,
-                     [&](bool checked) { tracking = checked; });
+                     [&](bool checked) {
+                       tracking = checked;
+                       if (!tracking)
+                         clearRelativeMouseAnchor();
+                     });
     QMenu *placementMenu = optionsMenu->addMenu("Placement/Size");
     QAction *topHalfAction = placementMenu->addAction("Top Half (T)");
     QObject::connect(topHalfAction, &QAction::triggered,
