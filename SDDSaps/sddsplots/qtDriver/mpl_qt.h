@@ -146,6 +146,7 @@ void mouse_tracking(QMainWindow *mainWindow);
 void captureRelativeMouseAnchor();
 void clearRelativeMouseAnchor();
 bool hasRelativeMouseAnchor();
+void refreshCanvas();
 void placeBottomHalf(QMainWindow *mainWindow);
 void placeTopHalf(QMainWindow *mainWindow);
 void placeLeftHalf(QMainWindow *mainWindow);
