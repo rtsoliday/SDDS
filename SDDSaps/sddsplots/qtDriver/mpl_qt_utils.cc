@@ -8,6 +8,13 @@
 
 bool whiteTheme = false;
 
+void refreshCanvas() {
+  if (!canvas)
+    return;
+  canvas->update();
+  canvas->repaint();
+}
+
 int allocspectrum() {
   int n, ok = 1, k;
   double hue;
@@ -189,7 +196,7 @@ void onBlack() {
     colorsalloc[n] = 1;
   }
   currentcolor = white;
-  canvas->update();
+  refreshCanvas();
 }
 
 void onWhite() {
@@ -200,7 +207,7 @@ void onWhite() {
     colorsalloc[n] = 1;
   }
   currentcolor = black;
-  canvas->update();
+  refreshCanvas();
 }
 
 struct COORDREC *makecoordrec() {
@@ -391,7 +398,7 @@ void nav_next(QMainWindow *mainWindow) {
     QApplication::beep();
   } else {
     cur = cur->next;
-    canvas->update();
+    refreshCanvas();
     QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
     mainWindow->setWindowTitle(wtitle);
   }
@@ -420,7 +427,7 @@ void nav_previous(QMainWindow *mainWindow) {
     QApplication::beep();
   } else {
     cur = cur->prev;
-    canvas->update();
+    refreshCanvas();
     QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
     mainWindow->setWindowTitle(wtitle);
   }
@@ -435,7 +442,7 @@ void delete_current(QMainWindow *mainWindow) {
     QApplication::beep();
   } else {
     destroyplotrec(cur);
-    canvas->update();
+    refreshCanvas();
     QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
     mainWindow->setWindowTitle(wtitle);
   }
@@ -602,7 +609,7 @@ void to_number(QMainWindow *mainWindow) {
     cur = last;
     while (number <  cur->nplot)
       cur = cur->prev;
-    canvas->update();
+    refreshCanvas();
     QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
     mainWindow->setWindowTitle(wtitle);
   }
@@ -710,7 +717,7 @@ void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
         cur = cur->prev;
     usecoordn = 0;
     for (;;) {
-        canvas->update();
+        refreshCanvas();
         QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
         mainWindow->setWindowTitle(wtitle);
         QTime dieTime = QTime::currentTime().addMSecs(100);
@@ -726,14 +733,14 @@ void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
     while (cur->prev)
       cur = cur->prev;
     usecoordn = 0;
-    canvas->update();
+    refreshCanvas();
     QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
     mainWindow->setWindowTitle(wtitle);
   });
   QObject::connect(shortcut_GT, &QShortcut::activated, [mainWindow](){
     cur = last;
     usecoordn = 0;
-    canvas->update();
+    refreshCanvas();
     QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
     mainWindow->setWindowTitle(wtitle);
   });
