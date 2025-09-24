@@ -54,7 +54,7 @@ long readdata() {
 
       /* Display the plot */
       if (domovie || (keep > 0) || (curwrite->nplot == currentPlot)) {
-        canvas->update();
+        refreshCanvas();
         displayed = true;
         if (domovie || (keep > 0)) {
           return 0;
@@ -124,7 +124,7 @@ long readdata() {
   }
   if (feof(input)) {
     if (!displayed) {
-      canvas->update();
+      refreshCanvas();
     }
     domovie = false;
     return 1;
