@@ -2717,7 +2717,7 @@ int main(int argc, char *argv[]) {
           cur = last;
           while (cur->prev && cur->nplot > currentPlot)
             cur = cur->prev;
-          canvas->update();
+          refreshCanvas();
           QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
           mainWindow.setWindowTitle(wtitle);
         }
