@@ -1,21 +1,20 @@
 #include "mpl_qt.h"
 #include <cstring>
+#include <string>
 
 void newzoom() {
   char *original = NULL;
   char *op = NULL;
   char *tmp = NULL;
-  char *cmd = NULL;
   char *_tmp1 = NULL;
   char *_tmp2 = NULL;
   long is_global;
-  int len0 = strlen(sddsplotCommandline2) + 1024;
   int useScales = 0;
   int limitAdded = 0;
   char *clcopy = NULL;
-
-  cmd = (char*)malloc(sizeof(char) * len0);
-  strcpy(cmd, "");
+  std::string prefix;
+  std::string postLimit;
+  std::string limitString;
 
   if (sddsplotCommandline2) {
     clcopy = (char*)malloc(sizeof(char) * (strlen(sddsplotCommandline2) + 1));
@@ -51,6 +50,49 @@ void newzoom() {
     original = (char*)malloc(sizeof(char) * (int)(strlen(sddsplotCommandline2) + 256));
     strcpy(original, sddsplotCommandline2);
     is_global = 1;
+
+    auto appendToken = [&](const char *token) {
+      std::string entry;
+      if (token[0] != '"') {
+        entry += "'";
+        entry += token;
+        entry += "' ";
+      } else {
+        entry += " ";
+        entry += token;
+        entry += " ";
+      }
+      if (limitAdded)
+        postLimit += entry;
+      else
+        prefix += entry;
+    };
+
+    auto updateLimitString = [&]() {
+      char buffer[512];
+      if (useScales)
+        snprintf(buffer, sizeof(buffer),
+                 "-scales=%.10g,%.10g,%.10g,%.10g ",
+                 xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+                 xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+                 ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+                 ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+      else
+        snprintf(buffer, sizeof(buffer),
+                 "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
+                 xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+                 xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+                 ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+                 ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+      limitString = buffer;
+    };
+
+    auto ensureLimitString = [&]() {
+      if (!limitAdded)
+        limitAdded = 1;
+      updateLimitString();
+    };
+
     while ((op = get_token_t(original, (char*)"'"))) {
       tmp = (char*)malloc(sizeof(char) * (int)(strlen(op) + 256));
       str_tolower(strcpy(tmp, op));
@@ -73,7 +115,6 @@ void newzoom() {
           fprintf(stderr, "New Zoom feature can not handle option -mode with normalize, offset, eoffset,center, meanCenter,coffset,coffset, and fractionalDeviation keywords\n");
           free(tmp);
           free(op);
-          free(cmd);
           free(original);
           return;
         }
@@ -89,49 +130,12 @@ void newzoom() {
               xlog_global = 1;
           }
 
-          if (!limitAdded) {
-            if (useScales)
-              snprintf(tmp, strlen(op) + 256,
-                       "-scales=%.10g,%.10g,%.10g,%.10g ",
-                       xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                       xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                       ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                       ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-            else
-              snprintf(tmp, strlen(op) + 256,
-                       "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                       xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                       xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                       ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                       ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-            cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
-            strcat(cmd, tmp);
-            limitAdded = 1;
-          }
+          ensureLimitString();
         }
       }
 
       if ((strncmp(tmp, "-col", 4) == 0) || (strncmp(tmp, "-par", 4) == 0)) {
-        if (!limitAdded) {
-          if (useScales)
-            snprintf(tmp, strlen(op) + 256,
-                     "-scales=%.10g,%.10g,%.10g,%.10g ",
-                     xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                     xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                     ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                     ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-          else
-            snprintf(tmp, strlen(op) + 256,
-                     "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                     xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                     xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                     ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                     ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-
-          cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
-          strcat(cmd, tmp);
-          limitAdded = 1;
-        }
+        ensureLimitString();
         if (is_global)
           is_global = 0;
         xmult = xmult_global;
@@ -140,6 +144,7 @@ void newzoom() {
         xoff = xoff_global;
         xlog = xlog_global;
         ylog = ylog_global;
+        updateLimitString();
       }
 
       if (strncmp(tmp, "-fa", 3) == 0) {
@@ -155,26 +160,7 @@ void newzoom() {
           if (is_global)
             xmult_global = atof(_tmp2 + 1);
         }
-        if (!limitAdded) {
-          if (useScales)
-            snprintf(tmp, strlen(op) + 256,
-                     "-scales=%.10g,%.10g,%.10g,%.10g ",
-                     xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                     xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                     ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                     ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-          else
-            snprintf(tmp, strlen(op) + 256,
-                     "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                     xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                     xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                     ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                     ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-
-          cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
-          strcat(cmd, tmp);
-          limitAdded = 1;
-        }
+        ensureLimitString();
       }
 
       if (strncmp(tmp, "-of", 3) == 0) {
@@ -190,76 +176,39 @@ void newzoom() {
           if (is_global)
             xoff_global = atof(_tmp2 + 1);
         }
-        if (!limitAdded) {
-          if (useScales)
-            snprintf(tmp, strlen(op) + 256,
-                     "-scales=%.10g,%.10g,%.10g,%.10g ",
-                     xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                     xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                     ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                     ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-          else
-            snprintf(tmp, strlen(op) + 256,
-                     "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                     xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                     xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                     ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                     ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-
-          cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
-          strcat(cmd, tmp);
-          limitAdded = 1;
-        }
+        ensureLimitString();
       }
 
-      if (op[0] != '"') {
-        strcat(cmd, "'");
-        strcat(cmd, op);
-        strcat(cmd, "' ");
-      } else {
-        strcat(cmd, " ");
-        strcat(cmd, op);
-        strcat(cmd, " ");
-      }
+      appendToken(op);
       free(tmp);
       free(op);
     }
 
     free(original);
-    if (!limitAdded) {
-      tmp = (char*)malloc(sizeof(char) * 256);
-      if (useScales)
-        snprintf(tmp, 256,
-                 "-scales=%.10g,%.10g,%.10g,%.10g ",
-                 xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                 xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                 ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                 ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-      else
-        snprintf(tmp, 256,
-                 "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                 xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                 xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                 ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                 ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-      cmd = (char*)realloc(cmd, sizeof(char) * (len0 += 128));
-      strcat(cmd, tmp);
-      free(tmp);
-    }
-  } else { /* restore to original command */
-    strcpy(cmd, sddsplotCommandline2);
+    if (!limitAdded)
+      ensureLimitString();
+  } else {
+    prefix = sddsplotCommandline2;
     userx1 = XMAX;
     usery1 = YMAX;
   }
 
   QTemporaryFile tempFile;
   if (tempFile.open()) {}
-  
-  strcat(cmd, " -output=");
-  strcat(cmd, tempFile.fileName().toUtf8().constData());
-  int sysret = system(cmd);
+
+  std::string finalCommand;
+  if (!(userx0 == 0 && userx1 == 0 && usery0 == 0 && usery1 == 0)) {
+    finalCommand = prefix;
+    if (limitAdded)
+      finalCommand += limitString;
+    finalCommand += postLimit;
+  } else {
+    finalCommand = prefix;
+  }
+  finalCommand += " -output=";
+  finalCommand += tempFile.fileName().toUtf8().constData();
+  int sysret = system(finalCommand.c_str());
   (void)sysret;
-  free(cmd);
   do {
     if (fexists(tempFile.fileName().toUtf8().constData()))
       break;
