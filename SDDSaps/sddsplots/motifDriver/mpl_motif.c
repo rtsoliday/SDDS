@@ -6489,23 +6489,117 @@ void zoom(double x0, double y0, double x1, double y1) {
   /*       W,H,scalex,offsetx0,scaley,offsety0,deltax,deltay); */
 }
 
+static void append_text(char **buffer, size_t *length, size_t *capacity, const char *text) {
+  size_t add;
+
+  if (!text)
+    return;
+  add = strlen(text);
+  if (!add)
+    return;
+  if (!*buffer) {
+    *capacity = add + 64;
+    *buffer = malloc(*capacity);
+    if (!*buffer)
+      return;
+    (*buffer)[0] = '\0';
+    *length = 0;
+  }
+  while (*length + add + 1 > *capacity) {
+    size_t newCapacity = *capacity ? *capacity * 2 : add + 64;
+    char *tmpBuffer = realloc(*buffer, newCapacity);
+    if (!tmpBuffer)
+      return;
+    *buffer = tmpBuffer;
+    *capacity = newCapacity;
+  }
+  memcpy(*buffer + *length, text, add);
+  *length += add;
+  (*buffer)[*length] = '\0';
+}
+
+static void append_token(char **buffer, size_t *length, size_t *capacity, const char *token) {
+  if (!token)
+    return;
+  if (token[0] != '"') {
+    append_text(buffer, length, capacity, "'");
+    append_text(buffer, length, capacity, token);
+    append_text(buffer, length, capacity, "' ");
+  } else {
+    append_text(buffer, length, capacity, " ");
+    append_text(buffer, length, capacity, token);
+    append_text(buffer, length, capacity, " ");
+  }
+}
+
+static void update_limit_string(char *limitString, size_t limitSize, int useScales, int xlog, int ylog,
+                                double xminLimit, double xmaxLimit, double yminLimit, double ymaxLimit,
+                                double xmult, double ymult, double xoff, double yoff) {
+  if (!limitString || !limitSize)
+    return;
+  if (useScales) {
+    snprintf(limitString, limitSize,
+             "-scales=%.10g,%.10g,%.10g,%.10g ",
+             xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+             xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+             ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+             ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+  } else {
+    snprintf(limitString, limitSize,
+             "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
+             xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+             xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+             ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+             ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+  }
+}
+
+static void ensure_limit_string(int *limitAdded, char *limitString, size_t limitSize, int useScales, int xlog, int ylog,
+                                double xminLimit, double xmaxLimit, double yminLimit, double ymaxLimit,
+                                double xmult, double ymult, double xoff, double yoff) {
+  if (!limitAdded || !limitString)
+    return;
+  if (!*limitAdded)
+    *limitAdded = 1;
+  update_limit_string(limitString, limitSize, useScales, xlog, ylog, xminLimit, xmaxLimit, yminLimit, ymaxLimit, xmult,
+                      ymult, xoff, yoff);
+}
+
 void newzoom(double x0, double y0, double x1, double y1) {
 
-  char *cmd = NULL;
   char *original = NULL;
   char *op = NULL;
   char *tmp = NULL;
   char *_tmp1 = NULL;
   char *_tmp2 = NULL;
   char *tmp2 = malloc(sizeof(char) * 256);
-  int len0 = strlen(sddsplotCommandline2) + 1024;
   long is_global;
   int limitAdded = 0;
+  int useScales = 0;
+  char *prefix = NULL;
+  char *postLimit = NULL;
+  char *finalCommand = NULL;
+  size_t prefixLength = 0;
+  size_t postLength = 0;
+  size_t finalLength = 0;
+  size_t prefixCapacity = 0;
+  size_t postCapacity = 0;
+  size_t finalCapacity = 0;
+  char limitString[512];
 
   struct stat fstatus;
-  cmd = malloc(sizeof(char) * len0);
-  strcpy(cmd, "");
   strcpy(tmp2, "");
+
+  if (sddsplotCommandline2) {
+    char *clcopy = malloc(sizeof(char) * (strlen(sddsplotCommandline2) + 1));
+    if (clcopy) {
+      strcpy(clcopy, sddsplotCommandline2);
+      char *first = strtok(clcopy, " ");
+      if (first && strstr(first, "sddscontour"))
+        useScales = 1;
+      free(clcopy);
+    }
+  }
 
   if (fexists(tmpZoomFilename)) {
     xerrmsg(1, "Last plot operations not completed. Try later!");
@@ -6559,8 +6653,11 @@ void newzoom(double x0, double y0, double x1, double y1) {
           xerrmsg(1, "New Zoom feature can not handle option -mode with normalize, offset, eoffset,center, meanCenter,coffset,coffset, and fractionalDeviation keywords");
           XFree(tmp);
           XFree(op);
-          XFree(cmd);
           XFree(original);
+          free(prefix);
+          free(postLimit);
+          free(finalCommand);
+          XFree(tmp2);
           return;
         }
         if (strstr(tmp, "=lo")) {
@@ -6575,32 +6672,14 @@ void newzoom(double x0, double y0, double x1, double y1) {
               xlog_global = 1;
           }
 
-          if (!limitAdded) {
-            sprintf(tmp, "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                    xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                    xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                    ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                    ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-            cmd = realloc(cmd, sizeof(char) * (len0 += 128));
-            strcat(cmd, tmp);
-            limitAdded = 1;
-          }
+          ensure_limit_string(&limitAdded, limitString, sizeof(limitString), useScales, xlog, ylog, xminLimit, xmaxLimit,
+                              yminLimit, ymaxLimit, xmult, ymult, xoff, yoff);
         }
       }
 
       if ((strncmp(tmp, "-col", 4) == 0) || (strncmp(tmp, "-par", 4) == 0)) {
-        if (!limitAdded) {
-          sprintf(tmp, "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                  xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                  xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                  ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                  ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-
-          cmd = realloc(cmd, sizeof(char) * (len0 += 128));
-
-          strcat(cmd, tmp);
-          limitAdded = 1;
-        }
+        ensure_limit_string(&limitAdded, limitString, sizeof(limitString), useScales, xlog, ylog, xminLimit, xmaxLimit,
+                            yminLimit, ymaxLimit, xmult, ymult, xoff, yoff);
         if (is_global)
           is_global = 0;
         xmult = xmult_global;
@@ -6609,6 +6688,8 @@ void newzoom(double x0, double y0, double x1, double y1) {
         xoff = xoff_global;
         xlog = xlog_global;
         ylog = ylog_global;
+        update_limit_string(limitString, sizeof(limitString), useScales, xlog, ylog, xminLimit, xmaxLimit, yminLimit,
+                            ymaxLimit, xmult, ymult, xoff, yoff);
       }
 
       if (strncmp(tmp, "-fa", 3) == 0) {
@@ -6624,17 +6705,8 @@ void newzoom(double x0, double y0, double x1, double y1) {
           if (is_global)
             xmult_global = atof(_tmp2 + 1);
         }
-        if (!limitAdded) {
-          sprintf(tmp, "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                  xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                  xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                  ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                  ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-
-          cmd = realloc(cmd, sizeof(char) * (len0 += 128));
-          strcat(cmd, tmp);
-          limitAdded = 1;
-        }
+        ensure_limit_string(&limitAdded, limitString, sizeof(limitString), useScales, xlog, ylog, xminLimit, xmaxLimit,
+                            yminLimit, ymaxLimit, xmult, ymult, xoff, yoff);
       }
       if (strncmp(tmp, "-of", 3) == 0) {
         if ((_tmp1 = strstr(tmp, "yc"))) {
@@ -6649,39 +6721,26 @@ void newzoom(double x0, double y0, double x1, double y1) {
           if (is_global)
             xoff_global = atof(_tmp2 + 1);
         }
-        if (!limitAdded) {
-          sprintf(tmp, "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                  xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                  xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                  ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                  ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-
-          cmd = realloc(cmd, sizeof(char) * (len0 += 128));
-          strcat(cmd, tmp);
-          limitAdded = 1;
-        }
+        ensure_limit_string(&limitAdded, limitString, sizeof(limitString), useScales, xlog, ylog, xminLimit, xmaxLimit,
+                            yminLimit, ymaxLimit, xmult, ymult, xoff, yoff);
       }
 
-      if (op[0] != '"') {
-        strcat(cmd, "'");
-        strcat(cmd, op);
-        strcat(cmd, "' ");
-      } else {
-        strcat(cmd, " ");
-        strcat(cmd, op);
-        strcat(cmd, " ");
-      }
+      if (limitAdded)
+        append_token(&postLimit, &postLength, &postCapacity, op);
+      else
+        append_token(&prefix, &prefixLength, &prefixCapacity, op);
       XFree(tmp);
       XFree(op);
     }
 
     XFree(original);
-    strcat(cmd, tmp2);
+    if (!limitAdded)
+      ensure_limit_string(&limitAdded, limitString, sizeof(limitString), useScales, xlog, ylog, xminLimit, xmaxLimit,
+                          yminLimit, ymaxLimit, xmult, ymult, xoff, yoff);
   } else { /* restore to original command */
-    strcpy(cmd, sddsplotCommandline2);
+    append_text(&finalCommand, &finalLength, &finalCapacity, sddsplotCommandline2);
   }
 
-  strcat(cmd, " -output=");
   strcpy(tmpZoomFilename, "");
   tmpname(tmp2);
 #if defined(_WIN32)
@@ -6690,10 +6749,19 @@ void newzoom(double x0, double y0, double x1, double y1) {
   strcat(tmpZoomFilename, "/tmp/");
   strcat(tmpZoomFilename, tmp2);
 #endif
-  strcat(cmd, tmpZoomFilename);
-  /* fprintf(stderr,"%s\n",cmd); */
-  system(cmd);
-  XFree(cmd);
+  if (!(x0 == 0 && x1 == 0 && y0 == 0 && y1 == 0)) {
+    append_text(&finalCommand, &finalLength, &finalCapacity, prefix ? prefix : "");
+    if (limitAdded)
+      append_text(&finalCommand, &finalLength, &finalCapacity, limitString);
+    append_text(&finalCommand, &finalLength, &finalCapacity, postLimit ? postLimit : "");
+  }
+  append_text(&finalCommand, &finalLength, &finalCapacity, " -output=");
+  append_text(&finalCommand, &finalLength, &finalCapacity, tmpZoomFilename);
+  /* fprintf(stderr,"%s\n",finalCommand); */
+  system(finalCommand);
+  free(finalCommand);
+  free(prefix);
+  free(postLimit);
   XFree(tmp2);
   do {
     if (fexists(tmpZoomFilename))
