@@ -2214,6 +2214,7 @@ Other keyboard shortcuts:\n\
 w - toggle white/black theme\n\
 . - toggle mouse tracking\n\
 : - set mouse tracker origin\n\
+Ctrl + r - replot current data\n\
 q - quit");
         layout->addWidget(textEdit);
         setLayout(layout);

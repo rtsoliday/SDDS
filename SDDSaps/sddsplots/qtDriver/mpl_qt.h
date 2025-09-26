@@ -135,6 +135,7 @@ void quit(void);
 void onBlack();
 void onWhite();
 void newzoom();
+bool replotCurrentData();
 long readdata();
 void print();
 void save();

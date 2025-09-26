@@ -221,3 +221,27 @@ void newzoom() {
     fclose(ifp);
   }
 }
+
+bool replotCurrentData() {
+  if (!sddsplotCommandline2 || !cur)
+    return false;
+
+  double savedUserx0 = userx0;
+  double savedUserx1 = userx1;
+  double savedUsery0 = usery0;
+  double savedUsery1 = usery1;
+
+  userx0 = 0.0;
+  userx1 = 0.0;
+  usery0 = 0.0;
+  usery1 = 0.0;
+
+  newzoom();
+
+  userx0 = savedUserx0;
+  userx1 = savedUserx1;
+  usery0 = savedUsery0;
+  usery1 = savedUsery1;
+
+  return true;
+}

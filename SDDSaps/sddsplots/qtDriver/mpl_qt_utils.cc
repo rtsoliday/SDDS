@@ -625,6 +625,7 @@ void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
   QShortcut *shortcut_P = new QShortcut(QKeySequence(Qt::Key_P), mainWindow);
   QShortcut *shortcut_Q = new QShortcut(QKeySequence(Qt::Key_Q), mainWindow);
   QShortcut *shortcut_R = new QShortcut(QKeySequence(Qt::Key_R), mainWindow);
+  QShortcut *shortcut_CtrlR = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), mainWindow);
   QShortcut *shortcut_T = new QShortcut(QKeySequence(Qt::Key_T), mainWindow);
   QShortcut *shortcut_W = new QShortcut(QKeySequence(Qt::Key_W), mainWindow);
   QShortcut *shortcut_Z = nullptr;
@@ -663,6 +664,16 @@ void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
   });
   QObject::connect(shortcut_R, &QShortcut::activated,
                    [mainWindow]() { placeRightHalf(mainWindow); });
+  QObject::connect(shortcut_CtrlR, &QShortcut::activated, [mainWindow]() {
+    if (!replotCurrentData()) {
+      QApplication::beep();
+      return;
+    }
+    if (cur) {
+      QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
+      mainWindow->setWindowTitle(wtitle);
+    }
+  });
   QObject::connect(shortcut_Q, &QShortcut::activated, [](){
     quit();
   });
