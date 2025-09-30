@@ -36,9 +36,6 @@ ifeq ($(OS), Linux)
 endif
 
 PLOT_DRIVER = SDDSaps/sddsplots/qtDriver
-ifeq ($(IMPROV_BUILD),1)
-  PLOT_DRIVER = SDDSaps/sddsplots/motifDriver
-endif
 ifeq ($(OS), Windows)
   PLOT_DRIVER = SDDSaps/sddsplots/winMotifDriver
 endif
