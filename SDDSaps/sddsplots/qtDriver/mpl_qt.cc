@@ -1758,6 +1758,22 @@ public:
     connect(m_resizeTimer, &QTimer::timeout, this, &Canvas::resizeFinished);
     setMouseTracking(true);
   }
+  QImage renderPlotToImage(const QSize &targetSize) {
+    if (targetSize.isEmpty())
+      return QImage();
+
+    QImage image(targetSize, QImage::Format_ARGB32);
+    image.fill(QColor::fromRgb(colors[0]));
+
+    if (!cur)
+      return image;
+
+    QPainter bufferPainter(&image);
+    bufferPainter.setPen(QColor::fromRgb(white));
+    drawPlotToPainter(bufferPainter, targetSize, false);
+    bufferPainter.end();
+    return image;
+  }
   void setRelativeAnchorFromGlobal(const QPoint &globalPos) {
     QPoint localPos = mapFromGlobal(globalPos);
     if (!rect().contains(localPos)) {
@@ -1861,10 +1877,6 @@ protected:
     m_resizeTimer->start(250); // Restart timer each time a resize event occurs
   }
   void paintEvent(QPaintEvent *event) override {
-    VTYPE x, y, lt, lt2;
-    char *bufptr, command;
-    unsigned short r, g, b;
-
     if (m_resizing) {
       // Skip painting during an active resize
       return;
@@ -1884,19 +1896,90 @@ protected:
     }
     QPainter bufferPainter(&m_buffer);
     bufferPainter.setPen(QColor::fromRgb(white));
+    drawPlotToPainter(bufferPainter, m_buffer.size(), true);
 
-    if (fabs(userx1 - userx0) < 1e-12) userx1 = userx0 + 1;
-    if (fabs(usery1 - usery0) < 1e-12) usery1 = usery0 + 1;
-    W = width();
-    H = height();
+    // Now copy the off-screen buffer to the widget
+    QPainter painter(this);
+    painter.drawPixmap(0, 0, m_buffer);
+
+  }
+private slots:
+  void resizeFinished() {
+    m_resizing = false; // Clear flag when no resize event occurs for a while
+    update();           // Force a final repaint
+  }
+
+private:
+  QRubberBand *rubberBand;
+  QPoint origin;
+  bool m_resizing = false;
+  QPixmap m_buffer;
+  QTimer *m_resizeTimer;
+  bool m_hasRelativeAnchor = false;
+  double m_anchorX = 0.0;
+  double m_anchorY = 0.0;
+
+  void drawPlotToPainter(QPainter &bufferPainter, const QSize &targetSize, bool updateState) {
+    if (!cur)
+      return;
+
+    VTYPE x, y, lt, lt2;
+    char *bufptr, command;
+    unsigned short r, g, b;
+
+    int savedW = W;
+    int savedH = H;
+    double savedScalex = scalex;
+    double savedScaley = scaley;
+    double savedUserx0 = userx0;
+    double savedUserx1 = userx1;
+    double savedUsery0 = usery0;
+    double savedUsery1 = usery1;
+    double savedUserax = userax;
+    double savedUserbx = userbx;
+    double savedUseray = useray;
+    double savedUserby = userby;
+    VTYPE savedCx = cx;
+    VTYPE savedCy = cy;
+    int savedCurrentlinewidth = currentlinewidth;
+    COLOR_REF savedCurrentcolor = currentcolor;
+    int savedLinecolormax = linecolormax;
+    int savedUseDashes = UseDashes;
+    int savedNspect = nspect;
+    int savedSpectral = spectral;
+    int savedCustomspectral = customspectral;
+    unsigned short savedRed0 = red0;
+    unsigned short savedGreen0 = green0;
+    unsigned short savedBlue0 = blue0;
+    unsigned short savedRed1 = red1;
+    unsigned short savedGreen1 = green1;
+    unsigned short savedBlue1 = blue1;
+    int savedSpectrumallocated = spectrumallocated;
+    struct COORDREC *savedCurcoord = curcoord;
+    struct COORDREC *savedLastcoord = lastcoord;
+    struct COORDREC *savedUsecoord = usecoord;
+    int savedNcoords = ncoords;
+
+    if (updateState)
+      destroycoordrecs();
+
+    if (fabs(userx1 - userx0) < 1e-12)
+      userx1 = userx0 + 1;
+    if (fabs(usery1 - usery0) < 1e-12)
+      usery1 = usery0 + 1;
+
+    int targetW = std::max(1, targetSize.width());
+    int targetH = std::max(1, targetSize.height());
+
+    W = targetW;
+    H = targetH;
     scalex = (W - 1.0) / (userx1 - userx0);
     scaley = (H - 1.0) / (usery1 - usery0);
 
     bufptr = cur->buffer;
-    destroycoordrecs();
     for (int n = 0; n < cur->nc;) {
       switch (command = *bufptr++) {
-      case 'V': // draw vector
+      case 'V':
         memcpy((char *)&x, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         memcpy((char *)&y, bufptr, sizeof(VTYPE));
@@ -1906,14 +1989,14 @@ protected:
         cx = x;
         cy = y;
         break;
-      case 'M': // move
+      case 'M':
         memcpy((char *)&cx, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         memcpy((char *)&cy, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         n += sizeof(char) + 2 * sizeof(VTYPE);
         break;
-      case 'P': // dot
+      case 'P':
         memcpy((char *)&cx, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         memcpy((char *)&cy, bufptr, sizeof(VTYPE));
@@ -1923,7 +2006,7 @@ protected:
         cx++;
         cy++;
         break;
-      case 'L': // set line type
+      case 'L':
         {
           QPen pen = bufferPainter.pen();
           pen.setStyle(Qt::SolidLine);
@@ -1932,7 +2015,7 @@ protected:
           n += sizeof(char) + sizeof(VTYPE);
           if (!lineTypeTable.nEntries) {
             lt = lt2 % 16;
-            lt += 2; /* Convert to color index */
+            lt += 2;
             if (lt >= NCOLORS)
               lt = NCOLORS - 1;
             if (lt > linecolormax)
@@ -1967,8 +2050,9 @@ protected:
           pen.setWidth(currentlinewidth);
           pen.setColor(currentcolor);
           bufferPainter.setPen(pen);
-        } break;
-      case 'W': // set line width
+        }
+        break;
+      case 'W':
         {
           memcpy((char *)&lt, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
@@ -1977,11 +2061,12 @@ protected:
           QPen pen = bufferPainter.pen();
           pen.setWidth(currentlinewidth);
           bufferPainter.setPen(pen);
-        } break;
-      case 'B': // Fill Box
+        }
+        break;
+      case 'B':
         {
           VTYPE shade, xl, xh, yl, yh;
-          int x, y, width, height;
+          int px, py, width, height;
           memcpy((char *)&shade, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
           memcpy((char *)&xl, bufptr, sizeof(VTYPE));
@@ -1996,13 +2081,14 @@ protected:
           if (!spectrumallocated)
             allocspectrum();
           shade = shade % nspect;
-          x = Xpixel(xl);
-          y = Ypixel(yl);
-          width = Xpixel(xh) - x;
-          height = Ypixel(yh) - y;
-          bufferPainter.fillRect(QRect(x, y, width, height), spectrum[shade]);
-        } break;
-      case 'U': // user coordinate scaling
+          px = Xpixel(xl);
+          py = Ypixel(yl);
+          width = Xpixel(xh) - px;
+          height = Ypixel(yh) - py;
+          bufferPainter.fillRect(QRect(px, py, width, height), spectrum[shade]);
+        }
+        break;
+      case 'U':
         memcpy((char *)&userax, bufptr, sizeof(double));
         bufptr += sizeof(double);
         memcpy((char *)&userbx, bufptr, sizeof(double));
@@ -2012,22 +2098,23 @@ protected:
         memcpy((char *)&userby, bufptr, sizeof(double));
         bufptr += sizeof(double);
         n += sizeof(char) + 4 * sizeof(double);
-        curcoord = makecoordrec();
-        if (lastcoord) {
-          lastcoord->next = curcoord;
+        if (updateState) {
+          curcoord = makecoordrec();
+          if (lastcoord)
+            lastcoord->next = curcoord;
+          lastcoord = curcoord;
+          curcoord->x0 = userax;
+          curcoord->x1 = userbx;
+          curcoord->y0 = useray;
+          curcoord->y1 = userby;
         }
-        lastcoord = curcoord;
-        curcoord->x0 = userax;
-        curcoord->x1 = userbx;
-        curcoord->y0 = useray;
-        curcoord->y1 = userby;
         break;
       case 'G':
       case 'R':
       case 'E':
         n += sizeof(char);
         break;
-      case 'C': // set line color
+      case 'C':
         {
           memcpy((char *)&r, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
@@ -2037,11 +2124,14 @@ protected:
           bufptr += sizeof(VTYPE);
           n += sizeof(char) + 3 * sizeof(VTYPE);
           QPen pen = bufferPainter.pen();
-          currentcolor = RGB_QT(std::round((255.0 / 65536.0) * r), std::round((255.0 / 65536.0) * g), std::round((255.0 / 65536.0) * b));
+          currentcolor = RGB_QT(std::round((255.0 / 65536.0) * r),
+                               std::round((255.0 / 65536.0) * g),
+                               std::round((255.0 / 65536.0) * b));
           pen.setColor(currentcolor);
           bufferPainter.setPen(pen);
-        } break;
-      case 'S': // Allocate spectral spectrum
+        }
+        break;
+      case 'S':
         {
           VTYPE num, spec, r0, g0, b0, r1, g1, b1;
           memcpy((char *)&num, bufptr, sizeof(VTYPE));
@@ -2088,45 +2178,70 @@ protected:
             spectral = 0;
           }
           allocspectrum();
-        } break;
+        }
+        break;
       default:
-        // DialogBoxParam(hInst, (LPCTSTR)IDD_ERRORBOX, display, (DLGPROC)ErrorDialog, IDS_INVALIDDRAWCOMMAND);
         break;
       }
     }
-    if ((usecoordn != 0) && curcoord) {
-      while (curcoord->ncoord != usecoordn) {
-        if (curcoord->prev)
-          curcoord = curcoord->prev;
+
+    if (updateState) {
+      if ((usecoordn != 0) && curcoord) {
+        while (curcoord->ncoord != usecoordn) {
+          if (curcoord->prev)
+            curcoord = curcoord->prev;
+        }
+        usecoord = curcoord;
+        userax = curcoord->x0;
+        userbx = curcoord->x1;
+        useray = curcoord->y0;
+        userby = curcoord->y1;
       }
-      usecoord = curcoord;
-      userax = curcoord->x0;
-      userbx = curcoord->x1;
-      useray = curcoord->y0;
-      userby = curcoord->y1;
+    } else {
+      W = savedW;
+      H = savedH;
+      scalex = savedScalex;
+      scaley = savedScaley;
+      userx0 = savedUserx0;
+      userx1 = savedUserx1;
+      usery0 = savedUsery0;
+      usery1 = savedUsery1;
+      userax = savedUserax;
+      userbx = savedUserbx;
+      useray = savedUseray;
+      userby = savedUserby;
+      cx = savedCx;
+      cy = savedCy;
+      currentlinewidth = savedCurrentlinewidth;
+      currentcolor = savedCurrentcolor;
+      linecolormax = savedLinecolormax;
+      UseDashes = savedUseDashes;
+      nspect = savedNspect;
+      spectral = savedSpectral;
+      customspectral = savedCustomspectral;
+      red0 = savedRed0;
+      green0 = savedGreen0;
+      blue0 = savedBlue0;
+      red1 = savedRed1;
+      green1 = savedGreen1;
+      blue1 = savedBlue1;
+      spectrumallocated = savedSpectrumallocated;
+      curcoord = savedCurcoord;
+      lastcoord = savedLastcoord;
+      usecoord = savedUsecoord;
+      ncoords = savedNcoords;
     }
-
-    // Now copy the off-screen buffer to the widget
-    QPainter painter(this);
-    painter.drawPixmap(0, 0, m_buffer);
-
   }
-private slots:
-  void resizeFinished() {
-    m_resizing = false; // Clear flag when no resize event occurs for a while
-    update();           // Force a final repaint
-  }
-
-private:
-  QRubberBand *rubberBand;
-  QPoint origin;
-  bool m_resizing = false;
-  QPixmap m_buffer;
-  QTimer *m_resizeTimer;
-  bool m_hasRelativeAnchor = false;
-  double m_anchorX = 0.0;
-  double m_anchorY = 0.0;
 };
+
+QImage exportCurrentPlotImage(const QSize &targetSize) {
+  if (!canvas)
+    return QImage();
+  Canvas *plotCanvas = qobject_cast<Canvas *>(canvas);
+  if (!plotCanvas)
+    return QImage();
+  return plotCanvas->renderPlotToImage(targetSize);
+}
 
 void captureRelativeMouseAnchor() {
   if (!canvas)

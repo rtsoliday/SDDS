@@ -12,6 +12,7 @@
 #include <QVBoxLayout>
 #include <QFrame>
 #include <QPixmap>
+#include <QImage>
 #include <QTimer>
 #include <QObject>
 #include <QVector>
@@ -139,6 +140,7 @@ bool replotCurrentData();
 long readdata();
 void print();
 void save();
+QImage exportCurrentPlotImage(const QSize &targetSize);
 void nav_next(QMainWindow *mainWindow);
 void nav_previous(QMainWindow *mainWindow);
 void delete_current(QMainWindow *mainWindow);
