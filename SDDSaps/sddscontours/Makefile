@@ -18,7 +18,8 @@ ifeq ($(OS), Linux)
   CFLAGS += -fopenmp
   CCFLAGS += -fopenmp
   LDFLAGS += -fopenmp
-  PROD_SYS_LIBS := $(GLFW_LIB) $(GL_LIB) $(GLU_LIB) $(GLUT_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+  #PROD_SYS_LIBS := $(GLFW_LIB) $(GL_LIB) $(GLU_LIB) $(GLUT_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+  PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lmdbplt -lmdbcommon -lfftpack -lSDDS1 -lrpnlib -lmdbmth -lmdblib
 endif
 
@@ -37,6 +38,12 @@ include ../../Makefile.build
 
 $(OBJ_DIR)/sddscontour$(EXEEXT): $(sddscontour_OBJS) $(LIBRARY) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddscontour_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
+
+$(OBJ_DIR)/sddswaterfall$(EXEEXT): $(sddswaterfall_OBJS) $(LIBRARY) $(PROD_DEPS)
+	$(LINKEXE) $(OUTPUTEXE) $(sddswaterfall_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(GLFW_LIB) $(GL_LIB) $(GLUT_LIB) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
