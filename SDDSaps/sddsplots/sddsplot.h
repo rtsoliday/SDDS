@@ -504,11 +504,19 @@ typedef struct {
 #define PARAMETER_DATA 1
 #define ARRAY_DATA 2
 
+/* Flags for -usePages option */
+#define USEPAGES_START_GIVEN  0x0001U
+#define USEPAGES_END_GIVEN    0x0002U
+#define USEPAGES_INTERVAL_GIVEN 0x0004U
+
 typedef struct {
   char **filename, **description_text;
   char **xname, **yname, **x1name, **y1name;
   short *was_wildname;
   long datanames, filenames, data_class,frompage,topage;
+  /* -usePages selection */
+  unsigned long usePagesFlags;
+  long usePagesStart, usePagesEnd, usePagesInterval;
   EXCLUDE_SPEC x_exclude_spec;
   EXCLUDE_SPEC y_exclude_spec;
   GRAPHIC_SPEC graphic;
