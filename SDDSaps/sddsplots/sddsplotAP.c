@@ -764,6 +764,41 @@ long fromPage_AP(PLOT_SPEC *plotspec, char **item, long items)
   return 1;
 }
 
+/* -usePages=start=<pagenumber>,end=<pagenumber>,interval=<integer> */
+long usePages_AP(PLOT_SPEC *plotspec, char **item, long items)
+{
+  PLOT_REQUEST *plreq;
+  unsigned long flags = 0;
+  plreq = plotspec->plot_request+plotspec->plot_requests-1;
+
+  /* Parse keywords: start, end, interval */
+  if (!scanItemList(&flags, item, &items, 0,
+                    "start", SDDS_LONG, &plreq->usePagesStart, 1, USEPAGES_START_GIVEN,
+                    "end", SDDS_LONG, &plreq->usePagesEnd, 1, USEPAGES_END_GIVEN,
+                    "interval", SDDS_LONG, &plreq->usePagesInterval, 1, USEPAGES_INTERVAL_GIVEN,
+                    NULL)) {
+    return bombre("invalid -usePages syntax",
+                  "-usePages=start=<pagenumber>,end=<pagenumber>,interval=<integer>", 0);
+  }
+  /* Validate interval and bounds */
+  if (!(flags & USEPAGES_INTERVAL_GIVEN) || plreq->usePagesInterval<=0)
+    return bombre("invalid -usePages syntax",
+                  "-usePages=start=<pagenumber>,end=<pagenumber>,interval=<integer>", 0);
+  if ((flags & USEPAGES_START_GIVEN) && plreq->usePagesStart<=0)
+    return bombre("invalid -usePages syntax",
+                  "-usePages=start=<pagenumber>,end=<pagenumber>,interval=<integer>", 0);
+  if ((flags & USEPAGES_END_GIVEN) && plreq->usePagesEnd<=0)
+    return bombre("invalid -usePages syntax",
+                  "-usePages=start=<pagenumber>,end=<pagenumber>,interval=<integer>", 0);
+  if ((flags & USEPAGES_START_GIVEN) && (flags & USEPAGES_END_GIVEN) &&
+      plreq->usePagesStart>plreq->usePagesEnd)
+    return bombre("invalid -usePages syntax",
+                  "-usePages=start=<pagenumber>,end=<pagenumber>,interval=<integer>", 0);
+
+  plreq->usePagesFlags = flags;
+  return 1;
+}
+
 long xexclude_columnnames_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
   /*static char *exclude_columnnames_usage = 
