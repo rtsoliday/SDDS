@@ -341,3 +341,89 @@ double min_in_array(double *array, long n) {
       min = array[n];
   return (min);
 }
+
+#include <stdarg.h>
+
+/**
+ * @brief Computes the minimum value of a variable number of double arguments.
+ *
+ * @param num_args The count of the double arguments that follow.
+ * @param ... A variable number of double-precision floating-point numbers.
+ * @return The minimum value among the provided arguments. Returns 0.0 if num_args is 0.
+ */
+double min_double(int num_args, ...) {
+    // If no arguments are provided, return 0.0.
+    if (num_args <= 0) {
+        return 0.0;
+    }
+
+    // Declare a va_list to hold the variable arguments.
+    va_list args;
+
+    // Initialize the va_list to start after the last named argument (num_args).
+    va_start(args, num_args);
+
+    // Initialize the minimum value with the first variable argument.
+    // We must specify the type of the argument to va_arg.
+    double min_val = va_arg(args, double);
+
+    // Loop through the rest of the arguments.
+    // We start the loop from 1 since we've already processed the first argument.
+    for (int i = 1; i < num_args; i++) {
+        // Get the next argument from the list.
+        double current_val = va_arg(args, double);
+
+        // If the current value is less than the stored minimum, update the minimum.
+        if (current_val < min_val) {
+            min_val = current_val;
+        }
+    }
+
+    // Clean up the va_list. This is a crucial step.
+    va_end(args);
+
+    // Return the final minimum value.
+    return min_val;
+}
+
+/**
+ * @brief Computes the maximum value of a variable number of double arguments.
+ *
+ * @param num_args The count of the double arguments that follow.
+ * @param ... A variable number of double-precision floating-point numbers.
+ * @return The maximum value among the provided arguments. Returns 0.0 if num_args is 0.
+ */
+double max_double(int num_args, ...) {
+    // If no arguments are provided, return 0.0.
+    if (num_args <= 0) {
+        return 0.0;
+    }
+
+    // Declare a va_list to hold the variable arguments.
+    va_list args;
+
+    // Initialize the va_list to start after the last named argument (num_args).
+    va_start(args, num_args);
+
+    // Initialize the maximum value with the first variable argument.
+    // We must specify the type of the argument to va_arg.
+    double max_val = va_arg(args, double);
+
+    // Loop through the rest of the arguments.
+    // We start the loop from 1 since we've already processed the first argument.
+    for (int i = 1; i < num_args; i++) {
+        // Get the next argument from the list.
+        double current_val = va_arg(args, double);
+
+        // If the current value is greater than the stored maximum, update the maximum.
+        if (current_val > max_val) {
+            max_val = current_val;
+        }
+    }
+
+    // Clean up the va_list. This is a crucial step.
+    va_end(args);
+
+    // Return the final maximum value.
+    return max_val;
+}
