@@ -223,10 +223,24 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
         for (ifile=0; ifile<plreq->filenames; ifile++) {
           if (strcmp(filename[file], plreq->filename[ifile])!=0)
             continue;
+          /* Respect legacy page bounds */
           if (plreq->frompage && datapage<plreq->frompage)
             continue;
           if (plreq->topage && datapage>plreq->topage)
             continue;
+          /* Apply -usePages filtering when provided */
+          if (plreq->usePagesFlags & USEPAGES_INTERVAL_GIVEN) {
+            long startPage = (plreq->usePagesFlags & USEPAGES_START_GIVEN) ? plreq->usePagesStart : 1;
+            /* Respect start bound */
+            if (datapage < startPage)
+              continue;
+            /* Respect end bound if given */
+            if ((plreq->usePagesFlags & USEPAGES_END_GIVEN) && datapage > plreq->usePagesEnd)
+              continue;
+            /* Enforce interval stepping relative to start */
+            if (((datapage - startPage) % plreq->usePagesInterval) != 0)
+              continue;
+          }
 #if defined(DEBUG)
           fprintf(stderr, "memory: %ld\n", memory_count());
           fprintf(stderr, "taking data for file %ld of request %ld\n", ifile, ireq);
