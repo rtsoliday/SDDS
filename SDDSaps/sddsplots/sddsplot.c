@@ -59,7 +59,7 @@ char *USAGE1 = "sddsplot \n\
   -parameternames=<x-name>,<y-name-list>[,<y1-name-list>|<x1-name>,<y1-name-list>] | \n\
   -arraynames=<x-name>,<y-name-list>[,<y1-name-list>|<x1-name>,<y1-name-list>] | \n\
   -mplfiles | -keep[={names|files}]]\n\
-  [-toPage=<pagenumber>] [-fromPage=<pagenumber>] \n\
+  [-toPage=<pagenumber>] [-fromPage=<pagenumber>] [-usePages=start=<pagenumber>,end=<pagenumber>,interval=<integer>] \n\
   [<filename>...]\n\
   -repeat[=checkSeconds=<number>][,timeout=<seconds>]\n\
   -namescan={all|first}\n\
@@ -237,6 +237,7 @@ static char *main_keyword[] = {
   "yExclude",
   "toPage",
   "fromPage",
+  "usePages",
   "dither",
   "intensityBar",
   "databehind",
@@ -331,6 +332,7 @@ extern long aspectratio_AP(PLOT_SPEC *plotspec, char **item, long items),
   yexclude_columnnames_AP(PLOT_SPEC *plotspec, char **item, long items),
   toPage_AP(PLOT_SPEC *plotspec, char **item, long items),
   fromPage_AP(PLOT_SPEC *plotspec, char **item, long items),
+  usePages_AP(PLOT_SPEC *plotspec, char **item, long items),
   dither_AP(PLOT_SPEC *plotspec, char **item, long items),
   intensityBar_AP(PLOT_SPEC *plotspec, char **item, long items),
   dataBehind_AP(PLOT_SPEC *plotspec, char **item, long items),
@@ -424,6 +426,7 @@ static long (*main_parser[])(PLOT_SPEC *plotspec, char **item, long items) = {
   yexclude_columnnames_AP,
   toPage_AP,
   fromPage_AP,
+  usePages_AP,
   dither_AP,
   intensityBar_AP,
   dataBehind_AP,
