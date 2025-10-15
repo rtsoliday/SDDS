@@ -17,21 +17,47 @@ ifeq ($(OS), Linux)
     PROD :=
   else
     MOC_VER_DIGIT := $(shell $(MOC) -v | cut -d' ' -f2 | cut -c1)
-    CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)Network Qt$(MOC_VER_DIGIT)DataVisualization)
-    LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport Qt$(MOC_VER_DIGIT)Network Qt$(MOC_VER_DIGIT)DataVisualization)
-    PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
-    PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
+    QT_PKG_LIST := Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)Network Qt$(MOC_VER_DIGIT)PrintSupport Qt$(MOC_VER_DIGIT)DataVisualization
+    PKG_CONFIG_AVAILABLE := $(shell pkg-config --version >/dev/null 2>&1 && echo yes)
+    ifneq ($(PKG_CONFIG_AVAILABLE),yes)
+      $(warning pkg-config not found - please install your Qt pkg-config files; disabling mpl_qt build)
+      PROD :=
+    else
+      QT_PKGS_PRESENT := $(shell pkg-config --exists $(QT_PKG_LIST) && echo yes)
+      ifneq ($(QT_PKGS_PRESENT),yes)
+        $(warning Required Qt pkg-config modules ($(QT_PKG_LIST)) not found - disabling mpl_qt build)
+        PROD :=
+      else
+        CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)Network Qt$(MOC_VER_DIGIT)DataVisualization)
+        LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport Qt$(MOC_VER_DIGIT)Network Qt$(MOC_VER_DIGIT)DataVisualization)
+        PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
+        PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
+      endif
+    endif
   endif
 endif
 
 ifeq ($(OS), Darwin)
-  CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt5Widgets Qt5Network Qt5DataVisualization)
-  LDFLAGS += $(shell pkg-config --libs Qt5Widgets Qt5PrintSupport Qt5Network Qt5DataVisualization) -framework ApplicationServices
-  PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
-  PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
   MOC = $(wildcard /opt/local/libexec/qt5/bin/moc)
   ifeq ($(MOC),)
     MOC = moc-qt5
+  endif
+  PKG_CONFIG_AVAILABLE := $(shell pkg-config --version >/dev/null 2>&1 && echo yes)
+  ifneq ($(PKG_CONFIG_AVAILABLE),yes)
+    $(warning pkg-config not found - please install your Qt pkg-config files; disabling mpl_qt build)
+    PROD :=
+  else
+    QT_PKG_LIST := Qt5Widgets Qt5Network Qt5PrintSupport Qt5DataVisualization
+    QT_PKGS_PRESENT := $(shell pkg-config --exists $(QT_PKG_LIST) && echo yes)
+    ifneq ($(QT_PKGS_PRESENT),yes)
+      $(warning Required Qt pkg-config modules ($(QT_PKG_LIST)) not found - disabling mpl_qt build)
+      PROD :=
+    else
+      CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt5Widgets Qt5Network Qt5DataVisualization)
+      LDFLAGS += $(shell pkg-config --libs Qt5Widgets Qt5PrintSupport Qt5Network Qt5DataVisualization) -framework ApplicationServices
+      PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
+      PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
+    endif
   endif
 endif
 
@@ -55,3 +81,4 @@ $(OBJ_DIR)/mpl_qt$(EXEEXT): $(mpl_qt_OBJS) $(LIBRARY) $(PROD_DEPS)
 	cp -f $@ $(BIN_DIR)/
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
+
