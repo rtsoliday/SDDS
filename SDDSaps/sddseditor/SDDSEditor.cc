@@ -2044,7 +2044,7 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
   QAction *plotAct = menu.addAction(tr("Plot from file"));
   QAction *ascAct = menu.addAction(tr("Sort ascending"));
   QAction *descAct = menu.addAction(tr("Sort descending"));
-  QAction *searchAct = menu.addAction(tr("Search"));
+  QAction *searchAct = menu.addAction(tr("Search/Replace"));
   QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
   if (chosen == plotAct)
@@ -2216,12 +2216,14 @@ void SDDSEditor::searchColumn(int column) {
   QHBoxLayout btnLayout;
   QPushButton searchBtn(tr("Search"), &dlg);
   QPushButton replaceBtn(tr("Replace"), &dlg);
+  QPushButton replaceSelectedBtn(tr("Replace Selected"), &dlg);
   QPushButton replaceAllBtn(tr("Replace All"), &dlg);
   QPushButton prevBtn(tr("Previous"), &dlg);
   QPushButton nextBtn(tr("Next"), &dlg);
   QPushButton closeBtn(tr("Close"), &dlg);
   btnLayout.addWidget(&searchBtn);
   btnLayout.addWidget(&replaceBtn);
+  btnLayout.addWidget(&replaceSelectedBtn);
   btnLayout.addWidget(&replaceAllBtn);
   btnLayout.addWidget(&prevBtn);
   btnLayout.addWidget(&nextBtn);
@@ -2249,7 +2251,7 @@ void SDDSEditor::searchColumn(int column) {
     activeEditor = idx;
   };
 
-  auto runSearch = [&](bool showInfo) {
+  auto runSearch = [&](bool showInfo, bool refocus = true) {
     QString pat = patternEdit.text();
     matches.clear();
     matchIndex = -1;
@@ -2274,7 +2276,8 @@ void SDDSEditor::searchColumn(int column) {
     }
     if (!matches.isEmpty()) {
       matchIndex = 0;
-      focusMatch();
+      if (refocus)
+        focusMatch();
     } else if (showInfo) {
       QMessageBox::information(&dlg, tr("Search"), tr("No matches found"));
     }
@@ -2329,8 +2332,44 @@ void SDDSEditor::searchColumn(int column) {
     runSearch(replaced == 0);
   };
 
+  auto replaceSelected = [&]() {
+    QString pat = patternEdit.text();
+    if (pat.isEmpty())
+      return;
+    QItemSelectionModel *sel = columnView->selectionModel();
+    if (!sel)
+      return;
+    QModelIndexList indexes = sel->selectedIndexes();
+    if (indexes.isEmpty())
+      return;
+    QString repl = replaceEdit.text();
+    int replaced = 0;
+    for (const QModelIndex &idx : indexes) {
+      if (!idx.isValid() || idx.column() != column)
+        continue;
+      QStandardItem *it = columnModel->item(idx.row(), column);
+      if (!it)
+        continue;
+      QString val = it->text();
+      int pos = 0;
+      bool changed = false;
+      while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
+        val.replace(pos, pat.length(), repl);
+        pos += repl.length();
+        ++replaced;
+        changed = true;
+      }
+      if (changed)
+        it->setText(val);
+    }
+    if (replaced > 0)
+      markDirty();
+    runSearch(replaced == 0, false);
+  };
+
   QObject::connect(&searchBtn, &QPushButton::clicked, [&]() { runSearch(true); });
   QObject::connect(&replaceBtn, &QPushButton::clicked, replaceCurrent);
+  QObject::connect(&replaceSelectedBtn, &QPushButton::clicked, replaceSelected);
   QObject::connect(&replaceAllBtn, &QPushButton::clicked, replaceAll);
   QObject::connect(&nextBtn, &QPushButton::clicked, [&]() {
     if (matches.isEmpty())
@@ -2345,6 +2384,14 @@ void SDDSEditor::searchColumn(int column) {
     focusMatch();
   });
   QObject::connect(&closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+  dlg.adjustSize();
+  QRect parentFrame = frameGeometry();
+  int x = parentFrame.x() + (parentFrame.width() - dlg.width()) / 2;
+  int y = parentFrame.y();
+  if (y < 0)
+    y = 0;
+  dlg.move(x, y);
 
   dlg.exec();
   if (activeEditor.isValid())
@@ -3256,4 +3303,3 @@ void SDDSEditor::showHelp() {
 }
 
 #include "SDDSEditor_moc.h"
-
