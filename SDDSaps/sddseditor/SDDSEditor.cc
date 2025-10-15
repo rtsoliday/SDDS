@@ -43,6 +43,7 @@
 #include <QRegularExpression>
 #include <QItemSelectionModel>
 #include <functional>
+#include <memory>
 #include <cstdlib>
 #include <algorithm>
 #include <limits>
@@ -2202,114 +2203,137 @@ void SDDSEditor::searchColumn(int column) {
   if (!datasetLoaded)
     return;
 
-  QDialog dlg(this);
-  dlg.setWindowTitle(tr("Search Column"));
-  QVBoxLayout layout(&dlg);
-  QFormLayout form;
-  QLineEdit patternEdit(&dlg);
-  patternEdit.setText(lastSearchPattern);
-  QLineEdit replaceEdit(&dlg);
-  replaceEdit.setText(lastReplaceText);
-  form.addRow(tr("Find"), &patternEdit);
-  form.addRow(tr("Replace With"), &replaceEdit);
-  layout.addLayout(&form);
-  QHBoxLayout btnLayout;
-  QPushButton searchBtn(tr("Search"), &dlg);
-  QPushButton replaceBtn(tr("Replace"), &dlg);
-  QPushButton replaceSelectedBtn(tr("Replace Selected"), &dlg);
-  QPushButton replaceAllBtn(tr("Replace All"), &dlg);
-  QPushButton prevBtn(tr("Previous"), &dlg);
-  QPushButton nextBtn(tr("Next"), &dlg);
-  QPushButton closeBtn(tr("Close"), &dlg);
-  btnLayout.addWidget(&searchBtn);
-  btnLayout.addWidget(&replaceBtn);
-  btnLayout.addWidget(&replaceSelectedBtn);
-  btnLayout.addWidget(&replaceAllBtn);
-  btnLayout.addWidget(&prevBtn);
-  btnLayout.addWidget(&nextBtn);
-  btnLayout.addWidget(&closeBtn);
-  layout.addLayout(&btnLayout);
+  if (searchColumnDialog)
+    searchColumnDialog->close();
 
-  struct Match { int row; int start; };
-  QVector<Match> matches;
-  int matchIndex = -1;
-  QPersistentModelIndex activeEditor;
+  QDialog *dlg = new QDialog(this);
+  searchColumnDialog = dlg;
+  dlg->setWindowTitle(tr("Search Column"));
+  dlg->setAttribute(Qt::WA_DeleteOnClose);
+  dlg->setWindowModality(Qt::NonModal);
 
-  auto focusMatch = [&]() {
-    if (matchIndex < 0 || matchIndex >= matches.size())
+  QVBoxLayout *layout = new QVBoxLayout(dlg);
+  QFormLayout *form = new QFormLayout();
+  layout->addLayout(form);
+
+  QLineEdit *patternEdit = new QLineEdit(dlg);
+  patternEdit->setText(lastSearchPattern);
+  QLineEdit *replaceEdit = new QLineEdit(dlg);
+  replaceEdit->setText(lastReplaceText);
+  form->addRow(tr("Find"), patternEdit);
+  form->addRow(tr("Replace With"), replaceEdit);
+
+  QHBoxLayout *btnLayout = new QHBoxLayout();
+  QPushButton *searchBtn = new QPushButton(tr("Search"), dlg);
+  QPushButton *replaceBtn = new QPushButton(tr("Replace"), dlg);
+  QPushButton *replaceSelectedBtn = new QPushButton(tr("Replace Selected"), dlg);
+  QPushButton *replaceAllBtn = new QPushButton(tr("Replace All"), dlg);
+  QPushButton *prevBtn = new QPushButton(tr("Previous"), dlg);
+  QPushButton *nextBtn = new QPushButton(tr("Next"), dlg);
+  QPushButton *closeBtn = new QPushButton(tr("Close"), dlg);
+  btnLayout->addWidget(searchBtn);
+  btnLayout->addWidget(replaceBtn);
+  btnLayout->addWidget(replaceSelectedBtn);
+  btnLayout->addWidget(replaceAllBtn);
+  btnLayout->addWidget(prevBtn);
+  btnLayout->addWidget(nextBtn);
+  btnLayout->addWidget(closeBtn);
+  layout->addLayout(btnLayout);
+
+  struct Match {
+    int row;
+    int start;
+  };
+
+  struct SearchState {
+    QVector<Match> matches;
+    int matchIndex;
+    QPersistentModelIndex activeEditor;
+  };
+
+  auto state = std::make_shared<SearchState>();
+  state->matchIndex = -1;
+
+  std::function<void()> focusMatch;
+  std::function<void(bool, bool)> runSearch;
+
+  focusMatch = [this, column, patternEdit, state]() {
+    if (state->matchIndex < 0 || state->matchIndex >= state->matches.size())
       return;
-    if (activeEditor.isValid())
-      columnView->closePersistentEditor(activeEditor);
-    QModelIndex idx = columnModel->index(matches[matchIndex].row, column);
+    if (state->activeEditor.isValid())
+      columnView->closePersistentEditor(state->activeEditor);
+    QModelIndex idx = columnModel->index(state->matches[state->matchIndex].row, column);
+    if (!idx.isValid())
+      return;
     columnView->setCurrentIndex(idx);
     columnView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
     columnView->openPersistentEditor(idx);
     if (QWidget *w = columnView->indexWidget(idx)) {
       if (QLineEdit *line = qobject_cast<QLineEdit *>(w))
-        line->setSelection(matches[matchIndex].start, patternEdit.text().length());
+        line->setSelection(state->matches[state->matchIndex].start, patternEdit->text().length());
     }
-    activeEditor = idx;
+    state->activeEditor = idx;
   };
 
-  auto runSearch = [&](bool showInfo, bool refocus = true) {
-    QString pat = patternEdit.text();
-    matches.clear();
-    matchIndex = -1;
-    if (activeEditor.isValid()) {
-      columnView->closePersistentEditor(activeEditor);
-      activeEditor = QModelIndex();
+  runSearch = [this, column, dlg, patternEdit, replaceEdit, state, focusMatch](bool showInfo, bool refocus) {
+    QString pat = patternEdit->text();
+    state->matches.clear();
+    state->matchIndex = -1;
+    if (state->activeEditor.isValid()) {
+      columnView->closePersistentEditor(state->activeEditor);
+      state->activeEditor = QModelIndex();
     }
     if (pat.isEmpty())
       return;
     lastSearchPattern = pat;
-    lastReplaceText = replaceEdit.text();
+    lastReplaceText = replaceEdit->text();
     for (int r = 0; r < columnModel->rowCount(); ++r) {
-      QString val;
       QStandardItem *it = columnModel->item(r, column);
-      if (it)
-        val = it->text();
+      if (!it)
+        continue;
+      QString val = it->text();
       int pos = 0;
       while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
-        matches.append({r, pos});
+        state->matches.append({r, pos});
         pos += pat.length();
       }
     }
-    if (!matches.isEmpty()) {
-      matchIndex = 0;
+    if (!state->matches.isEmpty()) {
+      state->matchIndex = 0;
       if (refocus)
         focusMatch();
     } else if (showInfo) {
-      QMessageBox::information(&dlg, tr("Search"), tr("No matches found"));
+      QMessageBox::information(dlg, tr("Search"), tr("No matches found"));
     }
   };
 
-  auto replaceCurrent = [&]() {
-    if (matches.isEmpty())
-      runSearch(true);
-    if (matches.isEmpty())
+  auto replaceCurrent = [this, column, patternEdit, replaceEdit, state, runSearch]() {
+    if (state->matches.isEmpty())
+      runSearch(true, true);
+    if (state->matches.isEmpty())
       return;
-    if (matchIndex < 0 || matchIndex >= matches.size())
+    if (state->matchIndex < 0 || state->matchIndex >= state->matches.size())
       return;
-    Match m = matches[matchIndex];
+    Match m = state->matches[state->matchIndex];
     QStandardItem *it = columnModel->item(m.row, column);
     if (it) {
       QString val = it->text();
-      val.replace(m.start, patternEdit.text().length(), replaceEdit.text());
+      val.replace(m.start, patternEdit->text().length(), replaceEdit->text());
       it->setText(val);
     }
     markDirty();
-    runSearch(true);
+    runSearch(true, true);
   };
 
-  auto replaceAll = [&]() {
-    if (matches.isEmpty())
-      runSearch(true);
-    if (matches.isEmpty())
+  auto replaceAll = [this, column, patternEdit, replaceEdit, state, runSearch]() {
+    if (state->matches.isEmpty())
+      runSearch(true, true);
+    if (state->matches.isEmpty())
       return;
-    QString pat = patternEdit.text();
+    QString pat = patternEdit->text();
     if (pat.isEmpty())
       return;
-    QString repl = replaceEdit.text();
+    QString repl = replaceEdit->text();
     int replaced = 0;
     for (int r = 0; r < columnModel->rowCount(); ++r) {
       QStandardItem *it = columnModel->item(r, column);
@@ -2329,11 +2353,11 @@ void SDDSEditor::searchColumn(int column) {
     }
     if (replaced > 0)
       markDirty();
-    runSearch(replaced == 0);
+    runSearch(replaced == 0, true);
   };
 
-  auto replaceSelected = [&]() {
-    QString pat = patternEdit.text();
+  auto replaceSelected = [this, column, patternEdit, replaceEdit, state, runSearch]() {
+    QString pat = patternEdit->text();
     if (pat.isEmpty())
       return;
     QItemSelectionModel *sel = columnView->selectionModel();
@@ -2342,7 +2366,7 @@ void SDDSEditor::searchColumn(int column) {
     QModelIndexList indexes = sel->selectedIndexes();
     if (indexes.isEmpty())
       return;
-    QString repl = replaceEdit.text();
+    QString repl = replaceEdit->text();
     int replaced = 0;
     for (const QModelIndex &idx : indexes) {
       if (!idx.isValid() || idx.column() != column)
@@ -2367,35 +2391,40 @@ void SDDSEditor::searchColumn(int column) {
     runSearch(replaced == 0, false);
   };
 
-  QObject::connect(&searchBtn, &QPushButton::clicked, [&]() { runSearch(true); });
-  QObject::connect(&replaceBtn, &QPushButton::clicked, replaceCurrent);
-  QObject::connect(&replaceSelectedBtn, &QPushButton::clicked, replaceSelected);
-  QObject::connect(&replaceAllBtn, &QPushButton::clicked, replaceAll);
-  QObject::connect(&nextBtn, &QPushButton::clicked, [&]() {
-    if (matches.isEmpty())
+  QObject::connect(searchBtn, &QPushButton::clicked, dlg, [runSearch]() { runSearch(true, true); });
+  QObject::connect(replaceBtn, &QPushButton::clicked, dlg, replaceCurrent);
+  QObject::connect(replaceSelectedBtn, &QPushButton::clicked, dlg, replaceSelected);
+  QObject::connect(replaceAllBtn, &QPushButton::clicked, dlg, replaceAll);
+  QObject::connect(nextBtn, &QPushButton::clicked, dlg, [state, focusMatch]() {
+    if (state->matches.isEmpty())
       return;
-    matchIndex = (matchIndex + 1) % matches.size();
+    state->matchIndex = (state->matchIndex + 1) % state->matches.size();
     focusMatch();
   });
-  QObject::connect(&prevBtn, &QPushButton::clicked, [&]() {
-    if (matches.isEmpty())
+  QObject::connect(prevBtn, &QPushButton::clicked, dlg, [state, focusMatch]() {
+    if (state->matches.isEmpty())
       return;
-    matchIndex = (matchIndex - 1 + matches.size()) % matches.size();
+    state->matchIndex = (state->matchIndex - 1 + state->matches.size()) % state->matches.size();
     focusMatch();
   });
-  QObject::connect(&closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+  QObject::connect(closeBtn, &QPushButton::clicked, dlg, &QDialog::close);
 
-  dlg.adjustSize();
+  QObject::connect(dlg, &QDialog::destroyed, this, [this, state]() {
+    if (state->activeEditor.isValid())
+      columnView->closePersistentEditor(state->activeEditor);
+    searchColumnDialog = nullptr;
+  });
+
+  dlg->adjustSize();
   QRect parentFrame = frameGeometry();
-  int x = parentFrame.x() + (parentFrame.width() - dlg.width()) / 2;
+  int x = parentFrame.x() + (parentFrame.width() - dlg->width()) / 2;
   int y = parentFrame.y();
   if (y < 0)
     y = 0;
-  dlg.move(x, y);
-
-  dlg.exec();
-  if (activeEditor.isValid())
-    columnView->closePersistentEditor(activeEditor);
+  dlg->move(x, y);
+  dlg->show();
+  dlg->raise();
+  dlg->activateWindow();
 }
 
 void SDDSEditor::resizeArray(int column) {

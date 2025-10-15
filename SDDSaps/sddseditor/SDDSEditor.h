@@ -20,10 +20,12 @@
 #include <QString>
 #include <QPoint>
 #include <QUndoStack>
+#include <QPointer>
 #include <QCloseEvent>
 
 class QGroupBox;
 class QSplitter;
+class QDialog;
 
 struct ArrayStore {
   QVector<QString> values;
@@ -151,6 +153,7 @@ private:
   QUndoStack *undoStack;
   bool updatingModels;
   bool darkPalette;
+  QPointer<QDialog> searchColumnDialog;
 };
 
 #endif // SDDSEDITOR_H
