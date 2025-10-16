@@ -1510,8 +1510,6 @@ void SDDSEditor::populateModels() {
   columnModel->setColumnCount(ccount);
   columnModel->setRowCount(rows);
 
-  columnModel->blockSignals(true);
-
   for (int32_t i = 0; i < ccount; ++i) {
     COLUMN_DEFINITION *def = &dataset.layout.column_definition[i];
     columnModel->setHeaderData(i, Qt::Horizontal, QString(def->name));
@@ -1528,8 +1526,6 @@ void SDDSEditor::populateModels() {
   }
   for (int64_t r = 0; r < rows; ++r)
     columnModel->setVerticalHeaderItem(r, new QStandardItem(QString::number(r + 1)));
-
-  columnModel->blockSignals(false);
 
 
   // Resize columns to fit their contents first so initial widths are reasonable
