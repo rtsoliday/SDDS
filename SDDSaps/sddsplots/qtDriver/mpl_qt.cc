@@ -47,6 +47,7 @@
 #include <QFont>
 #include <QVector>
 #include <QStringList>
+#include <QRegularExpression>
 #include <QShortcut>
 #include <QLabel>
 #include <QPalette>
@@ -1078,7 +1079,7 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
   QVector<double> intensities;
   QVector<QVector3D> points;
   QString firstLine = in.readLine();
-  QStringList header = firstLine.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+  QStringList header = firstLine.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
   if (header.size() == 1) {
     int n = header[0].toInt();
     dataArray->reserve(n);
@@ -1088,7 +1089,7 @@ static QWidget *run3dScatter(const char *filename, const char *xlabel,
       QString line = in.readLine();
       while (line.trimmed().isEmpty() && !in.atEnd())
         line = in.readLine();
-      QStringList parts = line.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+      QStringList parts = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
       if (parts.size() < 3)
         continue;
       double x = parts[0].toDouble();
