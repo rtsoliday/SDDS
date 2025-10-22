@@ -99,6 +99,18 @@ TIFF_LIB = $(firstword $(wildcard \
            $(addsuffix /libtiff.so, $(LIB_DIRS)) \
            $(addsuffix /libtiff.a, $(LIB_DIRS)) \
            $(addsuffix /tiff.lib, $(LIB_DIR))))
+CURL_LIB = $(firstword $(wildcard \
+           $(addsuffix /libcurl.dylib, $(LIB_DIRS)) \
+           $(addsuffix /libcurl.so, $(LIB_DIRS)) \
+           $(addsuffix /libcurl.a, $(LIB_DIRS))))
+SSL_LIB = $(firstword $(wildcard \
+          $(addsuffix /libssl.dylib, $(LIB_DIRS)) \
+          $(addsuffix /libssl.so, $(LIB_DIRS)) \
+          $(addsuffix /libssl.a, $(LIB_DIRS))))
+CRYPTO_LIB = $(firstword $(wildcard \
+             $(addsuffix /libcrypto.dylib, $(LIB_DIRS)) \
+             $(addsuffix /libcrypto.so, $(LIB_DIRS)) \
+             $(addsuffix /libcrypto.a, $(LIB_DIRS))))
 XM_LIB = $(firstword $(wildcard \
          $(addsuffix /libXm.dylib, $(LIB_DIRS)) \
          $(addsuffix /libXm.so, $(LIB_DIRS)) \
