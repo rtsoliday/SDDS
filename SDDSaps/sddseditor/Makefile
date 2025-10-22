@@ -20,7 +20,7 @@ ifeq ($(OS), Linux)
     CCFLAGS += -I../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets) -DH5_USE_16_API -I/usr/include/hdf5/serial
     LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport)
     PROD_LIBS = -lSDDS1 -lrpnlib -lmdbmth -lmdblib
-    PROD_SYS_LIBS = $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm -ldl
+    PROD_SYS_LIBS = $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(CURL_LIB) $(SSL_LIB) $(CRYPTO_LIB) -lm -ldl
   endif
 endif
 
@@ -28,7 +28,7 @@ ifeq ($(OS), Darwin)
   CCFLAGS += -I../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt5Widgets) -DH5_USE_16_API
   LDFLAGS += $(shell pkg-config --libs Qt5Widgets Qt5PrintSupport)
   PROD_LIBS = -lSDDS1 -lrpnlib -lmdbmth -lmdblib
-  PROD_SYS_LIBS = $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm
+  PROD_SYS_LIBS = $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(CURL_LIB) $(SSL_LIB) $(CRYPTO_LIB) -lm
   MOC = $(wildcard /opt/local/libexec/qt5/bin/moc)
   ifeq ($(MOC),)
     MOC = moc-qt5
