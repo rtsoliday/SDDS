@@ -6,9 +6,9 @@ URL:		https://www.aps.anl.gov/Accelerator-Operations-Physics
 Packager:	Robert Soliday <soliday@aps.anl.gov>
 Prefix:		%{_bindir}
 Autoreq:	0
-Version:	5.8
+Version:	5.9
 Release:	1
-Source:		SDDSToolKit-5.8.tar.gz
+Source:		SDDSToolKit-5.9.tar.gz
 
 %define debug_package %{nil}
 %undefine __check_files
