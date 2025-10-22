@@ -1519,7 +1519,9 @@ void sddscontour_main(char *input_line)
     double *indepdata_page = NULL;
     double *tmpptr = NULL;
     double **tmpptr2 = NULL;
+    double *sortedParValues = NULL;
     long *sorted_index = NULL;
+    long logfail = 0;
 
     nx = ny = 0;
     pages = rows = 0;
@@ -1585,10 +1587,29 @@ void sddscontour_main(char *input_line)
     ny = rows;
     sorted_index = sort_and_return_index(waterfall_parValue, SDDS_DOUBLE, pages, 1);
     tmpptr2 = (double **)rearrange_by_index((char *)(data_value), sorted_index, sizeof(double *), pages);
+    sortedParValues = (double *)rearrange_by_index((char *)waterfall_parValue, sorted_index, sizeof(*waterfall_parValue), pages);
     free(sorted_index);
     free(data_value);
     data_value = tmpptr2;
-    find_min_max(&xmin, &xmax, waterfall_parValue, nx);
+    free(waterfall_parValue);
+    waterfall_parValue = sortedParValues;
+    if (xintervals)
+      free(xintervals);
+    xintervals = malloc(sizeof(*xintervals) * nx);
+    for (i = 0; i < nx; i++) {
+      xintervals[i] = waterfall_parValue[i];
+      if (xlog && xintervals[i] <= 0)
+        logfail = 1;
+    }
+    if (xlog && logfail) {
+      fprintf(stderr, "warning: -xlog ignored because parameter %s contains non-positive values.\n", waterfall_par);
+      xlog = 0;
+    }
+    if (xlog) {
+      for (i = 0; i < nx; i++)
+        xintervals[i] = log10(xintervals[i]);
+    }
+    find_min_max(&xmin, &xmax, xintervals, nx);
     find_min_max(&ymin, &ymax, indepdata, ny);
     get_plot_labels(&SDDS_table, waterfall_par, &waterfall_colorcol, 1,
                     waterfall_colorcol, waterfall_indeptcol, users_xlabel, users_ylabel, users_title,
