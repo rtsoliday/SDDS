@@ -78,6 +78,9 @@
 #include "scan.h"
 #include <ctype.h>
 
+#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
 /* Enumeration for option types */
 enum option_type {
   SET_TAKE_COLUMNS,
@@ -96,9 +99,11 @@ enum option_type {
   SET_WILD_MATCH,
   SET_MAJOR_ORDER,
   SET_REPLACE,
+  SET_HASH_LOOKUP,
   N_OPTIONS
 };
 
+/* Using shared hash table API from SDDSaps.h */
 #define COLUMN_MODE 0
 #define PARAMETER_MODE 1
 #define ARRAY_MODE 2
@@ -167,7 +172,7 @@ typedef char *STRING_PAIR[2];
 
 char *option[N_OPTIONS] = {
   "take", "leave", "match", "equate", "transfer", "reuse", "ifnot",
-  "nowarnings", "ifis", "pipe", "fillin", "rename", "editnames", "wildmatch", "majorOrder", "replace"};
+  "nowarnings", "ifis", "pipe", "fillin", "rename", "editnames", "wildmatch", "majorOrder", "replace", "hashlookup"};
 
 char *USAGE =
   "Usage:\n"
@@ -204,6 +209,8 @@ char *USAGE =
   "      Equate columns between <input1> and <input2> for data matching based on equality.\n"
   "  -majorOrder=row|column\n"
   "      Specify the major order of data in the output (row or column). Defaults to the order of <input1>.\n"
+  "  -hashLookup\n"
+  "      Use a hash table for key lookups instead of sorted key groups. Applies to -match and -equate (non-wildcard).\n"
   "Program by Michael Borland. (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
 
 int main(int argc, char **argv) {
@@ -238,6 +245,7 @@ int main(int argc, char **argv) {
   double *value1, *value2;
   long matched;
   short columnMajorOrder = -1;
+  long useHashLookup = 0;
 
   EDIT_NAME_REQUEST *edit_column_request, *edit_parameter_request, *edit_array_request;
   long edit_column_requests, edit_parameter_requests, edit_array_requests;
@@ -503,6 +511,9 @@ int main(int argc, char **argv) {
           SDDS_Bomb("invalid -editnames syntax: specify column, parameter, or array keyword");
           break;
         }
+        break;
+      case SET_HASH_LOOKUP:
+        useHashLookup = 1;
         break;
       default:
         fprintf(stderr, "error: unknown switch: %s\n", s_arg[i_arg].list[0]);
@@ -1061,8 +1072,13 @@ int main(int argc, char **argv) {
               fprintf(stderr, "Error: problem getting column %s from file %s\n", match_column[1], input2);
               SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
             }
-            if (!wildMatch)
-              keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_STRING, string2, rows2);
+            StrHash *strHash = NULL;
+            if (!wildMatch) {
+              if (useHashLookup)
+                strHash = SDDS_BuildStrHash(string2, rows2);
+              else
+                keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_STRING, string2, rows2);
+            }
             i3 = 0;
             for (i1 = 0; i1 < rows1; i1++) {
               if (firstRun) {
@@ -1075,8 +1091,16 @@ int main(int argc, char **argv) {
               matched = 0;
               if ((&SDDS_output)->row_flag[i1]) {
                 if (!wildMatch) {
-                  if ((i2 = FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_STRING, string1 + i3, reuse)) >= 0)
-                    matched = 1;
+                  if (useHashLookup) {
+                    int64_t hv = SDDS_LookupStr(strHash, string1[i3], reuse);
+                    if (hv >= 0) {
+                      i2 = hv;
+                      matched = 1;
+                    }
+                  } else {
+                    if ((i2 = FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_STRING, string1 + i3, reuse)) >= 0)
+                      matched = 1;
+                  }
                 } else {
                   if ((i2 = match_string(string1[i3], string2, rows2, WILDCARD_MATCH)) >= 0)
                     matched = 1;
@@ -1107,11 +1131,17 @@ int main(int argc, char **argv) {
               free(string2);
             }
 
-            for (i = 0; i < keyGroups; i++) {
-              free(keyGroup[i]->equivalent);
-              free(keyGroup[i]);
+            if (!wildMatch) {
+              if (useHashLookup) {
+                SDDS_FreeStrHash(strHash);
+              } else {
+                for (i = 0; i < keyGroups; i++) {
+                  free(keyGroup[i]->equivalent);
+                  free(keyGroup[i]);
+                }
+                free(keyGroup);
+              }
             }
-            free(keyGroup);
           } else if (equate_columns) {
             if (firstRun) {
               if (!(value1 = SDDS_GetColumnInDoubles(&SDDS_1, equate_column[0]))) {
@@ -1130,7 +1160,11 @@ int main(int argc, char **argv) {
             }
 
             i3 = 0;
-            keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_DOUBLE, value2, rows2);
+            NumHash *numHash = NULL;
+            if (useHashLookup)
+              numHash = SDDS_BuildNumHash(value2, rows2);
+            else
+              keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_DOUBLE, value2, rows2);
             for (i1 = 0; i1 < rows1; i1++) {
               if (firstRun) {
                 if (!SDDS_CopyRowDirect(&SDDS_output, i1, &SDDS_1, i1)) {
@@ -1140,7 +1174,18 @@ int main(int argc, char **argv) {
                 }
               }
               if ((&SDDS_output)->row_flag[i1]) {
-                if ((i2 = FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_DOUBLE, value1 + i3, reuse)) >= 0) {
+                int matchedEq = 0;
+                if (useHashLookup) {
+                  int64_t hv = SDDS_LookupNum(numHash, value1[i3], reuse);
+                  if (hv >= 0) {
+                    i2 = hv;
+                    matchedEq = 1;
+                  }
+                } else {
+                  if ((i2 = FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_DOUBLE, value1 + i3, reuse)) >= 0)
+                    matchedEq = 1;
+                }
+                if (matchedEq) {
                   if (!CopyRowToNewColumn(&SDDS_output, i1, &SDDS_ref[z], i2, take_RefData[z], take_RefData[z].columns, input2)) {
                     fprintf(stderr, "error in copying data to output!\n");
                     exit(EXIT_FAILURE);
@@ -1159,11 +1204,15 @@ int main(int argc, char **argv) {
               free(value1);
             if (rows2 && equate_columns)
               free(value2);
-            for (i = 0; i < keyGroups; i++) {
-              free(keyGroup[i]->equivalent);
-              free(keyGroup[i]);
+            if (useHashLookup) {
+              SDDS_FreeNumHash(numHash);
+            } else {
+              for (i = 0; i < keyGroups; i++) {
+                free(keyGroup[i]->equivalent);
+                free(keyGroup[i]);
+              }
+              free(keyGroup);
             }
-            free(keyGroup);
           } else {
             for (i1 = 0; i1 < rows1; i1++) {
               i2 = i1;
@@ -1217,7 +1266,11 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Error: problem getting column %s from file %s\n", match_column[1], input2);
                 SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
               }
-              keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_STRING, string2, rows2);
+              StrHash *strHash2 = NULL;
+              if (useHashLookup)
+                strHash2 = SDDS_BuildStrHash(string2, rows2);
+              else
+                keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_STRING, string2, rows2);
               i3 = 0;
               for (i1 = 0; i1 < rows1; i1++) {
                 if (firstRun) {
@@ -1228,7 +1281,13 @@ int main(int argc, char **argv) {
                   }
                 }
                 if ((&SDDS_output)->row_flag[i1]) {
-                  if ((FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_STRING, string1 + i3, reuse)) < 0) {
+                  int present = 0;
+                  if (useHashLookup) {
+                    present = SDDS_LookupStr(strHash2, string1[i3], 1) >= 0;
+                  } else {
+                    present = (FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_STRING, string1 + i3, reuse)) >= 0;
+                  }
+                  if (!present) {
                     if (!fillIn && !SDDS_AssertRowFlags(&SDDS_output, SDDS_INDEX_LIMITS, i1, i1, (int32_t)0))
                       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
                     if (warnings)
@@ -1249,11 +1308,15 @@ int main(int argc, char **argv) {
                 free(string2);
               }
 
-              for (i = 0; i < keyGroups; i++) {
-                free(keyGroup[i]->equivalent);
-                free(keyGroup[i]);
+              if (useHashLookup) {
+                SDDS_FreeStrHash(strHash2);
+              } else {
+                for (i = 0; i < keyGroups; i++) {
+                  free(keyGroup[i]->equivalent);
+                  free(keyGroup[i]);
+                }
+                free(keyGroup);
               }
-              free(keyGroup);
             } else if (equate_columns) {
               if (firstRun) {
                 if (!(value1 = SDDS_GetColumnInDoubles(&SDDS_1, equate_column[0]))) {
@@ -1270,7 +1333,11 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Error: problem getting column %s from file %s\n", equate_column[1], input2);
                 SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
               }
-              keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_DOUBLE, value2, rows2);
+              NumHash *numHash2 = NULL;
+              if (useHashLookup)
+                numHash2 = SDDS_BuildNumHash(value2, rows2);
+              else
+                keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_DOUBLE, value2, rows2);
               i3 = 0;
               for (i1 = 0; i1 < rows1; i1++) {
                 if (firstRun) {
@@ -1281,7 +1348,13 @@ int main(int argc, char **argv) {
                   }
                 }
                 if ((&SDDS_output)->row_flag[i1]) {
-                  if ((FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_DOUBLE, value1 + i3, reuse)) < 0) {
+                  int presentEq = 0;
+                  if (useHashLookup) {
+                    presentEq = SDDS_LookupNum(numHash2, value1[i3], 1) >= 0;
+                  } else {
+                    presentEq = (FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_DOUBLE, value1 + i3, reuse)) >= 0;
+                  }
+                  if (!presentEq) {
                     if (!fillIn && !SDDS_AssertRowFlags(&SDDS_output, SDDS_INDEX_LIMITS, i1, i1, (int32_t)0))
                       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
                     if (warnings)
@@ -1295,11 +1368,15 @@ int main(int argc, char **argv) {
                 free(value1);
               if (rows2 && equate_columns)
                 free(value2);
-              for (i = 0; i < keyGroups; i++) {
-                free(keyGroup[i]->equivalent);
-                free(keyGroup[i]);
+              if (useHashLookup) {
+                SDDS_FreeNumHash(numHash2);
+              } else {
+                for (i = 0; i < keyGroups; i++) {
+                  free(keyGroup[i]->equivalent);
+                  free(keyGroup[i]);
+                }
+                free(keyGroup);
               }
-              free(keyGroup);
             }
           }
         }
@@ -1768,3 +1845,5 @@ long CopyArraysFromSecondInput(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_sou
   }
   return 1;
 }
+
+/* Hash table implementation moved to SDDSaps.c; this file now uses shared API from SDDSaps.h */
