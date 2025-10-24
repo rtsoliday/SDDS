@@ -377,5 +377,47 @@ extern long pop_log(int32_t *logical);
 
 void add_ifitem(IFITEM_LIST *ifitem, char **name, long names);
 
+/* Hash table support shared across SDDS apps (moved from sddsxref.c) */
+
+/* Row list for tracking multiple matching rows per key */
+typedef struct RowList {
+  int64_t *rows;
+  int count;
+  int next;
+} RowList;
+
+/* String-keyed hash structures */
+typedef struct StrNode {
+  char *key;
+  RowList list;
+  struct StrNode *next;
+} StrNode;
+
+typedef struct StrHash {
+  StrNode **buckets;
+  int bucketCount;
+} StrHash;
+
+/* Numeric-keyed hash structures (uses bit pattern of double) */
+typedef struct NumNode {
+  uint64_t key;
+  RowList list;
+  struct NumNode *next;
+} NumNode;
+
+typedef struct NumHash {
+  NumNode **buckets;
+  int bucketCount;
+} NumHash;
+
+/* Hash table API */
+StrHash *SDDS_BuildStrHash(char **keys, int64_t nrows);
+int64_t SDDS_LookupStr(StrHash *ht, const char *key, int reuse);
+void SDDS_FreeStrHash(StrHash *ht);
+
+NumHash *SDDS_BuildNumHash(double *keys, int64_t nrows);
+int64_t SDDS_LookupNum(NumHash *ht, double keyVal, int reuse);
+void SDDS_FreeNumHash(NumHash *ht);
+
 #include "scan.h"
 long add_sddsfile_arguments(SCANNED_ARG **scanned, int argc);
