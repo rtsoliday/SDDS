@@ -14,6 +14,7 @@
  *            [-pipe[=input][,output]]
  *            [-match=<column-name>[=<column-name>]]
  *            [-equate=<column-name>[=<column-name>]] 
+ *            [-hashLookup]
  *            [-invert]
  *            [-reuse[=rows][,page]] 
  *            [-majorOrder=row|column]
@@ -26,6 +27,7 @@
  * | `-pipe`                               | Use pipe for input and/or output.                                                     |
  * | `-match`                              | Specify columns to match between `<input1>` and `<input2>`.                           |
  * | `-equate`                             | Specify columns to equate between `<input1>` and `<input2>`.                          |
+ * | `-hashLookup`                         | Use a hash table for matching instead of sorted key lists.                            |
  * | `-invert`                             | Invert the selection to keep non-matching rows.                                       |
  * | `-reuse`                              | Allow reusing rows or specify page reuse.                                             |
  * | `-majorOrder`                         | Set the output file to row or column major order.                                     |
@@ -48,6 +50,7 @@
 
 #include "mdb.h"
 #include "SDDS.h"
+#include "SDDSaps.h"
 #include "scan.h"
 
 /* Enumeration for option types */
@@ -59,6 +62,7 @@ enum option_type {
   SET_REUSE,
   SET_PIPE,
   SET_MAJOR_ORDER,
+  SET_HASH_LOOKUP,
   N_OPTIONS
 };
 
@@ -70,6 +74,7 @@ char *option[N_OPTIONS] = {
   "reuse",
   "pipe",
   "majorOrder",
+  "hashlookup",
 };
 
 char *USAGE = "\n\
@@ -77,6 +82,7 @@ sddsselect [<input1>] <input2> [<output>]\n\
            [-pipe[=input][,output]]\n\
            [-match=<column-name>[=<column-name>]]\n\
            [-equate=<column-name>[=<column-name>]] \n\
+           [-hashLookup]\n\
            [-invert]\n\
            [-reuse[=rows][,page]] \n\
            [-majorOrder=row|column]\n\
@@ -85,6 +91,7 @@ Options:\n\
   -pipe[=input][,output]          Use pipe for input and/or output.\n\
   -match=<column1>[=<column2>]   Specify columns to match between input1 and input2.\n\
   -equate=<column1>[=<column2>]  Specify columns to equate between input1 and input2.\n\
+  -hashLookup                     Use a hash table for key lookups (non-wildcard match/equate).\n\
   -invert                         Invert the selection to keep non-matching rows.\n\
   -reuse[=rows][,page]            Allow reusing rows or specify page reuse.\n\
   -majorOrder=row|column          Set the output file to row or column major order.\n\
@@ -110,6 +117,7 @@ int main(int argc, char **argv) {
   KEYED_EQUIVALENT **keyGroup = NULL;
   long keyGroups = 0;
   short columnMajorOrder = -1;
+  long useHashLookup = 0;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&s_arg, argc, argv);
@@ -197,6 +205,9 @@ int main(int argc, char **argv) {
       case SET_PIPE:
         if (!processPipeOption(s_arg[i_arg].list + 1, s_arg[i_arg].n_items - 1, &pipeFlags))
           SDDS_Bomb("invalid -pipe syntax");
+        break;
+      case SET_HASH_LOOKUP:
+        useHashLookup = 1;
         break;
       default:
         fprintf(stderr, "error: unknown switch: %s\n", s_arg[i_arg].list[0]);
@@ -338,8 +349,13 @@ int main(int argc, char **argv) {
           fprintf(stderr, "Error: problem getting column %s from file %s\n", match_column[1], input2);
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         }
-        if (rows2)
-          keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_STRING, string2, rows2);
+        StrHash *strHash = NULL;
+        if (rows2) {
+          if (useHashLookup)
+            strHash = SDDS_BuildStrHash(string2, rows2);
+          else
+            keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_STRING, string2, rows2);
+        }
         for (i1 = 0; i1 < rows1; i1++) {
           if (!SDDS_CopyRowDirect(&SDDS_output, i1, &SDDS_1, i1)) {
             sprintf(s, "Problem copying row %" PRId64 " of first data set", i1);
@@ -347,8 +363,14 @@ int main(int argc, char **argv) {
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
           }
           matched = 0;
-          if (rows2 && (i2 = FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_STRING, string1 + i1, reuse)) >= 0) {
-            matched = 1;
+          if (rows2) {
+            if (useHashLookup) {
+              if (SDDS_LookupStr(strHash, string1[i1], reuse) >= 0)
+                matched = 1;
+            } else {
+              if ((i2 = FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_STRING, string1 + i1, reuse)) >= 0)
+                matched = 1;
+            }
           }
           if ((!matched && !invert) || (matched && invert)) {
             if (!SDDS_AssertRowFlags(&SDDS_output, SDDS_INDEX_LIMITS, i1, i1, 0))
@@ -366,6 +388,10 @@ int main(int argc, char **argv) {
             free(string2[i]);
           free(string2);
           string2 = NULL;
+        }
+        if (useHashLookup && strHash) {
+          SDDS_FreeStrHash(strHash);
+          strHash = NULL;
         }
         for (i = 0; i < keyGroups; i++) {
           if (keyGroup[i]) {
@@ -392,8 +418,13 @@ int main(int argc, char **argv) {
           fprintf(stderr, "Error: problem getting column %s from file %s\n", equate_column[1], input2);
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         }
-        if (rows2)
-          keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_DOUBLE, value2, rows2);
+        NumHash *numHash = NULL;
+        if (rows2) {
+          if (useHashLookup)
+            numHash = SDDS_BuildNumHash(value2, rows2);
+          else
+            keyGroup = MakeSortedKeyGroups(&keyGroups, SDDS_DOUBLE, value2, rows2);
+        }
         for (i1 = 0; i1 < rows1; i1++) {
           if (!SDDS_CopyRowDirect(&SDDS_output, i1, &SDDS_1, i1)) {
             sprintf(s, "Problem copying row %" PRId64 " of first data set", i1);
@@ -401,9 +432,14 @@ int main(int argc, char **argv) {
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
           }
           equated = 0;
-          if (rows2 &&
-              (i2 = FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_DOUBLE, value1 + i1, reuse)) >= 0) {
-            equated = 1;
+          if (rows2) {
+            if (useHashLookup) {
+              if (SDDS_LookupNum(numHash, value1[i1], reuse) >= 0)
+                equated = 1;
+            } else {
+              if ((i2 = FindMatchingKeyGroup(keyGroup, keyGroups, SDDS_DOUBLE, value1 + i1, reuse)) >= 0)
+                equated = 1;
+            }
           }
           if ((!equated && !invert) || (equated && invert)) {
             if (!SDDS_AssertRowFlags(&SDDS_output, SDDS_INDEX_LIMITS, i1, i1, 0))
@@ -416,6 +452,10 @@ int main(int argc, char **argv) {
         if (rows2 && value2)
           free(value2);
         value2 = NULL;
+        if (useHashLookup && numHash) {
+          SDDS_FreeNumHash(numHash);
+          numHash = NULL;
+        }
         for (i = 0; i < keyGroups; i++) {
           if (keyGroup[i]) {
             if (keyGroup[i]->equivalent)
