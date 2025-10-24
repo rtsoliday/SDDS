@@ -148,6 +148,7 @@ sddsshiftcor_SRC = sddsshiftcor.c SDDSutils.c
 sddssplinefit_SRC = sddssplinefit.c SDDSutils.c
 sddsspotanalysis_SRC = sddsspotanalysis.c SDDSutils.c
 sddsxref_SRC = sddsxref.c SDDSaps.c
+sddsselect_SRC = sddsselect.c SDDSaps.c
 sdds2tiff_SRC = sdds2tiff.c
 tiff2sdds_SRC = tiff2sdds.c
 
@@ -339,6 +340,12 @@ $(OBJ_DIR)/sddsspotanalysis$(EXEEXT): $(sddsspotanalysis_OBJS) $(PROD_DEPS)
 
 $(OBJ_DIR)/sddsxref$(EXEEXT): $(sddsxref_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsxref_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+	cp -f $@ $(BIN_DIR)/
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
+	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
+
+$(OBJ_DIR)/sddsselect$(EXEEXT): $(sddsselect_OBJS) $(PROD_DEPS)
+	$(LINKEXE) $(OUTPUTEXE) $(sddsselect_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
