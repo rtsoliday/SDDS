@@ -4115,3 +4115,190 @@ void GillMillerIntegration1(double *indepData, double *data, long n_data, double
   *result = integral[n_data - 1];
   free(integral);
 }
+
+/* ========================================================================== */
+/* Hash table support for -hashLookup (moved from sddsxref.c into SDDSaps)    */
+/* Shared implementations for string and numeric key lookup.                  */
+/* ========================================================================== */
+
+#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
+
+/* Internal helpers */
+static unsigned long SDDS_hash_string(const char *s) {
+  unsigned long h = 5381;
+  int c;
+  while (s && (c = *s++))
+    h = ((h << 5) + h) + (unsigned long)c; /* djb2 */
+  return h;
+}
+
+static uint64_t SDDS_hash_double_key(uint64_t key) {
+  /* Mix 64-bit key using FNV-1a style for decent distribution */
+  uint64_t h = 1469598103934665603ULL;
+  for (int i = 0; i < 8; i++) {
+    uint8_t b = (key >> (i * 8)) & 0xFF;
+    h ^= b;
+    h *= 1099511628211ULL;
+  }
+  return h;
+}
+
+/* Build a hash table mapping string keys to row indices (supports duplicates) */
+StrHash *SDDS_BuildStrHash(char **keys, int64_t nrows) {
+  const int buckets = 8192;
+  StrHash *ht = (StrHash *)malloc(sizeof(StrHash));
+  if (!ht) return NULL;
+  ht->bucketCount = buckets;
+  ht->buckets = (StrNode **)calloc(buckets, sizeof(StrNode *));
+  if (!ht->buckets) {
+    free(ht);
+    return NULL;
+  }
+  for (int64_t r = 0; r < nrows; r++) {
+    char *key = keys[r];
+    if (!key)
+      continue;
+    unsigned long h = SDDS_hash_string(key) % (unsigned long)buckets;
+    StrNode *node = ht->buckets[h];
+    while (node && strcmp(node->key, key) != 0)
+      node = node->next;
+    if (!node) {
+      node = (StrNode *)malloc(sizeof(StrNode));
+      if (!node) continue;
+      node->key = key; /* borrow pointer (lifetime managed by caller) */
+      node->list.rows = (int64_t *)malloc(sizeof(int64_t));
+      if (!node->list.rows) { free(node); continue; }
+      node->list.rows[0] = r;
+      node->list.count = 1;
+      node->list.next = 0;
+      node->next = ht->buckets[h];
+      ht->buckets[h] = node;
+    } else {
+      node->list.rows = (int64_t *)realloc(node->list.rows, sizeof(int64_t) * (node->list.count + 1));
+      if (!node->list.rows) {
+        node->list.count = 0;
+        continue;
+      }
+      node->list.rows[node->list.count++] = r;
+    }
+  }
+  return ht;
+}
+
+int64_t SDDS_LookupStr(StrHash *ht, const char *key, int reuse) {
+  if (!ht || !key)
+    return -1;
+  unsigned long h = SDDS_hash_string(key) % (unsigned long)ht->bucketCount;
+  StrNode *node = ht->buckets[h];
+  while (node && strcmp(node->key, key) != 0)
+    node = node->next;
+  if (!node || node->list.count == 0)
+    return -1;
+  if (reuse) {
+    /* allow reuse: return first row */
+    return node->list.rows[0];
+  } else {
+    /* no reuse: consume next available */
+    if (node->list.next >= node->list.count)
+      return -1;
+    return node->list.rows[node->list.next++];
+  }
+}
+
+void SDDS_FreeStrHash(StrHash *ht) {
+  if (!ht) return;
+  for (int i = 0; i < ht->bucketCount; i++) {
+    StrNode *cur = ht->buckets[i];
+    while (cur) {
+      StrNode *n = cur->next;
+      if (cur->list.rows)
+        free(cur->list.rows);
+      free(cur);
+      cur = n;
+    }
+  }
+  free(ht->buckets);
+  free(ht);
+}
+
+/* Build a hash table mapping double keys (bit pattern) to row indices */
+NumHash *SDDS_BuildNumHash(double *keys, int64_t nrows) {
+  const int buckets = 8192;
+  NumHash *ht = (NumHash *)malloc(sizeof(NumHash));
+  if (!ht) return NULL;
+  ht->bucketCount = buckets;
+  ht->buckets = (NumNode **)calloc(buckets, sizeof(NumNode *));
+  if (!ht->buckets) {
+    free(ht);
+    return NULL;
+  }
+  for (int64_t r = 0; r < nrows; r++) {
+    double dv = keys[r];
+    uint64_t k;
+    memcpy(&k, &dv, sizeof(uint64_t));
+    uint64_t hv = SDDS_hash_double_key(k);
+    int idx = (int)(hv % (uint64_t)buckets);
+    NumNode *node = ht->buckets[idx];
+    while (node && node->key != k)
+      node = node->next;
+    if (!node) {
+      node = (NumNode *)malloc(sizeof(NumNode));
+      if (!node) continue;
+      node->key = k;
+      node->list.rows = (int64_t *)malloc(sizeof(int64_t));
+      if (!node->list.rows) { free(node); continue; }
+      node->list.rows[0] = r;
+      node->list.count = 1;
+      node->list.next = 0;
+      node->next = ht->buckets[idx];
+      ht->buckets[idx] = node;
+    } else {
+      node->list.rows = (int64_t *)realloc(node->list.rows, sizeof(int64_t) * (node->list.count + 1));
+      if (!node->list.rows) {
+        node->list.count = 0;
+        continue;
+      }
+      node->list.rows[node->list.count++] = r;
+    }
+  }
+  return ht;
+}
+
+int64_t SDDS_LookupNum(NumHash *ht, double keyVal, int reuse) {
+  if (!ht)
+    return -1;
+  uint64_t k;
+  memcpy(&k, &keyVal, sizeof(uint64_t));
+  uint64_t hv = SDDS_hash_double_key(k);
+  int idx = (int)(hv % (uint64_t)ht->bucketCount);
+  NumNode *node = ht->buckets[idx];
+  while (node && node->key != k)
+    node = node->next;
+  if (!node || node->list.count == 0)
+    return -1;
+  if (reuse) {
+    return node->list.rows[0];
+  } else {
+    if (node->list.next >= node->list.count)
+      return -1;
+    return node->list.rows[node->list.next++];
+  }
+}
+
+void SDDS_FreeNumHash(NumHash *ht) {
+  if (!ht) return;
+  for (int i = 0; i < ht->bucketCount; i++) {
+    NumNode *cur = ht->buckets[i];
+    while (cur) {
+      NumNode *n = cur->next;
+      if (cur->list.rows)
+        free(cur->list.rows);
+      free(cur);
+      cur = n;
+    }
+  }
+  free(ht->buckets);
+  free(ht);
+}
