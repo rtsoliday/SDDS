@@ -609,6 +609,7 @@ int main(int argc, char **argv) {
   }
   ySigmasValid = 0;
   if (sigmasMode != -1 || generateSigmas || ySigmaName || modifySigmas)
+    ySigmasValid = 1;
 
   if (normTerm >= 0 && normTerm >= terms)
     SDDS_Bomb("can't normalize to that term--not that many terms");
