@@ -49,6 +49,10 @@ endif
 
 include ../../Makefile.build
 
+# Special compilation rule for sddsplot.c to work around -O3 optimization bug
+O.Linux-x86_64/sddsplot.o: sddsplot.c
+	gcc -m64 -O0 -g -Wall -fPIC -I/usr/include -mtune=generic -DUSE_GD_LIBRARY -DzLib -I../../include -fopenmp -MMD -MP -MF O.Linux-x86_64/sddsplot.d -c sddsplot.c -o O.Linux-x86_64/sddsplot.o
+
 $(OBJ_DIR)/sddsplot$(EXEEXT): $(sddsplot_OBJS) $(LIBRARY) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsplot_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
