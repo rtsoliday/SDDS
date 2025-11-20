@@ -6,6 +6,17 @@
  */
 
 #include "mpl_qt.h"
+static bool isEqualAspectArgument(const char *arg) {
+  if (!arg)
+    return false;
+  const char *options[] = {"-equalaspect", "-equalAspect"};
+  for (const char *option : options) {
+    const size_t len = strlen(option);
+    if (!strncmp(arg, option, len) && (arg[len] == '\0' || arg[len] == '='))
+      return true;
+  }
+  return false;
+}
 
 #include <unistd.h>
 #ifndef _WIN32
@@ -2403,7 +2414,7 @@ int main(int argc, char *argv[]) {
       current.topline = QString::fromUtf8(argv[i] + 9);
     else if (!strcmp(argv[i], "-fontsize") && i + 1 < argc && in3d)
       current.fontSize = atoi(argv[++i]);
-    else if (!strcmp(argv[i], "-equalaspect") && in3d)
+    else if (isEqualAspectArgument(argv[i]) && in3d)
       current.equalAspect = true;
     else if (!strcmp(argv[i], "-shade") && i + 1 < argc && in3d) {
       nspect = atoi(argv[++i]);

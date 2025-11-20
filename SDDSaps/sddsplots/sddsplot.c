@@ -130,6 +130,7 @@ char *USAGE5 = "  -offset=[{x|y}change={value>][,{x|y}parameter=<name>][,{x|y}in
   -intensityBar=[text=<string>,][labelsize=<value>][,unitsize=<value>][,xadjust=<value>]\n\
   -convertunits={column|parameter},<name>,<new-units-name>,<old-units-name>[,<factor>]\n\
   -3d={column|array},<x-name>,<y-name>,<z-name>[,<intensity-name>]\n\
+  -equalAspect[={-1,1}] (currently applies to -3d plots)\n\
   -orderColors={temperature|rtemperature|spectral|rspectral|start=(<red>,<green>,<blue>){[,finish=(<red>,<green>,<blue>)]|[,increment=(<red>,<green>,<blue>)]}}\n\
   All colors range from 0 to 65535.\n\
   -device={qt|motif|png|postscript}[,dashes,linetypetable=<lineDefineFile>,movie,interval=<seconds>,keep=<number>,share=<name>,timeoutHours=<hours>,spectrum]\n\
@@ -246,6 +247,7 @@ static char *main_keyword[] = {
   "listfonts",
   "fixfontsize",
   "convertunits",
+  "equalAspect",
   "3d",
   NULL,
 };
@@ -341,6 +343,7 @@ extern long aspectratio_AP(PLOT_SPEC *plotspec, char **item, long items),
   listFonts_AP(PLOT_SPEC *plotspec, char **item, long items),
   fixfontsize_AP(PLOT_SPEC *plotspec, char **item, long items),
   convertUnits_AP(PLOT_SPEC *plotspec, char **item, long items),
+  equalAspect_AP(PLOT_SPEC *plotspec, char **item, long items),
   threeD_AP(PLOT_SPEC *plotspec, char **item, long items);
 
 static long (*main_parser[])(PLOT_SPEC *plotspec, char **item, long items) = {
@@ -435,6 +438,7 @@ static long (*main_parser[])(PLOT_SPEC *plotspec, char **item, long items) = {
   listFonts_AP,
   fixfontsize_AP,
   convertUnits_AP,
+  equalAspect_AP,
   threeD_AP,
   NULL,
 };

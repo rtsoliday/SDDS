@@ -78,6 +78,19 @@ static void appendQuotedOption(char *command, size_t commandSize, const char *op
     command[commandSize - 1] = '\0';
 }
 
+static int matchesEqualAspectOption(const char *arg) {
+  size_t len;
+  if (!arg)
+    return 0;
+  len = strlen("-equalaspect");
+  if (!strncmp(arg, "-equalaspect", len))
+    return arg[len] == '\0' || arg[len] == '=';
+  len = strlen("-equalAspect");
+  if (!strncmp(arg, "-equalAspect", len))
+    return arg[len] == '\0' || arg[len] == '=';
+  return 0;
+}
+
 long graphic_AP1(GRAPHIC_SPEC *graphic_spec, long element, char **item, long items);
 long plotnames_AP1(PLOT_SPEC *plotspec, char **item, long items, char *plotnames_usage, long class);
 void add_plot_request(PLOT_SPEC *plspec);
@@ -289,7 +302,7 @@ static int handle3DScatter(int argc, char **argv, const TICK_SETTINGS *tickSetti
     if (!strcmp(argv[i], "-fontsize") && i + 1 < argc) {
       strcat(command, " -fontsize ");
       strcat(command, argv[++i]);
-    } else if (!strcmp(argv[i], "-equalaspect"))
+    } else if (matchesEqualAspectOption(argv[i]))
       strcat(command, " -equalaspect");
     else if (!strcmp(argv[i], "-yflip"))
       strcat(command, " -yflip");
@@ -1062,6 +1075,19 @@ long noscales_AP(PLOT_SPEC *plotspec, char **item, long items)
         }
     return 1;
     }
+
+long equalAspect_AP(PLOT_SPEC *plotspec, char **item, long items)
+{
+    (void)plotspec;
+    if (!items)
+        return 1;
+    if (items == 1) {
+        if (!strcmp(item[0], "1") || !strcmp(item[0], "-1"))
+            return 1;
+        return bombre("invalid -equalAspect value", "-equalAspect[={-1,1}]", 0);
+        }
+    return bombre("invalid -equalAspect syntax", "-equalAspect[={-1,1}]", 0);
+}
 
 long xlabel_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
