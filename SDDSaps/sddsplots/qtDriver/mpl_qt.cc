@@ -1786,6 +1786,12 @@ public:
     bufferPainter.end();
     return image;
   }
+  bool renderPlotToPainter(QPainter &painter, const QSize &targetSize) {
+    if (targetSize.isEmpty())
+      return false;
+    drawPlotToPainter(painter, targetSize, false);
+    return true;
+  }
   void setRelativeAnchorFromGlobal(const QPoint &globalPos) {
     QPoint localPos = mapFromGlobal(globalPos);
     if (!rect().contains(localPos)) {
@@ -2255,6 +2261,15 @@ QImage exportCurrentPlotImage(const QSize &targetSize) {
   return plotCanvas->renderPlotToImage(targetSize);
 }
 
+bool exportCurrentPlotToPainter(QPainter &painter, const QSize &targetSize) {
+  if (!canvas)
+    return false;
+  Canvas *plotCanvas = qobject_cast<Canvas *>(canvas);
+  if (!plotCanvas)
+    return false;
+  return plotCanvas->renderPlotToPainter(painter, targetSize);
+}
+
 void captureRelativeMouseAnchor() {
   if (!canvas)
     return;
@@ -2537,9 +2552,13 @@ int main(int argc, char *argv[]) {
   fileMenu->addAction(printAction);
   QObject::connect(printAction, &QAction::triggered, &app, [](bool){ print(); });
 
-  QAction *saveAction = new QAction("Save as PNG, JPEG or PDF...", &mainWindow);
+  QAction *saveAction = new QAction("Save as PNG or JPEG...", &mainWindow);
   fileMenu->addAction(saveAction);
   QObject::connect(saveAction, &QAction::triggered, &app, [](bool){ save(); });
+
+  QAction *savePdfEpsAction = new QAction("Save as PDF, PS or EPS...", &mainWindow);
+  fileMenu->addAction(savePdfEpsAction);
+  QObject::connect(savePdfEpsAction, &QAction::triggered, &app, [](bool){ savePdfOrEps(); });
 
   QAction *quitAction = new QAction("Quit (Q)", &mainWindow);
   fileMenu->addAction(quitAction);
