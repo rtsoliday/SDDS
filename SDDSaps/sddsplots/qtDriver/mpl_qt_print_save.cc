@@ -33,23 +33,25 @@ static QImage buildExportImage(const QSize &exportSize) {
     return QImage();
   QImage plotImage = exportCurrentPlotImage(exportSize);
   if (plotImage.isNull()) {
+    QCoreApplication::processEvents();
     QPixmap pixmap = canvas->grab();
-    plotImage = pixmap.toImage().convertToFormat(QImage::Format_ARGB32);
+    plotImage = pixmap.toImage().scaled(exportSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                      .convertToFormat(QImage::Format_ARGB32);
   }
-  if (surfaceGraph && surfaceContainer) {
-    QImage graphImage = surfaceGraph->renderToImage(0, exportSize);
+  if (surfaceGraph && surfaceContainer && surfaceContainer->isVisible()) {
+    QRect containerGeom = surfaceContainer->geometry();
+    double scaleX = (exportSize.width() > 0 && canvas->width() > 0)
+                        ? static_cast<double>(exportSize.width()) / canvas->width()
+                        : 1.0;
+    double scaleY = (exportSize.height() > 0 && canvas->height() > 0)
+                        ? static_cast<double>(exportSize.height()) / canvas->height()
+                        : 1.0;
+    QSize scaledSize(std::lround(containerGeom.width() * scaleX),
+                     std::lround(containerGeom.height() * scaleY));
+    QImage graphImage = surfaceGraph->renderToImage(0, scaledSize);
     if (!graphImage.isNull()) {
       QPainter painter(&plotImage);
-      double scaleX = (exportSize.width() > 0 && canvas->width() > 0)
-                          ? static_cast<double>(exportSize.width()) / canvas->width()
-                          : 1.0;
-      double scaleY = (exportSize.height() > 0 && canvas->height() > 0)
-                          ? static_cast<double>(exportSize.height()) / canvas->height()
-                          : 1.0;
-      QPoint topLeft = surfaceContainer->geometry().topLeft();
-      QPoint scaledTopLeft(std::lround(topLeft.x() * scaleX), std::lround(topLeft.y() * scaleY));
-      QSize scaledSize(std::lround(surfaceContainer->width() * scaleX),
-                       std::lround(surfaceContainer->height() * scaleY));
+      QPoint scaledTopLeft(std::lround(containerGeom.x() * scaleX), std::lround(containerGeom.y() * scaleY));
       painter.drawImage(QRect(scaledTopLeft, scaledSize), graphImage);
       painter.end();
     }
@@ -114,11 +116,32 @@ static bool renderPlotWithPrinter(const QString &fileName,
     target = QSize(LPNG_XMAX, LPNG_YMAX);
   painter.fillRect(QRect(QPoint(0, 0), target), Qt::white);
   bool painted = exportCurrentPlotToPainter(painter, target);
-  if (!painted && canvas)
+  if (!painted && canvas) {
+    double scaleX = (target.width() > 0 && canvas->width() > 0)
+                        ? static_cast<double>(target.width()) / canvas->width()
+                        : 1.0;
+    double scaleY = (target.height() > 0 && canvas->height() > 0)
+                        ? static_cast<double>(target.height()) / canvas->height()
+                        : 1.0;
+    painter.save();
+    painter.scale(scaleX, scaleY);
+    QCoreApplication::processEvents();
     canvas->render(&painter);
-  if (surfaceGraph && surfaceContainer) {
-    QImage graphImage = surfaceGraph->renderToImage(0, surfaceContainer->size());
-    painter.drawImage(surfaceContainer->geometry().topLeft(), graphImage);
+    painter.restore();
+  }
+  if (surfaceGraph && surfaceContainer && surfaceContainer->isVisible()) {
+    QRect containerGeom = surfaceContainer->geometry();
+    double scaleX = (target.width() > 0 && canvas->width() > 0)
+                        ? static_cast<double>(target.width()) / canvas->width()
+                        : 1.0;
+    double scaleY = (target.height() > 0 && canvas->height() > 0)
+                        ? static_cast<double>(target.height()) / canvas->height()
+                        : 1.0;
+    QSize scaledSize(std::lround(containerGeom.width() * scaleX),
+                     std::lround(containerGeom.height() * scaleY));
+    QImage graphImage = surfaceGraph->renderToImage(0, scaledSize);
+    QPoint scaledTopLeft(std::lround(containerGeom.x() * scaleX), std::lround(containerGeom.y() * scaleY));
+    painter.drawImage(QRect(scaledTopLeft, scaledSize), graphImage);
   }
   painter.end();
   onBlack();
@@ -238,10 +261,29 @@ void print() {
   if (dialog.exec() == QDialog::Accepted) {
     onWhite();
     QPainter painter(&printer);
-    canvas->render(&painter);
-    if (surfaceGraph && surfaceContainer) {
-      QImage graphImage = surfaceGraph->renderToImage(0, surfaceContainer->size());
-      painter.drawImage(surfaceContainer->geometry().topLeft(), graphImage);
+    QSize target = printer.pageRect(QPrinter::DevicePixel).size().toSize();
+    if (!target.isValid() && canvas)
+      target = canvas->size();
+    if (canvas) {
+      double scaleX = (target.width() > 0 && canvas->width() > 0)
+                          ? static_cast<double>(target.width()) / canvas->width()
+                          : 1.0;
+      double scaleY = (target.height() > 0 && canvas->height() > 0)
+                          ? static_cast<double>(target.height()) / canvas->height()
+                          : 1.0;
+      painter.save();
+      painter.scale(scaleX, scaleY);
+      QCoreApplication::processEvents();
+      canvas->render(&painter);
+      painter.restore();
+      if (surfaceGraph && surfaceContainer && surfaceContainer->isVisible()) {
+        QRect containerGeom = surfaceContainer->geometry();
+        QSize scaledSize(std::lround(containerGeom.width() * scaleX),
+                         std::lround(containerGeom.height() * scaleY));
+        QImage graphImage = surfaceGraph->renderToImage(0, scaledSize);
+        QPoint scaledTopLeft(std::lround(containerGeom.x() * scaleX), std::lround(containerGeom.y() * scaleY));
+        painter.drawImage(QRect(scaledTopLeft, scaledSize), graphImage);
+      }
     }
     painter.end();
     onBlack();

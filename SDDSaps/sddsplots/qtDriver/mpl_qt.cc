@@ -2364,6 +2364,39 @@ q - quit");
 };
 
 /**
+ * @brief Custom Qt message handler to suppress XCB warning messages.
+ *
+ * Filters out "qt.qpa.xcb: QXcbConnection: XCB error" messages that occur
+ * during normal operation and are not indicative of actual problems.
+ *
+ * @param type The message type.
+ * @param context The message log context.
+ * @param msg The message string.
+ */
+static void customMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
+  if (msg.contains("QXcbConnection") && msg.contains("XCB error"))
+    return;
+  QByteArray localMsg = msg.toLocal8Bit();
+  switch (type) {
+  case QtDebugMsg:
+    fprintf(stderr, "Debug: %s\n", localMsg.constData());
+    break;
+  case QtInfoMsg:
+    fprintf(stderr, "Info: %s\n", localMsg.constData());
+    break;
+  case QtWarningMsg:
+    fprintf(stderr, "Warning: %s\n", localMsg.constData());
+    break;
+  case QtCriticalMsg:
+    fprintf(stderr, "Critical: %s\n", localMsg.constData());
+    break;
+  case QtFatalMsg:
+    fprintf(stderr, "Fatal: %s\n", localMsg.constData());
+    abort();
+  }
+}
+
+/**
  * @brief Main entry point of the MPL Outboard Driver application.
  *
  * Sets up the main window, menus, canvas, and event loop.
@@ -2373,6 +2406,7 @@ q - quit");
  * @return int Exit status.
  */
 int main(int argc, char *argv[]) {
+  qInstallMessageHandler(customMessageHandler);
   lineTypeTable.nEntries = 0;
   lineTypeTable.typeFlag = 0x0000;
 
