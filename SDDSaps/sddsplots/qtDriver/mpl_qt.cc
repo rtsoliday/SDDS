@@ -1764,11 +1764,15 @@ static void startReader(int fd) {
 class Canvas : public QFrame {
   Q_OBJECT
 public:
-  Canvas(QWidget *parent = nullptr) : QFrame(parent), rubberBand(nullptr) {
+  Canvas(QWidget *parent = nullptr) : QFrame(parent), rubberBand(nullptr), m_bufferValid(false) {
     m_resizeTimer = new QTimer(this);
     m_resizeTimer->setSingleShot(true);
     connect(m_resizeTimer, &QTimer::timeout, this, &Canvas::resizeFinished);
     setMouseTracking(true);
+  }
+  /* Invalidate the cached buffer to force a redraw on next paint */
+  void invalidateBuffer() {
+    m_bufferValid = false;
   }
   QImage renderPlotToImage(const QSize &targetSize) {
     if (targetSize.isEmpty())
@@ -1843,6 +1847,7 @@ protected:
           usery0 = 0.;
           usery1 = YMAX;
         }
+        m_bufferValid = false;
         update();
       }
     } else if (event->button() == Qt::RightButton) {
@@ -1855,6 +1860,7 @@ protected:
         userx1 = usery1 = 0;
         newzoom();
       }
+      m_bufferValid = false;
       update();
     }
   }
@@ -1900,30 +1906,33 @@ protected:
       return;
     }
 
-    // Create or update the off-screen buffer
-    if (m_buffer.size() != size()) {
-      m_buffer = QPixmap(size());
-    }
-    // Clear the off-screen buffer
-    m_buffer.fill(QColor::fromRgb(colors[0]));
+    // Check if buffer needs to be regenerated (size changed or explicitly invalidated)
+    bool needsRedraw = !m_bufferValid || m_buffer.size() != size();
 
-    if (!cur) {
-      QPainter painter(this);
-      painter.drawPixmap(0, 0, m_buffer);
-      return;
-    }
-    QPainter bufferPainter(&m_buffer);
-    bufferPainter.setPen(QColor::fromRgb(white));
-    drawPlotToPainter(bufferPainter, m_buffer.size(), true);
+    if (needsRedraw) {
+      // Create or update the off-screen buffer
+      if (m_buffer.size() != size()) {
+        m_buffer = QPixmap(size());
+      }
+      // Clear the off-screen buffer
+      m_buffer.fill(QColor::fromRgb(colors[0]));
 
-    // Now copy the off-screen buffer to the widget
+      if (cur) {
+        QPainter bufferPainter(&m_buffer);
+        bufferPainter.setPen(QColor::fromRgb(white));
+        drawPlotToPainter(bufferPainter, m_buffer.size(), true);
+      }
+      m_bufferValid = true;
+    }
+
+    // Copy the cached buffer to the widget (fast operation)
     QPainter painter(this);
     painter.drawPixmap(0, 0, m_buffer);
-
   }
 private slots:
   void resizeFinished() {
     m_resizing = false; // Clear flag when no resize event occurs for a while
+    m_bufferValid = false; // Force redraw after resize
     update();           // Force a final repaint
   }
 
@@ -1931,6 +1940,7 @@ private:
   QRubberBand *rubberBand;
   QPoint origin;
   bool m_resizing = false;
+  bool m_bufferValid = false;
   QPixmap m_buffer;
   QTimer *m_resizeTimer;
   bool m_hasRelativeAnchor = false;
@@ -2338,6 +2348,15 @@ bool hasRelativeMouseAnchor() {
   if (!plotCanvas)
     return false;
   return plotCanvas->hasRelativeAnchor();
+}
+
+void invalidateCanvasBuffer() {
+  if (!canvas)
+    return;
+  Canvas *plotCanvas = qobject_cast<Canvas *>(canvas);
+  if (!plotCanvas)
+    return;
+  plotCanvas->invalidateBuffer();
 }
 
 class HelpDialog : public QDialog {

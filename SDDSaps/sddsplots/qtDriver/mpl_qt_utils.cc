@@ -11,6 +11,7 @@ bool whiteTheme = false;
 void refreshCanvas() {
   if (!canvas)
     return;
+  invalidateCanvasBuffer();
   canvas->update();
   canvas->repaint();
 }
