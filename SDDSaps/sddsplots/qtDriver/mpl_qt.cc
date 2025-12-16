@@ -1941,6 +1941,37 @@ private:
     if (!cur)
       return;
 
+    /* Batch rendering constants and buffers for efficient drawing.
+     * Instead of individual drawLine/drawPoint calls, we accumulate
+     * primitives and draw them in batches for better performance. */
+    static const int BATCH_SIZE = 4096;
+    QVector<QLine> lineBatch;
+    QVector<QPoint> pointBatch;
+    lineBatch.reserve(BATCH_SIZE);
+    pointBatch.reserve(BATCH_SIZE);
+
+    /* Lambda to flush accumulated lines */
+    auto flushLines = [&]() {
+      if (!lineBatch.isEmpty()) {
+        bufferPainter.drawLines(lineBatch);
+        lineBatch.clear();
+      }
+    };
+
+    /* Lambda to flush accumulated points */
+    auto flushPoints = [&]() {
+      if (!pointBatch.isEmpty()) {
+        bufferPainter.drawPoints(pointBatch.data(), pointBatch.size());
+        pointBatch.clear();
+      }
+    };
+
+    /* Lambda to flush all batches */
+    auto flushBatches = [&]() {
+      flushLines();
+      flushPoints();
+    };
+
     VTYPE x, y, lt, lt2;
     char *bufptr, command;
     unsigned short r, g, b;
@@ -2003,7 +2034,9 @@ private:
         memcpy((char *)&y, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         n += sizeof(char) + 2 * sizeof(VTYPE);
-        bufferPainter.drawLine(Xpixel(cx), Ypixel(cy), Xpixel(x), Ypixel(y));
+        lineBatch.append(QLine(Xpixel(cx), Ypixel(cy), Xpixel(x), Ypixel(y)));
+        if (lineBatch.size() >= BATCH_SIZE)
+          flushLines();
         cx = x;
         cy = y;
         break;
@@ -2020,12 +2053,15 @@ private:
         memcpy((char *)&cy, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         n += sizeof(char) + 2 * sizeof(VTYPE);
-        bufferPainter.drawLine(Xpixel(cx), Ypixel(cy), Xpixel(cx), Ypixel(cy));
+        pointBatch.append(QPoint(Xpixel(cx), Ypixel(cy)));
+        if (pointBatch.size() >= BATCH_SIZE)
+          flushPoints();
         cx++;
         cy++;
         break;
       case 'L':
         {
+          flushBatches();
           QPen pen = bufferPainter.pen();
           pen.setStyle(Qt::SolidLine);
           memcpy((char *)&lt2, bufptr, sizeof(VTYPE));
@@ -2072,6 +2108,7 @@ private:
         break;
       case 'W':
         {
+          flushBatches();
           memcpy((char *)&lt, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
           n += sizeof(char) + sizeof(VTYPE);
@@ -2083,6 +2120,7 @@ private:
         break;
       case 'B':
         {
+          flushBatches();
           VTYPE shade, xl, xh, yl, yh;
           int px, py, width, height;
           memcpy((char *)&shade, bufptr, sizeof(VTYPE));
@@ -2134,6 +2172,7 @@ private:
         break;
       case 'C':
         {
+          flushBatches();
           memcpy((char *)&r, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
           memcpy((char *)&g, bufptr, sizeof(VTYPE));
@@ -2151,6 +2190,7 @@ private:
         break;
       case 'S':
         {
+          flushBatches();
           VTYPE num, spec, r0, g0, b0, r1, g1, b1;
           memcpy((char *)&num, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
@@ -2202,6 +2242,9 @@ private:
         break;
       }
     }
+
+    /* Flush any remaining batched primitives */
+    flushBatches();
 
     if (updateState) {
       if ((usecoordn != 0) && curcoord) {
@@ -2693,6 +2736,7 @@ int main(int argc, char *argv[]) {
   // Create a central widget with a layout
   QWidget *centralWidget = new QWidget;
   QVBoxLayout *layout = new QVBoxLayout(centralWidget);
+  layout->setContentsMargins(2, 2, 2, 2);
 
   if (!plots.isEmpty()) {
     plotStack = new QStackedWidget;

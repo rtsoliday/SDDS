@@ -305,7 +305,6 @@ int QT_move(int x, int y) {
   buffer[0] = x;
   buffer[1] = y;
   fwrite(buffer, sizeof(buffer[0]), 2, QT_pipe);
-  fflush(QT_pipe);
   return 0;
 }
 
@@ -316,7 +315,6 @@ int QT_vector(int x, int y) {
   buffer[0] = x;
   buffer[1] = y;
   fwrite(buffer, sizeof(buffer[0]), 2, QT_pipe);
-  fflush(QT_pipe);
   return 0;
 }
 
@@ -326,7 +324,6 @@ int QT_line_thickness(int lt) {
   fwrite(&value, sizeof(value), 1, QT_pipe);
   buffer = lt;
   fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
-  fflush(QT_pipe);
   return 0;
 }
 
@@ -343,7 +340,6 @@ int QT_spectral(long num, int spec, unsigned short red0, unsigned short green0, 
   buffer[6] = green1;
   buffer[7] = blue1;
   fwrite(buffer, sizeof(*buffer), 8, QT_pipe);
-  fflush(QT_pipe);
   return 0;
 }
 
@@ -354,13 +350,11 @@ int QT_linetype(int lt) {
     fwrite(&value, sizeof(value), 1, QT_pipe);
     buffer = lt;
     fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
-    fflush(QT_pipe);
   } else {
     lt -= 1000;
     fwrite(&value, sizeof(value), 1, QT_pipe);
     buffer = lt;
     fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
-    fflush(QT_pipe);
     lt = lt % qt_color_index;
     QT_color(qt_colors[lt].red, qt_colors[lt].green, qt_colors[lt].blue);
   }
@@ -378,7 +372,6 @@ int QT_fill_box(int shade, int xl, int xh, int yl, int yh) {
   buffer[3] = yl;
   buffer[4] = yh;
   fwrite(buffer, sizeof(*buffer), 5, QT_pipe);
-  fflush(QT_pipe);
   qt_last_linetype = -1;
   return 0;
 }
@@ -390,7 +383,6 @@ int QT_dot(int x, int y, int number) {
   buffer[0] = x;
   buffer[1] = y;
   fwrite(buffer, sizeof(*buffer), 2, QT_pipe);
-  fflush(QT_pipe);
   return 0;
 }
 
@@ -402,7 +394,6 @@ int QT_color(unsigned short red, unsigned short green, unsigned short blue) {
   buffer[1] = green;
   buffer[2] = blue;
   fwrite(buffer, sizeof(*buffer), 3, QT_pipe);
-  fflush(QT_pipe);
   return 0;
 }
 
