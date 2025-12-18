@@ -1615,7 +1615,6 @@ void sddscontour_main(char *input_line)
                     waterfall_colorcol, waterfall_indeptcol, users_xlabel, users_ylabel, users_title,
                     &xlabel, &ylabel, &title, deltas, xRangeProvided, conversions, ucd);
     free(waterfall_parValue);
-    free(indepdata);
     dx = (xmax - xmin) / (nx - 1);
     dy = (ymax - ymin) / (ny - 1);
     /*   if (orig_limit[0]!=orig_limit[1] || orig_limit[2]!=orig_limit[3]) {
@@ -1629,6 +1628,7 @@ void sddscontour_main(char *input_line)
     /*above data_value is for horizontal waterfall*/
     if ((!vertical_waterfall && swap_xy) || (vertical_waterfall && !swap_xy)) {
       /*make vertical waterfall plot*/
+      double *newXintervals = NULL;
       double **new_data;
       new_data = (double **)zarray_2d(sizeof(double), ny, nx);
       for (i = 0; i < nx; i++) {
@@ -1637,12 +1637,43 @@ void sddscontour_main(char *input_line)
       }
       SDDS_FreeMatrix((void **)data_value, nx);
       data_value = new_data;
+
+      /*
+         Keep interval arrays consistent with the transposed grid.
+         Prior to transposing: xintervals has length nx (pages/parameter values) and
+         indepdata has length ny (rows/independent variable values).
+         After transposing: nx and ny are swapped, so xintervals must refer to the
+         independent-variable axis and yintervals must refer to the parameter axis.
+       */
+      if (xintervals) {
+        yintervals = xintervals;
+        xintervals = NULL;
+      }
+      if (indepdata) {
+        newXintervals = malloc(sizeof(*newXintervals) * ny);
+        memcpy(newXintervals, indepdata, sizeof(*newXintervals) * ny);
+        xintervals = newXintervals;
+      }
+
       SWAP_PTR(xlabel, ylabel);
       SWAP_DOUBLE(xmin, ymin);
       SWAP_DOUBLE(dx, dy);
       SWAP_DOUBLE(xmax, ymax);
       SWAP_LONG(nx, ny);
+
+      if (xintervals) {
+        find_min_max(&xmin, &xmax, xintervals, nx);
+        dx = (xmax - xmin) / (nx - 1);
+      }
+      if (yintervals) {
+        find_min_max(&ymin, &ymax, yintervals, ny);
+        dy = (ymax - ymin) / (ny - 1);
+      }
     }
+
+    if (indepdata)
+      free(indepdata);
+
     if (xlabel[0] == '@')
       xlabel = getParameterLabel(&SDDS_table, xlabel + 1, xlabel_editcommand, NULL);
 
