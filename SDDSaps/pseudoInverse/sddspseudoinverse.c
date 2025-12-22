@@ -1117,50 +1117,79 @@ int main(int argc, char **argv) {
 #endif
 #    endif
 #    if defined(MKL)
-    work = (double *)malloc(sizeof(double) * 1);
-    lwork = -1;
-    lda = MAX(1, R->m);
-    if (lapackMethod == 1) {
-      iwork = malloc(sizeof(*iwork) * 8 * MIN(R->m, R->n));
-      dgesdd_((char *)&calcMode, (MKL_INT *)&R->m, (MKL_INT *)&R->n,
-              (double *)R->base, (MKL_INT *)&lda,
-              (double *)SValue->ve,
-              (double *)U->base, (MKL_INT *)&R->m,
-              (double *)Vt->base, (MKL_INT *)&R->n,
-              (double *)work, (MKL_INT *)&lwork, iwork,
-              (MKL_INT *)&info);
-    } else
-      dgesvd_((char *)&calcMode, (char *)&calcMode, (MKL_INT *)&R->m, (MKL_INT *)&R->n,
-              (double *)R->base, (MKL_INT *)&lda,
-              (double *)SValue->ve,
-              (double *)U->base, (MKL_INT *)&R->m,
-              (double *)Vt->base, (MKL_INT *)&R->n,
-              (double *)work, (MKL_INT *)&lwork,
-              (MKL_INT *)&info);
+    /*
+       IMPORTANT (Windows + MKL):
+       Never cast &R->m, &lda, etc. to MKL_INT*. When MKL is built/linked
+       as ILP64, MKL_INT is 64-bit while Meschach matrix dimensions are
+       typically 32-bit on Windows. Passing the wrong-sized integer pointers
+       corrupts arguments like LDA and yields MKL errors such as
+       "Parameter 5 was incorrect on entry to DGESDD".
+    */
+    {
+      MKL_INT mMkl, nMkl, ldaMkl, lduMkl, ldvtMkl, lworkMkl, infoMkl;
+      MKL_INT *iworkMkl = NULL;
+      size_t lworkAlloc;
 
-    lwork = work[0];
-    if (verbose & FL_VERYVERBOSE)
-      fprintf(stderr, "Work space size returned from dgesvd_ is %ld.\n", lwork);
-    work = (double *)realloc(work, sizeof(double) * lwork);
-    if (lapackMethod == 1) {
-      dgesdd_((char *)&calcMode, (MKL_INT *)&R->m, (MKL_INT *)&R->n,
-              (double *)R->base, (MKL_INT *)&lda,
-              (double *)SValue->ve,
-              (double *)U->base, (MKL_INT *)&R->m,
-              (double *)Vt->base, (MKL_INT *)&R->n,
-              (double *)work, (MKL_INT *)&lwork, iwork,
-              (MKL_INT *)&info);
-      free(iwork);
-    } else
-      dgesvd_((char *)&calcMode, (char *)&calcMode, (MKL_INT *)&R->m, (MKL_INT *)&R->n,
-              (double *)R->base, (MKL_INT *)&lda,
-              (double *)SValue->ve,
-              (double *)U->base, (MKL_INT *)&R->m,
-              (double *)Vt->base, (MKL_INT *)&R->n,
-              (double *)work, (MKL_INT *)&lwork,
-              (MKL_INT *)&info);
+      work = (double *)malloc(sizeof(double) * 1);
+      mMkl = (MKL_INT)R->m;
+      nMkl = (MKL_INT)R->n;
+      ldaMkl = (MKL_INT)MAX(1, R->m);
+      lduMkl = (MKL_INT)R->m;
+      ldvtMkl = (MKL_INT)R->n;
+      lworkMkl = -1;
+      infoMkl = 0;
 
-    free(work);
+      if (lapackMethod == 1) {
+        MKL_INT minMN = mMkl < nMkl ? mMkl : nMkl;
+        iworkMkl = (MKL_INT *)malloc(sizeof(*iworkMkl) * (size_t)(8 * (size_t)minMN));
+        dgesdd_((char *)&calcMode, &mMkl, &nMkl,
+                (double *)R->base, &ldaMkl,
+                (double *)SValue->ve,
+                (double *)U->base, &lduMkl,
+                (double *)Vt->base, &ldvtMkl,
+                (double *)work, &lworkMkl, iworkMkl,
+                &infoMkl);
+      } else {
+        dgesvd_((char *)&calcMode, (char *)&calcMode, &mMkl, &nMkl,
+                (double *)R->base, &ldaMkl,
+                (double *)SValue->ve,
+                (double *)U->base, &lduMkl,
+                (double *)Vt->base, &ldvtMkl,
+                (double *)work, &lworkMkl,
+                &infoMkl);
+      }
+
+      lworkMkl = (MKL_INT)work[0];
+      if (lworkMkl <= 0)
+        SDDS_Bomb("Error: invalid workspace size returned by MKL LAPACK SVD call.");
+      if (verbose & FL_VERYVERBOSE)
+        fprintf(stderr, "Work space size returned from dgesvd_ is %lld.\n", (long long)lworkMkl);
+
+      lworkAlloc = (size_t)lworkMkl;
+      work = (double *)realloc(work, sizeof(double) * lworkAlloc);
+      if (lapackMethod == 1) {
+        dgesdd_((char *)&calcMode, &mMkl, &nMkl,
+                (double *)R->base, &ldaMkl,
+                (double *)SValue->ve,
+                (double *)U->base, &lduMkl,
+                (double *)Vt->base, &ldvtMkl,
+                (double *)work, &lworkMkl, iworkMkl,
+                &infoMkl);
+      } else {
+        dgesvd_((char *)&calcMode, (char *)&calcMode, &mMkl, &nMkl,
+                (double *)R->base, &ldaMkl,
+                (double *)SValue->ve,
+                (double *)U->base, &lduMkl,
+                (double *)Vt->base, &ldvtMkl,
+                (double *)work, &lworkMkl,
+                &infoMkl);
+      }
+
+      if (iworkMkl)
+        free(iworkMkl);
+      free(work);
+      info = (int)infoMkl;
+    }
     /* do not need R now can free it*/
     t_free(R);
     R = (MAT *)NULL;
@@ -1437,9 +1466,17 @@ int main(int argc, char **argv) {
 #endif
 #      endif
 #      if defined(MKL)
+  {
+    MKL_INT mMkl = (MKL_INT)U->m;
+    MKL_INT nMkl = (MKL_INT)V->n;
+    MKL_INT kMkl = (MKL_INT)kk;
+    MKL_INT ldaMkl = (MKL_INT)lda;
+    MKL_INT ldbMkl = (MKL_INT)ldb;
+    MKL_INT ldcMkl = (MKL_INT)U->m;
     dgemm_("N", "N",
-           (MKL_INT *)&U->m, (MKL_INT *)&V->n, (MKL_INT *)&kk, &alpha, U->base,
-           (MKL_INT *)&lda, V->base, (MKL_INT *)&ldb, &beta, RInvt->base, (MKL_INT *)&U->m);
+       &mMkl, &nMkl, &kMkl, &alpha, U->base,
+       &ldaMkl, V->base, &ldbMkl, &beta, RInvt->base, &ldcMkl);
+  }
 #      endif
 #      if defined(LAPACK)
     dgemm_("N", "N",
@@ -1515,14 +1552,22 @@ int main(int argc, char **argv) {
                   RInvt->base, &ldb, &beta, Product->base, &Product->m);
 #    else
 #      if defined(MKL)
-      if (!invertMultiply)
-        dgemm_("T", "N",
-               (MKL_INT *)&Product->m, (MKL_INT *)&Product->n, (MKL_INT *)&kk, &alpha, RInvt->base, (MKL_INT *)&lda,
-               Multi->base, (MKL_INT *)&ldb, &beta, Product->base, (MKL_INT *)&Product->m);
-      else
-        dgemm_("N", "T",
-               (MKL_INT *)&Product->m, (MKL_INT *)&Product->n, (MKL_INT *)&kk, &alpha, Multi->base, (MKL_INT *)&lda,
-               RInvt->base, (MKL_INT *)&ldb, &beta, Product->base, (MKL_INT *)&Product->m);
+      {
+        MKL_INT mMkl = (MKL_INT)Product->m;
+        MKL_INT nMkl = (MKL_INT)Product->n;
+        MKL_INT kMkl = (MKL_INT)kk;
+        MKL_INT ldaMkl = (MKL_INT)lda;
+        MKL_INT ldbMkl = (MKL_INT)ldb;
+        MKL_INT ldcMkl = (MKL_INT)Product->m;
+        if (!invertMultiply)
+          dgemm_("T", "N",
+                 &mMkl, &nMkl, &kMkl, &alpha, RInvt->base, &ldaMkl,
+                 Multi->base, &ldbMkl, &beta, Product->base, &ldcMkl);
+        else
+          dgemm_("N", "T",
+                 &mMkl, &nMkl, &kMkl, &alpha, Multi->base, &ldaMkl,
+                 RInvt->base, &ldbMkl, &beta, Product->base, &ldcMkl);
+      }
 #      else
 #if defined(ACCELERATE_NEW_LAPACK)
       if (!invertMultiply)
@@ -1908,9 +1953,17 @@ int main(int argc, char **argv) {
 #endif
 #      endif
 #      if defined(MKL)
-      dgemm_("N", "N",
-             (MKL_INT *)&U->m, (MKL_INT *)&V->n, (MKL_INT *)&kk, &alpha, U->base,
-             (MKL_INT *)&lda, V->base, (MKL_INT *)&ldb, &beta, Rnewt->base, (MKL_INT *)&U->m);
+  {
+    MKL_INT mMkl = (MKL_INT)U->m;
+    MKL_INT nMkl = (MKL_INT)V->n;
+    MKL_INT kMkl = (MKL_INT)kk;
+    MKL_INT ldaMkl = (MKL_INT)lda;
+    MKL_INT ldbMkl = (MKL_INT)ldb;
+    MKL_INT ldcMkl = (MKL_INT)U->m;
+    dgemm_("N", "N",
+       &mMkl, &nMkl, &kMkl, &alpha, U->base,
+       &ldaMkl, V->base, &ldbMkl, &beta, Rnewt->base, &ldcMkl);
+  }
 #      endif
 #      if defined(LAPACK)
       dgemm_("N", "N",

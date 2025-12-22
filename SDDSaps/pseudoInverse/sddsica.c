@@ -879,51 +879,76 @@ int main(int argc, char **argv) {
   #endif
 #endif
 #if defined(MKL)
-    work = (double *)malloc(sizeof(double) * 1);
-    lwork = -1;
-    lda = MAX(1, R->m);
-    if (lapackMethod == 1) {
-      iwork = malloc(sizeof(*iwork) * 8 * MIN(R->m, R->n));
-      dgesdd_((char *)&calcMode, (MKL_INT *)&R->m, (MKL_INT *)&R->n,
-              (double *)R->base, (MKL_INT *)&lda,
-              (double *)SValue->ve,
-              (double *)U->base, (MKL_INT *)&R->m,
-              (double *)Vt->base, (MKL_INT *)&R->n,
-              (double *)work, (MKL_INT *)&lwork, iwork,
-              (MKL_INT *)&info);
-    } else
-      dgesvd_((char *)&calcMode, (char *)&calcMode, (MKL_INT *)&R->m, (MKL_INT *)&R->n,
-              (double *)R->base, (MKL_INT *)&lda,
-              (double *)SValue->ve,
-              (double *)U->base, (MKL_INT *)&R->m,
-              (double *)Vt->base, (MKL_INT *)&R->n,
-              (double *)work, (MKL_INT *)&lwork,
-              (MKL_INT *)&info);
+    /*
+       IMPORTANT (Windows + MKL):
+       Avoid casting pointers like &R->m, &lda, &lwork to MKL_INT*. Under
+       MKL ILP64, MKL_INT is 64-bit and such casts corrupt arguments.
+    */
+    {
+      MKL_INT mMkl, nMkl, ldaMkl, lduMkl, ldvtMkl, lworkMkl, infoMkl;
+      MKL_INT *iworkMkl = NULL;
+      size_t lworkAlloc;
 
-    lwork = work[0];
-    if (verbose & FL_VERYVERBOSE)
-      fprintf(stderr, "Work space size returned from dgesvd_ is %ld.\n", lwork);
+      work = (double *)malloc(sizeof(double) * 1);
+      mMkl = (MKL_INT)R->m;
+      nMkl = (MKL_INT)R->n;
+      ldaMkl = (MKL_INT)MAX(1, R->m);
+      lduMkl = (MKL_INT)R->m;
+      ldvtMkl = (MKL_INT)R->n;
+      lworkMkl = -1;
+      infoMkl = 0;
 
-    work = (double *)realloc(work, sizeof(double) * lwork);
-    if (lapackMethod == 1) {
-      dgesdd_((char *)&calcMode, (MKL_INT *)&R->m, (MKL_INT *)&R->n,
-              (double *)R->base, (MKL_INT *)&lda,
-              (double *)SValue->ve,
-              (double *)U->base, (MKL_INT *)&R->m,
-              (double *)Vt->base, (MKL_INT *)&R->n,
-              (double *)work, (MKL_INT *)&lwork, iwork,
-              (MKL_INT *)&info);
-      free(iwork);
-    } else
-      dgesvd_((char *)&calcMode, (char *)&calcMode, (MKL_INT *)&R->m, (MKL_INT *)&R->n,
-              (double *)R->base, (MKL_INT *)&lda,
-              (double *)SValue->ve,
-              (double *)U->base, (MKL_INT *)&R->m,
-              (double *)Vt->base, (MKL_INT *)&R->n,
-              (double *)work, (MKL_INT *)&lwork,
-              (MKL_INT *)&info);
+      if (lapackMethod == 1) {
+        MKL_INT minMN = mMkl < nMkl ? mMkl : nMkl;
+        iworkMkl = (MKL_INT *)malloc(sizeof(*iworkMkl) * (size_t)(8 * (size_t)minMN));
+        dgesdd_((char *)&calcMode, &mMkl, &nMkl,
+                (double *)R->base, &ldaMkl,
+                (double *)SValue->ve,
+                (double *)U->base, &lduMkl,
+                (double *)Vt->base, &ldvtMkl,
+                (double *)work, &lworkMkl, iworkMkl,
+                &infoMkl);
+      } else {
+        dgesvd_((char *)&calcMode, (char *)&calcMode, &mMkl, &nMkl,
+                (double *)R->base, &ldaMkl,
+                (double *)SValue->ve,
+                (double *)U->base, &lduMkl,
+                (double *)Vt->base, &ldvtMkl,
+                (double *)work, &lworkMkl,
+                &infoMkl);
+      }
 
-    free(work);
+      lworkMkl = (MKL_INT)work[0];
+      if (lworkMkl <= 0)
+        SDDS_Bomb("Error: invalid workspace size returned by MKL LAPACK SVD call.");
+      if (verbose & FL_VERYVERBOSE)
+        fprintf(stderr, "Work space size returned from dgesvd_ is %lld.\n", (long long)lworkMkl);
+
+      lworkAlloc = (size_t)lworkMkl;
+      work = (double *)realloc(work, sizeof(double) * lworkAlloc);
+      if (lapackMethod == 1) {
+        dgesdd_((char *)&calcMode, &mMkl, &nMkl,
+                (double *)R->base, &ldaMkl,
+                (double *)SValue->ve,
+                (double *)U->base, &lduMkl,
+                (double *)Vt->base, &ldvtMkl,
+                (double *)work, &lworkMkl, iworkMkl,
+                &infoMkl);
+      } else {
+        dgesvd_((char *)&calcMode, (char *)&calcMode, &mMkl, &nMkl,
+                (double *)R->base, &ldaMkl,
+                (double *)SValue->ve,
+                (double *)U->base, &lduMkl,
+                (double *)Vt->base, &ldvtMkl,
+                (double *)work, &lworkMkl,
+                &infoMkl);
+      }
+
+      if (iworkMkl)
+        free(iworkMkl);
+      free(work);
+      info = (int)infoMkl;
+    }
     /* do not need R now can free it*/
     t_free(R);
     R = (MAT *)NULL;

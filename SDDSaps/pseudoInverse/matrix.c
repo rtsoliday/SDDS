@@ -292,9 +292,17 @@ MAT *matrix_mult(MAT *mat1, MAT *mat2) {
   ldb = MAX(1, mat2->m);
   new_mat = matrix_get(mat1->m, mat2->n);
 #    if defined(MKL)
-  dgemm_("N", "N",
-         (MKL_INT *)&new_mat->m, (MKL_INT *)&new_mat->n, (MKL_INT *)&kk, &alpha, mat1->base,
-         (MKL_INT *)&lda, mat2->base, (MKL_INT *)&ldb, &beta, new_mat->base, (MKL_INT *)&new_mat->m);
+  {
+    MKL_INT mMkl = (MKL_INT)new_mat->m;
+    MKL_INT nMkl = (MKL_INT)new_mat->n;
+    MKL_INT kMkl = (MKL_INT)kk;
+    MKL_INT ldaMkl = (MKL_INT)lda;
+    MKL_INT ldbMkl = (MKL_INT)ldb;
+    MKL_INT ldcMkl = (MKL_INT)new_mat->m;
+    dgemm_("N", "N",
+           &mMkl, &nMkl, &kMkl, &alpha, mat1->base,
+           &ldaMkl, mat2->base, &ldbMkl, &beta, new_mat->base, &ldcMkl);
+  }
 #    else
 #      if defined(__APPLE__)
   dgemm_("N", "N",
@@ -329,9 +337,14 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
   /*use economy svd method i.e. U matrix is rectangular not square matrix */
   char calcMode = 'S';
 #endif
-#if defined(CLAPACK) || defined(MKL)
+#if defined(CLAPACK)
   double *work;
   long lwork;
+  long lda;
+  double alpha = 1.0, beta = 0.0;
+  int kk, ldb;
+#elif defined(MKL)
+  double *work;
   long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
@@ -370,28 +383,45 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
     U = matrix_get(A->m, MIN(A->m, A->n));
 
 #  if defined(MKL)
-  work = (double *)malloc(sizeof(double) * 1);
-  lwork = -1;
-  lda = MAX(1, A->m);
-  dgesvd_((char *)&calcMode, (char *)&calcMode, (MKL_INT *)&A->m, (MKL_INT *)&A->n,
-          (double *)A->base, (MKL_INT *)&lda,
-          (double *)SValue->ve,
-          (double *)U->base, (MKL_INT *)&A->m,
-          (double *)Vt->base, (MKL_INT *)&A->n,
-          (double *)work, (MKL_INT *)&lwork,
-          (MKL_INT *)&info);
+  /* Avoid casting &A->m, &lda, &lwork to MKL_INT*; breaks under MKL ILP64. */
+  {
+    MKL_INT mMkl = (MKL_INT)A->m;
+    MKL_INT nMkl = (MKL_INT)A->n;
+    MKL_INT ldaMkl = (MKL_INT)MAX(1, A->m);
+    MKL_INT lduMkl = (MKL_INT)A->m;
+    MKL_INT ldvtMkl = (MKL_INT)A->n;
+    MKL_INT lworkMkl = -1;
+    MKL_INT infoMkl = 0;
+    size_t lworkAlloc;
 
-  lwork = work[0];
-  work = (double *)realloc(work, sizeof(double) * lwork);
+    work = (double *)malloc(sizeof(double) * 1);
+    dgesvd_((char *)&calcMode, (char *)&calcMode, &mMkl, &nMkl,
+      (double *)A->base, &ldaMkl,
+      (double *)SValue->ve,
+      (double *)U->base, &lduMkl,
+      (double *)Vt->base, &ldvtMkl,
+      (double *)work, &lworkMkl,
+      &infoMkl);
 
-  dgesvd_((char *)&calcMode, (char *)&calcMode, (MKL_INT *)&A->m, (MKL_INT *)&A->n,
-          (double *)A->base, (MKL_INT *)&lda,
-          (double *)SValue->ve,
-          (double *)U->base, (MKL_INT *)&A->m,
-          (double *)Vt->base, (MKL_INT *)&A->n,
-          (double *)work, (MKL_INT *)&lwork,
-          (MKL_INT *)&info);
-  free(work);
+    if (infoMkl != 0 || work[0] <= 0) {
+      free(work);
+      SDDS_Bomb("Error querying dgesvd workspace size (MKL)");
+    }
+
+    lworkMkl = (MKL_INT)work[0];
+    lworkAlloc = (size_t)lworkMkl;
+    work = (double *)realloc(work, sizeof(double) * lworkAlloc);
+
+    dgesvd_((char *)&calcMode, (char *)&calcMode, &mMkl, &nMkl,
+      (double *)A->base, &ldaMkl,
+      (double *)SValue->ve,
+      (double *)U->base, &lduMkl,
+      (double *)Vt->base, &ldvtMkl,
+      (double *)work, &lworkMkl,
+      &infoMkl);
+    free(work);
+    info = (int)infoMkl;
+  }
 #  endif
 #  if defined(CLAPACK)
  #if defined(ACCELERATE_NEW_LAPACK)
@@ -543,9 +573,17 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
   lda = MAX(1, U->m);
   ldb = MAX(1, V->m);
 #    if defined(MKL)
-  dgemm_("N", "N",
-         (MKL_INT *)&U->m, (MKL_INT *)&V->n, (MKL_INT *)&kk, &alpha, U->base,
-         (MKL_INT *)&lda, V->base, (MKL_INT *)&ldb, &beta, Invt->base, (MKL_INT *)&U->m);
+  {
+    MKL_INT mMkl = (MKL_INT)U->m;
+    MKL_INT nMkl = (MKL_INT)V->n;
+    MKL_INT kMkl = (MKL_INT)kk;
+    MKL_INT ldaMkl = (MKL_INT)lda;
+    MKL_INT ldbMkl = (MKL_INT)ldb;
+    MKL_INT ldcMkl = (MKL_INT)U->m;
+    dgemm_("N", "N",
+           &mMkl, &nMkl, &kMkl, &alpha, U->base,
+           &ldaMkl, V->base, &ldbMkl, &beta, Invt->base, &ldcMkl);
+  }
 #    else
 #      if defined(__APPLE__)
   dgemm_("N", "N",
@@ -675,7 +713,16 @@ double matrix_det(MAT *A) {
   B = matrix_copy(A);
   /*LU decomposition*/
 #  if defined(MKL)
-  dgetrf_((MKL_INT *)&m, (MKL_INT *)&n, B->base, (MKL_INT *)&lda, (MKL_INT *)ipvt, (MKL_INT *)&info);
+  {
+    MKL_INT mMkl = (MKL_INT)m;
+    MKL_INT nMkl = (MKL_INT)n;
+    MKL_INT ldaMkl = (MKL_INT)lda;
+    MKL_INT infoMkl = 0;
+    MKL_INT *ipvtMkl = (MKL_INT *)calloc((size_t)nMkl, sizeof(*ipvtMkl));
+    dgetrf_(&mMkl, &nMkl, B->base, &ldaMkl, ipvtMkl, &infoMkl);
+    free(ipvtMkl);
+    info = (long)infoMkl;
+  }
 #  else
 #    if defined(LAPACK)
   LAPACK_dgetrf((lapack_int *)&m, (lapack_int *)&n, B->base, (lapack_int *)&lda, ipvt, (lapack_int *)&info);
@@ -727,9 +774,14 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
   /*use economy svd method i.e. U matrix is rectangular not square matrix */
   char calcMode = 'S';
 #endif
-#if defined(CLAPACK) || defined(MKL)
+#if defined(CLAPACK)
   double *work;
   long lwork;
+  long lda;
+  double alpha = 1.0, beta = 0.0;
+  int kk, ldb;
+#elif defined(MKL)
+  double *work;
   long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
@@ -772,28 +824,45 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
         Mij(A, i, j) *= weight[i];
   }
 #  if defined(MKL)
-  work = (double *)malloc(sizeof(double) * 1);
-  lwork = -1;
-  lda = MAX(1, A->m);
-  dgesvd_((char *)&calcMode, (char *)&calcMode, (MKL_INT *)&A->m, (MKL_INT *)&A->n,
-          (double *)A->base, (MKL_INT *)&lda,
-          (double *)SValue->ve,
-          (double *)U->base, (MKL_INT *)&A->m,
-          (double *)Vt->base, (MKL_INT *)&A->n,
-          (double *)work, (MKL_INT *)&lwork,
-          (MKL_INT *)&info);
+  /* Avoid casting &A->m, &lda, &lwork to MKL_INT*; breaks under MKL ILP64. */
+  {
+    MKL_INT mMkl = (MKL_INT)A->m;
+    MKL_INT nMkl = (MKL_INT)A->n;
+    MKL_INT ldaMkl = (MKL_INT)MAX(1, A->m);
+    MKL_INT lduMkl = (MKL_INT)A->m;
+    MKL_INT ldvtMkl = (MKL_INT)A->n;
+    MKL_INT lworkMkl = -1;
+    MKL_INT infoMkl = 0;
+    size_t lworkAlloc;
 
-  lwork = work[0];
-  work = (double *)realloc(work, sizeof(double) * lwork);
+    work = (double *)malloc(sizeof(double) * 1);
+    dgesvd_((char *)&calcMode, (char *)&calcMode, &mMkl, &nMkl,
+      (double *)A->base, &ldaMkl,
+      (double *)SValue->ve,
+      (double *)U->base, &lduMkl,
+      (double *)Vt->base, &ldvtMkl,
+      (double *)work, &lworkMkl,
+      &infoMkl);
 
-  dgesvd_((char *)&calcMode, (char *)&calcMode, (MKL_INT *)&A->m, (MKL_INT *)&A->n,
-          (double *)A->base, (MKL_INT *)&lda,
-          (double *)SValue->ve,
-          (double *)U->base, (MKL_INT *)&A->m,
-          (double *)Vt->base, (MKL_INT *)&A->n,
-          (double *)work, (MKL_INT *)&lwork,
-          (MKL_INT *)&info);
-  free(work);
+    if (infoMkl != 0 || work[0] <= 0) {
+      free(work);
+      SDDS_Bomb("Error querying dgesvd workspace size (MKL)");
+    }
+
+    lworkMkl = (MKL_INT)work[0];
+    lworkAlloc = (size_t)lworkMkl;
+    work = (double *)realloc(work, sizeof(double) * lworkAlloc);
+
+    dgesvd_((char *)&calcMode, (char *)&calcMode, &mMkl, &nMkl,
+      (double *)A->base, &ldaMkl,
+      (double *)SValue->ve,
+      (double *)U->base, &lduMkl,
+      (double *)Vt->base, &ldvtMkl,
+      (double *)work, &lworkMkl,
+      &infoMkl);
+    free(work);
+    info = (int)infoMkl;
+  }
 #  endif
 #  if defined(CLAPACK)
 #if defined(ACCELERATE_NEW_LAPACK)
@@ -945,9 +1014,17 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
   lda = MAX(1, U->m);
   ldb = MAX(1, V->m);
 #    if defined(MKL)
-  dgemm_("N", "N",
-         (MKL_INT *)&U->m, (MKL_INT *)&V->n, (MKL_INT *)&kk, &alpha, U->base,
-         (MKL_INT *)&lda, V->base, (MKL_INT *)&ldb, &beta, Invt->base, (MKL_INT *)&U->m);
+  {
+    MKL_INT mMkl = (MKL_INT)U->m;
+    MKL_INT nMkl = (MKL_INT)V->n;
+    MKL_INT kMkl = (MKL_INT)kk;
+    MKL_INT ldaMkl = (MKL_INT)lda;
+    MKL_INT ldbMkl = (MKL_INT)ldb;
+    MKL_INT ldcMkl = (MKL_INT)U->m;
+    dgemm_("N", "N",
+           &mMkl, &nMkl, &kMkl, &alpha, U->base,
+           &ldaMkl, V->base, &ldbMkl, &beta, Invt->base, &ldcMkl);
+  }
 #    else
 #      if defined(__APPLE__)
   dgemm_("N", "N",
