@@ -308,9 +308,16 @@ int main(int argc, char **argv) {
   /* default is standard svd calculation with square U matrix */
   char calcMode = 'A';
 #endif
-#if defined(CLAPACK) || defined(MKL)
+#if defined(CLAPACK)
   double *work;
   long lwork;
+  long lda;
+  double alpha = 1.0, beta = 0.0;
+  int kk, ldb;
+
+  MAT *tmpR = NULL;
+#elif defined(MKL)
+  double *work;
   long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
