@@ -261,11 +261,12 @@ int main(int argc, char **argv) {
         if (scanned[iArg].n_items > 0 &&
             (!scanItemList(&dummyFlags, scanned[iArg].list + 1, &scanned[iArg].n_items, 0,
                            "windowSize", SDDS_LONG, &medianWindowSize, 1, 0, NULL) ||
-             medianWindowSize <= 0)) {
-          fprintf(stderr, "sddssmooth: Invalid -medianFilter syntax/values: windowSize=%ld\n", medianWindowSize);
+             medianWindowSize < 0 || (medianWindowSize!=0 && medianWindowSize%2!=1))) {
+          fprintf(stderr, "sddssmooth: Invalid -medianFilter syntax/values: windowSize=%ld (0=no median filter, odd value required)\n", medianWindowSize);
           exit(EXIT_FAILURE);
         }
-        median = 1;
+        if (medianWindowSize>1)
+          median = 1;
         break;
       case CLO_NOWARNINGS:
         noWarnings = 1;
