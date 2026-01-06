@@ -284,20 +284,23 @@ int main(int argc, char **argv) {
 #endif
 
 #if defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
-  int info;
   /* default is standard svd calculation with square U matrix */
   char calcMode = 'A';
 #endif
-#if defined(CLAPACK) || defined(MKL)
+#if defined(CLAPACK)
   double *work;
   long lwork;
   long lda;
-
+  int info;
+#endif
+#if defined(MKL)
+  double *work;
 #endif
 #if defined(LAPACK)
   doublereal *work;
   long long lwork;
   long long lda;
+  int info;
 #endif
 
   betaPair[0] = betaPair[1] = betaPair[2] = betaPair[3] = 0;
@@ -962,7 +965,6 @@ int main(int argc, char **argv) {
       if (iworkMkl)
         free(iworkMkl);
       free(work);
-      info = (int)infoMkl;
     }
     /* do not need R now can free it*/
     t_free(R);

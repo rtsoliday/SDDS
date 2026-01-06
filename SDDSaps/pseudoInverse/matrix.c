@@ -354,7 +354,6 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
   VEC *SValue = NULL, *SValueUsed = NULL, *InvSValue = NULL;
   double max, min;
   char deletedVectors[1024];
-  int info;
   /*use economy svd method i.e. U matrix is rectangular not square matrix */
   char calcMode = 'S';
 #endif
@@ -364,6 +363,7 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
   long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
+  int info;
 #elif defined(MKL)
   double *work;
   long lda;
@@ -375,6 +375,7 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
   long long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
+  int info;
 #endif
 
 #if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
@@ -440,7 +441,6 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
       (double *)work, &lworkMkl,
       &infoMkl);
     free(work);
-    info = (int)infoMkl;
   }
 #  endif
 #  if defined(CLAPACK)
@@ -826,7 +826,6 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
   VEC *SValue = NULL, *SValueUsed = NULL, *InvSValue = NULL;
   double max, min;
   char deletedVectors[1024];
-  int info;
   /*use economy svd method i.e. U matrix is rectangular not square matrix */
   char calcMode = 'S';
 #endif
@@ -836,6 +835,7 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
   long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
+  int info;
 #elif defined(MKL)
   double *work;
   long lda;
@@ -847,6 +847,7 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
   long long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
+  int info;
 #endif
 
 #if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
@@ -916,7 +917,6 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
       (double *)work, &lworkMkl,
       &infoMkl);
     free(work);
-    info = (int)infoMkl;
   }
 #  endif
 #  if defined(CLAPACK)

@@ -305,11 +305,6 @@ int main(int argc, char **argv) {
   char deletedVector[1024];
   long printPackage;
   short columnMajorOrder = -1, lapackMethod = 1;
-#if defined(LAPACK)
-  void *iwork = NULL;
-#else
-  int *iwork = NULL;
-#endif
   /* Flag economy changes the calculation mode of the lapack-type calls to svd
      and may later be used by a modified meschach svd routine to
      reduce the number of columns returned for the U matrix.
@@ -321,7 +316,6 @@ int main(int argc, char **argv) {
 #endif
 
 #if defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
-  int info;
   /* default is standard svd calculation with square U matrix */
   char calcMode = 'A';
 #endif
@@ -331,14 +325,14 @@ int main(int argc, char **argv) {
   long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
-
   MAT *tmpR = NULL;
+  int *iwork = NULL;
+  int info;
 #elif defined(MKL)
   double *work;
   long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
-
   MAT *tmpR = NULL;
 #endif
 #if defined(LAPACK)
@@ -347,8 +341,9 @@ int main(int argc, char **argv) {
   long long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
-
   MAT *tmpR = NULL;
+  void *iwork = NULL;
+  int info;
 #endif
   long threads = 1;
 
@@ -1213,7 +1208,6 @@ int main(int argc, char **argv) {
       if (iworkMkl)
         free(iworkMkl);
       free(work);
-      info = (int)infoMkl;
     }
     /* do not need R now can free it*/
     t_free(R);
