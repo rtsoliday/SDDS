@@ -279,10 +279,6 @@ int main(int argc, char **argv) {
   long turn1 = 0, turnNum = 0;
   long npair = 0, betaPair[4];
 
-#if defined(NUMERICAL_RECIPES)
-  register Real x;
-#endif
-
 #if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
   /* default is standard svd calculation with square U matrix */
   char calcMode = 'A';
@@ -530,9 +526,7 @@ int main(int argc, char **argv) {
 #endif
 
   if (printPackage) {
-#if defined(NUMERICAL_RECIPES)
-    fprintf(stderr, "Compiled with package NUMERICAL_RECIPES\n");
-#elif defined(CLAPACK)
+#if defined(CLAPACK)
     fprintf(stderr, "Compiled with package CLAPACK\n");
 #elif defined(LAPACK)
     fprintf(stderr, "Compiled with package LAPACK\n");
@@ -725,14 +719,14 @@ int main(int argc, char **argv) {
       InvSValue = v_get(numericalColumns);
 
     /* Summary of which subroutine is called
-       Method           Num. Rec.           LAPACK    CLAPACK    Meschach
-       Flag             NUMERICAL_RECIPES   LAPACK    CLAPACK    NONE
+       Method           LAPACK    CLAPACK    Meschach
+       Flag             LAPACK    CLAPACK    NONE
        -----------------------------------------------------------------------------
        Function call
-       nr_svd           Yes                 No         No         No
-       dgesvd           No                  No         No         No
-       dgesvd_          No                  Yes        Yes        No
-       svd              No                  No         No         Yes
+       nr_svd           No         No         No
+       dgesvd           No         No         No
+       dgesvd_          Yes        Yes        No
+       svd              No         No         Yes
 
        Allocated matrices for variables
        (note some memories are freed as soon as possible after svd calculation.)
@@ -1307,10 +1301,8 @@ int main(int argc, char **argv) {
 
         /* the number of rows of U depends on the method used and the
            economy mode flag.  The clearest way for determining the number of
-           columns for the page is to use the matrix data itself. For
-           NUMERICAL_RECIPES only U is available, for other methods
-           Ut is available.*/
-#if defined(NUMERICAL_RECIPES) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+           columns for the page is to use the matrix data itself.*/
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
         if (0 > SDDS_DefineSimpleColumns(&uPage,
                                          U->n,
                                          orthoColumnName, NULL, SDDS_DOUBLE))
@@ -1397,19 +1389,6 @@ int main(int argc, char **argv) {
                           newColumnNamesColumn ? newColumnNamesColumn : "OriginalRows"))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-#if defined(NUMERICAL_RECIPES)
-      /* only U and Vt are available, and U is rectangular */
-      for (i = 0; i < rows; i++)
-        for (j = 0; j < numericalColumns; j++)
-          if (!SDDS_SetRowValues(&uPage, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE,
-                                 i, j + 1, U->me[i][j], -1))
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      if (!SDDS_WriteTable(&uPage))
-        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      m_free(U);
-      U = (MAT *)NULL;
-      R = (MAT *)NULL;
-#else
 #    if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
       /* U and Vt matrix are available and their base are in column order */
       for (i = 0; i < U->n; i++)
@@ -1433,11 +1412,10 @@ int main(int argc, char **argv) {
       m_free(Ut);
       Ut = (MAT *)NULL;
 #    endif
-#endif
       SDDS_FreeDataPage(&uPage);
     } else {
       /* free pointers in U or Ut anyhow with -vmatrix not specified.*/
-#if defined(NUMERICAL_RECIPES) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
       m_free(U);
       U = (MAT *)NULL;
       R = (MAT *)NULL;
@@ -1701,113 +1679,6 @@ int m_freePointers(mat)
 
   return (0);
 }
-
-#if defined(NUMERICAL_RECIPES)
-
-#  define MAX_STACK 100
-/* fix_nr_svd -- fix minor details about SVD from numerical recipes in C
-   This is based on a meschach library routine to fix svd.
-   -- make singular values non-negative
-   -- sort singular values in decreasing order
-   -- variables as for bisvd()
-   -- no argument checking */
-/* Note that meschach's svd decomposes A = (arg1)^T w (arg2) which
-   is a different convention as in num. recipes in C: A = (arg1) w
-   (arg2)^T, which we use in this program. That's why the
-   arguments here appeared to be the tranpose of the calling
-   arguments.
-   Ut is rectangular with the same number of columns as the
-   V. This function will differ from fixsvd in that Ut
-   is treated in a "transposed" way relative to U. */
-static void fix_nr_svd(Ut, d, V)
-     VEC *d;
-MAT *Ut, *V;
-{
-  int i, j, k, l, r, stack[MAX_STACK], sp;
-  Real tmp, v;
-
-  /* make singular values non-negative */
-  for (i = 0; i < d->dim; i++)
-    if (d->ve[i] < 0.0) {
-      d->ve[i] = -d->ve[i];
-      if (Ut != MNULL)
-        for (j = 0; j < Ut->m; j++)
-          Ut->me[j][i] = -Ut->me[j][i];
-    }
-
-  /* sort singular values */
-  /* nonrecursive implementation of quicksort due to R.Sedgewick,
-     "Algorithms in C", p. 122 (1990) */
-  sp = -1;
-  l = 0;
-  r = d->dim - 1;
-  for (;;) {
-    while (r > l) {
-      /* i = partition(d->ve,l,r) */
-      v = d->ve[r];
-
-      i = l - 1;
-      j = r;
-      for (;;) { /* inequalities have been set "backwards" for **decreasing** order */
-        while (d->ve[++i] > v)
-          ;
-        while (d->ve[--j] < v)
-          ;
-        if (i >= j)
-          break;
-        /* swap entries in d->ve */
-        tmp = d->ve[i];
-        d->ve[i] = d->ve[j];
-        d->ve[j] = tmp;
-        /* swap columns of Ut & rows of V as well */
-        if (Ut != MNULL)
-          for (k = 0; k < Ut->m; k++) {
-            tmp = Ut->me[k][i];
-            Ut->me[k][i] = Ut->me[k][j];
-            Ut->me[k][j] = tmp;
-          }
-        if (V != MNULL)
-          /* can't be clever and swap pointer here, since the memory
-             may have been allocated as one long array */
-          for (k = 0; k < V->n; k++) {
-            tmp = V->me[i][k];
-            V->me[i][k] = V->me[j][k];
-            V->me[j][k] = tmp;
-          }
-      }
-      tmp = d->ve[i];
-      d->ve[i] = d->ve[r];
-      d->ve[r] = tmp;
-      if (Ut != MNULL)
-        for (k = 0; k < Ut->m; k++) {
-          tmp = Ut->me[k][i];
-          Ut->me[k][i] = Ut->me[k][r];
-          Ut->me[k][r] = tmp;
-        }
-      if (V != MNULL)
-        for (k = 0; k < V->n; k++) {
-          tmp = V->me[i][k];
-          V->me[i][k] = V->me[r][k];
-          V->me[r][k] = tmp;
-        }
-      /* end i = partition(...) */
-      if (i - l > r - i) {
-        stack[++sp] = l;
-        stack[++sp] = i - 1;
-        l = i + 1;
-      } else {
-        stack[++sp] = i + 1;
-        stack[++sp] = r;
-        r = i - 1;
-      }
-    }
-    if (sp < 0)
-      break;
-    r = stack[sp--];
-    l = stack[sp--];
-  }
-}
-#endif
 
 void *SDDS_GetCastMatrixOfRows_SunPerf(SDDS_DATASET *SDDS_dataset, int32_t *n_rows, long sddsType) {
   void *data;
