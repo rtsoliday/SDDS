@@ -32,10 +32,6 @@
 #include "scan.h"
 #include "match_string.h"
 
-#ifdef SUNPERF
-#  include <sunperf.h>
-#endif
-
 #ifdef MKL
 #  include <omp.h>
 #  include "mkl.h"
@@ -247,7 +243,7 @@ long SDDS_FreeDataPage(SDDS_DATASET *SDDS_dataset);
 int m_freePointers(MAT *mat);
 int t_free(MAT *mat);
 
-#if defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
 void *SDDS_GetCastMatrixOfRows_SunPerf(SDDS_DATASET *SDDS_dataset, int32_t *n_rows, long sddsType);
 #endif
 
@@ -274,7 +270,7 @@ int main(int argc, char **argv) {
   char *outputDescription = NULL;
   long i_arg;
   register long i, j;
-#if defined(NUMERICAL_RECIPES) || defined(SUNPERF)
+#if defined(NUMERICAL_RECIPES)
   register k;
 #else
 #  if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
@@ -308,14 +304,14 @@ int main(int argc, char **argv) {
   /* Flag economy changes the calculation mode of the lapack-type calls to svd
      and may later be used by a modified meschach svd routine to
      reduce the number of columns returned for the U matrix.
-     The ecomony mode is already the only mode for NR and for sunperf. */
+     The ecomony mode is already the only mode for NR. */
   long economy, economyRows;
 
-#if defined(NUMERICAL_RECIPES) || defined(SUNPERF)
+#if defined(NUMERICAL_RECIPES)
   register Real x;
 #endif
 
-#if defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
   /* default is standard svd calculation with square U matrix */
   char calcMode = 'A';
 #endif
@@ -461,7 +457,7 @@ int main(int argc, char **argv) {
         }
         break;
       case CLO_ECONOMY:
-#if defined(NUMERICAL_RECIPES) || defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#if defined(NUMERICAL_RECIPES) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
         economy = 1;
 #else
         if (!noWarnings) {
@@ -542,7 +538,7 @@ int main(int argc, char **argv) {
         }
 #else
         if (verbose)
-          fprintf(stdout, "Warning: the multiplyMatrix is not implemented for Numerical receipe or meschan or SunPerformance.\n");
+          fprintf(stdout, "Warning: the multiplyMatrix is not implemented for Numerical receipe or meschach\n");
 #endif
         break;
       case CLO_NEWCOLUMNNAMES:
@@ -588,8 +584,6 @@ int main(int argc, char **argv) {
   if (printPackage) {
 #if defined(NUMERICAL_RECIPES)
     fprintf(stderr, "Compiled with package NUMERICAL_RECIPES\n");
-#elif defined(SUNPERF)
-    fprintf(stderr, "Compiled with package SUNPERF\n");
 #elif defined(CLAPACK)
     fprintf(stderr, "Compiled with package CLAPACK\n");
 #elif defined(LAPACK)
@@ -864,7 +858,7 @@ int main(int argc, char **argv) {
     }
     /* it is assumed that the non-numerical columns are filtered out */
     /* On subsequent loops, the memory pointed to by R->me is supposed to be freed */
-#if defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
     /* read in data as a matrix with contiguously allocated memory */
     /* The data will be ordered along columns (for fortran) and not along rows as in C.
        So the call to m_foutput will give the wrong layout */
@@ -905,8 +899,8 @@ int main(int argc, char **argv) {
 
     if (verbose & FL_VERYVERBOSE) {
       setformat("%9.6le ");
-#if defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
-      fprintf(stderr, "Because a fortran routine is used (SunPerf, LAPACK or CLAPACK) the following Input matrix elements are jumbled but in the correct order for calling dgesvd \n");
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+      fprintf(stderr, "Because a fortran routine is used (LAPACK or CLAPACK) the following Input matrix elements are jumbled but in the correct order for calling dgesvd \n");
 #endif
       fprintf(stderr, "Input ");
       m_foutput(stderr, R);
@@ -914,7 +908,7 @@ int main(int argc, char **argv) {
     /*here there was an important bug by in multiplying weight, R->m=rows (corresponse to bpms), weight numbers = rows (bpm weights); so that the correct
       way should be i<R->m (instead of i<R->n, which was before), and j<R->n (instead of R->m, which was before) */
     if (includeWeights) {
-#if defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
       /*for lapack, the R matrix is transposed (in column major order */
       for (j = 0; j < R->n; j++)
         for (i = 0; i < R->m; i++)
@@ -926,7 +920,7 @@ int main(int argc, char **argv) {
 #endif
     }
     if (includeCorrWeights) {
-#if defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
       /*for lapack, the R matrix is transposed (in column major order */
       for (j = 0; j < R->n; j++)
         for (i = 0; i < R->m; i++)
@@ -947,23 +941,20 @@ int main(int argc, char **argv) {
       InvSValue = v_get(numericalColumns);
 
     /* Summary of which subroutine is called
-       Method           Num. Rec.           SunPerf      LAPACK    CLAPACK    Meschach
-       Flag             NUMERICAL_RECIPES   SUNPERF      LAPACK    CLAPACK    NONE
+       Method           Num. Rec.           LAPACK    CLAPACK    Meschach
+       Flag             NUMERICAL_RECIPES   LAPACK    CLAPACK    NONE
        -----------------------------------------------------------------------------
        Function call
-       nr_svd           Yes                 No           No         No         No
-       dgesvd           No                  Yes          No         No         No
-       dgesvd_          No                  No           Yes        Yes        No
-       svd              No                  No           No         No         Yes
+       nr_svd           Yes                 No         No         No
+       dgesvd           No                  No         No         No
+       dgesvd_          No                  Yes        Yes        No
+       svd              No                  No         No         Yes
 
        Allocated matrices for variables
        (note some memories are freed as soon as possible after svd calculation.)
        U or Ut          U uses R memory     U            Ut uses U  Ut uses U  Ut
        V or Vt          V (freed) and Vt    Vt           Vt         Vt         Vt
        Numerical recipes uses the same memory for R and U and saves memory.
-       SunPerf is an alternative to Num. Rec. and Meschach on solaris.
-       SunPerf library is an implementation of LAPACK. It has C-interface
-       library calls. That's why we don't see the _ postfix on dgesvd below.
        CLAPACK is a C version of fortran LAPACK.
        CLAPACK may use ATLAS, an automatically tuned version of basic algebra functions.
        LAPACK is plain lapack now installed in linux systems.
@@ -996,7 +987,7 @@ int main(int argc, char **argv) {
     }
 
 #else
-#  if defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#  if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
     /* These fortran calling routines have a option to
        run with standard svd (square U) and economy SVD (smaller U) */
     if (!Vt)
@@ -1014,25 +1005,6 @@ int main(int argc, char **argv) {
     else
       calcMode = 'S';
 
-#    if defined(SUNPERF)
-    dgesvd(calcMode, calcMode, (int)R->m, (int)R->n,
-           R->base, (int)(MAX(1, R->m)),
-           SValue->ve,
-           U->base, (int)R->m,
-           Vt->base, (int)R->n,
-           &info);
-
-    dtrans('I', 1.0, U->base, U->m, U->n, NULL);
-    dtrans('I', 1.0, Vt->base, Vt->m, Vt->n, NULL);
-    if (verbose & FL_VERYVERBOSE) {
-      fprintf(stderr, "U after svd calculation ");
-      m_foutput(stderr, U);
-    }
-    if (verbose & FL_VERYVERBOSE) {
-      fprintf(stderr, "Vt after svd calculation ");
-      m_foutput(stderr, Vt);
-    }
-#    endif
 #    if defined(CLAPACK)
 #if defined(ACCELERATE_NEW_LAPACK)
     work = (double *)malloc(sizeof(double) * 1);
@@ -1464,7 +1436,7 @@ int main(int argc, char **argv) {
         mem_info_file(stderr, 0);
     }
 
-#if defined(NUMERICAL_RECIPES) || defined(SUNPERF)
+#if defined(NUMERICAL_RECIPES)
     /* Only U (with original R memory) and Vt are available.  Make
        multiplication as sum of singular triplets RInv_ij = (V_ik InvS_k
        Ut_kj) becomes (Vt_ki InvS_k U_jk) */
@@ -1824,9 +1796,9 @@ int main(int argc, char **argv) {
         /* the number of rows of U depends on the method used and the
            economy mode flag.  The clearest way for determining the number of
            columns for the page is to use the matrix data itself. For
-           NUMERICAL_RECIPES and SUNPERF only U is available, for other methods
+           NUMERICAL_RECIPES only U is available, for other methods
            Ut is available.*/
-#if defined(NUMERICAL_RECIPES) || defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#if defined(NUMERICAL_RECIPES) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
         if (0 > SDDS_DefineSimpleColumns(&uPage,
                                          U->n,
                                          orthoColumnName, NULL, SDDS_DOUBLE))
@@ -1985,7 +1957,7 @@ int main(int argc, char **argv) {
         Rnewt = m_get(numericalColumns, rows);
 #endif
       }
-#if defined(NUMERICAL_RECIPES) || defined(SUNPERF)
+#if defined(NUMERICAL_RECIPES)
       /* only U (with original R memory) and Vt are available. */
       for (i = 0; i < U->m; i++)
         for (j = 0; j < Vt->n; j++) {
@@ -2135,19 +2107,6 @@ int main(int argc, char **argv) {
       U = (MAT *)NULL;
       R = (MAT *)NULL;
 #else
-#  if defined(SUNPERF)
-      /* only U and Vt are available, and U is rectangular and U may be smaller when -economy is used. */
-      for (i = 0; i < rows; i++)
-        for (j = 0; j < U->n; j++)
-          if (!SDDS_SetRowValues(&uPage, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE,
-                                 i, j + 1, U->me[i][j], -1))
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      if (!SDDS_WriteTable(&uPage))
-        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      m_free(U);
-      U = (MAT *)NULL;
-      R = (MAT *)NULL;
-#  else
 #    if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
       /* U and Vt matrix are available and their base are in column order */
       for (i = 0; i < U->n; i++)
@@ -2171,12 +2130,11 @@ int main(int argc, char **argv) {
       m_free(Ut);
       Ut = (MAT *)NULL;
 #    endif
-#  endif
 #endif
       SDDS_FreeDataPage(&uPage);
     } else {
       /* free pointers in U or Ut anyhow with -vmatrix not specified.*/
-#if defined(NUMERICAL_RECIPES) || defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#if defined(NUMERICAL_RECIPES) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
       m_free(U);
       U = (MAT *)NULL;
       R = (MAT *)NULL;
@@ -2558,7 +2516,7 @@ MAT *Ut, *V;
 }
 #endif
 
-#if defined(SUNPERF) || defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
 void *SDDS_GetCastMatrixOfRows_SunPerf(SDDS_DATASET *SDDS_dataset, int32_t *n_rows, long sddsType) {
   void *data;
   long i, j, k, size;
