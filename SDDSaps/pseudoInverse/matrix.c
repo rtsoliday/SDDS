@@ -39,6 +39,19 @@ int f2c_dgemm(char *transA, char *transB, integer *M, integer *N, integer *K,
 #ifdef LAPACK
 #  include "f2c.h"
 #  include <lapacke.h>
+/*
+  LAPACK integer-size compatibility note:
+
+  Some systems ship a liblapack.so soname that resolves to an ILP64
+  implementation (64-bit Fortran INTEGER) rather than the traditional LP64
+  implementation (32-bit Fortran INTEGER). If code passes 32-bit integer
+  storage (e.g., addresses of int fields like MAT->m) into an ILP64 runtime,
+  LAPACK/BLAS routines may see corrupted arguments.
+
+  To remain runnable with either LP64 or ILP64 LAPACK at runtime, the LAPACK
+  code paths below use 64-bit integer storage (long long) and cast pointers
+  to lapack_int* when calling Lapacke-provided Fortran entry points.
+*/
 int dgemm_(char *transa, char *transb, lapack_int *m, lapack_int *n, lapack_int *k, double *alpha, double *a, lapack_int *lda, double *b, lapack_int *ldb, double *beta, double *c, lapack_int *ldc);
 #endif
 
@@ -278,7 +291,7 @@ MAT *matrix_mult(MAT *mat1, MAT *mat2) {
   double alpha = 1.0, beta = 0.0;
 #endif
 #if defined(LAPACK)
-  integer lda, kk, ldb;
+  long long lda, kk, ldb;
   doublereal alpha = 1.0, beta = 0.0;
 #endif
   if (!mat1 || !mat2)
@@ -309,9 +322,17 @@ MAT *matrix_mult(MAT *mat1, MAT *mat2) {
          (__LAPACK_int *)&new_mat->m, (__LAPACK_int *)&new_mat->n, (int *)&kk, &alpha, mat1->base,
          (int *)&lda, mat2->base, (int *)&ldb, &beta, new_mat->base, (__LAPACK_int *)&new_mat->m);
 #      else
-  dgemm_("N", "N",
-    (lapack_int *)&new_mat->m, (lapack_int *)&new_mat->n, (lapack_int *)&kk, &alpha, mat1->base,
-         (lapack_int *)&lda, mat2->base, (lapack_int *)&ldb, &beta, new_mat->base, (lapack_int *)&new_mat->m);
+  {
+    long long m64 = (long long)new_mat->m;
+    long long n64 = (long long)new_mat->n;
+    long long k64 = (long long)kk;
+    long long lda64 = (long long)lda;
+    long long ldb64 = (long long)ldb;
+    long long ldc64 = (long long)new_mat->m;
+    dgemm_("N", "N",
+           (lapack_int *)&m64, (lapack_int *)&n64, (lapack_int *)&k64, &alpha, mat1->base,
+           (lapack_int *)&lda64, mat2->base, (lapack_int *)&ldb64, &beta, new_mat->base, (lapack_int *)&ldc64);
+  }
 #      endif
 #  endif
 #else
@@ -351,8 +372,7 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
 #endif
 #if defined(LAPACK)
   doublereal *work;
-  integer lwork;
-  integer lda;
+  long long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
 #endif
@@ -473,29 +493,52 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
  #endif
 #  endif
 #  if defined(LAPACK)
-  work = (doublereal *)malloc(sizeof(doublereal) * 1);
-  lwork = -1;
-  lda = MAX(1, A->m);
+  {
+    long long m64 = (long long)A->m;
+    long long n64 = (long long)A->n;
+    long long lda64 = (long long)MAX(1, A->m);
+    long long ldu64 = (long long)A->m;
+    long long ldvt64 = (long long)A->n;
+    long long lwork64 = -1;
+    long long info64 = 0;
+    size_t lworkAlloc;
 
-  LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&A->m, (lapack_int *)&A->n,
-                (doublereal *)A->base, (lapack_int *)&lda,
-                (doublereal *)SValue->ve,
-                (doublereal *)U->base, (lapack_int *)&A->m,
-                (doublereal *)Vt->base, (lapack_int *)&A->n,
-                (doublereal *)work, (lapack_int *)&lwork,
-                (lapack_int *)&info);
+    work = (doublereal *)malloc(sizeof(doublereal) * 1);
 
-  lwork = work[0];
-  work = (doublereal *)realloc(work, sizeof(doublereal) * lwork);
+    LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&m64, (lapack_int *)&n64,
+                  (doublereal *)A->base, (lapack_int *)&lda64,
+                  (doublereal *)SValue->ve,
+                  (doublereal *)U->base, (lapack_int *)&ldu64,
+                  (doublereal *)Vt->base, (lapack_int *)&ldvt64,
+                  (doublereal *)work, (lapack_int *)&lwork64,
+                  (lapack_int *)&info64);
 
-  LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&A->m, (lapack_int *)&A->n,
-                (doublereal *)A->base, (lapack_int *)&lda,
-                (doublereal *)SValue->ve,
-                (doublereal *)U->base, (lapack_int *)&A->m,
-                (doublereal *)Vt->base, (lapack_int *)&A->n,
-                (doublereal *)work, (lapack_int *)&lwork,
-                (lapack_int *)&info);
-  free(work);
+    lwork64 = (long long)work[0];
+    if (info64 != 0 || lwork64 <= 0) {
+      free(work);
+      SDDS_Bomb("Error querying dgesvd workspace size (LAPACK)");
+    }
+    lworkAlloc = (size_t)lwork64;
+    work = (doublereal *)realloc(work, sizeof(doublereal) * lworkAlloc);
+
+    LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&m64, (lapack_int *)&n64,
+                  (doublereal *)A->base, (lapack_int *)&lda64,
+                  (doublereal *)SValue->ve,
+                  (doublereal *)U->base, (lapack_int *)&ldu64,
+                  (doublereal *)Vt->base, (lapack_int *)&ldvt64,
+                  (doublereal *)work, (lapack_int *)&lwork64,
+                  (lapack_int *)&info64);
+
+    free(work);
+    info = (int)info64;
+    if (info) {
+      if (info < 0)
+        fprintf(stderr, "Error in SVD (dgesvd): the %d-th argument had an illegal value.\n", -info);
+      else
+        fprintf(stderr, "Error in SVD (dgesvd): failed to converge (info=%d).\n", info);
+      SDDS_Bomb("SVD failed (matrix_invert)");
+    }
+  }
 #  endif
   max = 0;
   min = HUGE;
@@ -590,9 +633,17 @@ MAT *matrix_invert(MAT *A, int32_t largestSValue, int32_t smallestSValue, double
          (__LAPACK_int *)&U->m, (__LAPACK_int *)&V->n, &kk, &alpha, U->base,
          (int *)&lda, V->base, &ldb, &beta, Invt->base, (__LAPACK_int *)&U->m);
 #      else
-  dgemm_("N", "N",
-    (lapack_int *)&U->m, (lapack_int *)&V->n, &kk, &alpha, U->base,
-         (lapack_int *)&lda, V->base, (lapack_int *)&ldb, &beta, Invt->base, (lapack_int *)&U->m);
+  {
+    long long m64 = (long long)U->m;
+    long long n64 = (long long)V->n;
+    long long k64 = (long long)kk;
+    long long lda64 = (long long)lda;
+    long long ldb64 = (long long)ldb;
+    long long ldc64 = (long long)U->m;
+    dgemm_("N", "N",
+           (lapack_int *)&m64, (lapack_int *)&n64, (lapack_int *)&k64, &alpha, U->base,
+           (lapack_int *)&lda64, V->base, (lapack_int *)&ldb64, &beta, Invt->base, (lapack_int *)&ldc64);
+  }
 #      endif
 #    endif
   matrix_free(V);
@@ -696,7 +747,8 @@ double matrix_det(MAT *A) {
   long i, lda, n, m, *ipvt, info;
 #endif
 #if defined(LAPACK)
-  lapack_int i, lda, n, m, *ipvt, info;
+  long long i, lda, n, m, info;
+  void *ipvt;
 #endif
 #if !defined(LAPACK) && !defined(CLAPACK) && !defined(MKL)
   MATRIX *DET;
@@ -709,7 +761,11 @@ double matrix_det(MAT *A) {
   lda = A->m;
   n = A->n;
   m = A->m;
+#  if defined(LAPACK)
+  ipvt = calloc((size_t)n, sizeof(long long));
+#  else
   ipvt = calloc(n, sizeof(*ipvt));
+#  endif
   B = matrix_copy(A);
   /*LU decomposition*/
 #  if defined(MKL)
@@ -725,7 +781,7 @@ double matrix_det(MAT *A) {
   }
 #  else
 #    if defined(LAPACK)
-  LAPACK_dgetrf((lapack_int *)&m, (lapack_int *)&n, B->base, (lapack_int *)&lda, ipvt, (lapack_int *)&info);
+  LAPACK_dgetrf((lapack_int *)&m, (lapack_int *)&n, B->base, (lapack_int *)&lda, (lapack_int *)ipvt, (lapack_int *)&info);
 #    else
 #if defined(ACCELERATE_NEW_LAPACK)
   dgetrf_((__LAPACK_int *)&m, (__LAPACK_int *)&n, B->base, (__LAPACK_int *)&lda, (__LAPACK_int *)ipvt, (__LAPACK_int *)&info);
@@ -788,8 +844,7 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
 #endif
 #if defined(LAPACK)
   doublereal *work;
-  integer lwork;
-  integer lda;
+  long long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
 #endif
@@ -914,29 +969,52 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
 #endif
 #  endif
 #  if defined(LAPACK)
-  work = (doublereal *)malloc(sizeof(doublereal) * 1);
-  lwork = -1;
-  lda = MAX(1, A->m);
+  {
+    long long m64 = (long long)A->m;
+    long long n64 = (long long)A->n;
+    long long lda64 = (long long)MAX(1, A->m);
+    long long ldu64 = (long long)A->m;
+    long long ldvt64 = (long long)A->n;
+    long long lwork64 = -1;
+    long long info64 = 0;
+    size_t lworkAlloc;
 
-  LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&A->m, (lapack_int *)&A->n,
-                (doublereal *)A->base, (lapack_int *)&lda,
-                (doublereal *)SValue->ve,
-                (doublereal *)U->base, (lapack_int *)&A->m,
-                (doublereal *)Vt->base, (lapack_int *)&A->n,
-                (doublereal *)work, (lapack_int *)&lwork,
-                (lapack_int *)&info);
+    work = (doublereal *)malloc(sizeof(doublereal) * 1);
 
-  lwork = work[0];
-  work = (doublereal *)realloc(work, sizeof(doublereal) * lwork);
+    LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&m64, (lapack_int *)&n64,
+                  (doublereal *)A->base, (lapack_int *)&lda64,
+                  (doublereal *)SValue->ve,
+                  (doublereal *)U->base, (lapack_int *)&ldu64,
+                  (doublereal *)Vt->base, (lapack_int *)&ldvt64,
+                  (doublereal *)work, (lapack_int *)&lwork64,
+                  (lapack_int *)&info64);
 
-  LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&A->m, (lapack_int *)&A->n,
-                (doublereal *)A->base, (lapack_int *)&lda,
-                (doublereal *)SValue->ve,
-                (doublereal *)U->base, (lapack_int *)&A->m,
-                (doublereal *)Vt->base, (lapack_int *)&A->n,
-                (doublereal *)work, (lapack_int *)&lwork,
-                (lapack_int *)&info);
-  free(work);
+    lwork64 = (long long)work[0];
+    if (info64 != 0 || lwork64 <= 0) {
+      free(work);
+      SDDS_Bomb("Error querying dgesvd workspace size (LAPACK)");
+    }
+    lworkAlloc = (size_t)lwork64;
+    work = (doublereal *)realloc(work, sizeof(doublereal) * lworkAlloc);
+
+    LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&m64, (lapack_int *)&n64,
+                  (doublereal *)A->base, (lapack_int *)&lda64,
+                  (doublereal *)SValue->ve,
+                  (doublereal *)U->base, (lapack_int *)&ldu64,
+                  (doublereal *)Vt->base, (lapack_int *)&ldvt64,
+                  (doublereal *)work, (lapack_int *)&lwork64,
+                  (lapack_int *)&info64);
+
+    free(work);
+    info = (int)info64;
+    if (info) {
+      if (info < 0)
+        fprintf(stderr, "Error in SVD (dgesvd): the %d-th argument had an illegal value.\n", -info);
+      else
+        fprintf(stderr, "Error in SVD (dgesvd): failed to converge (info=%d).\n", info);
+      SDDS_Bomb("SVD failed (matrix_invert_weight)");
+    }
+  }
 #  endif
   max = 0;
   min = HUGE;
@@ -1031,9 +1109,17 @@ MAT *matrix_invert_weight(MAT *A, double *weight, int32_t largestSValue, int32_t
          (__LAPACK_int *)&U->m, (__LAPACK_int *)&V->n, &kk, &alpha, U->base,
          (int *)&lda, V->base, &ldb, &beta, Invt->base, (__LAPACK_int *)&U->m);
 #      else
-  dgemm_("N", "N",
-    (lapack_int *)&U->m, (lapack_int *)&V->n, &kk, &alpha, U->base,
-         (lapack_int *)&lda, V->base, &ldb, &beta, Invt->base, (lapack_int *)&U->m);
+  {
+    long long m64 = (long long)U->m;
+    long long n64 = (long long)V->n;
+    long long k64 = (long long)kk;
+    long long lda64 = (long long)lda;
+    long long ldb64 = (long long)ldb;
+    long long ldc64 = (long long)U->m;
+    dgemm_("N", "N",
+           (lapack_int *)&m64, (lapack_int *)&n64, (lapack_int *)&k64, &alpha, U->base,
+           (lapack_int *)&lda64, V->base, (lapack_int *)&ldb64, &beta, Invt->base, (lapack_int *)&ldc64);
+  }
 #      endif
 #    endif
   matrix_free(V);
