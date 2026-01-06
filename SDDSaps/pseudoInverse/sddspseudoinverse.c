@@ -65,6 +65,23 @@ int f2c_dgemm(char *transA, char *transB, integer *M, integer *N, integer *K,
 #ifdef LAPACK
 #  include "f2c.h"
 #  include <lapacke.h>
+/*
+  LAPACK/BLAS integer-size compatibility note:
+
+  Some distributions (notably some RHEL 9 variants) may ship a liblapack.so
+  soname that resolves to an ILP64 build (64-bit Fortran INTEGER) instead of
+  the traditional LP64 build (32-bit Fortran INTEGER).
+
+  If we compile against LP64 headers (lapack_int=32-bit) but load an ILP64
+  LAPACK at runtime, calling routines like DGESDD/DGEMM with 32-bit integer
+  *storage* yields errors such as:
+    "** On entry to DGESDD parameter number 5 had an illegal value"
+
+  We keep Lapacke's declarations (from <lapacke.h>) to avoid conflicting
+  prototypes, but we pass 64-bit integer storage (long long variables) and
+  cast the pointers to lapack_int*. This works with both LP64 and ILP64
+  runtimes because the Fortran code will read/write either 4 or 8 bytes.
+*/
 int dgemm_(char *transa, char *transb, lapack_int *m, lapack_int *n, lapack_int *k, double *alpha, double *a, const lapack_int *lda, double *b, const lapack_int *ldb, double *beta, double *c, const lapack_int *ldc);
 #endif
 
@@ -289,7 +306,7 @@ int main(int argc, char **argv) {
   long printPackage;
   short columnMajorOrder = -1, lapackMethod = 1;
 #if defined(LAPACK)
-  lapack_int *iwork = NULL;
+  void *iwork = NULL;
 #else
   int *iwork = NULL;
 #endif
@@ -326,8 +343,8 @@ int main(int argc, char **argv) {
 #endif
 #if defined(LAPACK)
   doublereal *work;
-  lapack_int lwork;
-  lapack_int lda;
+  long long lwork;
+  long long lda;
   double alpha = 1.0, beta = 0.0;
   int kk, ldb;
 
@@ -369,6 +386,7 @@ int main(int argc, char **argv) {
   includeWeights = includeCorrWeights = 0;
   sFileAsMatrix = 0;
   economy = 0;
+  economyRows = 0;
   printPackage = 0;
 
   for (i_arg = 1; i_arg < argc; i_arg++) {
@@ -1204,49 +1222,85 @@ int main(int argc, char **argv) {
       the column order of U and Vt matrices */
 #    endif
 #    if defined(LAPACK)
-    work = (doublereal *)malloc(sizeof(doublereal) * 1);
-    lwork = -1;
-    lda = MAX(1, R->m);
-    if (lapackMethod == 1) {
-      iwork = malloc(sizeof(*iwork) * 8 * MIN(R->m, R->n));
-      LAPACK_dgesdd((char *)&calcMode, (lapack_int *)&R->m, (lapack_int *)&R->n,
-                    (double *)R->base, (lapack_int *)&lda,
-                    (double *)SValue->ve,
-                    (double *)U->base, (lapack_int *)&R->m,
-                    (double *)Vt->base, (lapack_int *)&R->n,
-                    (double *)work, (lapack_int *)&lwork, iwork,
-                    (lapack_int *)&info);
-    } else
-      LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&R->m, (lapack_int *)&R->n,
-                    (doublereal *)R->base, (lapack_int *)&lda,
-                    (doublereal *)SValue->ve,
-                    (doublereal *)U->base, (lapack_int *)&R->m,
-                    (doublereal *)Vt->base, (lapack_int *)&R->n,
-                    (doublereal *)work, (lapack_int *)&lwork,
-                    (lapack_int *)&info);
+    {
+  long long m64, n64, ldu64, ldvt64;
+  long long info64 = 0;
+      long long minMN;
+      size_t lworkAlloc;
 
-    lwork = work[0];
-    if (verbose & FL_VERYVERBOSE)
-      fprintf(stderr, "Work space size returned from dgesvd_ is %d.\n", lwork);
-    work = (doublereal *)realloc(work, sizeof(doublereal) * lwork);
-    if (lapackMethod == 1) {
-      LAPACK_dgesdd((char *)&calcMode, (lapack_int *)&R->m, (lapack_int *)&R->n,
-                    (double *)R->base, (lapack_int *)&lda,
-                    (double *)SValue->ve,
-                    (double *)U->base, (lapack_int *)&R->m,
-                    (double *)Vt->base, (lapack_int *)&R->n,
-                    (double *)work, (lapack_int *)&lwork, iwork,
-                    (lapack_int *)&info);
-      free(iwork);
-    } else
-      LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&R->m, (lapack_int *)&R->n,
-                    (doublereal *)R->base, (lapack_int *)&lda,
-                    (doublereal *)SValue->ve,
-                    (doublereal *)U->base, (lapack_int *)&R->m,
-                    (doublereal *)Vt->base, (lapack_int *)&R->n,
-                    (doublereal *)work, (lapack_int *)&lwork,
-                    (lapack_int *)&info);
-    free(work);
+      work = (doublereal *)malloc(sizeof(doublereal) * 1);
+      lwork = -1;
+
+      m64 = (long long)R->m;
+      n64 = (long long)R->n;
+      lda = (long long)MAX(1, R->m);
+      ldu64 = (long long)R->m;
+      ldvt64 = (long long)R->n;
+
+      if (lapackMethod == 1) {
+        minMN = (m64 < n64) ? m64 : n64;
+        iwork = malloc(sizeof(long long) * (size_t)(8 * (size_t)minMN));
+        LAPACK_dgesdd((char *)&calcMode, (lapack_int *)&m64, (lapack_int *)&n64,
+                (double *)R->base, (lapack_int *)&lda,
+                (double *)SValue->ve,
+                (double *)U->base, (lapack_int *)&ldu64,
+                (double *)Vt->base, (lapack_int *)&ldvt64,
+                (double *)work, (lapack_int *)&lwork, (lapack_int *)iwork,
+                (lapack_int *)&info64);
+      } else {
+        LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&m64, (lapack_int *)&n64,
+                (double *)R->base, (lapack_int *)&lda,
+                (double *)SValue->ve,
+                (double *)U->base, (lapack_int *)&ldu64,
+                (double *)Vt->base, (lapack_int *)&ldvt64,
+                (double *)work, (lapack_int *)&lwork,
+                (lapack_int *)&info64);
+      }
+
+      lwork = (long long)work[0];
+      if (lwork <= 0)
+        SDDS_Bomb("Error: invalid workspace size returned by LAPACK SVD call.");
+      if (verbose & FL_VERYVERBOSE)
+        fprintf(stderr, "Work space size returned from dgesvd_ is %lld.\n", lwork);
+
+      lworkAlloc = (size_t)lwork;
+      work = (doublereal *)realloc(work, sizeof(doublereal) * lworkAlloc);
+
+      if (lapackMethod == 1) {
+        LAPACK_dgesdd((char *)&calcMode, (lapack_int *)&m64, (lapack_int *)&n64,
+                (double *)R->base, (lapack_int *)&lda,
+                (double *)SValue->ve,
+                (double *)U->base, (lapack_int *)&ldu64,
+                (double *)Vt->base, (lapack_int *)&ldvt64,
+                (double *)work, (lapack_int *)&lwork, (lapack_int *)iwork,
+                (lapack_int *)&info64);
+        free(iwork);
+        iwork = NULL;
+      } else {
+        LAPACK_dgesvd((char *)&calcMode, (char *)&calcMode, (lapack_int *)&m64, (lapack_int *)&n64,
+                (double *)R->base, (lapack_int *)&lda,
+                (double *)SValue->ve,
+                (double *)U->base, (lapack_int *)&ldu64,
+                (double *)Vt->base, (lapack_int *)&ldvt64,
+                (double *)work, (lapack_int *)&lwork,
+                (lapack_int *)&info64);
+      }
+
+      info = (int)info64;
+      if (info) {
+        if (info < 0) {
+          fprintf(stderr, "** LAPACK error: illegal value in argument %d to %s\n",
+                  -info, lapackMethod == 1 ? "DGESDD" : "DGESVD");
+        } else {
+          fprintf(stderr, "** LAPACK error: %s failed to converge (info=%d)\n",
+                  lapackMethod == 1 ? "DGESDD" : "DGESVD", info);
+        }
+        exit(1);
+      }
+
+      free(work);
+      work = NULL;
+    }
     /* do not need R now can free it*/
 
     t_free(R);
@@ -1486,9 +1540,17 @@ int main(int argc, char **argv) {
   }
 #      endif
 #      if defined(LAPACK)
-    dgemm_("N", "N",
-           (lapack_int *)&U->m, (lapack_int *)&V->n, &kk, &alpha, U->base,
-           &lda, V->base, &ldb, &beta, RInvt->base, (lapack_int *)&U->m);
+  {
+    long long m64 = (long long)U->m;
+    long long n64 = (long long)V->n;
+    long long k64 = (long long)kk;
+    long long lda64 = (long long)lda;
+    long long ldb64 = (long long)ldb;
+    long long ldc64 = (long long)U->m;
+      dgemm_("N", "N",
+             (lapack_int *)&m64, (lapack_int *)&n64, (lapack_int *)&k64, &alpha, U->base,
+             (lapack_int *)&lda64, V->base, (lapack_int *)&ldb64, &beta, RInvt->base, (lapack_int *)&ldc64);
+  }
 #      endif
 #    endif
     m_free(V);
@@ -1587,13 +1649,29 @@ int main(int argc, char **argv) {
                RInvt->base, &ldb, &beta, Product->base, (__LAPACK_int *)&Product->m);
 #else
       if (!invertMultiply)
-        dgemm_("T", "N",
-          (lapack_int *)&Product->m, (lapack_int *)&Product->n, &kk, &alpha, RInvt->base, (lapack_int *)&lda,
-               Multi->base, (lapack_int *)&ldb, &beta, Product->base, (lapack_int *)&Product->m);
+        {
+          long long m64 = (long long)Product->m;
+          long long n64 = (long long)Product->n;
+          long long k64 = (long long)kk;
+          long long lda64 = (long long)lda;
+          long long ldb64 = (long long)ldb;
+          long long ldc64 = (long long)Product->m;
+          dgemm_("T", "N",
+                (lapack_int *)&m64, (lapack_int *)&n64, (lapack_int *)&k64, &alpha, RInvt->base, (lapack_int *)&lda64,
+                Multi->base, (lapack_int *)&ldb64, &beta, Product->base, (lapack_int *)&ldc64);
+        }
       else
-        dgemm_("N", "T",
-               (lapack_int *)&Product->m, (lapack_int *)&Product->n, &kk, &alpha, Multi->base, (lapack_int *)&lda,
-               RInvt->base, (lapack_int *)&ldb, &beta, Product->base, (lapack_int *)&Product->m);
+        {
+          long long m64 = (long long)Product->m;
+          long long n64 = (long long)Product->n;
+          long long k64 = (long long)kk;
+          long long lda64 = (long long)lda;
+          long long ldb64 = (long long)ldb;
+          long long ldc64 = (long long)Product->m;
+          dgemm_("N", "T",
+                (lapack_int *)&m64, (lapack_int *)&n64, (lapack_int *)&k64, &alpha, Multi->base, (lapack_int *)&lda64,
+                RInvt->base, (lapack_int *)&ldb64, &beta, Product->base, (lapack_int *)&ldc64);
+        }
 #endif
 #      endif
 #    endif
@@ -1973,9 +2051,17 @@ int main(int argc, char **argv) {
   }
 #      endif
 #      if defined(LAPACK)
-      dgemm_("N", "N",
-        (lapack_int *)&U->m, (lapack_int *)&V->n, &kk, &alpha, U->base,
-             &lda, V->base, &ldb, &beta, Rnewt->base, (lapack_int *)&U->m);
+  {
+    long long m64 = (long long)U->m;
+    long long n64 = (long long)V->n;
+    long long k64 = (long long)kk;
+    long long lda64 = (long long)lda;
+    long long ldb64 = (long long)ldb;
+    long long ldc64 = (long long)U->m;
+    dgemm_("N", "N",
+      (lapack_int *)&m64, (lapack_int *)&n64, (lapack_int *)&k64, &alpha, U->base,
+      (lapack_int *)&lda64, V->base, (lapack_int *)&ldb64, &beta, Rnewt->base, (lapack_int *)&ldc64);
+  }
 #      endif
 #    endif
       m_free(V);
