@@ -6,7 +6,9 @@
 #include "SDDS.h"
 #include "mdb.h"
 #include "matrixop.h"
-
+#if !defined(LAPACK) && !defined(CLAPACK) && !defined(MKL)
+#  include "matlib.h"
+#endif
 #if !defined(HUGE)
 #  define HUGE DBL_MAX
 #endif
@@ -742,11 +744,12 @@ void *SDDS_GetCastMatrixOfRowsByColumn(SDDS_DATASET *SDDS_dataset, int32_t *n_ro
 
 double matrix_det(MAT *A) {
   double det = 1.0;
-  MAT *B;
 #if defined(CLAPACK) || defined(MKL)
+  MAT *B;
   long i, lda, n, m, *ipvt, info;
 #endif
 #if defined(LAPACK)
+  MAT *B;
   long long i, lda, n, m, info;
   void *ipvt;
 #endif

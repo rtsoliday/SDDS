@@ -10,10 +10,21 @@ sddsica_SRC = matrix.c sddsica.c
 CFLAGS += -DzLib -I../../include
 
 ifeq ($(OS), Linux)
-  CFLAGS += -fopenmp $(MKL_CFLAG) $(MKL_INCLUDE) $(LAPACK_CFLAG) $(LAPACK_INCLUDE)
-  LDFLAGS += -fopenmp
-  PROD_SYS_LIBS := $(MKL_LIB) $(LAPACK_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
-  PROD_LIBS = -lmdbcommon -lfftpack -lSDDS1 -lrpnlib -lmdbmth -lmdblib -lmeschach 
+  ifeq ($(MKL_CFLAG),)
+    ifeq ($(LAPACK_CFLAG),)
+	  USE_MATLIB = 1
+    endif
+  endif
+  ifeq ($(USE_MATLIB),1)
+    PROD_SYS_LIBS := $(MKL_LIB) $(LAPACK_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+    PROD_LIBS = -lmdbcommon -lmatlib -lfftpack -lSDDS1 -lrpnlib -lmdbmth -lmdblib -lmeschach
+  else
+    CFLAGS += -fopenmp $(MKL_CFLAG) $(MKL_INCLUDE) $(LAPACK_CFLAG) $(LAPACK_INCLUDE)
+    LDFLAGS += -fopenmp
+
+    PROD_SYS_LIBS := $(MKL_LIB) $(LAPACK_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+    PROD_LIBS = -lmdbcommon -lfftpack -lSDDS1 -lrpnlib -lmdbmth -lmdblib -lmeschach 
+  endif
 endif
 
 ifeq ($(OS), Darwin)

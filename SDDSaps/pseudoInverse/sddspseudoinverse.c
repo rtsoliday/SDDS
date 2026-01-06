@@ -239,7 +239,7 @@ int m_freePointers(MAT *mat);
 int t_free(MAT *mat);
 
 #if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
-void *SDDS_GetCastMatrixOfRows_SunPerf(SDDS_DATASET *SDDS_dataset, int32_t *n_rows, long sddsType);
+void *SDDS_GetCastMatrixOfRows_SunPerf(SDDS_DATASET *SDDS_dataset, int64_t *n_rows, long sddsType);
 #endif
 
 int32_t InitializeInputAndGetColumnNames(SDDS_DATASET *SDDS_dataset, char *filename,
@@ -257,7 +257,8 @@ int main(int argc, char **argv) {
   char **corrWeightsColumnName, **corrWeightsName = NULL;
   char *corrWeightsNamesColumn, *corrWeightsValuesColumn;
   double *weights, largestS;
-  int32_t rows = 0, multiplyRows = 0, outpageRows = 0, actuators = 0, outputColumns = 0;
+  int64_t rows = 0;
+  int32_t outpageRows = 0, actuators = 0, outputColumns = 0;
   int32_t rowsFirstPage = 0, numericalColumns, weightsRows=0, weightsColumns, multiplyColumns, freeMultiCol = 0;
   int32_t corrWeightsRows = 0, corrWeightsColumns;
   long sFileAsMatrix;
@@ -266,15 +267,19 @@ int main(int argc, char **argv) {
   long i_arg;
   register long i, j;
 #if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+  int64_t multiplyRows = 0;
+  MAT *Multi = NULL;
+  long mpage = 0;
+  short lapackMethod = 1;
 #else
-  register k;
+  int k;
 #endif
   int32_t dim_ptr[1] = {1};
   long removeDCVectors, includeWeights, verbose, includeCorrWeights;
   char format[80];
   char *Symbol, *Root;
   VEC *w = NULL, *SValue, *SValueUsed, *InvSValue, *corrW = NULL;
-  MAT *R, *RInvt, *RInvR, *Rnewt, *U, *Ut, *V, *Vt, *Multi = NULL, *Product = NULL;
+  MAT *R, *RInvt, *RInvR, *Rnewt, *U, *Ut, *V, *Vt, *Product = NULL;
 
   double ratio;
   long nlargest, nsmallest, t_svn = 0, tikhonov = 0;
@@ -284,14 +289,14 @@ int main(int argc, char **argv) {
   long digits, foundStringColumn = 0, invertMultiply = 0, strColIndex = -1;
   unsigned long pipeFlags;
   long tmpfile_used, noWarnings;
-  long ipage, row_match, mpage = 0;
+  long ipage, row_match;
   char *oldColumnNames, *newColumnNamesColumn;
   double conditionNumber, max, min;
   unsigned long flags, majorOrderFlag;
   long *deleteVector, deleteVectors, firstdelete;
   char deletedVector[1024];
   long printPackage;
-  short columnMajorOrder = -1, lapackMethod = 1;
+  short columnMajorOrder = -1;
   /* Flag economy changes the calculation mode of the lapack-type calls to svd
      and may later be used by a modified meschach svd routine to
      reduce the number of columns returned for the U matrix.
@@ -545,9 +550,13 @@ int main(int argc, char **argv) {
         if (s_arg[i_arg].n_items != 2)
           SDDS_Bomb("Invalid -lapackMethod syntax, either \"simple\" or \"divideAndConquer\" should be given.");
         if (strncmp_case_insensitive(s_arg[i_arg].list[1], "simple", MIN(strlen(s_arg[i_arg].list[1]), 6)) == 0) {
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
           lapackMethod = 0;
+#endif
         } else if (strncmp_case_insensitive(s_arg[i_arg].list[1], "divideAndConqure", MIN(strlen(s_arg[i_arg].list[1]), 6)) == 0) {
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
           lapackMethod = 1;
+#endif
         } else
           SDDS_Bomb("Invalid lapackMethod given, has to be \"simple\" or \"divideAndConquer\".");
         break;
@@ -615,7 +624,7 @@ int main(int argc, char **argv) {
         SDDS_Bomb("No rows in dataset.");
       }
       if (verbose & FL_VERBOSE)
-        fprintf(stderr, "Page %ld has %" PRId32 " rows.\n", ipage, rows);
+        fprintf(stderr, "Page %ld has %" PRId64 " rows.\n", ipage, rows);
       rowsFirstPage = rows;
       /* read string column or create names for output file columns*/
       if (!Root && stringColumnName) {
@@ -652,7 +661,7 @@ int main(int argc, char **argv) {
         SDDS_Bomb("No rows in dataset.");
       }
       if (verbose & FL_VERBOSE)
-        fprintf(stderr, "Page %ld has %" PRId32 " rows.\n", ipage, rows);
+        fprintf(stderr, "Page %ld has %" PRId64 " rows.\n", ipage, rows);
       if (rows != rowsFirstPage) {
         SDDS_Bomb("Datasets don't have the same number of rows.\nProcessing stopped before reaching the end of the input file.");
       }
@@ -2116,7 +2125,7 @@ int main(int argc, char **argv) {
           for (j = 0; j < (economy ? economyRows : rows); j++)
             if (!SDDS_SetRowValues(&sPage, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE,
                                    j, i, i == j ? SValue->ve[i] : 0.0, -1)) {
-              fprintf(stderr, "Problem setting S[%ld][%ld] of %d x %d matrix\n", i, j,
+              fprintf(stderr, "Problem setting S[%ld][%ld] of %d x %ld matrix\n", i, j,
                       numericalColumns, rows);
               SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
             }
@@ -2331,7 +2340,7 @@ int m_freePointers(mat)
 }
 
 #if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
-void *SDDS_GetCastMatrixOfRows_SunPerf(SDDS_DATASET *SDDS_dataset, int32_t *n_rows, long sddsType) {
+void *SDDS_GetCastMatrixOfRows_SunPerf(SDDS_DATASET *SDDS_dataset, int64_t *n_rows, long sddsType) {
   void *data;
   long i, j, k, size;
   /*  long type;*/

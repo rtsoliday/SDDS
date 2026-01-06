@@ -262,7 +262,10 @@ int main(int argc, char **argv) {
   long *deleteVector, deleteVectors, firstdelete;
   char deletedVector[1024];
   long printPackage;
-  short columnMajorOrder = -1, lapackMethod = 1;
+  short columnMajorOrder = -1;
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
+  short lapackMethod = 1;
+#endif
   /* Flag economy changes the calculation mode of the lapack-type calls to svd
      and may later be used by a modified meschach svd routine to
      reduce the number of columns returned for the U matrix.
@@ -483,9 +486,13 @@ int main(int argc, char **argv) {
         if (s_arg[i_arg].n_items != 2)
           SDDS_Bomb("Invalid -lapackMethod syntax, either \"simple\" or \"divideAndConquer\" should be given.");
         if (strncmp_case_insensitive(s_arg[i_arg].list[1], "simple", MIN(strlen(s_arg[i_arg].list[1]), 6)) == 0) {
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
           lapackMethod = 0;
+#endif
         } else if (strncmp_case_insensitive(s_arg[i_arg].list[1], "divideAndConqure", MIN(strlen(s_arg[i_arg].list[1]), 6)) == 0) {
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
           lapackMethod = 1;
+#endif
         } else
           SDDS_Bomb("Invalid lapackMethod given, has to be \"simple\" or \"divideAndConquer\".");
         break;
