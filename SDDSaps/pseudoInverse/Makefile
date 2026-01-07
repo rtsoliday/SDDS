@@ -7,7 +7,7 @@ sddsmatrixop_SRC = matrix.c sddsmatrixop.c
 sdds2dpfit_SRC = matrix.c sdds2dpfit.c
 sddsica_SRC = matrix.c sddsica.c
 
-CFLAGS += -DzLib -I../../include
+CFLAGS += -DzLib -I../../include -Og
 
 ifeq ($(OS), Linux)
   ifeq ($(MKL_CFLAG),)
