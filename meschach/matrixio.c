@@ -395,6 +395,7 @@ char    *f_string;
     return old_f_string;
 }
 
+#define COLUMN_LIMIT 8
 void    m_foutput(fp,a)
 FILE    *fp;
 MAT     *a;
@@ -412,9 +413,9 @@ MAT     *a;
 	  for ( j=0, tmp=2; j<a->n; j++, tmp++ )
 	  {             /* for each col in row... */
 	       fprintf(fp,format,a->me[i][j]);
-	       if ( ! (tmp % 5) )       putc('\n',fp);
+	       if ( ! (tmp % COLUMN_LIMIT) )       putc('\n',fp);
 	  }
-	  if ( tmp % 5 != 1 )   putc('\n',fp);
+	  if ( tmp % COLUMN_LIMIT != 1 )   putc('\n',fp);
      }
 }
 
@@ -451,9 +452,9 @@ VEC     *x;
      for ( i=0, tmp=0; i<x->dim; i++, tmp++ )
      {
 	  fprintf(fp,format,x->ve[i]);
-	  if ( tmp % 5 == 4 )   putc('\n',fp);
+	  if ( tmp % COLUMN_LIMIT == (COLUMN_LIMIT-1) )   putc('\n',fp);
      }
-     if ( tmp % 5 != 0 )        putc('\n',fp);
+     if ( tmp % COLUMN_LIMIT != 0 )        putc('\n',fp);
 }
 
 
@@ -478,9 +479,9 @@ MAT     *a;
 	  for ( j=0, tmp=2; j<a->n; j++, tmp++ )
 	  {             /* for each col in row... */
 	       fprintf(fp,format,a->me[i][j]);
-	       if ( ! (tmp % 5) )       putc('\n',fp);
+	       if ( ! (tmp % COLUMN_LIMIT) )       putc('\n',fp);
 	  }
-	  if ( tmp % 5 != 1 )   putc('\n',fp);
+	  if ( tmp % COLUMN_LIMIT != 1 )   putc('\n',fp);
      }
 }
 
@@ -517,8 +518,8 @@ VEC     *x;
      for ( i=0, tmp=0; i<x->dim; i++, tmp++ )
      {
 	  fprintf(fp,format,x->ve[i]);
-	  if ( tmp % 5 == 4 )   putc('\n',fp);
+	  if ( tmp % COLUMN_LIMIT == (COLUMN_LIMIT-1) )   putc('\n',fp);
      }
-     if ( tmp % 5 != 0 )        putc('\n',fp);
+     if ( tmp % COLUMN_LIMIT != 0 )        putc('\n',fp);
 }
 
