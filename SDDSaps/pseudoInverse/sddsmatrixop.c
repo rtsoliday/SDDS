@@ -108,7 +108,7 @@ static long input_pages; /*number of pages in the input file */
 int32_t InitializeInputAndGetColumnNames(SDDS_DATASET *SDDS_dataset, char *filename,
                                          char ***numericalColumnName, int32_t *numericalColumns);
 
-void push_matrix(char *fileName, char ***doubleColumnName, int32_t *doubleColumnNames, long isInput);
+void push_matrix(char *fileName, char ***doubleColumnName, int32_t *doubleColumnNames, long isInput, short verbose);
 long push_address(long address, long index);
 long pop_address(long index);
 
@@ -249,7 +249,7 @@ int main(int argc, char **argv) {
       case CLO_PUSH:
         if (s_arg[i_arg].n_items != 2)
           SDDS_Bomb("invalid -push option!");
-        push_matrix(s_arg[i_arg].list[1], &doubleColumnName, &doubleColumns, 0);
+        push_matrix(s_arg[i_arg].list[1], &doubleColumnName, &doubleColumns, 0, verbose);
         push_string(s_arg[i_arg].list[1]);
         break;
       case CLO_PIPE:
@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
         case USE_STDOUT:
           break;
         default:
-          push_matrix(NULL, &doubleColumnName, &doubleColumns, 1);
+          push_matrix(NULL, &doubleColumnName, &doubleColumns, 1, verbose);
           push_string("stdin");
           inputRead = 1;
           break;
@@ -448,7 +448,7 @@ int main(int argc, char **argv) {
     } else {
       if (inputFile == NULL && !inputRead) {
         inputFile = s_arg[i_arg].list[0];
-        push_matrix(inputFile, &doubleColumnName, &doubleColumns, 1);
+        push_matrix(inputFile, &doubleColumnName, &doubleColumns, 1, verbose);
         push_string(inputFile);
       } else if (outputFile == NULL)
         outputFile = s_arg[i_arg].list[0];
@@ -577,7 +577,7 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-void push_matrix(char *fileName, char ***doubleColumnName, int32_t *doubleColumns, long isInput) {
+void push_matrix(char *fileName, char ***doubleColumnName, int32_t *doubleColumns, long isInput, short verbose) {
   SDDS_DATASET inputPage;
   char **numericalColumnNames = NULL;
   int32_t numericalColumns, rows;
@@ -613,6 +613,15 @@ void push_matrix(char *fileName, char ***doubleColumnName, int32_t *doubleColumn
     matrix->me = (Real **)calloc(matrix->n, sizeof(Real *));
     for (i = 0; i < matrix->n; i++)
       matrix->me[i] = &(matrix->base[i * matrix->m]);
+    if (verbose) {
+      fprintf(stderr, "Loaded %d x %d matrix from %s\n", matrix->m, matrix->n, fileName);
+      for (i=0; i<matrix->m; i++) {
+        fprintf(stderr, "row %ld: ", i);
+        for (long j=0; j<matrix->n; j++) 
+          fprintf(stderr, "%13.6e ", matrix->me[j][i]);
+        fprintf(stderr, "\n");
+      }
+    }
     push_address((long)matrix, pages);
     pages++;
     if (pages > MAX_PAGES) {
