@@ -45,9 +45,214 @@
 #include <functional>
 #include <memory>
 #include <cstdlib>
+#include <cerrno>
+#include <cctype>
 #include <algorithm>
 #include <limits>
 #include <QLocale>
+
+static bool validateTextForType(const QString &text, int type, bool showMessage);
+static int dimProduct(const QVector<int> &dims);
+
+static QString truncateForMessage(const QString &text, int maxLen = 80) {
+  QString t = text;
+  t.replace('\n', "\\n");
+  t.replace('\r', "\\r");
+  t.replace('\t', "\\t");
+  if (t.size() <= maxLen)
+    return t;
+  return t.left(maxLen) + QObject::tr("…");
+}
+
+static bool parseLongDoubleStrict(const QString &text, long double *out) {
+  if (!out)
+    return false;
+  QString trimmed = text.trimmed();
+  if (trimmed.isEmpty()) {
+    *out = 0.0L;
+    return true;
+  }
+  QByteArray ba = trimmed.toLocal8Bit();
+  const char *start = ba.constData();
+  char *end = nullptr;
+  errno = 0;
+  long double v = strtold(start, &end);
+  if (end == start)
+    return false;
+  while (end && *end && std::isspace(static_cast<unsigned char>(*end)))
+    ++end;
+  if (end && *end)
+    return false;
+  if (errno == ERANGE)
+    return false;
+  *out = v;
+  return true;
+}
+
+static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
+                                 int pageIndex, QString *errorText) {
+  const int pcount = layout.n_parameters;
+  const int ccount = layout.n_columns;
+  const int acount = layout.n_arrays;
+
+  // Parameters
+  for (int i = 0; i < pcount; ++i) {
+    const PARAMETER_DEFINITION &pdef = layout.parameter_definition[i];
+    if (pdef.fixed_value)
+      continue;
+    const QString val = (i < pd.parameters.size()) ? pd.parameters[i] : QString();
+    const int32_t type = pdef.type;
+    if (!validateTextForType(val, type, false)) {
+      if (errorText) {
+        *errorText = QObject::tr("Page %1: parameter '%2' has invalid value '%3' for type %4")
+                         .arg(pageIndex + 1)
+                         .arg(QString::fromLocal8Bit(pdef.name))
+                         .arg(truncateForMessage(val))
+                         .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+      }
+      return false;
+    }
+    if (type == SDDS_LONGDOUBLE) {
+      long double tmp;
+      if (!parseLongDoubleStrict(val, &tmp)) {
+        if (errorText) {
+          *errorText = QObject::tr("Page %1: parameter '%2' has invalid value '%3' for type %4")
+                           .arg(pageIndex + 1)
+                           .arg(QString::fromLocal8Bit(pdef.name))
+                           .arg(truncateForMessage(val))
+                           .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+        }
+        return false;
+      }
+    }
+  }
+
+  // Columns: require consistent row count across columns.
+  if (ccount > 0) {
+    if (pd.columns.size() < ccount) {
+      if (errorText)
+        *errorText = QObject::tr("Page %1: internal error: column data missing (have %2, need %3)")
+                         .arg(pageIndex + 1)
+                         .arg(pd.columns.size())
+                         .arg(ccount);
+      return false;
+    }
+    const int64_t rows = pd.columns[0].size();
+    for (int c = 0; c < ccount; ++c) {
+      if (pd.columns[c].size() != rows) {
+        if (errorText) {
+          const char *name = layout.column_definition[c].name;
+          *errorText = QObject::tr("Page %1: column '%2' has %3 rows; expected %4")
+                           .arg(pageIndex + 1)
+                           .arg(QString::fromLocal8Bit(name))
+                           .arg(pd.columns[c].size())
+                           .arg(rows);
+        }
+        return false;
+      }
+      const int32_t type = layout.column_definition[c].type;
+      for (int64_t r = 0; r < rows; ++r) {
+        const QString cell = pd.columns[c][r];
+        if (!validateTextForType(cell, type, false)) {
+          if (errorText) {
+            const char *name = layout.column_definition[c].name;
+            *errorText = QObject::tr("Page %1: column '%2', row %3 has invalid value '%4' for type %5")
+                             .arg(pageIndex + 1)
+                             .arg(QString::fromLocal8Bit(name))
+                             .arg(r + 1)
+                             .arg(truncateForMessage(cell))
+                             .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+          }
+          return false;
+        }
+        if (type == SDDS_LONGDOUBLE) {
+          long double tmp;
+          if (!parseLongDoubleStrict(cell, &tmp)) {
+            if (errorText) {
+              const char *name = layout.column_definition[c].name;
+              *errorText = QObject::tr("Page %1: column '%2', row %3 has invalid value '%4' for type %5")
+                               .arg(pageIndex + 1)
+                               .arg(QString::fromLocal8Bit(name))
+                               .arg(r + 1)
+                               .arg(truncateForMessage(cell))
+                               .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+            }
+            return false;
+          }
+        }
+      }
+    }
+  }
+
+  // Arrays: dims must be valid and consistent with stored element count.
+  if (acount > 0) {
+    if (pd.arrays.size() < acount) {
+      if (errorText)
+        *errorText = QObject::tr("Page %1: internal error: array data missing (have %2, need %3)")
+                         .arg(pageIndex + 1)
+                         .arg(pd.arrays.size())
+                         .arg(acount);
+      return false;
+    }
+    for (int a = 0; a < acount; ++a) {
+      const ARRAY_DEFINITION &adef = layout.array_definition[a];
+      const ArrayStore &as = pd.arrays[a];
+      if (as.dims.size() != adef.dimensions) {
+        if (errorText) {
+          *errorText = QObject::tr("Page %1: array '%2' has %3 dimensions; expected %4")
+                           .arg(pageIndex + 1)
+                           .arg(QString::fromLocal8Bit(adef.name))
+                           .arg(as.dims.size())
+                           .arg(adef.dimensions);
+        }
+        return false;
+      }
+      const int expected = dimProduct(as.dims);
+      if (expected < 0 || expected != as.values.size()) {
+        if (errorText) {
+          *errorText = QObject::tr("Page %1: array '%2' has %3 elements but dimensions imply %4")
+                           .arg(pageIndex + 1)
+                           .arg(QString::fromLocal8Bit(adef.name))
+                           .arg(as.values.size())
+                           .arg(expected);
+        }
+        return false;
+      }
+
+      const int32_t type = adef.type;
+      for (int i = 0; i < as.values.size(); ++i) {
+        const QString cell = as.values[i];
+        if (!validateTextForType(cell, type, false)) {
+          if (errorText) {
+            *errorText = QObject::tr("Page %1: array '%2', element %3 has invalid value '%4' for type %5")
+                             .arg(pageIndex + 1)
+                             .arg(QString::fromLocal8Bit(adef.name))
+                             .arg(i + 1)
+                             .arg(truncateForMessage(cell))
+                             .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+          }
+          return false;
+        }
+        if (type == SDDS_LONGDOUBLE) {
+          long double tmp;
+          if (!parseLongDoubleStrict(cell, &tmp)) {
+            if (errorText) {
+              *errorText = QObject::tr("Page %1: array '%2', element %3 has invalid value '%4' for type %5")
+                               .arg(pageIndex + 1)
+                               .arg(QString::fromLocal8Bit(adef.name))
+                               .arg(i + 1)
+                               .arg(truncateForMessage(cell))
+                               .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+            }
+            return false;
+          }
+        }
+      }
+    }
+  }
+
+  return true;
+}
 
 static bool validateTextForType(const QString &text, int type,
                                 bool showMessage = true) {
@@ -55,13 +260,39 @@ static bool validateTextForType(const QString &text, int type,
     QString trimmed = text.trimmed();
     if (!trimmed.isEmpty()) {
       bool ok = true;
-      if (SDDS_FLOATING_TYPE(type))
+      if (type == SDDS_LONGDOUBLE) {
+        long double tmp;
+        ok = parseLongDoubleStrict(trimmed, &tmp);
+      } else if (type == SDDS_DOUBLE) {
         trimmed.toDouble(&ok);
-      else if (type == SDDS_USHORT || type == SDDS_ULONG ||
-               type == SDDS_ULONG64)
+      } else if (type == SDDS_FLOAT) {
+        trimmed.toFloat(&ok);
+      } else if (type == SDDS_USHORT) {
+        qulonglong v = trimmed.toULongLong(&ok);
+        if (!ok || v > std::numeric_limits<unsigned short>::max())
+          ok = false;
+      } else if (type == SDDS_ULONG) {
+        qulonglong v = trimmed.toULongLong(&ok);
+        if (!ok || v > std::numeric_limits<uint32_t>::max())
+          ok = false;
+      } else if (type == SDDS_ULONG64) {
         trimmed.toULongLong(&ok);
-      else
+      } else if (type == SDDS_SHORT) {
+        qint64 v = trimmed.toLongLong(&ok);
+        if (!ok || v < std::numeric_limits<short>::min() || v > std::numeric_limits<short>::max())
+          ok = false;
+      } else if (type == SDDS_LONG) {
+        qint64 v = trimmed.toLongLong(&ok);
+        if (!ok || v < std::numeric_limits<int32_t>::min() || v > std::numeric_limits<int32_t>::max())
+          ok = false;
+      } else if (type == SDDS_LONG64) {
         trimmed.toLongLong(&ok);
+      } else {
+        if (SDDS_FLOATING_TYPE(type))
+          trimmed.toDouble(&ok);
+        else
+          trimmed.toLongLong(&ok);
+      }
       if (!ok) {
         if (showMessage)
           QMessageBox::warning(nullptr, QObject::tr("SDDS"),
@@ -90,6 +321,53 @@ static int dimProduct(const QVector<int> &dims) {
     prod *= d;
   }
   return prod;
+}
+
+static void normalizeEmptyNumericsToZero(const SDDS_LAYOUT &layout, QVector<PageStore> &pages) {
+  const int pcount = layout.n_parameters;
+  const int ccount = layout.n_columns;
+  const int acount = layout.n_arrays;
+
+  for (int pg = 0; pg < pages.size(); ++pg) {
+    PageStore &pd = pages[pg];
+
+    if (pcount > 0 && pd.parameters.size() < pcount)
+      pd.parameters.resize(pcount);
+    for (int i = 0; i < pcount; ++i) {
+      const PARAMETER_DEFINITION &pdef = layout.parameter_definition[i];
+      if (pdef.fixed_value)
+        continue;
+      const int32_t type = pdef.type;
+      if (!SDDS_NUMERIC_TYPE(type))
+        continue;
+      if (i >= 0 && i < pd.parameters.size() && pd.parameters[i].trimmed().isEmpty())
+        pd.parameters[i] = "0";
+    }
+
+    if (pd.columns.size() < ccount)
+      continue;
+    for (int c = 0; c < ccount; ++c) {
+      const int32_t type = layout.column_definition[c].type;
+      if (!SDDS_NUMERIC_TYPE(type))
+        continue;
+      for (int r = 0; r < pd.columns[c].size(); ++r) {
+        if (pd.columns[c][r].trimmed().isEmpty())
+          pd.columns[c][r] = "0";
+      }
+    }
+
+    if (pd.arrays.size() < acount)
+      continue;
+    for (int a = 0; a < acount; ++a) {
+      const int32_t type = layout.array_definition[a].type;
+      if (!SDDS_NUMERIC_TYPE(type))
+        continue;
+      for (int i = 0; i < pd.arrays[a].values.size(); ++i) {
+        if (pd.arrays[a].values[i].trimmed().isEmpty())
+          pd.arrays[a].values[i] = "0";
+      }
+    }
+  }
 }
 
 static hid_t hdfTypeForSdds(int32_t type) {
@@ -309,6 +587,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
       undoStack, columnView));
   columnView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::ResizeToContents);
+  columnView->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
   columnView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
   columnView->verticalHeader()->setDefaultSectionSize(18);
   columnView->verticalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -560,6 +839,16 @@ void SDDSEditor::parameterMoved(int, int, int) {
     pd.parameters = newParams;
   }
   populateModels();
+
+  // Keep the header visual order in sync with the reordered model.
+  vh->blockSignals(true);
+  for (int logical = 0; logical < count; ++logical) {
+    int visual = vh->visualIndex(logical);
+    if (visual != logical)
+      vh->moveSection(visual, logical);
+  }
+  vh->blockSignals(false);
+
   markDirty();
 }
 
@@ -593,6 +882,16 @@ void SDDSEditor::columnMoved(int, int, int) {
     pd.columns = newCols;
   }
   populateModels();
+
+  // Keep the header visual order in sync with the reordered model.
+  hh->blockSignals(true);
+  for (int logical = 0; logical < count; ++logical) {
+    int visual = hh->visualIndex(logical);
+    if (visual != logical)
+      hh->moveSection(visual, logical);
+  }
+  hh->blockSignals(false);
+
   markDirty();
 }
 
@@ -626,6 +925,16 @@ void SDDSEditor::arrayMoved(int, int, int) {
     pd.arrays = newArr;
   }
   populateModels();
+
+  // Keep the header visual order in sync with the reordered model.
+  hh->blockSignals(true);
+  for (int logical = 0; logical < count; ++logical) {
+    int visual = hh->visualIndex(logical);
+    if (visual != logical)
+      hh->moveSection(visual, logical);
+  }
+  hh->blockSignals(false);
+
   markDirty();
 }
 
@@ -814,6 +1123,15 @@ bool SDDSEditor::writeFile(const QString &path) {
     return false;
   commitModels();
 
+  // Validate everything up front so we don't partially write a file.
+  QString errorText;
+  for (int pg = 0; pg < pages.size(); ++pg) {
+    if (!validatePageForWrite(dataset.layout, pages[pg], pg, &errorText)) {
+      QMessageBox::warning(this, tr("SDDS"), errorText);
+      return false;
+    }
+  }
+
   QString finalPath = path;
   bool updateSymlink = false;
   QFileInfo fi(path);
@@ -855,7 +1173,8 @@ bool SDDSEditor::writeFile(const QString &path) {
   int ccount = dataset.layout.n_columns;
   int acount = dataset.layout.n_arrays;
 
-  for (const PageStore &pd : qAsConst(pages)) {
+  for (int pg = 0; pg < pages.size(); ++pg) {
+    const PageStore &pd = pages[pg];
     int64_t rows = 0;
     if (ccount > 0 && pd.columns.size() > 0)
       rows = pd.columns[0].size();
@@ -873,36 +1192,138 @@ bool SDDSEditor::writeFile(const QString &path) {
       QString text = (i < pd.parameters.size()) ? pd.parameters[i] : QString();
       const char *name = pdef.name;
       int32_t type = pdef.type;
+      bool ok = true;
       switch (type) {
       case SDDS_SHORT:
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (short)text.toShort(), NULL);
+        {
+          qint64 v = text.trimmed().isEmpty() ? 0 : text.toLongLong(&ok);
+          if (!ok || v < std::numeric_limits<short>::min() || v > std::numeric_limits<short>::max())
+            ok = false;
+          if (!ok) {
+            QMessageBox::warning(this, tr("SDDS"), tr("Page %1: parameter '%2' value '%3' is invalid for type short")
+                                                   .arg(pg + 1)
+                                                   .arg(QString::fromLocal8Bit(name))
+                                                   .arg(truncateForMessage(text)));
+            SDDS_Terminate(&out);
+            return false;
+          }
+          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (short)v, NULL);
+        }
         break;
       case SDDS_USHORT:
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (unsigned short)text.toUShort(), NULL);
+        {
+          qulonglong v = text.trimmed().isEmpty() ? 0 : text.toULongLong(&ok);
+          if (!ok || v > std::numeric_limits<unsigned short>::max())
+            ok = false;
+          if (!ok) {
+            QMessageBox::warning(this, tr("SDDS"), tr("Page %1: parameter '%2' value '%3' is invalid for type ushort")
+                                                   .arg(pg + 1)
+                                                   .arg(QString::fromLocal8Bit(name))
+                                                   .arg(truncateForMessage(text)));
+            SDDS_Terminate(&out);
+            return false;
+          }
+          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (unsigned short)v, NULL);
+        }
         break;
       case SDDS_LONG:
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toLong(), NULL);
+        {
+          qint64 v = text.trimmed().isEmpty() ? 0 : text.toLongLong(&ok);
+          if (!ok || v < std::numeric_limits<int32_t>::min() || v > std::numeric_limits<int32_t>::max())
+            ok = false;
+          if (!ok) {
+            QMessageBox::warning(this, tr("SDDS"), tr("Page %1: parameter '%2' value '%3' is invalid for type long")
+                                                   .arg(pg + 1)
+                                                   .arg(QString::fromLocal8Bit(name))
+                                                   .arg(truncateForMessage(text)));
+            SDDS_Terminate(&out);
+            return false;
+          }
+          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (int32_t)v, NULL);
+        }
         break;
       case SDDS_ULONG:
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toULong(), NULL);
+        {
+          qulonglong v = text.trimmed().isEmpty() ? 0 : text.toULongLong(&ok);
+          if (!ok || v > std::numeric_limits<uint32_t>::max())
+            ok = false;
+          if (!ok) {
+            QMessageBox::warning(this, tr("SDDS"), tr("Page %1: parameter '%2' value '%3' is invalid for type ulong")
+                                                   .arg(pg + 1)
+                                                   .arg(QString::fromLocal8Bit(name))
+                                                   .arg(truncateForMessage(text)));
+            SDDS_Terminate(&out);
+            return false;
+          }
+          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (uint32_t)v, NULL);
+        }
         break;
       case SDDS_LONG64:
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toLongLong(), NULL);
+        {
+          qint64 v = text.trimmed().isEmpty() ? 0 : text.toLongLong(&ok);
+          if (!ok) {
+            QMessageBox::warning(this, tr("SDDS"), tr("Page %1: parameter '%2' value '%3' is invalid for type long64")
+                                                   .arg(pg + 1)
+                                                   .arg(QString::fromLocal8Bit(name))
+                                                   .arg(truncateForMessage(text)));
+            SDDS_Terminate(&out);
+            return false;
+          }
+          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (int64_t)v, NULL);
+        }
         break;
       case SDDS_ULONG64:
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toULongLong(), NULL);
+        {
+          qulonglong v = text.trimmed().isEmpty() ? 0 : text.toULongLong(&ok);
+          if (!ok) {
+            QMessageBox::warning(this, tr("SDDS"), tr("Page %1: parameter '%2' value '%3' is invalid for type ulong64")
+                                                   .arg(pg + 1)
+                                                   .arg(QString::fromLocal8Bit(name))
+                                                   .arg(truncateForMessage(text)));
+            SDDS_Terminate(&out);
+            return false;
+          }
+          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (uint64_t)v, NULL);
+        }
         break;
       case SDDS_FLOAT:
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toFloat(), NULL);
+        {
+          float v = text.trimmed().isEmpty() ? 0.0f : text.toFloat(&ok);
+          if (!ok) {
+            QMessageBox::warning(this, tr("SDDS"), tr("Page %1: parameter '%2' value '%3' is invalid for type float")
+                                                   .arg(pg + 1)
+                                                   .arg(QString::fromLocal8Bit(name))
+                                                   .arg(truncateForMessage(text)));
+            SDDS_Terminate(&out);
+            return false;
+          }
+          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, v, NULL);
+        }
         break;
       case SDDS_DOUBLE:
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toDouble(), NULL);
+        {
+          double v = text.trimmed().isEmpty() ? 0.0 : text.toDouble(&ok);
+          if (!ok) {
+            QMessageBox::warning(this, tr("SDDS"), tr("Page %1: parameter '%2' value '%3' is invalid for type double")
+                                                   .arg(pg + 1)
+                                                   .arg(QString::fromLocal8Bit(name))
+                                                   .arg(truncateForMessage(text)));
+            SDDS_Terminate(&out);
+            return false;
+          }
+          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, v, NULL);
+        }
         break;
       case SDDS_LONGDOUBLE: {
-        QByteArray ba = text.toLocal8Bit();
-        long double v = 0.0L;
-        if (!ba.isEmpty())
-          v = strtold(ba.constData(), nullptr);
+        long double v;
+        if (!parseLongDoubleStrict(text, &v)) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: parameter '%2' value '%3' is invalid for type long double")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name))
+                                                 .arg(truncateForMessage(text)));
+          SDDS_Terminate(&out);
+          return false;
+        }
         SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, v, NULL);
         break;
       }
@@ -925,10 +1346,11 @@ bool SDDSEditor::writeFile(const QString &path) {
     for (int c = 0; c < ccount && c < pd.columns.size(); ++c) {
       const char *name = dataset.layout.column_definition[c].name;
       int32_t type = dataset.layout.column_definition[c].type;
+      bool ok = true;
       if (type == SDDS_STRING) {
         QVector<char *> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
-          QString text = r < pd.columns[c].size() ? pd.columns[c][r] : QString();
+          const QString text = pd.columns[c][r];
           arr[r] = strdup(text.toLocal8Bit().constData());
         }
         SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
@@ -937,7 +1359,7 @@ bool SDDSEditor::writeFile(const QString &path) {
       } else if (type == SDDS_CHARACTER) {
         QVector<char> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
-          QString text = r < pd.columns[c].size() ? pd.columns[c][r] : QString();
+          const QString text = pd.columns[c][r];
           QByteArray ba = text.toLatin1();
           arr[r] = ba.isEmpty() ? '\0' : ba.at(0);
         }
@@ -945,26 +1367,158 @@ bool SDDSEditor::writeFile(const QString &path) {
       } else if (type == SDDS_LONGDOUBLE) {
         QVector<long double> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
-          QString text = r < pd.columns[c].size() ? pd.columns[c][r] : QString();
-          QByteArray ba = text.toLocal8Bit();
-          arr[r] = ba.isEmpty() ? 0.0L : strtold(ba.constData(), nullptr);
+          const QString text = pd.columns[c][r];
+          if (!parseLongDoubleStrict(text, &arr[r]))
+            ok = false;
+        }
+        if (!ok) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: column '%2' contains a value that is invalid for type long double")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name)));
+          SDDS_Terminate(&out);
+          return false;
         }
         SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
       } else if (type == SDDS_LONG64) {
         QVector<int64_t> arr(rows);
-        for (int64_t r = 0; r < rows; ++r)
-          arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toLongLong() : 0;
+        for (int64_t r = 0; r < rows; ++r) {
+          const QString text = pd.columns[c][r];
+          arr[r] = text.trimmed().isEmpty() ? 0 : text.toLongLong(&ok);
+          if (!ok)
+            break;
+        }
+        if (!ok) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: column '%2' contains a value that is invalid for type long64")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name)));
+          SDDS_Terminate(&out);
+          return false;
+        }
         SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
       } else if (type == SDDS_ULONG64) {
         QVector<uint64_t> arr(rows);
-        for (int64_t r = 0; r < rows; ++r)
-          arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toULongLong() : 0;
+        for (int64_t r = 0; r < rows; ++r) {
+          const QString text = pd.columns[c][r];
+          arr[r] = text.trimmed().isEmpty() ? 0 : text.toULongLong(&ok);
+          if (!ok)
+            break;
+        }
+        if (!ok) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: column '%2' contains a value that is invalid for type ulong64")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name)));
+          SDDS_Terminate(&out);
+          return false;
+        }
         SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
-      } else {
+      } else if (type == SDDS_DOUBLE) {
         QVector<double> arr(rows);
-        for (int64_t r = 0; r < rows; ++r)
-          arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toDouble() : 0.0;
-        SDDS_SetColumnFromDoubles(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        for (int64_t r = 0; r < rows; ++r) {
+          const QString text = pd.columns[c][r];
+          arr[r] = text.trimmed().isEmpty() ? 0.0 : text.toDouble(&ok);
+          if (!ok)
+            break;
+        }
+        if (!ok) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: column '%2' contains a value that is invalid for type double")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name)));
+          SDDS_Terminate(&out);
+          return false;
+        }
+        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+      } else if (type == SDDS_FLOAT) {
+        QVector<float> arr(rows);
+        for (int64_t r = 0; r < rows; ++r) {
+          const QString text = pd.columns[c][r];
+          arr[r] = text.trimmed().isEmpty() ? 0.0f : text.toFloat(&ok);
+          if (!ok)
+            break;
+        }
+        if (!ok) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: column '%2' contains a value that is invalid for type float")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name)));
+          SDDS_Terminate(&out);
+          return false;
+        }
+        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+      } else if (type == SDDS_LONG) {
+        QVector<int32_t> arr(rows);
+        for (int64_t r = 0; r < rows; ++r) {
+          const QString text = pd.columns[c][r];
+          qint64 v = text.trimmed().isEmpty() ? 0 : text.toLongLong(&ok);
+          if (!ok || v < std::numeric_limits<int32_t>::min() || v > std::numeric_limits<int32_t>::max())
+            ok = false;
+          if (!ok)
+            break;
+          arr[r] = (int32_t)v;
+        }
+        if (!ok) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: column '%2' contains a value that is invalid for type long")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name)));
+          SDDS_Terminate(&out);
+          return false;
+        }
+        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+      } else if (type == SDDS_ULONG) {
+        QVector<uint32_t> arr(rows);
+        for (int64_t r = 0; r < rows; ++r) {
+          const QString text = pd.columns[c][r];
+          qulonglong v = text.trimmed().isEmpty() ? 0 : text.toULongLong(&ok);
+          if (!ok || v > std::numeric_limits<uint32_t>::max())
+            ok = false;
+          if (!ok)
+            break;
+          arr[r] = (uint32_t)v;
+        }
+        if (!ok) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: column '%2' contains a value that is invalid for type ulong")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name)));
+          SDDS_Terminate(&out);
+          return false;
+        }
+        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+      } else if (type == SDDS_SHORT) {
+        QVector<short> arr(rows);
+        for (int64_t r = 0; r < rows; ++r) {
+          const QString text = pd.columns[c][r];
+          qint64 v = text.trimmed().isEmpty() ? 0 : text.toLongLong(&ok);
+          if (!ok || v < std::numeric_limits<short>::min() || v > std::numeric_limits<short>::max())
+            ok = false;
+          if (!ok)
+            break;
+          arr[r] = (short)v;
+        }
+        if (!ok) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: column '%2' contains a value that is invalid for type short")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name)));
+          SDDS_Terminate(&out);
+          return false;
+        }
+        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+      } else if (type == SDDS_USHORT) {
+        QVector<unsigned short> arr(rows);
+        for (int64_t r = 0; r < rows; ++r) {
+          const QString text = pd.columns[c][r];
+          qulonglong v = text.trimmed().isEmpty() ? 0 : text.toULongLong(&ok);
+          if (!ok || v > std::numeric_limits<unsigned short>::max())
+            ok = false;
+          if (!ok)
+            break;
+          arr[r] = (unsigned short)v;
+        }
+        if (!ok) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: column '%2' contains a value that is invalid for type ushort")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name)));
+          SDDS_Terminate(&out);
+          return false;
+        }
+        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
       }
     }
 
@@ -974,6 +1528,7 @@ bool SDDSEditor::writeFile(const QString &path) {
       const ArrayStore &as = pd.arrays[a];
       int elements = as.values.size();
       QVector<int32_t> dims = QVector<int32_t>::fromList(as.dims.toList());
+      bool ok = true;
       if (type == SDDS_STRING) {
         QVector<char *> arr(elements);
         for (int i = 0; i < elements; ++i) {
@@ -993,47 +1548,115 @@ bool SDDSEditor::writeFile(const QString &path) {
         SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA,
                       arr.data(), dims.data());
       } else {
-        size_t size = SDDS_type_size[type - 1];
-        void *buffer = malloc(size * elements);
-        if (!buffer)
-          continue;
-        for (int i = 0; i < elements; ++i) {
-          QString cell = as.values[i];
-          switch (type) {
-          case SDDS_LONGDOUBLE:
-            ((long double *)buffer)[i] = strtold(cell.toLocal8Bit().constData(), nullptr);
-            break;
-          case SDDS_DOUBLE:
-            ((double *)buffer)[i] = cell.toDouble();
-            break;
-          case SDDS_FLOAT:
-            ((float *)buffer)[i] = cell.toFloat();
-            break;
-          case SDDS_LONG64:
-            ((int64_t *)buffer)[i] = cell.toLongLong();
-            break;
-          case SDDS_ULONG64:
-            ((uint64_t *)buffer)[i] = cell.toULongLong();
-            break;
-          case SDDS_LONG:
-            ((int32_t *)buffer)[i] = cell.toInt();
-            break;
-          case SDDS_ULONG:
-            ((uint32_t *)buffer)[i] = cell.toUInt();
-            break;
-          case SDDS_SHORT:
-            ((short *)buffer)[i] = (short)cell.toInt();
-            break;
-          case SDDS_USHORT:
-            ((unsigned short *)buffer)[i] = (unsigned short)cell.toUInt();
-            break;
-          default:
-            ((double *)buffer)[i] = cell.toDouble();
-            break;
+        if (type == SDDS_LONGDOUBLE) {
+          QVector<long double> buffer(elements);
+          for (int i = 0; i < elements; ++i)
+            if (!parseLongDoubleStrict(as.values[i], &buffer[i]))
+              ok = false;
+          if (ok)
+            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+        } else if (type == SDDS_DOUBLE) {
+          QVector<double> buffer(elements);
+          for (int i = 0; i < elements; ++i) {
+            const QString cell = as.values[i];
+            buffer[i] = cell.trimmed().isEmpty() ? 0.0 : cell.toDouble(&ok);
+            if (!ok)
+              break;
           }
+          if (ok)
+            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+        } else if (type == SDDS_FLOAT) {
+          QVector<float> buffer(elements);
+          for (int i = 0; i < elements; ++i) {
+            const QString cell = as.values[i];
+            buffer[i] = cell.trimmed().isEmpty() ? 0.0f : cell.toFloat(&ok);
+            if (!ok)
+              break;
+          }
+          if (ok)
+            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+        } else if (type == SDDS_LONG64) {
+          QVector<int64_t> buffer(elements);
+          for (int i = 0; i < elements; ++i) {
+            const QString cell = as.values[i];
+            buffer[i] = cell.trimmed().isEmpty() ? 0 : cell.toLongLong(&ok);
+            if (!ok)
+              break;
+          }
+          if (ok)
+            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+        } else if (type == SDDS_ULONG64) {
+          QVector<uint64_t> buffer(elements);
+          for (int i = 0; i < elements; ++i) {
+            const QString cell = as.values[i];
+            buffer[i] = cell.trimmed().isEmpty() ? 0 : cell.toULongLong(&ok);
+            if (!ok)
+              break;
+          }
+          if (ok)
+            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+        } else if (type == SDDS_LONG) {
+          QVector<int32_t> buffer(elements);
+          for (int i = 0; i < elements; ++i) {
+            const QString cell = as.values[i];
+            qint64 v = cell.trimmed().isEmpty() ? 0 : cell.toLongLong(&ok);
+            if (!ok || v < std::numeric_limits<int32_t>::min() || v > std::numeric_limits<int32_t>::max())
+              ok = false;
+            if (!ok)
+              break;
+            buffer[i] = (int32_t)v;
+          }
+          if (ok)
+            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+        } else if (type == SDDS_ULONG) {
+          QVector<uint32_t> buffer(elements);
+          for (int i = 0; i < elements; ++i) {
+            const QString cell = as.values[i];
+            qulonglong v = cell.trimmed().isEmpty() ? 0 : cell.toULongLong(&ok);
+            if (!ok || v > std::numeric_limits<uint32_t>::max())
+              ok = false;
+            if (!ok)
+              break;
+            buffer[i] = (uint32_t)v;
+          }
+          if (ok)
+            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+        } else if (type == SDDS_SHORT) {
+          QVector<short> buffer(elements);
+          for (int i = 0; i < elements; ++i) {
+            const QString cell = as.values[i];
+            qint64 v = cell.trimmed().isEmpty() ? 0 : cell.toLongLong(&ok);
+            if (!ok || v < std::numeric_limits<short>::min() || v > std::numeric_limits<short>::max())
+              ok = false;
+            if (!ok)
+              break;
+            buffer[i] = (short)v;
+          }
+          if (ok)
+            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+        } else if (type == SDDS_USHORT) {
+          QVector<unsigned short> buffer(elements);
+          for (int i = 0; i < elements; ++i) {
+            const QString cell = as.values[i];
+            qulonglong v = cell.trimmed().isEmpty() ? 0 : cell.toULongLong(&ok);
+            if (!ok || v > std::numeric_limits<unsigned short>::max())
+              ok = false;
+            if (!ok)
+              break;
+            buffer[i] = (unsigned short)v;
+          }
+          if (ok)
+            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
         }
-        SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer, dims.data());
-        free(buffer);
+
+        if (!ok) {
+          QMessageBox::warning(this, tr("SDDS"), tr("Page %1: array '%2' contains a value that is invalid for type %3")
+                                                 .arg(pg + 1)
+                                                 .arg(QString::fromLocal8Bit(name))
+                                                 .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type))));
+          SDDS_Terminate(&out);
+          return false;
+        }
       }
     }
 
@@ -1046,6 +1669,11 @@ bool SDDSEditor::writeFile(const QString &path) {
   }
 
   SDDS_Terminate(&out);
+
+  // Make the UI match what was just written: empty numeric fields are written as 0.
+  normalizeEmptyNumericsToZero(dataset.layout, pages);
+  populateModels();
+
   dirty = false;
   updateWindowTitle();
   if (updateSymlink) {
@@ -1061,6 +1689,14 @@ bool SDDSEditor::writeHDF(const QString &path) {
   if (!datasetLoaded)
     return false;
   commitModels();
+
+  QString errorText;
+  for (int pg = 0; pg < pages.size(); ++pg) {
+    if (!validatePageForWrite(dataset.layout, pages[pg], pg, &errorText)) {
+      QMessageBox::warning(this, tr("SDDS"), errorText);
+      return false;
+    }
+  }
 
   QByteArray fname = QFile::encodeName(path);
   hid_t file = H5Fcreate(fname.constData(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
@@ -1321,6 +1957,11 @@ bool SDDSEditor::writeHDF(const QString &path) {
   }
 
   H5Fclose(file);
+
+  // Make the UI match what was exported: empty numeric fields become 0.
+  normalizeEmptyNumericsToZero(dataset.layout, pages);
+  populateModels();
+
   return true;
 }
 
@@ -1361,6 +2002,9 @@ bool SDDSEditor::writeCSV(const QString &path) {
       for (int32_t i = 0; i < pcount; ++i) {
         const char *name = dataset.layout.parameter_definition[i].name;
         QString value = (i < pd.parameters.size()) ? pd.parameters[i] : QString();
+        const int32_t type = dataset.layout.parameter_definition[i].type;
+        if (SDDS_NUMERIC_TYPE(type) && value.trimmed().isEmpty())
+          value = "0";
         out << escape(QString::fromLocal8Bit(name)) << ',' << escape(value) << '\n';
       }
       out << '\n';
@@ -1380,6 +2024,9 @@ bool SDDSEditor::writeCSV(const QString &path) {
       for (int64_t r = 0; r < rows; ++r) {
         for (int32_t c = 0; c < ccount; ++c) {
           QString cell = (r < pd.columns[c].size()) ? pd.columns[c][r] : QString();
+          const int32_t type = dataset.layout.column_definition[c].type;
+          if (SDDS_NUMERIC_TYPE(type) && cell.trimmed().isEmpty())
+            cell = "0";
           out << escape(cell);
           if (c != ccount - 1)
             out << ',';
@@ -1409,6 +2056,9 @@ bool SDDSEditor::writeCSV(const QString &path) {
           QString cell = (a < pd.arrays.size() && r < pd.arrays[a].values.size())
                              ? pd.arrays[a].values[r]
                              : QString();
+          const int32_t type = dataset.layout.array_definition[a].type;
+          if (SDDS_NUMERIC_TYPE(type) && cell.trimmed().isEmpty())
+            cell = "0";
           out << escape(cell);
           if (a != acount - 1)
             out << ',';
@@ -1420,6 +2070,11 @@ bool SDDSEditor::writeCSV(const QString &path) {
   }
 
   file.close();
+
+  // Make the UI match what was exported: empty numeric fields become 0.
+  normalizeEmptyNumericsToZero(dataset.layout, pages);
+  populateModels();
+
   return true;
 }
 
@@ -1478,6 +2133,14 @@ void SDDSEditor::loadPage(int page) {
   currentPage = page - 1;
   populateModels();
 }
+
+void SDDSEditor::flushPendingEdits() {
+  if (QWidget *fw = QApplication::focusWidget()) {
+    fw->clearFocus();
+    qApp->processEvents();
+  }
+}
+
 void SDDSEditor::populateModels() {
   if (!datasetLoaded || pages.isEmpty() || currentPage < 0 || currentPage >= pages.size())
     return;
@@ -1551,8 +2214,12 @@ void SDDSEditor::populateModels() {
     arrayModel->setHeaderData(a, Qt::Horizontal,
                               QString(def->name));
     const QVector<QString> vals = (a < pd.arrays.size()) ? pd.arrays[a].values : QVector<QString>();
-    for (int i = 0; i < vals.size(); ++i)
-      arrayModel->setItem(i, a, new QStandardItem(vals[i]));
+    for (int r = 0; r < maxLen; ++r) {
+      const bool inRange = r < vals.size();
+      QStandardItem *item = new QStandardItem(inRange ? vals[r] : QString());
+      item->setEditable(inRange);
+      arrayModel->setItem(r, a, item);
+    }
   }
   for (int r = 0; r < maxLen; ++r)
     arrayModel->setVerticalHeaderItem(r, new QStandardItem(QString::number(r + 1)));
@@ -1613,10 +2280,7 @@ bool SDDSEditor::ensureDataset() {
   return true;
 }
 void SDDSEditor::commitModels() {
-  if (QWidget *fw = QApplication::focusWidget()) {
-    fw->clearFocus();
-    qApp->processEvents();
-  }
+  flushPendingEdits();
 
   if (!datasetLoaded || pages.isEmpty() || currentPage < 0 || currentPage >= pages.size())
     return;
@@ -1658,8 +2322,10 @@ void SDDSEditor::commitModels() {
   int rowsA = arrayModel->rowCount();
   for (int32_t a = 0; a < acount && a < arrayModel->columnCount(); ++a) {
     ArrayStore &as = pd.arrays[a];
-    int elements = as.values.size();
-    for (int i = 0; i < elements && i < rowsA; ++i) {
+    int expected = dimProduct(as.dims);
+    if (expected != as.values.size())
+      as.values.resize(expected);
+    for (int i = 0; i < expected && i < rowsA; ++i) {
       QStandardItem *it = arrayModel->item(i, a);
       as.values[i] = it ? it->text() : QString();
     }
@@ -1669,6 +2335,7 @@ void SDDSEditor::commitModels() {
 void SDDSEditor::editParameterAttributes() {
   if (!datasetLoaded)
     return;
+  commitModels();
   QModelIndex idx = paramView->currentIndex();
   if (!idx.isValid())
     return;
@@ -1759,6 +2426,7 @@ void SDDSEditor::editParameterAttributes() {
 void SDDSEditor::editColumnAttributes() {
   if (!datasetLoaded)
     return;
+  commitModels();
   QModelIndex idx = columnView->currentIndex();
   if (!idx.isValid())
     return;
@@ -1848,6 +2516,7 @@ void SDDSEditor::editColumnAttributes() {
 void SDDSEditor::editArrayAttributes() {
   if (!datasetLoaded)
     return;
+  commitModels();
   QModelIndex idx = arrayView->currentIndex();
   if (!idx.isValid())
     return;
@@ -1961,6 +2630,7 @@ void SDDSEditor::editArrayAttributes() {
 void SDDSEditor::changeParameterType(int row) {
   if (!datasetLoaded)
     return;
+  commitModels();
   QStringList types;
   types << "short" << "ushort" << "long" << "ulong" << "long64"
         << "ulong64" << "float" << "double" << "long double" << "string"
@@ -2012,6 +2682,7 @@ void SDDSEditor::parameterCellMenuRequested(const QPoint &pos) {
 void SDDSEditor::changeColumnType(int column) {
   if (!datasetLoaded)
     return;
+  commitModels();
   QStringList types;
   types << "short" << "ushort" << "long" << "ulong" << "long64"
         << "ulong64" << "float" << "double" << "long double" << "string"
@@ -2620,6 +3291,7 @@ void SDDSEditor::searchArray(int column) {
 void SDDSEditor::changeArrayType(int column) {
   if (!datasetLoaded)
     return;
+  commitModels();
   QStringList types;
   types << "short" << "ushort" << "long" << "ulong" << "long64"
         << "ulong64" << "float" << "double" << "long double" << "string"
@@ -2814,6 +3486,8 @@ void SDDSEditor::insertParameter() {
   if (!ensureDataset())
     return;
 
+  commitModels();
+
   QDialog dlg(this);
   dlg.setWindowTitle(tr("New Parameter"));
   QFormLayout form(&dlg);
@@ -2890,6 +3564,8 @@ void SDDSEditor::insertParameter() {
 void SDDSEditor::insertColumn() {
   if (!ensureDataset())
     return;
+
+  commitModels();
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("New Column"));
@@ -2969,6 +3645,8 @@ void SDDSEditor::insertColumn() {
 void SDDSEditor::insertArray() {
   if (!ensureDataset())
     return;
+
+  commitModels();
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("New Array"));
@@ -3054,6 +3732,7 @@ void SDDSEditor::insertArray() {
 void SDDSEditor::deleteParameter() {
   if (!datasetLoaded)
     return;
+  commitModels();
   QModelIndex idx = paramView->currentIndex();
   if (!idx.isValid())
     return;
@@ -3075,6 +3754,7 @@ void SDDSEditor::deleteParameter() {
 void SDDSEditor::deleteColumn() {
   if (!datasetLoaded)
     return;
+  commitModels();
   QModelIndex idx = columnView->currentIndex();
   if (!idx.isValid())
     return;
@@ -3096,6 +3776,7 @@ void SDDSEditor::deleteColumn() {
 void SDDSEditor::deleteArray() {
   if (!datasetLoaded)
     return;
+  commitModels();
   QModelIndex idx = arrayView->currentIndex();
   if (!idx.isValid())
     return;
@@ -3117,6 +3798,8 @@ void SDDSEditor::deleteArray() {
 void SDDSEditor::insertColumnRows() {
   if (!datasetLoaded)
     return;
+
+  commitModels();
 
   bool ok = false;
   int rowsToAdd =
@@ -3149,6 +3832,8 @@ void SDDSEditor::insertColumnRows() {
 void SDDSEditor::deleteColumnRows() {
   if (!datasetLoaded)
     return;
+
+  commitModels();
 
   QModelIndexList selection = columnView->selectionModel()->selectedRows();
   if (selection.isEmpty())

@@ -97,6 +97,7 @@ protected:
 
 private:
   void applyTheme(bool dark);
+  void flushPendingEdits();
   void loadPage(int page);
   void populateModels();
   void commitModels();
