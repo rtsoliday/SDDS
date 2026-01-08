@@ -46,6 +46,7 @@
 #include <QTimer>
 #include <QCoreApplication>
 #include <QProgressDialog>
+#include <QAbstractTableModel>
 #include <functional>
 #include <memory>
 #include <cstdlib>
@@ -495,7 +496,7 @@ static QString canonicalizeForDisplay(const QString &text, int type) {
 
 class SetDataCommand : public QUndoCommand {
 public:
-  SetDataCommand(QStandardItemModel *model, const QModelIndex &index,
+  SetDataCommand(QAbstractItemModel *model, const QModelIndex &index,
                  const QString &oldVal, const QString &newVal)
       : m(model), idx(index), oldValue(oldVal), newValue(newVal) {}
 
@@ -503,7 +504,7 @@ public:
   void redo() override { m->setData(idx, newValue); }
 
 private:
-  QStandardItemModel *m;
+  QAbstractItemModel *m;
   QModelIndex idx;
   QString oldValue;
   QString newValue;
@@ -521,6 +522,230 @@ protected:
     deselect();
     event->accept();
   }
+};
+
+class ColumnPageModel : public QAbstractTableModel {
+public:
+  ColumnPageModel(SDDS_DATASET *dataset, QVector<PageStore> *pages, int *currentPage,
+                  QObject *parent = nullptr)
+      : QAbstractTableModel(parent), dataset(dataset), pages(pages), currentPage(currentPage) {}
+
+  int rowCount(const QModelIndex &parent = QModelIndex()) const override {
+    Q_UNUSED(parent);
+    if (!dataset || !pages || !currentPage)
+      return 0;
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return 0;
+    if (dataset->layout.n_columns <= 0)
+      return 0;
+    const PageStore &pd = (*pages)[*currentPage];
+    return pd.columns.size() > 0 ? pd.columns[0].size() : 0;
+  }
+
+  int columnCount(const QModelIndex &parent = QModelIndex()) const override {
+    Q_UNUSED(parent);
+    if (!dataset)
+      return 0;
+    return dataset->layout.n_columns;
+  }
+
+  QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override {
+    if (!index.isValid() || !dataset || !pages || !currentPage)
+      return QVariant();
+    if (role != Qt::DisplayRole && role != Qt::EditRole)
+      return QVariant();
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return QVariant();
+    const PageStore &pd = (*pages)[*currentPage];
+    int c = index.column();
+    int r = index.row();
+    if (c < 0 || c >= pd.columns.size())
+      return QVariant();
+    const QVector<QString> &col = pd.columns[c];
+    if (r < 0 || r >= col.size())
+      return QVariant();
+    return col[r];
+  }
+
+  bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override {
+    if (!index.isValid() || role != Qt::EditRole)
+      return false;
+    if (!dataset || !pages || !currentPage)
+      return false;
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return false;
+    PageStore &pd = (*pages)[*currentPage];
+    int c = index.column();
+    int r = index.row();
+    if (c < 0 || c >= pd.columns.size())
+      return false;
+    QVector<QString> &col = pd.columns[c];
+    if (r < 0 || r >= col.size())
+      return false;
+    QString text = value.toString();
+    if (col[r] == text)
+      return false;
+    col[r] = text;
+    emit dataChanged(index, index, {Qt::DisplayRole, Qt::EditRole});
+    return true;
+  }
+
+  Qt::ItemFlags flags(const QModelIndex &index) const override {
+    if (!index.isValid())
+      return Qt::NoItemFlags;
+    return Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsEditable;
+  }
+
+  QVariant headerData(int section, Qt::Orientation orientation,
+                      int role = Qt::DisplayRole) const override {
+    if (!dataset || role != Qt::DisplayRole)
+      return QVariant();
+    if (orientation == Qt::Horizontal) {
+      if (section < 0 || section >= dataset->layout.n_columns)
+        return QVariant();
+      return QString(dataset->layout.column_definition[section].name);
+    }
+    return QString::number(section + 1);
+  }
+
+  void refresh() {
+    beginResetModel();
+    endResetModel();
+  }
+
+  void refreshHeaders(int first, int last) {
+    emit headerDataChanged(Qt::Horizontal, first, last);
+  }
+
+private:
+  SDDS_DATASET *dataset;
+  QVector<PageStore> *pages;
+  int *currentPage;
+};
+
+class ArrayPageModel : public QAbstractTableModel {
+public:
+  ArrayPageModel(SDDS_DATASET *dataset, QVector<PageStore> *pages, int *currentPage,
+                 QObject *parent = nullptr)
+      : QAbstractTableModel(parent), dataset(dataset), pages(pages), currentPage(currentPage), maxLen(0) {}
+
+  int rowCount(const QModelIndex &parent = QModelIndex()) const override {
+    Q_UNUSED(parent);
+    if (!dataset || !pages || !currentPage)
+      return 0;
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return 0;
+    if (dataset->layout.n_arrays <= 0)
+      return 0;
+    return maxLen;
+  }
+
+  int columnCount(const QModelIndex &parent = QModelIndex()) const override {
+    Q_UNUSED(parent);
+    if (!dataset)
+      return 0;
+    return dataset->layout.n_arrays;
+  }
+
+  QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override {
+    if (!index.isValid() || !dataset || !pages || !currentPage)
+      return QVariant();
+    if (role != Qt::DisplayRole && role != Qt::EditRole)
+      return QVariant();
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return QVariant();
+    const PageStore &pd = (*pages)[*currentPage];
+    int c = index.column();
+    int r = index.row();
+    if (c < 0 || c >= pd.arrays.size())
+      return QVariant();
+    const QVector<QString> &vals = pd.arrays[c].values;
+    if (r < 0 || r >= vals.size())
+      return QVariant();
+    return vals[r];
+  }
+
+  bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override {
+    if (!index.isValid() || role != Qt::EditRole)
+      return false;
+    if (!dataset || !pages || !currentPage)
+      return false;
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return false;
+    PageStore &pd = (*pages)[*currentPage];
+    int c = index.column();
+    int r = index.row();
+    if (c < 0 || c >= pd.arrays.size())
+      return false;
+    QVector<QString> &vals = pd.arrays[c].values;
+    if (r < 0 || r >= vals.size())
+      return false;
+    QString text = value.toString();
+    if (vals[r] == text)
+      return false;
+    vals[r] = text;
+    emit dataChanged(index, index, {Qt::DisplayRole, Qt::EditRole});
+    return true;
+  }
+
+  Qt::ItemFlags flags(const QModelIndex &index) const override {
+    if (!index.isValid() || !pages || !currentPage)
+      return Qt::NoItemFlags;
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return Qt::NoItemFlags;
+    const PageStore &pd = (*pages)[*currentPage];
+    int c = index.column();
+    int r = index.row();
+    if (c < 0 || c >= pd.arrays.size())
+      return Qt::NoItemFlags;
+    const QVector<QString> &vals = pd.arrays[c].values;
+    if (r < 0)
+      return Qt::NoItemFlags;
+    Qt::ItemFlags f = Qt::ItemIsSelectable | Qt::ItemIsEnabled;
+    if (r < vals.size())
+      f |= Qt::ItemIsEditable;
+    return f;
+  }
+
+  QVariant headerData(int section, Qt::Orientation orientation,
+                      int role = Qt::DisplayRole) const override {
+    if (!dataset || role != Qt::DisplayRole)
+      return QVariant();
+    if (orientation == Qt::Horizontal) {
+      if (section < 0 || section >= dataset->layout.n_arrays)
+        return QVariant();
+      return QString(dataset->layout.array_definition[section].name);
+    }
+    return QString::number(section + 1);
+  }
+
+  void refresh() {
+    recomputeMaxLen();
+    beginResetModel();
+    endResetModel();
+  }
+
+  void refreshHeaders(int first, int last) {
+    emit headerDataChanged(Qt::Horizontal, first, last);
+  }
+
+private:
+  void recomputeMaxLen() {
+    maxLen = 0;
+    if (!pages || !currentPage)
+      return;
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return;
+    const PageStore &pd = (*pages)[*currentPage];
+    for (const ArrayStore &as : pd.arrays)
+      if (as.values.size() > maxLen)
+        maxLen = as.values.size();
+  }
+
+  SDDS_DATASET *dataset;
+  QVector<PageStore> *pages;
+  int *currentPage;
+  int maxLen;
 };
 
 class SDDSItemDelegate : public QStyledItemDelegate {
@@ -566,7 +791,7 @@ public:
       return;
     }
     if (undoStack)
-      undoStack->push(new SetDataCommand(static_cast<QStandardItemModel *>(model), index, oldVal, newVal));
+      undoStack->push(new SetDataCommand(model, index, oldVal, newVal));
     else
       model->setData(index, newVal);
   }
@@ -585,6 +810,11 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   loadProgressDialog = nullptr;
   loadProgressMin = 0;
   loadProgressMax = 100;
+
+  // QTableView/QHeaderView may query model headers during construction.
+  // Ensure SDDS_DATASET starts in a known-safe state (null pointers, zero counts).
+  memset(&dataset, 0, sizeof(dataset));
+
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
@@ -674,12 +904,25 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   colBox->setChecked(true);
   QVBoxLayout *colLayout = new QVBoxLayout(colBox);
   colLayout->setContentsMargins(0, 0, 0, 0);
-  columnModel = new QStandardItemModel(this);
+  columnModel = new ColumnPageModel(&dataset, &pages, &currentPage, this);
   columnView = new SingleClickEditTableView(colBox);
   columnView->setFont(tableFont);
   columnView->setModel(columnModel);
-  connect(columnModel, &QStandardItemModel::itemChanged, this,
-          &SDDSEditor::markDirty);
+  connect(columnModel, &QAbstractItemModel::dataChanged, this,
+          [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
+            if (!updatingModels)
+              markDirty();
+          });
+  connect(columnModel, &QAbstractItemModel::rowsInserted, this,
+          [this](const QModelIndex &, int, int) {
+            if (!updatingModels)
+              markDirty();
+          });
+  connect(columnModel, &QAbstractItemModel::rowsRemoved, this,
+          [this](const QModelIndex &, int, int) {
+            if (!updatingModels)
+              markDirty();
+          });
   columnView->setItemDelegate(new SDDSItemDelegate(
       [this](const QModelIndex &idx) {
         return dataset.layout.column_definition[idx.column()].type;
@@ -715,12 +958,25 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   arrayBox->setChecked(true);
   QVBoxLayout *arrayLayout = new QVBoxLayout(arrayBox);
   arrayLayout->setContentsMargins(0, 0, 0, 0);
-  arrayModel = new QStandardItemModel(this);
+  arrayModel = new ArrayPageModel(&dataset, &pages, &currentPage, this);
   arrayView = new SingleClickEditTableView(arrayBox);
   arrayView->setFont(tableFont);
   arrayView->setModel(arrayModel);
-  connect(arrayModel, &QStandardItemModel::itemChanged, this,
-          &SDDSEditor::markDirty);
+  connect(arrayModel, &QAbstractItemModel::dataChanged, this,
+          [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
+            if (!updatingModels)
+              markDirty();
+          });
+  connect(arrayModel, &QAbstractItemModel::rowsInserted, this,
+          [this](const QModelIndex &, int, int) {
+            if (!updatingModels)
+              markDirty();
+          });
+  connect(arrayModel, &QAbstractItemModel::rowsRemoved, this,
+          [this](const QModelIndex &, int, int) {
+            if (!updatingModels)
+              markDirty();
+          });
   arrayView->setItemDelegate(new SDDSItemDelegate(
       [this](const QModelIndex &idx) {
         return dataset.layout.array_definition[idx.column()].type;
@@ -2377,30 +2633,20 @@ void SDDSEditor::populateModels() {
     }
   };
 
-  const PageStore &pd = pages[currentPage];
-
   updatingModels = true;
 
   // Pre-compute rough work units so progress is monotonic.
   int32_t pcount = dataset.layout.n_parameters;
   int32_t ccount = dataset.layout.n_columns;
-  int64_t rows = (ccount > 0 && pd.columns.size() > 0) ? pd.columns[0].size() : 0;
   int32_t acount = dataset.layout.n_arrays;
-  int maxLen = 0;
-  for (int a = 0; a < acount && a < pd.arrays.size(); ++a)
-    if (pd.arrays[a].values.size() > maxLen)
-      maxLen = pd.arrays[a].values.size();
-  totalUnits += pcount;
-  if (ccount > 0 && rows > 0)
-    totalUnits += static_cast<int64_t>(ccount) * rows;
-  if (rows > 0)
-    totalUnits += rows; // column row headers
-  if (acount > 0 && maxLen > 0)
-    totalUnits += static_cast<int64_t>(acount) * maxLen;
-  if (maxLen > 0)
-    totalUnits += maxLen; // array row headers
-  totalUnits += 2; // resize columns/arrays
-  const int64_t updateEvery = std::max<int64_t>(1, totalUnits / 300);
+  // Note: columns/arrays now use virtual models (no per-cell allocation).
+  // We treat model resets and (optional) sizing passes as the main work units.
+  totalUnits = std::max<int64_t>(1, pcount) + 4;
+  const int64_t updateEvery = std::max<int64_t>(1, totalUnits / 50);
+
+  const PageStore &pd = pages[currentPage];
+  int64_t rows = (ccount > 0 && pd.columns.size() > 0) ? pd.columns[0].size() : 0;
+  const bool hugeTable = (rows > 0 && ccount > 0 && (rows * ccount) > 500000);
 
   // parameters
   if (progress) {
@@ -2431,34 +2677,10 @@ void SDDSEditor::populateModels() {
     progress->setLabelText(tr("Preparing display… (columns)"));
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   }
-  columnModel->setColumnCount(ccount);
-  columnModel->setRowCount(rows);
-
-  for (int32_t i = 0; i < ccount; ++i) {
-    COLUMN_DEFINITION *def = &dataset.layout.column_definition[i];
-    columnModel->setHeaderData(i, Qt::Horizontal, QString(def->name));
-    for (int64_t r = 0; r < rows; ++r) {
-      QString val =
-          (i < pd.columns.size() && r < pd.columns[i].size()) ? pd.columns[i][r] : QString();
-      QStandardItem *item = columnModel->item(r, i);
-      if (!item) {
-        item = new QStandardItem;
-        columnModel->setItem(r, i, item);
-      }
-      item->setText(val);
-
-      ++doneUnits;
-      if (progress && (doneUnits % updateEvery) == 0)
-        updateProgress(false);
-    }
-  }
-  for (int64_t r = 0; r < rows; ++r) {
-    columnModel->setVerticalHeaderItem(r, new QStandardItem(QString::number(r + 1)));
-
-    ++doneUnits;
-    if (progress && (doneUnits % updateEvery) == 0)
-      updateProgress(false);
-  }
+  columnModel->refresh();
+  ++doneUnits;
+  if (progress)
+    updateProgress(false);
 
 
   // Resize columns to fit their contents first so initial widths are reasonable
@@ -2468,7 +2690,10 @@ void SDDSEditor::populateModels() {
     progress->setLabelText(tr("Preparing display… (sizing columns)"));
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   }
-  columnView->resizeColumnsToContents();
+  // For very large tables, computing size-to-contents can be very expensive.
+  // During initial load (when progress dialog exists), skip it to speed up load.
+  if (!(progress && hugeTable))
+    columnView->resizeColumnsToContents();
   columnView->horizontalHeader()->setStretchLastSection(true);
   columnView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::Interactive);
@@ -2478,36 +2703,14 @@ void SDDSEditor::populateModels() {
 
   // arrays
   arrayBox->setChecked(acount > 0);
-  arrayModel->clear();
   if (progress) {
     progress->setLabelText(tr("Preparing display… (arrays)"));
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   }
-  arrayModel->setColumnCount(acount);
-  arrayModel->setRowCount(maxLen);
-  for (int a = 0; a < acount; ++a) {
-    ARRAY_DEFINITION *def = &dataset.layout.array_definition[a];
-    arrayModel->setHeaderData(a, Qt::Horizontal,
-                              QString(def->name));
-    const QVector<QString> vals = (a < pd.arrays.size()) ? pd.arrays[a].values : QVector<QString>();
-    for (int r = 0; r < maxLen; ++r) {
-      const bool inRange = r < vals.size();
-      QStandardItem *item = new QStandardItem(inRange ? vals[r] : QString());
-      item->setEditable(inRange);
-      arrayModel->setItem(r, a, item);
-
-      ++doneUnits;
-      if (progress && (doneUnits % updateEvery) == 0)
-        updateProgress(false);
-    }
-  }
-  for (int r = 0; r < maxLen; ++r) {
-    arrayModel->setVerticalHeaderItem(r, new QStandardItem(QString::number(r + 1)));
-
-    ++doneUnits;
-    if (progress && (doneUnits % updateEvery) == 0)
-      updateProgress(false);
-  }
+  arrayModel->refresh();
+  ++doneUnits;
+  if (progress)
+    updateProgress(false);
 
 
   // Similar treatment for arrays table.
@@ -2515,7 +2718,8 @@ void SDDSEditor::populateModels() {
     progress->setLabelText(tr("Preparing display… (sizing arrays)"));
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   }
-  arrayView->resizeColumnsToContents();
+  if (!(progress && hugeTable))
+    arrayView->resizeColumnsToContents();
   arrayView->horizontalHeader()->setStretchLastSection(true);
   arrayView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::Interactive);
@@ -2536,10 +2740,11 @@ void SDDSEditor::clearDataset() {
     paramModel->clear();
     paramModel->setColumnCount(1);
     paramModel->setHorizontalHeaderLabels(QStringList() << tr("Value"));
-    columnModel->clear();
-    arrayModel->clear();
     pageCombo->clear();
     pages.clear();
+    currentPage = 0;
+    columnModel->refresh();
+    arrayModel->refresh();
   }
 }
 
@@ -2599,29 +2804,15 @@ void SDDSEditor::commitModels() {
     }
   }
 
-  int32_t ccount = dataset.layout.n_columns;
-  int64_t rows = columnModel->rowCount();
-  pd.columns.resize(ccount);
-  for (int32_t c = 0; c < ccount && c < columnModel->columnCount(); ++c) {
-    pd.columns[c].resize(rows);
-    for (int64_t r = 0; r < rows; ++r) {
-      QStandardItem *it = columnModel->item(r, c);
-      pd.columns[c][r] = it ? it->text() : QString();
-    }
-  }
-
+  // Columns/arrays are edited directly in PageStore via the virtual models.
+  // Keep array storage consistent with its dimensions.
   int32_t acount = dataset.layout.n_arrays;
   pd.arrays.resize(acount);
-  int rowsA = arrayModel->rowCount();
-  for (int32_t a = 0; a < acount && a < arrayModel->columnCount(); ++a) {
+  for (int32_t a = 0; a < acount && a < pd.arrays.size(); ++a) {
     ArrayStore &as = pd.arrays[a];
     int expected = dimProduct(as.dims);
     if (expected != as.values.size())
       as.values.resize(expected);
-    for (int i = 0; i < expected && i < rowsA; ++i) {
-      QStandardItem *it = arrayModel->item(i, a);
-      as.values[i] = it ? it->text() : QString();
-    }
   }
 }
 
@@ -2802,7 +2993,7 @@ void SDDSEditor::editColumnAttributes() {
   int32_t tval = typeGroup.checkedId();
   SDDS_ChangeColumnInformation(&dataset, (char *)"type", &tval,
                                SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
-  columnModel->setHeaderData(col, Qt::Horizontal, name.text());
+  columnModel->refreshHeaders(col, col);
   markDirty();
 }
 
@@ -2916,7 +3107,7 @@ void SDDSEditor::editArrayAttributes() {
   int32_t tval = typeGroup.checkedId();
   SDDS_ChangeArrayInformation(&dataset, (char *)"type", &tval,
                               SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
-  arrayModel->setHeaderData(col, Qt::Horizontal, name.text());
+  arrayModel->refreshHeaders(col, col);
   populateModels();
   markDirty();
 }
@@ -2993,7 +3184,7 @@ void SDDSEditor::changeColumnType(int column) {
   SDDS_ChangeColumnInformation(&dataset, (char *)"type", &sddsType,
                                SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
                                const_cast<char *>(name.toLocal8Bit().constData()));
-  columnModel->setHeaderData(column, Qt::Horizontal, QString(name));
+  columnModel->refreshHeaders(column, column);
   markDirty();
 }
 
@@ -3248,10 +3439,10 @@ void SDDSEditor::searchColumn(int column) {
     lastSearchPattern = pat;
     lastReplaceText = replaceEdit->text();
     for (int r = 0; r < columnModel->rowCount(); ++r) {
-      QStandardItem *it = columnModel->item(r, column);
-      if (!it)
+      QModelIndex idx = columnModel->index(r, column);
+      if (!idx.isValid())
         continue;
-      QString val = it->text();
+      QString val = idx.data(Qt::EditRole).toString();
       int pos = 0;
       while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
         state->matches.append({r, pos});
@@ -3275,12 +3466,12 @@ void SDDSEditor::searchColumn(int column) {
     if (state->matchIndex < 0 || state->matchIndex >= state->matches.size())
       return;
     Match m = state->matches[state->matchIndex];
-    QStandardItem *it = columnModel->item(m.row, column);
-    if (it) {
-      QString val = it->text();
-      val.replace(m.start, patternEdit->text().length(), replaceEdit->text());
-      it->setText(val);
-    }
+    QModelIndex idx = columnModel->index(m.row, column);
+    if (!idx.isValid())
+      return;
+    QString val = idx.data(Qt::EditRole).toString();
+    val.replace(m.start, patternEdit->text().length(), replaceEdit->text());
+    columnModel->setData(idx, val);
     markDirty();
     runSearch(true, true);
   };
@@ -3296,10 +3487,10 @@ void SDDSEditor::searchColumn(int column) {
     QString repl = replaceEdit->text();
     int replaced = 0;
     for (int r = 0; r < columnModel->rowCount(); ++r) {
-      QStandardItem *it = columnModel->item(r, column);
-      if (!it)
+      QModelIndex idx = columnModel->index(r, column);
+      if (!idx.isValid())
         continue;
-      QString val = it->text();
+      QString val = idx.data(Qt::EditRole).toString();
       int pos = 0;
       bool changed = false;
       while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
@@ -3309,7 +3500,7 @@ void SDDSEditor::searchColumn(int column) {
         changed = true;
       }
       if (changed)
-        it->setText(val);
+        columnModel->setData(idx, val);
     }
     if (replaced > 0)
       markDirty();
@@ -3331,10 +3522,7 @@ void SDDSEditor::searchColumn(int column) {
     for (const QModelIndex &idx : indexes) {
       if (!idx.isValid() || idx.column() != column)
         continue;
-      QStandardItem *it = columnModel->item(idx.row(), column);
-      if (!it)
-        continue;
-      QString val = it->text();
+      QString val = idx.data(Qt::EditRole).toString();
       int pos = 0;
       bool changed = false;
       while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
@@ -3344,7 +3532,7 @@ void SDDSEditor::searchColumn(int column) {
         changed = true;
       }
       if (changed)
-        it->setText(val);
+        columnModel->setData(idx, val);
     }
     if (replaced > 0)
       markDirty();
@@ -3493,9 +3681,9 @@ void SDDSEditor::searchArray(int column) {
     lastReplaceText = replaceEdit.text();
     for (int r = 0; r < arrayModel->rowCount(); ++r) {
       QString val;
-      QStandardItem *it = arrayModel->item(r, column);
-      if (it)
-        val = it->text();
+      QModelIndex idx = arrayModel->index(r, column);
+      if (idx.isValid())
+        val = idx.data(Qt::EditRole).toString();
       int pos = 0;
       while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
         matches.append({r, pos});
@@ -3518,12 +3706,12 @@ void SDDSEditor::searchArray(int column) {
     if (matchIndex < 0 || matchIndex >= matches.size())
       return;
     Match m = matches[matchIndex];
-    QStandardItem *it = arrayModel->item(m.row, column);
-    if (it) {
-      QString val = it->text();
-      val.replace(m.start, patternEdit.text().length(), replaceEdit.text());
-      it->setText(val);
-    }
+    QModelIndex idx = arrayModel->index(m.row, column);
+    if (!idx.isValid())
+      return;
+    QString val = idx.data(Qt::EditRole).toString();
+    val.replace(m.start, patternEdit.text().length(), replaceEdit.text());
+    arrayModel->setData(idx, val);
     markDirty();
     runSearch(true);
   };
@@ -3539,10 +3727,10 @@ void SDDSEditor::searchArray(int column) {
     QString repl = replaceEdit.text();
     int replaced = 0;
     for (int r = 0; r < arrayModel->rowCount(); ++r) {
-      QStandardItem *it = arrayModel->item(r, column);
-      if (!it)
+      QModelIndex idx = arrayModel->index(r, column);
+      if (!idx.isValid())
         continue;
-      QString val = it->text();
+      QString val = idx.data(Qt::EditRole).toString();
       int pos = 0;
       bool changed = false;
       while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
@@ -3552,7 +3740,7 @@ void SDDSEditor::searchArray(int column) {
         changed = true;
       }
       if (changed)
-        it->setText(val);
+        arrayModel->setData(idx, val);
     }
     if (replaced > 0)
       markDirty();
@@ -3602,7 +3790,7 @@ void SDDSEditor::changeArrayType(int column) {
   SDDS_ChangeArrayInformation(&dataset, (char *)"type", &sddsType,
                               SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
                               const_cast<char *>(name.toLocal8Bit().constData()));
-  arrayModel->setHeaderData(column, Qt::Horizontal, QString(name));
+  arrayModel->refreshHeaders(column, column);
   markDirty();
 }
 

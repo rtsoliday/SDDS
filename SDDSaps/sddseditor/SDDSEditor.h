@@ -27,6 +27,8 @@ class QGroupBox;
 class QSplitter;
 class QDialog;
 class QProgressDialog;
+class ColumnPageModel;
+class ArrayPageModel;
 
 struct ArrayStore {
   QVector<QString> values;
@@ -143,8 +145,8 @@ private:
   QGroupBox *arrayBox;
   QSplitter *dataSplitter;
   QStandardItemModel *paramModel;
-  QStandardItemModel *columnModel;
-  QStandardItemModel *arrayModel;
+  ColumnPageModel *columnModel;
+  ArrayPageModel *arrayModel;
 
   QVector<PageStore> pages;
   int currentPage;
