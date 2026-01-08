@@ -42,6 +42,9 @@
 #include <QUndoStack>
 #include <QRegularExpression>
 #include <QItemSelectionModel>
+#include <QMouseEvent>
+#include <QTimer>
+#include <QCoreApplication>
 #include <functional>
 #include <memory>
 #include <cstdlib>
@@ -53,6 +56,78 @@
 
 static bool validateTextForType(const QString &text, int type, bool showMessage);
 static int dimProduct(const QVector<int> &dims);
+
+class SingleClickEditTableView : public QTableView {
+public:
+  explicit SingleClickEditTableView(QWidget *parent = nullptr) : QTableView(parent) {}
+
+private:
+  void forwardClickToEditorAt(const QPoint &viewPos, const QPoint &globalPos, int retries = 3) {
+    QWidget *target = viewport()->childAt(viewPos);
+    if (!target || target == viewport()) {
+      if (retries > 0) {
+        QTimer::singleShot(0, this, [this, viewPos, globalPos, retries]() {
+          forwardClickToEditorAt(viewPos, globalPos, retries - 1);
+        });
+      }
+      return;
+    }
+
+    // Prefer setting the caret directly when the editor is a QLineEdit.
+    if (QLineEdit *le = qobject_cast<QLineEdit *>(target)) {
+      le->setFocus();
+      const QPoint localPos = le->mapFromGlobal(globalPos);
+      le->setCursorPosition(le->cursorPositionAt(localPos));
+      le->deselect();
+      return;
+    }
+
+    // Otherwise, forward as a normal click so it places the caret.
+    const QPoint localPos = target->mapFromGlobal(globalPos);
+    QMouseEvent press(QEvent::MouseButtonPress, localPos, globalPos, Qt::LeftButton,
+                      Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(target, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, localPos, globalPos, Qt::LeftButton,
+                        Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(target, &release);
+  }
+
+protected:
+  void mousePressEvent(QMouseEvent *event) override {
+    QTableView::mousePressEvent(event);
+    if (event->button() != Qt::LeftButton)
+      return;
+    QModelIndex idx = indexAt(event->pos());
+    if (!idx.isValid())
+      return;
+    if (QItemSelectionModel *sel = selectionModel())
+      sel->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
+    if (!(model()->flags(idx) & Qt::ItemIsEditable))
+      return;
+    edit(idx);
+  }
+
+  void mouseDoubleClickEvent(QMouseEvent *event) override {
+    // The view normally consumes the second click as a double-click. For single-click-to-edit,
+    // we want the second click to land in the editor widget to place the caret.
+    if (event->button() == Qt::LeftButton) {
+      QModelIndex idx = indexAt(event->pos());
+      if (idx.isValid() && (model()->flags(idx) & Qt::ItemIsEditable)) {
+        if (QItemSelectionModel *sel = selectionModel())
+          sel->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
+        edit(idx);
+        const QPoint viewPos = event->pos();
+        const QPoint globalPos = event->globalPos();
+        QTimer::singleShot(0, this, [this, viewPos, globalPos]() {
+          forwardClickToEditorAt(viewPos, globalPos);
+        });
+        event->accept();
+        return;
+      }
+    }
+    QTableView::mouseDoubleClickEvent(event);
+  }
+};
 
 static QString truncateForMessage(const QString &text, int maxLen = 80) {
   QString t = text;
@@ -433,11 +508,32 @@ private:
   QString newValue;
 };
 
+class CaretOnDoubleClickLineEdit : public QLineEdit {
+public:
+  explicit CaretOnDoubleClickLineEdit(QWidget *parent = nullptr) : QLineEdit(parent) {}
+
+protected:
+  void mouseDoubleClickEvent(QMouseEvent *event) override {
+    // QLineEdit normally selects a word on double-click; sddseditor wants double-click
+    // to behave like a normal click (place caret).
+    setCursorPosition(cursorPositionAt(event->pos()));
+    deselect();
+    event->accept();
+  }
+};
+
 class SDDSItemDelegate : public QStyledItemDelegate {
 public:
   using TypeFunc = std::function<int(const QModelIndex &)>;
   SDDSItemDelegate(TypeFunc tf, QUndoStack *stack, QObject *parent = nullptr)
       : QStyledItemDelegate(parent), typeFunc(std::move(tf)), undoStack(stack) {}
+
+  QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
+                        const QModelIndex &index) const override {
+    Q_UNUSED(option);
+    Q_UNUSED(index);
+    return new CaretOnDoubleClickLineEdit(parent);
+  }
 
   void initStyleOption(QStyleOptionViewItem *option,
                        const QModelIndex &index) const override {
@@ -510,8 +606,8 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   pageLayout->addWidget(pageCombo);
 
   pageLayout->addStretch(1);
-  asciiBtn = new QRadioButton(tr("ascii"), this);
-  binaryBtn = new QRadioButton(tr("binary"), this);
+  asciiBtn = new QRadioButton(tr("ASCII"), this);
+  binaryBtn = new QRadioButton(tr("Binary"), this);
   asciiBtn->setChecked(true);
   pageLayout->addWidget(asciiBtn);
   pageLayout->addWidget(binaryBtn);
@@ -537,7 +633,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   paramModel = new QStandardItemModel(this);
   paramModel->setColumnCount(1);
   paramModel->setHorizontalHeaderLabels(QStringList() << tr("Value"));
-  paramView = new QTableView(paramBox);
+  paramView = new SingleClickEditTableView(paramBox);
   paramView->setFont(tableFont);
   paramView->setModel(paramModel);
   paramView->setItemDelegate(new SDDSItemDelegate(
@@ -575,7 +671,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   QVBoxLayout *colLayout = new QVBoxLayout(colBox);
   colLayout->setContentsMargins(0, 0, 0, 0);
   columnModel = new QStandardItemModel(this);
-  columnView = new QTableView(colBox);
+  columnView = new SingleClickEditTableView(colBox);
   columnView->setFont(tableFont);
   columnView->setModel(columnModel);
   connect(columnModel, &QStandardItemModel::itemChanged, this,
@@ -616,7 +712,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   QVBoxLayout *arrayLayout = new QVBoxLayout(arrayBox);
   arrayLayout->setContentsMargins(0, 0, 0, 0);
   arrayModel = new QStandardItemModel(this);
-  arrayView = new QTableView(arrayBox);
+  arrayView = new SingleClickEditTableView(arrayBox);
   arrayView->setFont(tableFont);
   arrayView->setModel(arrayModel);
   connect(arrayModel, &QStandardItemModel::itemChanged, this,
