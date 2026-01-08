@@ -26,6 +26,7 @@
 class QGroupBox;
 class QSplitter;
 class QDialog;
+class QProgressDialog;
 
 struct ArrayStore {
   QVector<QString> values;
@@ -155,6 +156,11 @@ private:
   bool updatingModels;
   bool darkPalette;
   QPointer<QDialog> searchColumnDialog;
+
+  /* Used only during initial load to provide progress through UI model building. */
+  QPointer<QProgressDialog> loadProgressDialog;
+  int loadProgressMin;
+  int loadProgressMax;
 };
 
 #endif // SDDSEDITOR_H

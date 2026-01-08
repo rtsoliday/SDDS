@@ -45,6 +45,7 @@
 #include <QMouseEvent>
 #include <QTimer>
 #include <QCoreApplication>
+#include <QProgressDialog>
 #include <functional>
 #include <memory>
 #include <cstdlib>
@@ -581,6 +582,9 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
     lastSearchPattern(QString()), lastReplaceText(QString()),
     undoStack(new QUndoStack(this)), updatingModels(false),
     darkPalette(darkPalette) {
+  loadProgressDialog = nullptr;
+  loadProgressMin = 0;
+  loadProgressMax = 100;
   // console dock
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
@@ -1140,31 +1144,114 @@ bool SDDSEditor::loadFile(const QString &path) {
   dirty = false;
   message(tr("Loaded %1").arg(path));
 
+  QProgressDialog progress(this);
+  progress.setWindowTitle(tr("SDDS"));
+  progress.setLabelText(tr("Loading %1…").arg(QFileInfo(path).fileName()));
+  progress.setRange(0, 100);
+  progress.setValue(0);
+  progress.setCancelButton(nullptr);
+  progress.setAutoClose(false);
+  progress.setAutoReset(false);
+  progress.setWindowModality(Qt::ApplicationModal);
+  progress.setMinimumDuration(0);
+  progress.show();
+  QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
+  // During the SDDS file read/copy, we only consume the first ~25% so that
+  // the remaining time (Qt model/view setup) can advance progress meaningfully.
+  auto setReadProgress = [&](int percent0to100) {
+    int p = std::min(99, std::max(0, percent0to100));
+    int mapped = (p * 25) / 99;
+    mapped = std::min(25, std::max(0, mapped));
+    if (mapped != progress.value()) {
+      progress.setValue(mapped);
+      QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    }
+  };
+
   pages.clear();
+  int pageIndex = 0;
   while (SDDS_ReadPage(&in) > 0) {
+    ++pageIndex;
+    progress.setLabelText(tr("Loading %1 (page %2)…").arg(QFileInfo(path).fileName()).arg(pageIndex));
+    progress.setValue(0);
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
     PageStore pd;
+    int64_t totalUnits = 0;
+    int64_t doneUnits = 0;
+
     int32_t pcount;
     char **pnames = SDDS_GetParameterNames(&in, &pcount);
+    if (pcount > 0)
+      totalUnits += pcount;
     for (int32_t i = 0; i < pcount; ++i) {
       char *val = SDDS_GetParameterAsString(&in, pnames[i], NULL);
       pd.parameters.append(QString(val ? val : ""));
       free(val);
+
+      ++doneUnits;
+      if (totalUnits > 0) {
+        int percent = static_cast<int>((doneUnits * 100) / totalUnits);
+        if (percent != progress.value()) {
+          setReadProgress(percent);
+        }
+      }
     }
     SDDS_FreeStringArray(pnames, pcount);
     int32_t ccount;
     char **cnames = SDDS_GetColumnNames(&in, &ccount);
     int64_t rows = SDDS_RowCount(&in);
+    if (ccount > 0 && rows > 0)
+      totalUnits += static_cast<int64_t>(ccount) * rows;
+
     pd.columns.resize(ccount);
+    const int64_t updateEvery = std::max<int64_t>(1, totalUnits / 200);
     for (int32_t c = 0; c < ccount; ++c) {
       char **data = SDDS_GetColumnInString(&in, cnames[c]);
       pd.columns[c].resize(rows);
-      for (int64_t r = 0; r < rows; ++r)
+      for (int64_t r = 0; r < rows; ++r) {
         pd.columns[c][r] = QString(data ? data[r] : "");
+        ++doneUnits;
+        if (totalUnits > 0 && (doneUnits % updateEvery) == 0) {
+          int percent = static_cast<int>((doneUnits * 100) / totalUnits);
+          if (percent != progress.value()) {
+            setReadProgress(percent);
+          }
+        }
+      }
       SDDS_FreeStringArray(data, rows);
     }
     SDDS_FreeStringArray(cnames, ccount);
     int32_t acount;
     char **anames = SDDS_GetArrayNames(&in, &acount);
+
+    // Add array work units up front so progress stays monotonic.
+    if (acount > 0) {
+      for (int32_t a = 0; a < acount; ++a) {
+        ARRAY_DEFINITION *adef = SDDS_GetArrayDefinition(&in, anames[a]);
+        if (!adef || adef->dimensions <= 0)
+          continue;
+        int64_t elements = 1;
+        for (int d = 0; d < adef->dimensions; ++d) {
+          int dim = 0;
+          if (in.array && in.array[a].dimension)
+            dim = in.array[a].dimension[d];
+          if (dim <= 0) {
+            elements = 0;
+            break;
+          }
+          if (elements > std::numeric_limits<int64_t>::max() / dim) {
+            elements = std::numeric_limits<int64_t>::max();
+            break;
+          }
+          elements *= dim;
+        }
+        if (elements > 0 && elements < std::numeric_limits<int64_t>::max())
+          totalUnits += elements;
+      }
+    }
+
     pd.arrays.resize(acount);
     for (int32_t a = 0; a < acount; ++a) {
       ARRAY_DEFINITION *adef = SDDS_GetArrayDefinition(&in, anames[a]);
@@ -1174,12 +1261,23 @@ bool SDDSEditor::loadFile(const QString &path) {
       for (int d = 0; d < adef->dimensions; ++d)
         pd.arrays[a].dims[d] = in.array[a].dimension[d];
       pd.arrays[a].values.resize(dim);
-      for (int i = 0; i < dim; ++i)
+      for (int i = 0; i < dim; ++i) {
         pd.arrays[a].values[i] = QString(vals[i]);
+        ++doneUnits;
+        if (totalUnits > 0 && (doneUnits % updateEvery) == 0) {
+          int percent = static_cast<int>((doneUnits * 100) / totalUnits);
+          if (percent != progress.value()) {
+            setReadProgress(percent);
+          }
+        }
+      }
       SDDS_FreeStringArray(vals, dim);
     }
     SDDS_FreeStringArray(anames, acount);
     pages.append(pd);
+
+    // End-of-page: treat SDDS read/copy as 25% complete.
+    setReadProgress(99);
   }
  
   // Copy layout information for later editing and close the file
@@ -1202,6 +1300,17 @@ bool SDDSEditor::loadFile(const QString &path) {
     QMessageBox::warning(this, tr("SDDS"), tr("File contains no pages"));
     return false;
   }
+
+  // At this point the file is in memory; now we populate Qt models/views.
+  // This can take noticeable time for large datasets, so keep the indicator visible.
+  progress.setLabelText(tr("Preparing display…"));
+  progress.setValue(25);
+  QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
+  loadProgressDialog = &progress;
+  loadProgressMin = 25;
+  loadProgressMax = 99;
+
   pageCombo->blockSignals(true);
   pageCombo->clear();
   for (int i = 0; i < pages.size(); ++i)
@@ -1211,6 +1320,13 @@ bool SDDSEditor::loadFile(const QString &path) {
   currentPage = 0;
   loadPage(1);
   updateWindowTitle();
+
+  progress.setValue(100);
+  QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
+  loadProgressDialog = nullptr;
+  progress.close();
+  QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   return true;
 }
 
@@ -2241,13 +2357,57 @@ void SDDSEditor::populateModels() {
   if (!datasetLoaded || pages.isEmpty() || currentPage < 0 || currentPage >= pages.size())
     return;
 
+  QProgressDialog *progress = loadProgressDialog.data();
+  const int progressMin = loadProgressMin;
+  const int progressMax = loadProgressMax;
+  int64_t totalUnits = 0;
+  int64_t doneUnits = 0;
+  auto updateProgress = [&](bool force) {
+    if (!progress)
+      return;
+    int span = progressMax - progressMin;
+    int value = progressMin;
+    if (span > 0 && totalUnits > 0) {
+      value = progressMin + static_cast<int>((doneUnits * span) / totalUnits);
+      value = std::min(progressMax, std::max(progressMin, value));
+    }
+    if (force || value != progress->value()) {
+      progress->setValue(value);
+      QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    }
+  };
+
   const PageStore &pd = pages[currentPage];
 
   updatingModels = true;
 
-  // parameters
-  paramModel->removeRows(0, paramModel->rowCount());
+  // Pre-compute rough work units so progress is monotonic.
   int32_t pcount = dataset.layout.n_parameters;
+  int32_t ccount = dataset.layout.n_columns;
+  int64_t rows = (ccount > 0 && pd.columns.size() > 0) ? pd.columns[0].size() : 0;
+  int32_t acount = dataset.layout.n_arrays;
+  int maxLen = 0;
+  for (int a = 0; a < acount && a < pd.arrays.size(); ++a)
+    if (pd.arrays[a].values.size() > maxLen)
+      maxLen = pd.arrays[a].values.size();
+  totalUnits += pcount;
+  if (ccount > 0 && rows > 0)
+    totalUnits += static_cast<int64_t>(ccount) * rows;
+  if (rows > 0)
+    totalUnits += rows; // column row headers
+  if (acount > 0 && maxLen > 0)
+    totalUnits += static_cast<int64_t>(acount) * maxLen;
+  if (maxLen > 0)
+    totalUnits += maxLen; // array row headers
+  totalUnits += 2; // resize columns/arrays
+  const int64_t updateEvery = std::max<int64_t>(1, totalUnits / 300);
+
+  // parameters
+  if (progress) {
+    progress->setLabelText(tr("Preparing display… (parameters)"));
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
+  paramModel->removeRows(0, paramModel->rowCount());
   paramBox->setChecked(pcount > 0);
   for (int32_t i = 0; i < pcount; ++i) {
     PARAMETER_DEFINITION *def = &dataset.layout.parameter_definition[i];
@@ -2259,13 +2419,18 @@ void SDDSEditor::populateModels() {
     item->setEditable(true);
     item->setData(def->type, Qt::UserRole);
     paramModel->setItem(i, 0, item);
+
+    ++doneUnits;
+    if (progress && (doneUnits % updateEvery) == 0)
+      updateProgress(false);
   }
 
   // columns
-  int32_t ccount = dataset.layout.n_columns;
   colBox->setChecked(ccount > 0);
-  int64_t rows = (ccount > 0 && pd.columns.size() > 0) ? pd.columns[0].size() : 0;
-
+  if (progress) {
+    progress->setLabelText(tr("Preparing display… (columns)"));
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
   columnModel->setColumnCount(ccount);
   columnModel->setRowCount(rows);
 
@@ -2281,28 +2446,43 @@ void SDDSEditor::populateModels() {
         columnModel->setItem(r, i, item);
       }
       item->setText(val);
+
+      ++doneUnits;
+      if (progress && (doneUnits % updateEvery) == 0)
+        updateProgress(false);
     }
   }
-  for (int64_t r = 0; r < rows; ++r)
+  for (int64_t r = 0; r < rows; ++r) {
     columnModel->setVerticalHeaderItem(r, new QStandardItem(QString::number(r + 1)));
+
+    ++doneUnits;
+    if (progress && (doneUnits % updateEvery) == 0)
+      updateProgress(false);
+  }
 
 
   // Resize columns to fit their contents first so initial widths are reasonable
   // then allow them to stretch to fill the remaining space and be adjusted by
   // the user.
+  if (progress) {
+    progress->setLabelText(tr("Preparing display… (sizing columns)"));
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
   columnView->resizeColumnsToContents();
   columnView->horizontalHeader()->setStretchLastSection(true);
   columnView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::Interactive);
+  ++doneUnits;
+  if (progress)
+    updateProgress(false);
 
   // arrays
-  int32_t acount = dataset.layout.n_arrays;
   arrayBox->setChecked(acount > 0);
   arrayModel->clear();
-  int maxLen = 0;
-  for (int a = 0; a < acount && a < pd.arrays.size(); ++a)
-    if (pd.arrays[a].values.size() > maxLen)
-      maxLen = pd.arrays[a].values.size();
+  if (progress) {
+    progress->setLabelText(tr("Preparing display… (arrays)"));
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
   arrayModel->setColumnCount(acount);
   arrayModel->setRowCount(maxLen);
   for (int a = 0; a < acount; ++a) {
@@ -2315,17 +2495,34 @@ void SDDSEditor::populateModels() {
       QStandardItem *item = new QStandardItem(inRange ? vals[r] : QString());
       item->setEditable(inRange);
       arrayModel->setItem(r, a, item);
+
+      ++doneUnits;
+      if (progress && (doneUnits % updateEvery) == 0)
+        updateProgress(false);
     }
   }
-  for (int r = 0; r < maxLen; ++r)
+  for (int r = 0; r < maxLen; ++r) {
     arrayModel->setVerticalHeaderItem(r, new QStandardItem(QString::number(r + 1)));
+
+    ++doneUnits;
+    if (progress && (doneUnits % updateEvery) == 0)
+      updateProgress(false);
+  }
 
 
   // Similar treatment for arrays table.
+  if (progress) {
+    progress->setLabelText(tr("Preparing display… (sizing arrays)"));
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
   arrayView->resizeColumnsToContents();
   arrayView->horizontalHeader()->setStretchLastSection(true);
   arrayView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::Interactive);
+
+  ++doneUnits;
+  if (progress)
+    updateProgress(true);
 
 
   updatingModels = false;

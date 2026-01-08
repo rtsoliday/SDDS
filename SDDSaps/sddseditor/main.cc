@@ -9,6 +9,8 @@
 #include <QColor>
 #include <QStyleFactory>
 #include <QLoggingCategory>
+#include <QTimer>
+#include <QString>
 
 int main(int argc, char **argv) {
   QLoggingCategory::setFilterRules("qt.qpa.xcb.*=false\nqt.qpa.fonts=false");
@@ -23,8 +25,12 @@ int main(int argc, char **argv) {
   pal.setColor(QPalette::Inactive, QPalette::WindowText, textColor);
   app.setPalette(pal);
   SDDSEditor editor(dark);
-  if (argc > 1)
-    editor.loadFile(argv[1]);
   editor.show();
+  if (argc > 1) {
+    const QString path = QString::fromLocal8Bit(argv[1]);
+    QTimer::singleShot(0, &editor, [&editor, path]() {
+      editor.loadFile(path);
+    });
+  }
   return app.exec();
 }
