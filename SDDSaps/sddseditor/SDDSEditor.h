@@ -27,6 +27,7 @@ class QGroupBox;
 class QSplitter;
 class QDialog;
 class QProgressDialog;
+class ParameterPageModel;
 class ColumnPageModel;
 class ArrayPageModel;
 
@@ -144,7 +145,7 @@ private:
   QGroupBox *colBox;
   QGroupBox *arrayBox;
   QSplitter *dataSplitter;
-  QStandardItemModel *paramModel;
+  ParameterPageModel *paramModel;
   ColumnPageModel *columnModel;
   ArrayPageModel *arrayModel;
 

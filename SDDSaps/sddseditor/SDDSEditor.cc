@@ -524,6 +524,109 @@ protected:
   }
 };
 
+class ParameterPageModel : public QAbstractTableModel {
+public:
+  ParameterPageModel(SDDS_DATASET *dataset, QVector<PageStore> *pages, int *currentPage,
+                     QObject *parent = nullptr)
+      : QAbstractTableModel(parent), dataset(dataset), pages(pages), currentPage(currentPage) {}
+
+  int rowCount(const QModelIndex &parent = QModelIndex()) const override {
+    Q_UNUSED(parent);
+    if (!dataset || !pages || !currentPage)
+      return 0;
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return 0;
+    if (dataset->layout.n_parameters <= 0)
+      return 0;
+    return dataset->layout.n_parameters;
+  }
+
+  int columnCount(const QModelIndex &parent = QModelIndex()) const override {
+    Q_UNUSED(parent);
+    return 1;
+  }
+
+  QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override {
+    if (!index.isValid() || !dataset || !pages || !currentPage)
+      return QVariant();
+    if (role != Qt::DisplayRole && role != Qt::EditRole)
+      return QVariant();
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return QVariant();
+    if (index.column() != 0)
+      return QVariant();
+    const int r = index.row();
+    const PageStore &pd = (*pages)[*currentPage];
+    if (r < 0)
+      return QVariant();
+    if (r >= pd.parameters.size())
+      return QVariant();
+    return pd.parameters[r];
+  }
+
+  bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override {
+    if (!index.isValid() || role != Qt::EditRole)
+      return false;
+    if (!dataset || !pages || !currentPage)
+      return false;
+    if (*currentPage < 0 || *currentPage >= pages->size())
+      return false;
+    if (index.column() != 0)
+      return false;
+    PageStore &pd = (*pages)[*currentPage];
+    const int r = index.row();
+    if (r < 0)
+      return false;
+    if (r >= pd.parameters.size())
+      return false;
+    QString text = value.toString();
+    if (pd.parameters[r] == text)
+      return false;
+    pd.parameters[r] = text;
+    emit dataChanged(index, index, {Qt::DisplayRole, Qt::EditRole});
+    return true;
+  }
+
+  Qt::ItemFlags flags(const QModelIndex &index) const override {
+    if (!index.isValid())
+      return Qt::NoItemFlags;
+    if (index.column() != 0)
+      return Qt::NoItemFlags;
+    return Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsEditable;
+  }
+
+  QVariant headerData(int section, Qt::Orientation orientation,
+                      int role = Qt::DisplayRole) const override {
+    if (role != Qt::DisplayRole)
+      return QVariant();
+    if (orientation == Qt::Horizontal) {
+      if (section != 0)
+        return QVariant();
+      return tr("Value");
+    }
+    if (!dataset)
+      return QVariant();
+    if (section < 0 || section >= dataset->layout.n_parameters)
+      return QVariant();
+    const char *name = dataset->layout.parameter_definition[section].name;
+    return name ? QString(name) : QString();
+  }
+
+  void refresh() {
+    beginResetModel();
+    endResetModel();
+  }
+
+  void refreshRowHeaders(int first, int last) {
+    emit headerDataChanged(Qt::Vertical, first, last);
+  }
+
+private:
+  SDDS_DATASET *dataset;
+  QVector<PageStore> *pages;
+  int *currentPage;
+};
+
 class ColumnPageModel : public QAbstractTableModel {
 public:
   ColumnPageModel(SDDS_DATASET *dataset, QVector<PageStore> *pages, int *currentPage,
@@ -864,12 +967,15 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   paramBox->setChecked(true);
   QVBoxLayout *paramLayout = new QVBoxLayout(paramBox);
   paramLayout->setContentsMargins(0, 0, 0, 0);
-  paramModel = new QStandardItemModel(this);
-  paramModel->setColumnCount(1);
-  paramModel->setHorizontalHeaderLabels(QStringList() << tr("Value"));
+  paramModel = new ParameterPageModel(&dataset, &pages, &currentPage, this);
   paramView = new SingleClickEditTableView(paramBox);
   paramView->setFont(tableFont);
   paramView->setModel(paramModel);
+  connect(paramModel, &QAbstractItemModel::dataChanged, this,
+          [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
+            if (!updatingModels)
+              markDirty();
+          });
   paramView->setItemDelegate(new SDDSItemDelegate(
       [this](const QModelIndex &idx) {
         return dataset.layout.parameter_definition[idx.row()].type;
@@ -882,8 +988,6 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   paramView->verticalHeader()->setDefaultSectionSize(18);
   paramView->verticalHeader()->setSectionsMovable(true);
   paramView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
-  connect(paramModel, &QStandardItemModel::itemChanged, this,
-          &SDDSEditor::markDirty);
   connect(paramView->verticalHeader(), &QHeaderView::sectionDoubleClicked, this,
           &SDDSEditor::changeParameterType);
   connect(paramView->verticalHeader(), &QHeaderView::sectionMoved, this,
@@ -2641,8 +2745,7 @@ void SDDSEditor::populateModels() {
   int32_t acount = dataset.layout.n_arrays;
   // Note: columns/arrays now use virtual models (no per-cell allocation).
   // We treat model resets and (optional) sizing passes as the main work units.
-  totalUnits = std::max<int64_t>(1, pcount) + 4;
-  const int64_t updateEvery = std::max<int64_t>(1, totalUnits / 50);
+  totalUnits = 5;
 
   const PageStore &pd = pages[currentPage];
   int64_t rows = (ccount > 0 && pd.columns.size() > 0) ? pd.columns[0].size() : 0;
@@ -2653,23 +2756,11 @@ void SDDSEditor::populateModels() {
     progress->setLabelText(tr("Preparing display… (parameters)"));
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   }
-  paramModel->removeRows(0, paramModel->rowCount());
   paramBox->setChecked(pcount > 0);
-  for (int32_t i = 0; i < pcount; ++i) {
-    PARAMETER_DEFINITION *def = &dataset.layout.parameter_definition[i];
-    paramModel->setRowCount(i + 1);
-    paramModel->setVerticalHeaderItem(
-        i, new QStandardItem(QString(def->name)));
-    QString value = (i < pd.parameters.size()) ? pd.parameters[i] : QString();
-    QStandardItem *item = new QStandardItem(value);
-    item->setEditable(true);
-    item->setData(def->type, Qt::UserRole);
-    paramModel->setItem(i, 0, item);
-
-    ++doneUnits;
-    if (progress && (doneUnits % updateEvery) == 0)
-      updateProgress(false);
-  }
+  paramModel->refresh();
+  ++doneUnits;
+  if (progress)
+    updateProgress(false);
 
   // columns
   colBox->setChecked(ccount > 0);
@@ -2736,13 +2827,12 @@ void SDDSEditor::clearDataset() {
 
   if (datasetLoaded) {
     SDDS_Terminate(&dataset);
+    memset(&dataset, 0, sizeof(dataset));
     datasetLoaded = false;
-    paramModel->clear();
-    paramModel->setColumnCount(1);
-    paramModel->setHorizontalHeaderLabels(QStringList() << tr("Value"));
     pageCombo->clear();
     pages.clear();
     currentPage = 0;
+    paramModel->refresh();
     columnModel->refresh();
     arrayModel->refresh();
   }
@@ -2788,7 +2878,7 @@ void SDDSEditor::commitModels() {
   int32_t pcount = dataset.layout.n_parameters;
   pd.parameters.resize(pcount);
   for (int32_t i = 0; i < pcount && i < paramModel->rowCount(); ++i) {
-    QString val = paramModel->item(i, 0)->text();
+    QString val = paramModel->index(i, 0).data(Qt::EditRole).toString();
     pd.parameters[i] = val;
     PARAMETER_DEFINITION *def = &dataset.layout.parameter_definition[i];
     if (def->fixed_value) {
@@ -2902,8 +2992,7 @@ void SDDSEditor::editParameterAttributes() {
   int32_t tval = typeGroup.checkedId();
   SDDS_ChangeParameterInformation(&dataset, (char *)"type", &tval,
                                   SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, row);
-  if (paramModel->verticalHeaderItem(row))
-    paramModel->verticalHeaderItem(row)->setText(name.text());
+  paramModel->refreshRowHeaders(row, row);
   markDirty();
 }
 
@@ -3121,7 +3210,6 @@ void SDDSEditor::changeParameterType(int row) {
         << "character";
   if (row < 0 || row >= dataset.layout.n_parameters)
     return;
-  QStandardItem *headerItem = paramModel->verticalHeaderItem(row);
   QString name = dataset.layout.parameter_definition[row].name;
   QString current = SDDS_GetTypeName(dataset.layout.parameter_definition[row].type);
   bool ok = false;
@@ -3133,7 +3221,8 @@ void SDDSEditor::changeParameterType(int row) {
   SDDS_ChangeParameterInformation(&dataset, (char *)"type", &sddsType,
                                   SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
                                   const_cast<char *>(name.toLocal8Bit().constData()));
-  headerItem->setText(name);
+  // Type affects validation/formatting; repaint is sufficient.
+  paramView->viewport()->update();
   markDirty();
 }
 
