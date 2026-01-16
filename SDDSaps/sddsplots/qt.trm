@@ -3,7 +3,12 @@
  */
 #include <ctype.h>
 #include <stdio.h>
+#include <limits.h>
 #include "graph.h"
+
+#ifndef SDDS_LINETYPE_SUBTYPE_MULT
+#define SDDS_LINETYPE_SUBTYPE_MULT 1000
+#endif
 /* approximations for typical font/screen sizes */
 #define QT_XMAX 4096
 #define QT_YMAX 3165
@@ -351,12 +356,21 @@ int QT_linetype(int lt) {
     buffer = lt;
     fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
   } else {
-    lt -= 1000;
-    fwrite(&value, sizeof(value), 1, QT_pipe);
-    buffer = lt;
-    fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
-    lt = lt % qt_color_index;
-    QT_color(qt_colors[lt].red, qt_colors[lt].green, qt_colors[lt].blue);
+    if (lt >= SDDS_LINETYPE_SUBTYPE_FLAG && lt > SHRT_MAX) {
+      int type = (lt - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
+      int subtype = (lt - SDDS_LINETYPE_SUBTYPE_FLAG) / SDDS_LINETYPE_SUBTYPE_MULT;
+      QT_color(qt_colors[type % qt_color_index].red, qt_colors[type % qt_color_index].green, qt_colors[type % qt_color_index].blue);
+      fwrite(&value, sizeof(value), 1, QT_pipe);
+      buffer = -(short)(subtype + 1);
+      fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
+      lt = type;
+    } else {
+      fwrite(&value, sizeof(value), 1, QT_pipe);
+      buffer = lt;
+      fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
+      lt = (lt % SDDS_LINETYPE_SUBTYPE_MULT) % qt_color_index;
+      QT_color(qt_colors[lt].red, qt_colors[lt].green, qt_colors[lt].blue);
+    }
   }
   qt_last_linetype = lt;
   return 0;
