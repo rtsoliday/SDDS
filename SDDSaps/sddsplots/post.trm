@@ -41,6 +41,11 @@ int spectralps=0;
 int customspectralps=0;
 unsigned short r0_ps=0, g0_ps=0, b0_ps=0, r1_ps=1, g1_ps=1, b1_ps=1;
 
+#ifndef SDDS_LINETYPE_SUBTYPE_MULT
+#define SDDS_LINETYPE_SUBTYPE_MULT 1000
+#define SDDS_LINETYPE_SUBTYPE_FLAG 16000
+#endif
+
 char *PS_header[] = {
 "/vpt2 vpt 2 mul def\n", 
 "/hpt2 hpt 2 mul def\n", 
@@ -164,7 +169,7 @@ char *PS_color_def[] = {
 NULL
 };
 
-#define PS_LINETYPES 10
+#define PS_LINETYPES 16
 #define CPS_LINETYPES 16
 static struct {
     double red, green, blue, widthMultiplier;
@@ -191,15 +196,21 @@ static struct {
 
 char *PS_dashStyle[PS_LINETYPES] = {
 "[] 0 setdash", 
-"[4 dl 2 dl] 0 setdash", 
-"[2 dl 3 dl] 0 setdash", 
-"[1 dl 2 dl] 0 setdash", 
-"[5 dl 2 dl 1 dl 2 dl] 0 setdash", 
-"[3 dl 3 dl 1 dl 4 dl] 0 setdash", 
-"[2 dl 5 dl] 0 setdash",  
-"[4 dl 4 dl 4 dl 1 dl] 0 setdash",  
-"[8 dl 2 dl] 0 setdash",  
-"[1 dl 4 dl] 0 setdash"
+"[9 dl 5 dl] 0 setdash", 
+"[5 dl 8 dl] 0 setdash", 
+"[3 dl 5 dl] 0 setdash", 
+"[12 dl 5 dl 3 dl 5 dl] 0 setdash", 
+"[8 dl 8 dl 3 dl 9 dl] 0 setdash", 
+"[5 dl 12 dl] 0 setdash",  
+"[9 dl 9 dl 9 dl 3 dl] 0 setdash",  
+"[18 dl 5 dl] 0 setdash",  
+"[3 dl 9 dl] 0 setdash",
+"[14 dl 5 dl 5 dl 5 dl] 0 setdash",
+"[23 dl 8 dl] 0 setdash",
+"[8 dl 3 dl 3 dl 3 dl] 0 setdash",
+"[27 dl 9 dl 5 dl 9 dl] 0 setdash",
+"[5 dl 5 dl 14 dl 5 dl] 0 setdash",
+"[3 dl 3 dl 3 dl 3 dl] 0 setdash"
 };
 
 
@@ -426,10 +437,8 @@ char *line = "0123456789abcdef";
                                 line[i], CPS_lineParameters[i].red, CPS_lineParameters[i].green, CPS_lineParameters[i].blue,
                                 CPS_lineParameters[i].widthMultiplier);
 	        }
-	if (cps_useDash) {
-	        for (i=0; i<PS_LINETYPES; i++) 
-		        fprintf(outfile, "/DT%c  { PL %s } def\n", line[i], PS_dashStyle[i]);
-	}
+        for (i=0; i<PS_LINETYPES; i++) 
+                fprintf(outfile, "/DT%c  { PL %s } def\n", line[i], PS_dashStyle[i]);
 	if (lineTypeTable.nEntries) {
 	        for ( i=0; i<lineTypeTable.nEntries; i++) {
 		        fprintf(outfile,"/UL%d { ",i);
@@ -678,13 +687,15 @@ int PS_linetype(int linetype)
 {
 	char *line = "0123456789"; 
         
-	if(lineTypeTable.nEntries) {
-	   if (linetype >=1000)
-	      linetype-=1000;
+        if(lineTypeTable.nEntries) {
+           if (linetype >= SDDS_LINETYPE_SUBTYPE_FLAG)
+              linetype = (linetype - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
 	   linetype = linetype%lineTypeTable.nEntries;
 	   fprintf(outfile,"UL%d\n",linetype);
 	} else {      
-	   linetype = linetype%PS_LINETYPES;
+           if (linetype >= SDDS_LINETYPE_SUBTYPE_FLAG)
+              linetype = (linetype - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
+           linetype = linetype%PS_LINETYPES;
            if ((!force_linetype) && (linetype==last_PS_linetype))
                    return 0;
 	   fprintf(outfile, "LT%c\n",  line[linetype%PS_LINETYPES]);
@@ -701,24 +712,34 @@ static int last_CPS_linetype = -1;
 int CPS_linetype(int linetype)
 {
 	char *line = "0123456789abcdef";
-	if (lineTypeTable.nEntries) {
-	   if (linetype >=1000)
-	      linetype-=1000;
+        if (lineTypeTable.nEntries) {
+           if (linetype >= SDDS_LINETYPE_SUBTYPE_FLAG)
+              linetype = (linetype - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
 	   linetype = linetype%lineTypeTable.nEntries;	
 	   fprintf(outfile, "UL%d\n",linetype);
-	} else if ((cps_color_index == 0) || (linetype < 1000)) {
-	   if ((!force_linetype) && (linetype==last_CPS_linetype))
-	      return 0;
+        } else if (linetype >= SDDS_LINETYPE_SUBTYPE_FLAG) {
+           int type = (linetype - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
+           int subtype = (linetype - SDDS_LINETYPE_SUBTYPE_FLAG) / SDDS_LINETYPE_SUBTYPE_MULT;
+           if (cps_color_index > 0)
+             CPS_color(cps_colors[type%cps_color_index].red, cps_colors[type%cps_color_index].green, cps_colors[type%cps_color_index].blue);
+           else
+             fprintf(outfile, "LT%c\n",  line[type%PS_LINETYPES]);
+           force_linetype = 1;
+           fprintf(outfile, "PL %s\n",  PS_dashStyle[subtype%PS_LINETYPES]);
+        } else if ((cps_color_index > 0) && (linetype >= SDDS_LINETYPE_SUBTYPE_MULT)) {
+           int type = linetype % SDDS_LINETYPE_SUBTYPE_MULT;
+           CPS_color(cps_colors[type%cps_color_index].red, cps_colors[type%cps_color_index].green, cps_colors[type%cps_color_index].blue);
+           force_linetype = 1;
+           fprintf(outfile, "PL [] 0 setdash\n");
+        } else {
+           if ((!force_linetype) && (linetype==last_CPS_linetype))
+              return 0;
            fprintf(outfile, "LT%c\n",  line[linetype%CPS_LINETYPES]);
-	   force_linetype = 0;
-	} else {
-	   linetype -= 1000;
-	   CPS_color(cps_colors[linetype%cps_color_index].red, cps_colors[linetype%cps_color_index].green, cps_colors[linetype%cps_color_index].blue);
-	   force_linetype = 1;
-	}
+           force_linetype = 0;
+        }
 	
-	if ( !lineTypeTable.nEntries && cps_useDash)  
-	fprintf(outfile, "DT%c\n",  line[linetype%PS_LINETYPES]);
+        if ( !lineTypeTable.nEntries && cps_useDash && linetype < SDDS_LINETYPE_SUBTYPE_FLAG)  
+        fprintf(outfile, "DT%c\n",  line[linetype%PS_LINETYPES]);
 	
 	ps_path_count = 0;
 	last_CPS_linetype = linetype;
@@ -780,6 +801,12 @@ int PS_put_text(int x, int y, char *str)
 		fprintf(outfile, "grestore\n");
 	ps_path_count = 0;
 	return 0;
+}
+
+int PS_solid_dash(void)
+{
+        fprintf(outfile, "[] 0 setdash\n");
+        return 0;
 }
 
 int PS_text_angle(int ang)
