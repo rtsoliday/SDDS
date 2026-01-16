@@ -452,6 +452,89 @@ static long argEcho = 0;
 static short multicommandMode = 0, repeatMode = 0;
 static int32_t repeatModeCheckInterval = 1, repeatModeTimeout = 900;
 
+static int is_outboard_device(const char *device)
+{
+  return device && (!strcmp(device, "motif") || !strcmp(device, "qt"));
+}
+
+static void append_device_arg(char **buffer, long *length, long *capacity, const char *text)
+{
+  long add;
+  if (!text || !*text)
+    return;
+  add = (long)strlen(text);
+  if (!*buffer)
+    {
+      *capacity = add + 64;
+      *buffer = tmalloc(sizeof(**buffer) * (*capacity));
+      (*buffer)[0] = '\0';
+      *length = 0;
+    }
+  if (*length)
+    {
+      if (*length + 1 >= *capacity)
+        {
+          *capacity = *capacity + 64;
+          *buffer = trealloc(*buffer, sizeof(**buffer) * (*capacity));
+        }
+      (*buffer)[(*length)++] = ' ';
+      (*buffer)[*length] = '\0';
+    }
+  while (*length + add + 1 > *capacity)
+    {
+      *capacity *= 2;
+      *buffer = trealloc(*buffer, sizeof(**buffer) * (*capacity));
+    }
+  strcat(*buffer, text);
+  *length += add;
+}
+
+static char *build_outboard_device_args(char **argv, long argc)
+{
+  long i, length = 0, capacity = 0;
+  char *buffer = NULL;
+  for (i = 0; i < argc; i++)
+    {
+      char *item = argv[i];
+      if (!item || !*item)
+        continue;
+      if (item[0] == '-')
+        {
+          append_device_arg(&buffer, &length, &capacity, item);
+          continue;
+        }
+      if (strchr(item, '='))
+        {
+          char *copy = NULL, *eq = NULL;
+          char *converted = NULL;
+          SDDS_CopyString(&copy, item);
+          eq = strchr(copy, '=');
+          *eq = '\0';
+          converted = tmalloc(sizeof(*converted) * (strlen(copy) + strlen(eq + 1) + 3));
+          sprintf(converted, "-%s %s", copy, eq + 1);
+          append_device_arg(&buffer, &length, &capacity, converted);
+          free(copy);
+          free(converted);
+        }
+      else if (!strcmp(item, "dashes") || !strcmp(item, "movie") || !strcmp(item, "spectrum") ||
+               !strcmp(item, "doublebuffer") || !strcmp(item, "greyscale"))
+        {
+          char *converted = tmalloc(sizeof(*converted) * (strlen(item) + 4));
+          sprintf(converted, "-%s 1", item);
+          append_device_arg(&buffer, &length, &capacity, converted);
+          free(converted);
+        }
+      else
+        {
+          char *converted = tmalloc(sizeof(*converted) * (strlen(item) + 2));
+          sprintf(converted, "-%s", item);
+          append_device_arg(&buffer, &length, &capacity, converted);
+          free(converted);
+        }
+    }
+  return buffer;
+}
+
 extern int term;
 int dataBehind = 0;
 
@@ -591,7 +674,15 @@ int sddsplot_main(int commandlineArgc, char **commandlineArgv)
 
           if (plot_spec.deviceArgc)
             {
-              gs_device_arguments(plot_spec.deviceArgv[0], 0); /* for backward compatibility */
+              if (is_outboard_device(plot_spec.device))
+                {
+                  char *deviceArgs = build_outboard_device_args(plot_spec.deviceArgv, plot_spec.deviceArgc);
+                  gs_device_arguments(deviceArgs, 0);
+                  if (deviceArgs)
+                    free(deviceArgs);
+                }
+              else
+                gs_device_arguments(plot_spec.deviceArgv[0], 0); /* for backward compatibility */
               setDeviceArgv(plot_spec.deviceArgv, plot_spec.deviceArgc);
             }
           if (!plot_spec.font)
@@ -1123,6 +1214,7 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
   long coloroffset = 0;
   long ncolor_min = 65535;
   long ncolor_max = 0;
+  long useSubtypeEncoding = 0;
 
   graphic = NULL;
   legend = NULL;
@@ -1153,6 +1245,7 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
         min_level=DBL_MAX;
         max_level=-DBL_MAX;
       */
+      useSubtypeEncoding = 0;
       j = 0;
       for (panel = 0; panel < plspec->panels; panel++)
         {
@@ -1168,6 +1261,9 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
               if (plspec->panel[panel].dataset[idata]->request_index == request)
                 {
                   jj++;
+                  if (plspec->panel[panel].dataset[idata]->graphic.subtype > 0 ||
+                      (plspec->panel[panel].dataset[idata]->graphic.flags & GRAPHIC_SUBTYPE_EQ_TYPE))
+                    useSubtypeEncoding = 1;
                   if (plspec->panel[panel].dataset[idata]->graphic.flags & GRAPHIC_VARY_SUBTYPE)
                     {
                       if (plspec->panel[panel].dataset[idata]->graphic.subtype > ncolor_max)
@@ -1556,6 +1652,7 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
         }
       if (plreq->color_settings.flags & COLORSET_USERDEFINED)
         {
+          long typeIncrThisRequest = useSubtypeEncoding ? 0 : typeIncr;
           for (panel = 0; panel < plspec->panels; panel++)
             {
               int offsettype = -1;
@@ -1569,11 +1666,11 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
                             {
                               offsettype = plspec->panel[panel].dataset[idata]->graphic.subtype;
                             }
-                          plspec->panel[panel].dataset[idata]->graphic.subtype += typeIncr;
+                          plspec->panel[panel].dataset[idata]->graphic.subtype += typeIncrThisRequest;
                           plspec->panel[panel].dataset[idata]->graphic.subtype -= offsettype;
                           if (plspec->plot_request[request].graphic.flags & GRAPHIC_CONNECT_EQ_SUBTYPE)
                             {
-                              plspec->panel[panel].dataset[idata]->graphic.connect_linetype += typeIncr;
+                              plspec->panel[panel].dataset[idata]->graphic.connect_linetype += typeIncrThisRequest;
                               plspec->panel[panel].dataset[idata]->graphic.connect_linetype -= offsettype;
                             }
                         }
@@ -1583,11 +1680,11 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
                             {
                               offsettype = plspec->panel[panel].dataset[idata]->graphic.type;
                             }
-                          plspec->panel[panel].dataset[idata]->graphic.type += typeIncr;
+                          plspec->panel[panel].dataset[idata]->graphic.type += typeIncrThisRequest;
                           plspec->panel[panel].dataset[idata]->graphic.type -= offsettype;
                           if (plspec->plot_request[request].graphic.flags & GRAPHIC_CONNECT_EQ_TYPE)
                             {
-                              plspec->panel[panel].dataset[idata]->graphic.connect_linetype += typeIncr;
+                              plspec->panel[panel].dataset[idata]->graphic.connect_linetype += typeIncrThisRequest;
                               plspec->panel[panel].dataset[idata]->graphic.connect_linetype -= offsettype;
                             }
                         }
@@ -2443,18 +2540,23 @@ void sddsplotDataArrays(double *xn, double *yn, double *sxn, double *syn, long n
   switch (graphic->element)
     {
     case PLOT_LINE:
-      if (xgap || ygap)
-        {
-          plot_lines_gap(xn, yn, xgap, ygap, npts, graphic->type, graphic->thickness);
-        }
-      else if (flags & PLREQ_SEVER)
-        {
-          plot_lines_sever(xn, yn, npts, graphic->type, graphic->thickness);
-        }
-      else
-        {
-          plot_lines(xn, yn, npts, graphic->type, graphic->thickness);
-        }
+      {
+        long lineType = graphic->type;
+        if (graphic->subtype > 0 || (graphic->flags & (GRAPHIC_SUBTYPE_EQ_TYPE | GRAPHIC_VARY_SUBTYPE)))
+          lineType += SDDS_LINETYPE_SUBTYPE_FLAG + graphic->subtype * SDDS_LINETYPE_SUBTYPE_MULT;
+        if (xgap || ygap)
+          {
+            plot_lines_gap(xn, yn, xgap, ygap, npts, lineType, graphic->thickness);
+          }
+        else if (flags & PLREQ_SEVER)
+          {
+            plot_lines_sever(xn, yn, npts, lineType, graphic->thickness);
+          }
+        else
+          {
+            plot_lines(xn, yn, npts, lineType, graphic->thickness);
+          }
+      }
       break;
     case PLOT_SYMBOL:
       plot_points_fill(xn, yn, npts, graphic->type, graphic->subtype,
@@ -3595,7 +3697,13 @@ void make_legend(char **legend, GRAPHIC_SPEC **graphic, long n, double legendSca
         case PLOT_YBAR:
           x[0] = xmin + (xmax - xmin) * lpmin;
           x[1] = xmin + (xmax - xmin) * lpmax;
-          plot_lines(x, y, 2, graphic[i]->type, graphic[i]->thickness);
+          {
+            long lineType = graphic[i]->type;
+            if (!(legendFlags[i] & LEGEND_NOSUBTYPE) &&
+                (graphic[i]->subtype > 0 || (graphic[i]->flags & (GRAPHIC_SUBTYPE_EQ_TYPE | GRAPHIC_VARY_SUBTYPE))))
+              lineType += SDDS_LINETYPE_SUBTYPE_FLAG + graphic[i]->subtype * SDDS_LINETYPE_SUBTYPE_MULT;
+            plot_lines(x, y, 2, lineType, graphic[i]->thickness);
+          }
           break;
         case PLOT_DOTS:
           x[0] = xmin + (xmax - xmin) * lpmin + legend_xrange / 2;
