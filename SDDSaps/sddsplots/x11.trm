@@ -5,7 +5,12 @@
 #include <ctype.h>
 #include "x11_limits.h"
 #include <stdio.h>
+#include <limits.h>
 #include "graph.h"
+
+#ifndef SDDS_LINETYPE_SUBTYPE_MULT
+#define SDDS_LINETYPE_SUBTYPE_MULT 1000
+#endif
 #if defined(_WIN32)
 #include <winreg.h>
 #include <fcntl.h>
@@ -573,13 +578,23 @@ int X11b_linetype(int lt)
     fwrite(&buffer,  sizeof(buffer),  1,  X11_pipe);
     fflush(X11_pipe);
   } else {
-    lt -= 1000;
-    fwrite(&value,  sizeof(value),  1,  X11_pipe);
-    buffer = lt;
-    fwrite(&buffer,  sizeof(buffer),  1,  X11_pipe);
-    fflush(X11_pipe);
-    lt = lt%motif_color_index;
-    X11b_color(motif_colors[lt].red, motif_colors[lt].green, motif_colors[lt].blue);
+    if (lt >= SDDS_LINETYPE_SUBTYPE_FLAG && lt > SHRT_MAX) {
+      int type = (lt - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
+      int subtype = (lt - SDDS_LINETYPE_SUBTYPE_FLAG) / SDDS_LINETYPE_SUBTYPE_MULT;
+      X11b_color(motif_colors[type % motif_color_index].red, motif_colors[type % motif_color_index].green, motif_colors[type % motif_color_index].blue);
+      fwrite(&value,  sizeof(value),  1,  X11_pipe);
+      buffer = -(short)(subtype + 1);
+      fwrite(&buffer,  sizeof(buffer),  1,  X11_pipe);
+      fflush(X11_pipe);
+      lt = type;
+    } else {
+      fwrite(&value,  sizeof(value),  1,  X11_pipe);
+      buffer = lt;
+      fwrite(&buffer,  sizeof(buffer),  1,  X11_pipe);
+      fflush(X11_pipe);
+      lt = (lt % SDDS_LINETYPE_SUBTYPE_MULT) % motif_color_index;
+      X11b_color(motif_colors[lt].red, motif_colors[lt].green, motif_colors[lt].blue);
+    }
        
   }
   last_linetype = lt;
