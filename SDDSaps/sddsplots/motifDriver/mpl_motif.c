@@ -47,6 +47,10 @@
 #  define usleep(usecs) Sleep(usecs / 1000)
 #  define sleep(sec) Sleep(sec * 1000)
 #endif
+#ifndef SDDS_LINETYPE_SUBTYPE_MULT
+#define SDDS_LINETYPE_SUBTYPE_MULT 1000
+#define SDDS_LINETYPE_SUBTYPE_FLAG 16000
+#endif
 #include <X11/StringDefs.h>
 #include <X11/Xresource.h>
 #include <stdio.h>
@@ -295,16 +299,22 @@ XrmOptionDescRec options[NCOLORS + EXTRAOPTIONS] = {
   {"-zoomFactor", ".zoomFactor", XrmoptionSepArg, "20"},
 };
 
-char dashes[10][5] = {{0},
-                      {4, 2, 0},
-                      {2, 3, 0},
-                      {1, 2, 0},
-                      {5, 2, 1, 2, 0},
-                      {3, 3, 1, 4, 0},
-                      {2, 5, 0},
-                      {4, 4, 4, 1, 0},
-                      {8, 2, 0},
-                      {1, 4, 0}};
+char dashes[16][5] = {{0},
+                      {9, 5, 0},
+                      {5, 8, 0},
+                      {3, 5, 0},
+                      {12, 5, 3, 5, 0},
+                      {8, 8, 3, 9, 0},
+                      {5, 12, 0},
+                      {9, 9, 9, 3, 0},
+                      {18, 5, 0},
+                      {3, 9, 0},
+                      {14, 5, 5, 5, 0},
+                      {23, 8, 0},
+                      {8, 3, 3, 3, 0},
+                      {27, 9, 5, 9, 0},
+                      {5, 5, 14, 5, 0},
+                      {3, 3, 3, 3, 0}};
 
 XColor xcol;
 unsigned long spectrum[NSPECT];
@@ -550,7 +560,7 @@ int main(int argc, char **argv) {
         }
         break;
       case 'l': /* -linetypetable file*/
-        if (!strcmp("linetype", argv[i] + 1)) {
+        if (!strcmp("linetype", argv[i] + 1) || !strcmp("linetypetable", argv[i] + 1)) {
           LineTableFile = argv[++i];
           if (!LineTableFile) {
             xerrmsg(0, "Need linetype file names");
@@ -1842,6 +1852,16 @@ int destroyallplotrec() {
 static int line_style = LineSolid;
 int orig_height, orig_width;
 
+static void flush_dashed_path(Display *display, Drawable pixmap, Drawable window, GC gc,
+                              XPoint *points, int count, int doublebuffer)
+{
+  if (!points || count < 2)
+    return;
+  XDrawLines(display, pixmap, gc, points, count, CoordModeOrigin);
+  if (!doublebuffer)
+    XDrawLines(display, window, gc, points, count, CoordModeOrigin);
+}
+
 /**************************** displayplot *********************************/
 void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
 /* Draws the plot according to the commands in the buffer */
@@ -1854,6 +1874,9 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
   static int ifirst = 1;
   unsigned short r, g, b;
   XColor foregroundColor;
+  XPoint *dashPoints = NULL;
+  int dashCount = 0, dashCapacity = 0;
+  int dashActive = 0;
 
   /* Set scaling parameters */
   if (ifirst) {
@@ -1907,9 +1930,28 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
       memcpy((char *)&y, bufptr, sizeof(VTYPE));
       bufptr += sizeof(VTYPE);
       n += sizeof(char) + 2 * sizeof(VTYPE);
-      XDrawLine(display, pixmap, gc, X(cx), Y(cy), X(x), Y(y));
-      if (!doublebuffer)
-        XDrawLine(display, graphareawindow, gc, X(cx), Y(cy), X(x), Y(y));
+      if (dashActive) {
+        if (dashCount == 0) {
+          if (dashCapacity < 2) {
+            dashCapacity = 32;
+            dashPoints = (XPoint *)malloc(sizeof(*dashPoints) * dashCapacity);
+          }
+          dashPoints[dashCount].x = X(cx);
+          dashPoints[dashCount].y = Y(cy);
+          dashCount++;
+        }
+        if (dashCount + 1 >= dashCapacity) {
+          dashCapacity *= 2;
+          dashPoints = (XPoint *)realloc(dashPoints, sizeof(*dashPoints) * dashCapacity);
+        }
+        dashPoints[dashCount].x = X(x);
+        dashPoints[dashCount].y = Y(y);
+        dashCount++;
+      } else {
+        XDrawLine(display, pixmap, gc, X(cx), Y(cy), X(x), Y(y));
+        if (!doublebuffer)
+          XDrawLine(display, graphareawindow, gc, X(cx), Y(cy), X(x), Y(y));
+      }
       cx = x;
       cy = y;
       break;
@@ -1919,8 +1961,23 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
       memcpy((char *)&cy, bufptr, sizeof(VTYPE));
       bufptr += sizeof(VTYPE);
       n += sizeof(char) + 2 * sizeof(VTYPE);
+      if (dashActive) {
+        flush_dashed_path(display, pixmap, graphareawindow, gc, dashPoints, dashCount, doublebuffer);
+        dashCount = 0;
+        if (dashCapacity < 2) {
+          dashCapacity = 32;
+          dashPoints = (XPoint *)malloc(sizeof(*dashPoints) * dashCapacity);
+        }
+        dashPoints[dashCount].x = X(cx);
+        dashPoints[dashCount].y = Y(cy);
+        dashCount++;
+      }
       break;
     case 'P': /* X11_dot(x, y) -- dot */
+      if (dashActive) {
+        flush_dashed_path(display, pixmap, graphareawindow, gc, dashPoints, dashCount, doublebuffer);
+        dashCount = 0;
+      }
       memcpy((char *)&cx, bufptr, sizeof(VTYPE));
       bufptr += sizeof(VTYPE);
       memcpy((char *)&cy, bufptr, sizeof(VTYPE));
@@ -1931,13 +1988,29 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
         XDrawPoint(display, graphareawindow, gc, X(cx), Y(cy));
       break;
     case 'L': /*   X11_linetype(type) - set line type  */
-
+      if (dashActive) {
+        flush_dashed_path(display, pixmap, graphareawindow, gc, dashPoints, dashCount, doublebuffer);
+        dashCount = 0;
+      }
       memcpy((char *)&lt2, bufptr, sizeof(VTYPE));
       bufptr += sizeof(VTYPE);
       n += sizeof(char) + sizeof(VTYPE);
       if (Color) {
         if (!lineTypeTable.nEntries) { /* built-in types used */
-          lt = lt2 % 16;
+          int typeValue = lt2;
+          int subtypeValue = lt2;
+          if (lt2 < 0) {
+            subtypeValue = (-lt2) - 1;
+            type = (subtypeValue == 0) ? LineSolid : LineOnOffDash;
+            if (dashes[subtypeValue % 16][0])
+              XSetDashes(display, gc, 0, dashes[subtypeValue % 16], strlen(dashes[subtypeValue % 16]));
+            break;
+          }
+          if (lt2 >= SDDS_LINETYPE_SUBTYPE_FLAG) {
+            typeValue = (lt2 - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
+            subtypeValue = (lt2 - SDDS_LINETYPE_SUBTYPE_FLAG) / SDDS_LINETYPE_SUBTYPE_MULT;
+          }
+          lt = typeValue % 16;
           lt += 2; /* Convert to color index */
           if (lt >= NCOLORS)
             lt = NCOLORS - 1;
@@ -1946,13 +2019,15 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
           type = LineSolid;
           linewidth = 1;
           XSetForeground(display, gc, colors[lt]);
-          if (UseDashes) {
-            lt = lt2 % 10;
+          if (UseDashes || lt2 >= SDDS_LINETYPE_SUBTYPE_FLAG) {
+            lt = subtypeValue % 16;
             type = (lt == 0) ? LineSolid : LineOnOffDash;
             if (dashes[lt][0])
               XSetDashes(display, gc, 0, dashes[lt], strlen(dashes[lt]));
           }
         } else { /* user defined line types used */
+          if (lt2 >= SDDS_LINETYPE_SUBTYPE_FLAG)
+            lt2 = (lt2 - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
           lt = lt2 % lineTypeTable.nEntries;
           if (lineTypeTable.typeFlag & LINE_TABLE_DEFINE_THICKNESS)
             linewidth = lineTypeTable.thickness[lt];
@@ -1975,12 +2050,14 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
         }
       } else {
         if (!lineTypeTable.nEntries) { /* built-in dashes used */
-          lt = lt % 10;
+          lt = lt % 16;
           type = (lt == 0) ? LineSolid : LineOnOffDash;
           linewidth = 0;
           if (dashes[lt][0])
             XSetDashes(display, gc, 0, dashes[lt], strlen(dashes[lt]));
         } else { /* user defined type used */
+          if (lt2 >= SDDS_LINETYPE_SUBTYPE_FLAG)
+            lt2 = (lt2 - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
           lt = lt2 % lineTypeTable.nEntries;
           if (lineTypeTable.typeFlag & LINE_TABLE_DEFINE_THICKNESS)
             linewidth = lineTypeTable.thickness[lt];
@@ -1997,8 +2074,13 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
       }
       XSetLineAttributes(display, gc, linewidth, type, CapButt, JoinBevel);
       line_style = type;
+      dashActive = (line_style != LineSolid);
       break;
     case 'W': /*   X11_line_thickness(thickness) - set line width  */
+      if (dashActive) {
+        flush_dashed_path(display, pixmap, graphareawindow, gc, dashPoints, dashCount, doublebuffer);
+        dashCount = 0;
+      }
       memcpy((char *)&lt, bufptr, sizeof(VTYPE));
       bufptr += sizeof(VTYPE);
       n += sizeof(char) + sizeof(VTYPE);
@@ -2012,6 +2094,10 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
       break;
     case 'B': /* Fill Box */
       {
+        if (dashActive) {
+          flush_dashed_path(display, pixmap, graphareawindow, gc, dashPoints, dashCount, doublebuffer);
+          dashCount = 0;
+        }
         VTYPE shade, xl, xh, yl, yh;
 
         memcpy((char *)&shade, bufptr, sizeof(VTYPE));
@@ -2064,6 +2150,10 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
       n += sizeof(char);
       break;
     case 'C': {
+      if (dashActive) {
+        flush_dashed_path(display, pixmap, graphareawindow, gc, dashPoints, dashCount, doublebuffer);
+        dashCount = 0;
+      }
       memcpy((char *)&r, bufptr, sizeof(VTYPE));
       bufptr += sizeof(VTYPE);
       memcpy((char *)&g, bufptr, sizeof(VTYPE));
@@ -2082,6 +2172,10 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
     } break;
     case 'S': /* Allocate spectral spectrum */
       {
+        if (dashActive) {
+          flush_dashed_path(display, pixmap, graphareawindow, gc, dashPoints, dashCount, doublebuffer);
+          dashCount = 0;
+        }
         VTYPE num, spec, r0, g0, b0, r1, g1, b1;
         memcpy((char *)&num, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
@@ -2136,6 +2230,12 @@ void displayplot(Widget w, caddr_t clientdata, caddr_t calldata)
       break;
     }
   } /* End for loop */
+  if (dashActive) {
+    flush_dashed_path(display, pixmap, graphareawindow, gc, dashPoints, dashCount, doublebuffer);
+    dashCount = 0;
+  }
+  if (dashPoints)
+    free(dashPoints);
   /* Copy the pixmap to the window */
   if ((usecoordn != 0) && curcoord) {
     while (curcoord->ncoord != usecoordn) {
