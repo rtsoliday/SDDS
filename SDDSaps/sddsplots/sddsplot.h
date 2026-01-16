@@ -79,6 +79,9 @@ typedef struct {
 #define GRAPHIC_VARY_FIXFORFILE    0x00000400
 #define GRAPHIC_VARY_FIXFORREQUEST 0x00000800
 
+#define SDDS_LINETYPE_SUBTYPE_MULT 1000
+#define SDDS_LINETYPE_SUBTYPE_FLAG 16000
+
 typedef struct {
   double maximum[2];
   double minimum[2];
