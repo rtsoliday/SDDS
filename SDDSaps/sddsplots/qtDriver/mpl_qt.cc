@@ -25,6 +25,7 @@ static bool isEqualAspectArgument(const char *arg) {
 
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QPainterPath>
 #include <QtDataVisualization/Q3DSurface>
 #include <QtDataVisualization/QSurface3DSeries>
 #include <QtDataVisualization/QSurfaceDataArray>
@@ -76,6 +77,11 @@ static bool isEqualAspectArgument(const char *arg) {
 #include <algorithm>
 #include <cctype>
 #include <limits>
+
+#ifndef SDDS_LINETYPE_SUBTYPE_MULT
+#define SDDS_LINETYPE_SUBTYPE_MULT 1000
+#define SDDS_LINETYPE_SUBTYPE_FLAG 16000
+#endif
 #ifdef _WIN32
 #  include <windows.h>
 #elif defined(__APPLE__)
@@ -117,7 +123,28 @@ int currentlinewidth = 1;
 int linecolormax = 0;
 int UseDashes = 0;
 char *sddsplotCommandline2 = NULL;
-QVector<QVector<qreal>> dashPatterns(10);
+QVector<QVector<qreal>> dashPatterns(16);
+static void initDefaultDashPatterns()
+{
+  if (!dashPatterns[1].isEmpty())
+    return;
+  dashPatterns[0] = QVector<qreal>();
+  dashPatterns[1] << 9 << 5;
+  dashPatterns[2] << 5 << 8;
+  dashPatterns[3] << 3 << 5;
+  dashPatterns[4] << 12 << 5 << 3 << 5;
+  dashPatterns[5] << 8 << 8 << 3 << 9;
+  dashPatterns[6] << 5 << 12;
+  dashPatterns[7] << 9 << 9 << 9 << 3;
+  dashPatterns[8] << 18 << 5;
+  dashPatterns[9] << 3 << 9;
+  dashPatterns[10] << 14 << 5 << 5 << 5;
+  dashPatterns[11] << 23 << 8;
+  dashPatterns[12] << 8 << 3 << 3 << 3;
+  dashPatterns[13] << 27 << 9 << 5 << 9;
+  dashPatterns[14] << 5 << 5 << 14 << 5;
+  dashPatterns[15] << 3 << 3 << 3 << 3;
+}
 int spectral = 0;
 int customspectral = 0;
 int nspect = 101;
@@ -1982,6 +2009,17 @@ private:
       flushPoints();
     };
 
+    QPainterPath dashedPath;
+    bool dashActive = false;
+    bool dashHasPoint = false;
+    auto flushDashedPath = [&]() {
+      if (dashHasPoint) {
+        bufferPainter.drawPath(dashedPath);
+        dashedPath = QPainterPath();
+        dashHasPoint = false;
+      }
+    };
+
     VTYPE x, y, lt, lt2;
     char *bufptr, command;
     unsigned short r, g, b;
@@ -2044,9 +2082,17 @@ private:
         memcpy((char *)&y, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         n += sizeof(char) + 2 * sizeof(VTYPE);
-        lineBatch.append(QLine(Xpixel(cx), Ypixel(cy), Xpixel(x), Ypixel(y)));
-        if (lineBatch.size() >= BATCH_SIZE)
-          flushLines();
+        if (dashActive) {
+          if (!dashHasPoint) {
+            dashedPath.moveTo(Xpixel(cx), Ypixel(cy));
+            dashHasPoint = true;
+          }
+          dashedPath.lineTo(Xpixel(x), Ypixel(y));
+        } else {
+          lineBatch.append(QLine(Xpixel(cx), Ypixel(cy), Xpixel(x), Ypixel(y)));
+          if (lineBatch.size() >= BATCH_SIZE)
+            flushLines();
+        }
         cx = x;
         cy = y;
         break;
@@ -2056,8 +2102,15 @@ private:
         memcpy((char *)&cy, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         n += sizeof(char) + 2 * sizeof(VTYPE);
+        if (dashActive) {
+          flushDashedPath();
+          dashedPath.moveTo(Xpixel(cx), Ypixel(cy));
+          dashHasPoint = true;
+        }
         break;
       case 'P':
+        if (dashActive)
+          flushDashedPath();
         memcpy((char *)&cx, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         memcpy((char *)&cy, bufptr, sizeof(VTYPE));
@@ -2072,13 +2125,34 @@ private:
       case 'L':
         {
           flushBatches();
+          flushDashedPath();
           QPen pen = bufferPainter.pen();
           pen.setStyle(Qt::SolidLine);
           memcpy((char *)&lt2, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
           n += sizeof(char) + sizeof(VTYPE);
           if (!lineTypeTable.nEntries) {
-            lt = lt2 % 16;
+            int type = lt2;
+            int subtype = lt2;
+            if (lt2 < 0) {
+              subtype = (-lt2) - 1;
+              initDefaultDashPatterns();
+              if (subtype == 0) {
+                pen.setStyle(Qt::SolidLine);
+              } else {
+                pen.setDashPattern(dashPatterns[subtype % 16]);
+                pen.setStyle(Qt::CustomDashLine);
+              }
+              currentlinewidth = 1;
+              bufferPainter.setPen(pen);
+              dashActive = (pen.style() != Qt::SolidLine);
+              break;
+            }
+            if (lt2 >= SDDS_LINETYPE_SUBTYPE_FLAG) {
+              type = (lt2 - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
+              subtype = (lt2 - SDDS_LINETYPE_SUBTYPE_FLAG) / SDDS_LINETYPE_SUBTYPE_MULT;
+            }
+            lt = type % 16;
             lt += 2;
             if (lt >= NCOLORS)
               lt = NCOLORS - 1;
@@ -2086,11 +2160,15 @@ private:
               linecolormax = lt;
             currentlinewidth = 1;
             currentcolor = colors[lt];
-            if (UseDashes) {
-              lt = lt2 % 10;
+            if (UseDashes || lt2 >= SDDS_LINETYPE_SUBTYPE_FLAG) {
+              initDefaultDashPatterns();
+              lt = subtype % 16;
               pen.setDashPattern(dashPatterns[lt]);
+              pen.setStyle(Qt::CustomDashLine);
             }
           } else {
+            if (lt2 >= SDDS_LINETYPE_SUBTYPE_FLAG)
+              lt2 = (lt2 - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
             lt = lt2 % lineTypeTable.nEntries;
             if (lineTypeTable.typeFlag & LINE_TABLE_DEFINE_THICKNESS)
               currentlinewidth = lineTypeTable.thickness[lt];
@@ -2104,6 +2182,7 @@ private:
                     dpattern.append(static_cast<qreal>(lineTypeTable.dash[lt].dashArray[j]));
                 }
                 pen.setDashPattern(dpattern);
+                pen.setStyle(Qt::CustomDashLine);
               }
             }
             if (lineTypeTable.typeFlag && LINE_TABLE_DEFINE_COLOR) {
@@ -2114,11 +2193,13 @@ private:
           pen.setWidth(currentlinewidth);
           pen.setColor(currentcolor);
           bufferPainter.setPen(pen);
+          dashActive = (pen.style() != Qt::SolidLine);
         }
         break;
       case 'W':
         {
           flushBatches();
+          flushDashedPath();
           memcpy((char *)&lt, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
           n += sizeof(char) + sizeof(VTYPE);
@@ -2131,6 +2212,7 @@ private:
       case 'B':
         {
           flushBatches();
+          flushDashedPath();
           VTYPE shade, xl, xh, yl, yh;
           int px, py, width, height;
           memcpy((char *)&shade, bufptr, sizeof(VTYPE));
@@ -2183,6 +2265,7 @@ private:
       case 'C':
         {
           flushBatches();
+          flushDashedPath();
           memcpy((char *)&r, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
           memcpy((char *)&g, bufptr, sizeof(VTYPE));
@@ -2201,6 +2284,7 @@ private:
       case 'S':
         {
           flushBatches();
+          flushDashedPath();
           VTYPE num, spec, r0, g0, b0, r1, g1, b1;
           memcpy((char *)&num, bufptr, sizeof(VTYPE));
           bufptr += sizeof(VTYPE);
@@ -2254,6 +2338,7 @@ private:
     }
 
     /* Flush any remaining batched primitives */
+    flushDashedPath();
     flushBatches();
 
     if (updateState) {
@@ -2807,16 +2892,7 @@ int main(int argc, char *argv[]) {
       case 'd': /* -dashes */
         if (!strcmp("dashes", argv[i] + 1)) {
           UseDashes = atoi(argv[++i]);
-          dashPatterns[0] = QVector<qreal>();
-          dashPatterns[1] << 4 << 2;
-          dashPatterns[2] << 2 << 3;
-          dashPatterns[3] << 1 << 2;
-          dashPatterns[4] << 5 << 2 << 1 << 2;
-          dashPatterns[5] << 3 << 3 << 1 << 4;
-          dashPatterns[6] << 2 << 5;
-          dashPatterns[7] << 4 << 4 << 4 << 1;
-          dashPatterns[8] << 8 << 2;
-          dashPatterns[9] << 1 << 4;
+          initDefaultDashPatterns();
         } else {
           fprintf(stderr, "Invalid option %s\n", argv[i]);
           exit(1);
