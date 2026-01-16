@@ -56,6 +56,10 @@ CopyrightNotice001
 #include "gnumacros.h"
 #include "hersheyfont.h"
 
+extern int term;
+extern struct termentry term_tbl[];
+int PS_solid_dash(void);
+
 
 char defaultfont[20];
 void set_default_font(char* fontname) {
@@ -80,6 +84,7 @@ float psymbol(
               )   
 {
   double extent[4];
+
   return psymbol1(x, y, ktext, size, aspect, daspect, angle, tilt, text_length, mode, extent);
 }
 
@@ -156,6 +161,12 @@ float psymbol1(
   static long first_call = 0;
   static float change_scale = 1;
   long d_kspec = 0, d_iy0 = 9;
+  int resetDash = 0;
+
+  if (mode == LEFT_JUSTIFY && (term_tbl[term].flags & TERM_POSTSCRIPT)) {
+    PS_solid_dash();
+    resetDash = 1;
+  }
 
   /* control characters 
      c     \001=^a   go to normal script level 
@@ -756,6 +767,9 @@ float psymbol1(
             xpp, ypp);
 #endif
   }  
+  if (resetDash) {
+    PS_solid_dash();
+  }
   extent[0] = unmap_x(xpMax)-unmap_x(xpMin);
   extent[1] = unmap_y(ypMax)-unmap_y(ypMin);
   extent[2] = unmap_x((xpMax+xpMin)/2.0)-unmap_x(xInput);
