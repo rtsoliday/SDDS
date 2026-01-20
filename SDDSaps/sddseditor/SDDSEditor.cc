@@ -56,6 +56,22 @@
 #include <limits>
 #include <QLocale>
 
+/*
+ * On Windows, some headers define min/max as macros, which breaks code like
+ * std::numeric_limits<T>::min()/max() by macro expansion.
+ */
+#if defined(_WIN32)
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  if defined(min)
+#    undef min
+#  endif
+#  if defined(max)
+#    undef max
+#  endif
+#endif
+
 static bool validateTextForType(const QString &text, int type, bool showMessage);
 static int dimProduct(const QVector<int> &dims);
 
@@ -119,7 +135,11 @@ protected:
           sel->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
         edit(idx);
         const QPoint viewPos = event->pos();
+      #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        const QPoint globalPos = event->globalPosition().toPoint();
+      #else
         const QPoint globalPos = event->globalPos();
+      #endif
         QTimer::singleShot(0, this, [this, viewPos, globalPos]() {
           forwardClickToEditorAt(viewPos, globalPos);
         });
