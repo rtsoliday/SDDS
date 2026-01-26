@@ -2803,14 +2803,12 @@ void SDDSEditor::populateModels() {
     progress->setLabelText(tr("Preparing display… (parameters)"));
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   }
-  paramBox->setChecked(pcount > 0);
   paramModel->refresh();
   ++doneUnits;
   if (progress)
     updateProgress(false);
 
   // columns
-  colBox->setChecked(ccount > 0);
   if (progress) {
     progress->setLabelText(tr("Preparing display… (columns)"));
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
@@ -2840,7 +2838,6 @@ void SDDSEditor::populateModels() {
     updateProgress(false);
 
   // arrays
-  arrayBox->setChecked(acount > 0);
   if (progress) {
     progress->setLabelText(tr("Preparing display… (arrays)"));
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
@@ -2866,8 +2863,42 @@ void SDDSEditor::populateModels() {
   if (progress)
     updateProgress(true);
 
-
+  updatePanelSizing(pcount, ccount, acount);
   updatingModels = false;
+}
+
+void SDDSEditor::updatePanelSizing(int32_t pcount, int32_t ccount, int32_t acount) {
+  const bool anyExist = (pcount > 0) || (ccount > 0) || (acount > 0);
+
+  auto applyPanelState = [&](QGroupBox *box, QTableView *view, bool hasData) {
+    if (!anyExist) {
+      box->setChecked(true);
+      view->setVisible(true);
+      box->setMinimumHeight(0);
+      box->setMaximumHeight(QWIDGETSIZE_MAX);
+      box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+      return;
+    }
+
+    if (hasData) {
+      box->setChecked(true);
+      view->setVisible(true);
+      box->setMinimumHeight(0);
+      box->setMaximumHeight(QWIDGETSIZE_MAX);
+      box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    } else {
+      box->setChecked(false);
+      view->setVisible(false);
+      box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+      const int hint = box->sizeHint().height();
+      box->setMinimumHeight(hint);
+      box->setMaximumHeight(hint);
+    }
+  };
+
+  applyPanelState(paramBox, paramView, pcount > 0);
+  applyPanelState(colBox, columnView, ccount > 0);
+  applyPanelState(arrayBox, arrayView, acount > 0);
 }
 
 void SDDSEditor::clearDataset() {

@@ -121,6 +121,7 @@ private:
   void sortColumn(int column, Qt::SortOrder order);
   void searchColumn(int column);
   void searchArray(int column);
+  void updatePanelSizing(int32_t pcount, int32_t ccount, int32_t acount);
   void message(const QString &text);
   void markDirty();
   bool maybeSave();
