@@ -80,6 +80,12 @@ public:
   explicit SingleClickEditTableView(QWidget *parent = nullptr) : QTableView(parent) {}
 
 private:
+  QPoint pressPos;
+  QPersistentModelIndex pressIndex;
+  bool leftButtonDown{false};
+  bool dragSelecting{false};
+
+private:
   void forwardClickToEditorAt(const QPoint &viewPos, const QPoint &globalPos, int retries = 3) {
     QWidget *target = viewport()->childAt(viewPos);
     if (!target || target == viewport()) {
@@ -112,17 +118,38 @@ private:
 
 protected:
   void mousePressEvent(QMouseEvent *event) override {
+    if (event->button() == Qt::LeftButton) {
+      leftButtonDown = true;
+      dragSelecting = false;
+      pressPos = event->pos();
+      pressIndex = indexAt(event->pos());
+    }
     QTableView::mousePressEvent(event);
+  }
+
+  void mouseMoveEvent(QMouseEvent *event) override {
+    if (leftButtonDown && !dragSelecting) {
+      const int dist = (event->pos() - pressPos).manhattanLength();
+      if (dist >= QApplication::startDragDistance())
+        dragSelecting = true;
+    }
+    QTableView::mouseMoveEvent(event);
+  }
+
+  void mouseReleaseEvent(QMouseEvent *event) override {
+    QTableView::mouseReleaseEvent(event);
     if (event->button() != Qt::LeftButton)
       return;
-    QModelIndex idx = indexAt(event->pos());
-    if (!idx.isValid())
+    leftButtonDown = false;
+    if (dragSelecting)
       return;
-    if (QItemSelectionModel *sel = selectionModel())
-      sel->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
-    if (!(model()->flags(idx) & Qt::ItemIsEditable))
+    if (event->modifiers() != Qt::NoModifier)
       return;
-    edit(idx);
+    if (!pressIndex.isValid())
+      return;
+    if (!(model()->flags(pressIndex) & Qt::ItemIsEditable))
+      return;
+    edit(pressIndex);
   }
 
   void mouseDoubleClickEvent(QMouseEvent *event) override {
@@ -131,8 +158,6 @@ protected:
     if (event->button() == Qt::LeftButton) {
       QModelIndex idx = indexAt(event->pos());
       if (idx.isValid() && (model()->flags(idx) & Qt::ItemIsEditable)) {
-        if (QItemSelectionModel *sel = selectionModel())
-          sel->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
         edit(idx);
         const QPoint viewPos = event->pos();
       #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -1032,6 +1057,8 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   columnView = new SingleClickEditTableView(colBox);
   columnView->setFont(tableFont);
   columnView->setModel(columnModel);
+  columnView->setSelectionBehavior(QAbstractItemView::SelectItems);
+  columnView->setSelectionMode(QAbstractItemView::ExtendedSelection);
   connect(columnModel, &QAbstractItemModel::dataChanged, this,
           [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
             if (!updatingModels)
