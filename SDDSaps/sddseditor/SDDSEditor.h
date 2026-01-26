@@ -23,6 +23,8 @@
 #include <QPointer>
 #include <QCloseEvent>
 
+class QTimer;
+
 class QGroupBox;
 class QSplitter;
 class QDialog;
@@ -98,6 +100,7 @@ private slots:
 
 protected:
   void changeEvent(QEvent *event) override;
+  void resizeEvent(QResizeEvent *event) override;
 
 private:
   void applyTheme(bool dark);
@@ -165,6 +168,10 @@ private:
   QPointer<QProgressDialog> loadProgressDialog;
   int loadProgressMin;
   int loadProgressMax;
+
+  /* Debounce expensive repaints while the user is interactively resizing the window. */
+  QTimer *resizeDebounceTimer;
+  bool resizeUpdatesSuspended;
 };
 
 #endif // SDDSEDITOR_H

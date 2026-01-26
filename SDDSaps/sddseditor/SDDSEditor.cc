@@ -55,6 +55,7 @@
 #include <algorithm>
 #include <limits>
 #include <QLocale>
+#include <QResizeEvent>
 
 /*
  * On Windows, some headers define min/max as macros, which breaks code like
@@ -958,6 +959,27 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   loadProgressDialog = nullptr;
   loadProgressMin = 0;
   loadProgressMax = 100;
+
+  columnView = nullptr;
+  arrayView = nullptr;
+
+  resizeDebounceTimer = new QTimer(this);
+  resizeDebounceTimer->setSingleShot(true);
+  resizeUpdatesSuspended = false;
+  connect(resizeDebounceTimer, &QTimer::timeout, this, [this]() {
+    if (!resizeUpdatesSuspended)
+      return;
+    // Re-enable updates and repaint once resizing has settled.
+    if (columnView)
+      columnView->setUpdatesEnabled(true);
+    if (arrayView)
+      arrayView->setUpdatesEnabled(true);
+    resizeUpdatesSuspended = false;
+    if (columnView)
+      columnView->viewport()->update();
+    if (arrayView)
+      arrayView->viewport()->update();
+  });
 
   // QTableView/QHeaderView may query model headers during construction.
   // Ensure SDDS_DATASET starts in a known-safe state (null pointers, zero counts).
@@ -2899,6 +2921,46 @@ void SDDSEditor::updatePanelSizing(int32_t pcount, int32_t ccount, int32_t acoun
   applyPanelState(paramBox, paramView, pcount > 0);
   applyPanelState(colBox, columnView, ccount > 0);
   applyPanelState(arrayBox, arrayView, acount > 0);
+}
+
+void SDDSEditor::resizeEvent(QResizeEvent *event) {
+  QMainWindow::resizeEvent(event);
+
+  // When the user drags to resize/maximizes the window, Qt can trigger a large number
+  // of intermediate repaints. For large datasets this makes interactive resizing feel
+  // sluggish. We temporarily suspend updates on the heavy tables, then repaint once
+  // the resize settles.
+  if (!isVisible())
+    return;
+
+  // Only suspend when a dataset is present; otherwise it just makes the UI feel blank.
+  if (!datasetLoaded)
+    return;
+
+  // Only apply the repaint debounce for very large tables where full repaints during
+  // interactive resizing become noticeably expensive. For typical datasets, allow
+  // normal repainting to avoid visual distortion while resizing.
+  const int32_t ccount = dataset.layout.n_columns;
+  int64_t rows = 0;
+  if (ccount > 0 && currentPage >= 0 && currentPage < pages.size()) {
+    const PageStore &pd = pages[currentPage];
+    if (pd.columns.size() > 0)
+      rows = pd.columns[0].size();
+  }
+  const bool hugeTable = (rows > 0 && ccount > 0 && (rows * static_cast<int64_t>(ccount)) > 250000);
+  if (!hugeTable)
+    return;
+
+  if (!resizeUpdatesSuspended) {
+    if (columnView)
+      columnView->setUpdatesEnabled(false);
+    if (arrayView)
+      arrayView->setUpdatesEnabled(false);
+    resizeUpdatesSuspended = true;
+  }
+
+  // Restart debounce each time we get another resize event.
+  resizeDebounceTimer->start(80);
 }
 
 void SDDSEditor::clearDataset() {
