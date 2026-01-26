@@ -1261,8 +1261,9 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
               if (plspec->panel[panel].dataset[idata]->request_index == request)
                 {
                   jj++;
-                  if (plspec->panel[panel].dataset[idata]->graphic.subtype > 0 ||
-                      (plspec->panel[panel].dataset[idata]->graphic.flags & GRAPHIC_SUBTYPE_EQ_TYPE))
+                  if (plspec->panel[panel].dataset[idata]->graphic.element == PLOT_LINE &&
+                      (plspec->panel[panel].dataset[idata]->graphic.subtype > 0 ||
+                       (plspec->panel[panel].dataset[idata]->graphic.flags & GRAPHIC_SUBTYPE_EQ_TYPE)))
                     useSubtypeEncoding = 1;
                   if (plspec->panel[panel].dataset[idata]->graphic.flags & GRAPHIC_VARY_SUBTYPE)
                     {
