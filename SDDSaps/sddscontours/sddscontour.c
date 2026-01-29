@@ -227,6 +227,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
                   char *yEditCommand, long ySparseInterval, double yScale, long contour_label_interval,
                   long contour_label_offset, long do_shade, long waterfall,
                   char *colorName, char *colorUnits, long swap_xy, double xlabelScale, double ylabelScale, long yRangeProvided, long xRangeProvided,
+                  char **yStringLabels, long yStringCount,
                   DRAW_LINE_SPEC *drawLineSpec, long drawlines, long fill_screen, long nx_interp,
                   long ny_interp, double *orig_limit, short xlog, long nx_offset, short show_gaps);
 long get_plot_labels(SDDS_DATASET *SDDS_table, char *indeptcolumn, char **columnname, long columnnames,
@@ -367,6 +368,11 @@ void sddscontour_main(char *input_line)
   char **rpn_definitions_file, **rpn_expression, *rpn_equation, *rpn_transform;
   long mem1, mem2;
   long rpn_expressions, rpn_definitions_files, deltas, vertical_waterfall;
+  char **waterfall_indepLabels = NULL;
+  long waterfall_indepLabelCount = 0;
+  long waterfall_indepIsString = 0;
+  int32_t waterfall_indepIndex = -1;
+  int32_t waterfall_indepType = 0;
   static char *equdf_name = "SCEQ.UDF";
   static char *trudf_name = "SCTR.UDF";
   long fixed_range, readstatus, logscale;
@@ -1479,6 +1485,13 @@ void sddscontour_main(char *input_line)
       return (1);
     }
 
+    waterfall_indepIndex = SDDS_GetColumnIndex(&SDDS_table, waterfall_indeptcol);
+    if (waterfall_indepIndex >= 0) {
+      waterfall_indepType = SDDS_GetColumnType(&SDDS_table, waterfall_indepIndex);
+      if (waterfall_indepType == SDDS_STRING)
+        waterfall_indepIsString = 1;
+    }
+
     if (SDDS_GetColumnInformation(&SDDS_table, "symbol", &colorName, SDDS_GET_BY_NAME, waterfall_colorcol) != SDDS_STRING ||
         SDDS_GetColumnInformation(&SDDS_table, "units", &colorUnits, SDDS_GET_BY_NAME, waterfall_colorcol) != SDDS_STRING) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -1534,14 +1547,24 @@ void sddscontour_main(char *input_line)
         return (1);
       }
       if (pages == 0) {
-        if (!(indepdata = SDDS_GetColumnInDoubles(&SDDS_table, waterfall_indeptcol)))
-          bomb("unable to read independent variable data", NULL);
         rows = SDDS_CountRowsOfInterest(&SDDS_table);
-        for (i = 0; i < conversions; i++) {
-          if (ucd[i]->is_parameter == 0) {
-            if (wild_match(waterfall_indeptcol, ucd[i]->name)) {
-              for (j = 0; j < rows; j++) {
-                indepdata[j] = indepdata[j] * ucd[i]->factor;
+        if (waterfall_indepIsString) {
+          if (!(waterfall_indepLabels = SDDS_GetColumnInString(&SDDS_table, waterfall_indeptcol)))
+            bomb("unable to read independent variable strings", NULL);
+          waterfall_indepLabelCount = rows;
+          indepdata = malloc(sizeof(*indepdata) * rows);
+          for (i = 0; i < rows; i++)
+            indepdata[i] = i;
+          yintervals = indepdata;
+        } else {
+          if (!(indepdata = SDDS_GetColumnInDoubles(&SDDS_table, waterfall_indeptcol)))
+            bomb("unable to read independent variable data", NULL);
+          for (i = 0; i < conversions; i++) {
+            if (ucd[i]->is_parameter == 0) {
+              if (wild_match(waterfall_indeptcol, ucd[i]->name)) {
+                for (j = 0; j < rows; j++) {
+                  indepdata[j] = indepdata[j] * ucd[i]->factor;
+                }
               }
             }
           }
@@ -1565,9 +1588,11 @@ void sddscontour_main(char *input_line)
           return (1);
         }
       }
-      if (!(indepdata_page = SDDS_GetColumnInDoubles(&SDDS_table, waterfall_indeptcol)))
-        bomb("unable to read independent variable data", NULL);
-      sorted_index = sort_and_return_index(indepdata_page, SDDS_DOUBLE, rows, 1);
+      if (!waterfall_indepIsString) {
+        if (!(indepdata_page = SDDS_GetColumnInDoubles(&SDDS_table, waterfall_indeptcol)))
+          bomb("unable to read independent variable data", NULL);
+        sorted_index = sort_and_return_index(indepdata_page, SDDS_DOUBLE, rows, 1);
+      }
 
       if (!(tmpptr = (double *)SDDS_GetColumnInDoubles(&SDDS_table, waterfall_colorcol))) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
@@ -1576,11 +1601,19 @@ void sddscontour_main(char *input_line)
       if (drawlines && pages == 0)
         determine_drawline(drawLineSpec, drawlines, &SDDS_table);
 
-      data_value[pages] = (double *)rearrange_by_index((char *)tmpptr, sorted_index, SDDS_type_size[SDDS_DOUBLE - 1], rows);
+      if (waterfall_indepIsString) {
+        data_value[pages] = tmpptr;
+        tmpptr = NULL;
+      } else {
+        data_value[pages] = (double *)rearrange_by_index((char *)tmpptr, sorted_index, SDDS_type_size[SDDS_DOUBLE - 1], rows);
+      }
 
-      free(indepdata_page);
-      free(sorted_index);
-      free(tmpptr);
+      if (indepdata_page)
+        free(indepdata_page);
+      if (sorted_index)
+        free(sorted_index);
+      if (tmpptr)
+        free(tmpptr);
       pages++;
     }
     nx = pages;
@@ -1671,7 +1704,7 @@ void sddscontour_main(char *input_line)
       }
     }
 
-    if (indepdata)
+    if (indepdata && !waterfall_indepIsString)
       free(indepdata);
 
     if (xlabel[0] == '@')
@@ -1719,7 +1752,13 @@ void sddscontour_main(char *input_line)
                  pause_interval, columnmatches, columnname, columns,
                  yEditCommand, ySparseInterval, yScale, contour_label_interval,
                  contour_label_offset, do_shade, 1, colorName, colorUnits, swap_xy, xlabelScale, ylabelScale, yRangeProvided, xRangeProvided,
+                 waterfall_indepLabels, waterfall_indepLabelCount,
                  drawLineSpec, drawlines, fill_screen, nx_interp, ny_interp, orig_limit, xlog, nx_offset, show_gaps);
+    if (waterfall_indepLabels) {
+      SDDS_FreeStringArray(waterfall_indepLabels, waterfall_indepLabelCount);
+      waterfall_indepLabels = NULL;
+      waterfall_indepLabelCount = 0;
+    }
     if (data_value)
       SDDS_FreeMatrix((void **)data_value, nx);
     data_value = NULL;
@@ -2818,6 +2857,7 @@ void sddscontour_main(char *input_line)
                         pause_interval, columnmatches, columnname, columns,
                         yEditCommand, ySparseInterval, yScale, contour_label_interval,
                         contour_label_offset, do_shade, 0, colorName, colorUnits, swap_xy, xlabelScale, ylabelScale, yRangeProvided, xRangeProvided,
+                        NULL, 0,
                         drawLineSpec, drawlines, fill_screen, nx_interp, ny_interp, orig_limit, xlog, nx_offset, show_gaps))
         continue;
       /*restore the values after swap since they will be used for next plot */
@@ -2890,6 +2930,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
                   long contour_label_offset, long do_shade, long waterfall, char *colorName,
                   char *colorUnits, long swap_xy, double xlabelScale, double ylabelScale,
                   long yRangeProvided, long xRangeProvided,
+                  char **yStringLabels, long yStringCount,
                   DRAW_LINE_SPEC *drawLineSpec, long drawlines, long fill_screen,
                   long nx_interp, long ny_interp, double *orig_limit, short xlog, long nx_offset, short show_gaps) {
   long i, j, ix_min = 0, ix_max = 0, iy_min = 0, iy_max = 0, gray = 0;
@@ -2899,6 +2940,12 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
   level = NULL;
   max_value = -DBL_MAX;
   min_value = DBL_MAX;
+  if (yStringLabels && yStringCount > 0 && !(*flags & NO_SCALES)) {
+    if (swap_xy)
+      *flags |= NO_XSCALES;
+    else
+      *flags |= NO_YSCALES;
+  }
   for (i = nx - 1; i >= 0; i--) {
     for (j = ny - 1; j >= 0; j--) {
       value = data_value[i][j];
@@ -2989,7 +3036,21 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
                      shape, shapes, tsetFlags, xlabelScale, ylabelScale, do_shade, thickness, fill_screen);
     *flags |= DEVICE_DEFINED;
   }
-  if (columnmatches && !(*flags & NO_SCALES)) {
+  if (yStringLabels && yStringCount > 0 && !(*flags & NO_SCALES)) {
+    if (!swap_xy && !yRangeProvided) {
+      if ((ny_interp < 2) && (orig_limit[2] == orig_limit[3]) && yintervals) {
+        make_enumerated_yscale(yStringLabels, yintervals, yStringCount, yEditCommand, ySparseInterval, yScale, thickness, ylabel, ylabelScale);
+      } else {
+        make_enumerated_yscale(yStringLabels, NULL, yStringCount, yEditCommand, ySparseInterval, yScale, thickness, ylabel, ylabelScale);
+      }
+    } else if (swap_xy && !xRangeProvided) {
+      if (xintervals) {
+        make_enumerated_xscale(yStringLabels, xintervals, yStringCount, yEditCommand, ySparseInterval, yScale, thickness, xlabel, xlabelScale);
+      } else {
+        make_enumerated_xscale(yStringLabels, NULL, yStringCount, yEditCommand, ySparseInterval, yScale, thickness, xlabel, xlabelScale);
+      }
+    }
+  } else if (columnmatches && !(*flags & NO_SCALES)) {
     if (!swap_xy && !yRangeProvided) {
       if ((ny_interp < 2) && (orig_limit[2] == orig_limit[3])) {
         make_enumerated_yscale(columnname, yintervals, columns, yEditCommand, ySparseInterval, yScale, thickness, ylabel, ylabelScale);
@@ -3280,7 +3341,7 @@ void make_enumerated_yscale(char **label0, double *yposition, long labels, char 
   double x, y, yrange, xrange;
   double pmin, pmax, qmin, qmax;
   double wpmin, wpmax, wqmin, wqmax;
-  long i, maxlen;
+  long i, maxlen, displayLabels;
   char buffer[1024], **label;
   double tickFraction = 0.0125;
 
@@ -3294,8 +3355,11 @@ void make_enumerated_yscale(char **label0, double *yposition, long labels, char 
   get_char_size(&hsave, &vsave, 1);
   vsize = vsave;
   hsize = hsave;
-  if (yrange < labels * 1.5 * vsize / interval) {
-    vsize = yrange / labels / 1.5;
+  displayLabels = (interval > 0) ? (labels + interval - 1) / interval : labels;
+  if (displayLabels < 1)
+    displayLabels = 1;
+  if (yrange < displayLabels * 1.5 * vsize) {
+    vsize = yrange / displayLabels / 1.5;
     hsize = hsave / vsave * vsize;
   }
   label = tmalloc(sizeof(*label) * labels);
@@ -3306,8 +3370,10 @@ void make_enumerated_yscale(char **label0, double *yposition, long labels, char 
       SDDS_CopyString(&label[i], buffer);
     } else
       SDDS_CopyString(&label[i], label0[i]);
-    if ((long)strlen(label[i]) > maxlen)
-      maxlen = strlen(label[i]);
+    if (interval <= 1 || i % interval == 0) {
+      if ((long)strlen(label[i]) > maxlen)
+        maxlen = strlen(label[i]);
+    }
   }
   xrange = xrange / (pmax - pmin) * 0.8 * (pmin - wpmin);
   if (xrange < maxlen * hsize) {
@@ -3367,7 +3433,7 @@ void make_enumerated_xscale(char **label0, double *xposition, long labels, char 
   double xmin, xmax, ymin, ymax;
   double x, y, yrange, xrange;
   double pmin, pmax, qmin, qmax;
-  long i, maxlen;
+  long i, maxlen, displayLabels;
   char buffer[1024], **label;
   double tickFraction = 0.02;
 
@@ -3381,8 +3447,11 @@ void make_enumerated_xscale(char **label0, double *xposition, long labels, char 
   get_pspace(&pmin, &pmax, &qmin, &qmax);
   yrange = ymax - ymin;
   xrange = xmax - xmin;
-  if (xrange < labels * 1.5 * hsize / interval) {
-    hsize = xrange / labels / 1.5;
+  displayLabels = (interval > 0) ? (labels + interval - 1) / interval : labels;
+  if (displayLabels < 1)
+    displayLabels = 1;
+  if (xrange < displayLabels * 1.5 * hsize) {
+    hsize = xrange / displayLabels / 1.5;
     vsize = vsave / hsave * hsize;
   }
   label = tmalloc(sizeof(*label) * labels);
@@ -3393,8 +3462,10 @@ void make_enumerated_xscale(char **label0, double *xposition, long labels, char 
       SDDS_CopyString(&label[i], buffer);
     } else
       SDDS_CopyString(&label[i], label0[i]);
-    if ((long)strlen(label[i]) > maxlen)
-      maxlen = strlen(label[i]);
+    if (interval <= 1 || i % interval == 0) {
+      if ((long)strlen(label[i]) > maxlen)
+        maxlen = strlen(label[i]);
+    }
   }
   hsize *= scale;
   vsize *= scale;
