@@ -673,6 +673,7 @@ void checkGenerationFileLocks(char *match_date) {
       fclose(fp);
     }
   }
+  pclose(handle);
 #endif
 }
 
