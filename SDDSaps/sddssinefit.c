@@ -185,7 +185,6 @@ int main(int argc, char **argv) {
   int32_t nEvalMax = 5000, nPassMax = 25;
   double a[6], da[6];
   double alo[6], ahi[6];
-  long n_dimen = 4;
   int64_t zeroes;
   SDDS_DATASET InputTable, OutputTable;
   SCANNED_ARG *s_arg;
@@ -266,10 +265,8 @@ int main(int argc, char **argv) {
         break;
       case SET_ADD_SLOPE:
         addSlope = 1;
-        n_dimen += 1;
         break;
       case SET_ADD_EXPONENTIAL:
-        n_dimen += 1;
         if (s_arg[i_arg].n_items!=2) 
           SDDS_Bomb("incorrect -addExponential syntax");
         switch (match_string(s_arg[i_arg].list[1], expotentialOptions, EXPONENTIAL_OPTIONS, 0)) {

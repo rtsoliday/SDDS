@@ -97,15 +97,21 @@ namespace xlslib_core
 
 		if (!store.empty()) {
 			StoreList_Itor_t x0, x1;
+			#if defined(__DEBUG__) || defined(OLE_DEBUG)
 			size_t cnt = 0;
+			#endif
 
 			x0 = store.begin();
 			x1 = store.end();
 			for(StoreList_Itor_t di = x0; di != x1; ++di) {
 				di->Reset();
+				#if defined(__DEBUG__) || defined(OLE_DEBUG)
 				cnt++;
+				#endif
 			}
+			#if defined(__DEBUG__)
 			XTRACE2("ACTUAL: total storage unit count: ", cnt);
+			#endif
 #if OLE_DEBUG
 			std::cerr << "ACTUAL: total unit count: " << cnt << std::endl;
 #endif
@@ -234,15 +240,19 @@ namespace xlslib_core
 		}
 
 		UnitList_Itor_t j = start;
+		#if OLE_DEBUG
 		size_t cnt = 0;
 		size_t cntleft = 0;
+		#endif
 		for (UnitList_Itor_t i = j; i != m_FlushStack.end(); i++) {
 			CUnit *up = *i;
 			if (up->m_Backpatching_Level <= backpatch_level) {
 				XL_ASSERT(up != NULL);
 				delete up;
 				(*i) = NULL;
+				#if OLE_DEBUG
 				cnt++;
+				#endif
 				continue;
 			}
 
@@ -253,7 +263,9 @@ namespace xlslib_core
 				(*j) = up;
 			}
 			j++;
+			#if OLE_DEBUG
 			cntleft++;
+			#endif
 		}
 
 		size_t count = (size_t)(j - m_FlushStack.begin());

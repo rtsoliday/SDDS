@@ -2123,10 +2123,10 @@ int main(int argc, char **argv) {
         /*long index; */
         for (i = 0; i < numericalColumns; i++)
           for (j = 0; j < (economy ? economyRows : rows); j++)
-            if (!SDDS_SetRowValues(&sPage, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE,
-                                   j, i, i == j ? SValue->ve[i] : 0.0, -1)) {
-              fprintf(stderr, "Problem setting S[%ld][%ld] of %d x %ld matrix\n", i, j,
-                      numericalColumns, rows);
+                if (!SDDS_SetRowValues(&sPage, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE,
+                     j, i, i == j ? SValue->ve[i] : 0.0, -1)) {
+                  fprintf(stderr, "Problem setting S[%ld][%ld] of %d x %" PRId64 " matrix\n", i, j,
+                    numericalColumns, rows);
               SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
             }
       }
