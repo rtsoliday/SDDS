@@ -32,6 +32,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
   double xparam, yparam, x1param, y1param, splitparam;
   short *dataname_absent, mplFile;
   char **enumerate, **pointLabel;
+  int32_t *graphicType, *graphicSubtype;
   long *xtype, *ytype, files;
   char edit_buffer[SDDS_MAXLINE];
   char **filename;
@@ -479,6 +480,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
               if (points==0)
                 continue;
               enumerate = pointLabel = NULL;
+              graphicType = graphicSubtype = NULL;
               x = y = NULL;
               if (plreq->xname[idata] == NULL)
                 {
@@ -540,6 +542,12 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                 edit_strings(pointLabel, points, edit_buffer, plreq->pointLabelSettings.editCommand);
               if (enumerate && plreq->enumerate_settings.flags&ENUM_EDITCOMMANDGIVEN)
                 edit_strings(enumerate, points, edit_buffer, plreq->enumerate_settings.editcommand);
+              if (plreq->graphic.type_column &&
+                  !(graphicType = SDDS_GetColumnInLong(&table, plreq->graphic.type_column)))
+                SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+              if (plreq->graphic.subtype_column &&
+                  !(graphicSubtype = SDDS_GetColumnInLong(&table, plreq->graphic.subtype_column)))
+                SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
               if (plreq->split.flags&SPLIT_PARAMETERCHANGE)
                 {
                   split = (double*)malloc(sizeof(double) * points);
@@ -548,7 +556,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                   }
                 }
               append_to_dataset(requestData[ireq].dataset+iset+inewdata, x, enumerate, y, x1, y1, split, 
-                                pointLabel, points);
+                                graphicType, graphicSubtype, pointLabel, points);
               				
               if (x)
                 free(x);
@@ -563,6 +571,10 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                 free(split);
               if (pointLabel)
                 free(pointLabel);
+              if (graphicType)
+                free(graphicType);
+              if (graphicSubtype)
+                free(graphicSubtype);
               break;
             case PARAMETER_DATA:
 	    
@@ -597,7 +609,8 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
 
               append_to_dataset(requestData[ireq].dataset+iset+inewdata, &xparam, NULL, &yparam, 
                                 (plreq->x1name[idata]?&x1param:NULL),
-                                (plreq->y1name[idata]?&y1param:NULL), ((plreq->split.flags&SPLIT_PARAMETERCHANGE)?&splitparam:NULL), NULL, 1);
+                                (plreq->y1name[idata]?&y1param:NULL), ((plreq->split.flags&SPLIT_PARAMETERCHANGE)?&splitparam:NULL),
+                                NULL, NULL, NULL, 1);
               break;
             case ARRAY_DATA:
               
@@ -641,7 +654,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                 SDDS_Bomb(s);
               }
               append_to_dataset(requestData[ireq].dataset+iset+inewdata, x, NULL, y, x1, y1, NULL,
-                                NULL, nx);
+                                NULL, NULL, NULL, nx);
               break;
             }
             inewdata++;

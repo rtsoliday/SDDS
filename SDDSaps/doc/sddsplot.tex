@@ -212,7 +212,7 @@ local switches.
 \item Controlling type of plotting:
   \begin{itemize}
 
-  \item {\tt -graphic={\em element}[,type={\em integer}][,fill][,subtype=\{{\em integer} | type\}]}
+  \item {\tt -graphic={\em element}[,type={\em integer}|@{\em columnName}][,fill][,subtype=\{{\em integer} | type | @{\em columnName}\}]}
         {\tt [,connect[=\{{\em linetype} | type | subtype\}]][,vary[=\{type | subtype\}]][,modulus={\em integer}]}
         {\tt [,scale={\em factor}][,\{eachFile | eachPage | eachRequest | fixForName | ]}
   {\tt fixForFile | fixForRequest\}]} ---
@@ -227,6 +227,7 @@ left-hand vertical border of the plot.
 
 The {\tt type} field for the graphic element has different meanings for different elements.  For
 lines, impulses, bars, and dots, the type is the color or line style used, depending on the device.
+For devices that support color lines, the subtype for lines specifies the choice of dash-dot pattern.
 For most devices, values between 0 and 15 inclusive given unique lines.  For symbols and error bars,
 the type specifies the style of symbol or error bar to use; the value is between 0 and 8 inclusive
 for symbols and between 0 and 1 inclusive for error bars.  For symbols, one may give the {\tt fill}
@@ -237,6 +238,8 @@ or color to be used in making a symbol or error bar, and the size for a dot.  As
 line plotting, the value may be between 0 and 15 inclusive.  The {\tt connect} qualifier is also valid for
 symbols and error bars only.  It specifies that the symbols and error bars should be connected by lines.
 By default, the line type used is 0.
+
+If a column is given for the type or subtype, the data is expected to give integer values.
 
 If one desires automatic variation of the line color, symbol type, and
 so on, one may obtain this using the \verb|vary| qualifier.  By

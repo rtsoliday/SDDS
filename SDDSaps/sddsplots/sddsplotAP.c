@@ -517,7 +517,7 @@ unsigned long translate_to_plotcode(GRAPHIC_SPEC graphic)
     return(plotcode);
     }
 
-static char *graphic_usage = "-graphic=<element>[,type=<type>][,fill][,subtype={<type> | type}][,thickness=<integer>][,connect[={<linetype> | type | subtype}]][,vary=type][,vary=subtype][,scale=<factor>][,modulus=<integer>][,eachfile][,eachpage][,eachrequest][,fixForName][,fixForFile][,fixForRequest]\n\
+static char *graphic_usage = "-graphic=<element>[,type=<type|@column>][,fill][,subtype={<type> | type | @column}][,thickness=<integer>][,connect[={<linetype> | type | subtype}]][,vary=type][,vary=subtype][,scale=<factor>][,modulus=<integer>][,eachfile][,eachpage][,eachrequest][,fixForName][,fixForFile][,fixForRequest]\n\
 <element> is one of continue, line, symbol, errorbar, impulse, yimpulse, dot, bar, or ybar.\n";
 
 long graphic_AP(PLOT_SPEC *plotspec, char **item, long items)
@@ -604,25 +604,39 @@ long graphic_AP1(GRAPHIC_SPEC *graphic_spec, long element, char **item, long ite
     graphic_spec->subtype = 0;
     graphic_spec->thickness = defaultLineThickness;
     graphic_spec->fill = 0;
+    graphic_spec->type_column = NULL;
+    graphic_spec->subtype_column = NULL;
     for (i=0; i<items; i++) {
         if ((eqptr=strchr(item[i], '=')))
             *eqptr = 0;
         switch (match_string(item[i], graphic_kw, GRAPHIC_KWS, 0)) {
           case GRAPHIC_KW_TYPE:
-            if (!eqptr || SDDS_StringIsBlank(eqptr+1) || sscanf(eqptr+1, "%ld", &graphic_spec->type)!=1 ||
-                graphic_spec->type<0)
-                return bombre("invalid type specification for -graphic", graphic_usage, 0);
+        if (!eqptr || SDDS_StringIsBlank(eqptr+1))
+          return bombre("invalid type specification for -graphic", graphic_usage, 0);
+        if (eqptr[1] == '@') {
+          if (SDDS_StringIsBlank(eqptr+2))
+            return bombre("invalid type specification for -graphic", graphic_usage, 0);
+          if (!SDDS_CopyString(&graphic_spec->type_column, eqptr+2))
+            SDDS_Bomb("memory allocation failure (graphic_AP1)");
+        } else if (sscanf(eqptr+1, "%ld", &graphic_spec->type)!=1 || graphic_spec->type<0) {
+          return bombre("invalid type specification for -graphic", graphic_usage, 0);
+        }
             break;
           case GRAPHIC_KW_SUBTYPE:
             if (!eqptr || SDDS_StringIsBlank(eqptr+1))
                 return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
-            if (sscanf(eqptr+1, "%ld", &graphic_spec->subtype)!=1) {
-                if (strncmp(eqptr+1, "type", strlen(eqptr+1))!=0)
-                    return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
-                graphic_spec->flags |= GRAPHIC_SUBTYPE_EQ_TYPE;
-                }
-            else if (graphic_spec->subtype<0)
-                return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
+        if (eqptr[1] == '@') {
+          if (SDDS_StringIsBlank(eqptr+2))
+            return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
+          if (!SDDS_CopyString(&graphic_spec->subtype_column, eqptr+2))
+            SDDS_Bomb("memory allocation failure (graphic_AP1)");
+        } else if (sscanf(eqptr+1, "%ld", &graphic_spec->subtype)!=1) {
+          if (strncmp(eqptr+1, "type", strlen(eqptr+1))!=0)
+            return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
+          graphic_spec->flags |= GRAPHIC_SUBTYPE_EQ_TYPE;
+          }
+        else if (graphic_spec->subtype<0)
+          return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
             break;
           case GRAPHIC_KW_THICKNESS:
             if (!eqptr || SDDS_StringIsBlank(eqptr+1) || sscanf(eqptr+1, "%ld", &graphic_spec->thickness)!=1)
@@ -708,6 +722,12 @@ long graphic_AP1(GRAPHIC_SPEC *graphic_spec, long element, char **item, long ite
     if (graphic_spec->flags&GRAPHIC_VARY_SUBTYPE &&
         graphic_spec->flags&GRAPHIC_SUBTYPE_EQ_TYPE)
       return bombre("can't vary subtype and equate it to type in -graphic", NULL, 0);
+    if (graphic_spec->type_column && (graphic_spec->flags & GRAPHIC_VARY_TYPE))
+      return bombre("can't vary type when using a type column in -graphic", NULL, 0);
+    if (graphic_spec->subtype_column && (graphic_spec->flags & GRAPHIC_VARY_SUBTYPE))
+      return bombre("can't vary subtype when using a subtype column in -graphic", NULL, 0);
+    if (graphic_spec->subtype_column && (graphic_spec->flags & GRAPHIC_SUBTYPE_EQ_TYPE))
+      return bombre("can't equate subtype to type when using a subtype column in -graphic", NULL, 0);
     return 1;
 }
 

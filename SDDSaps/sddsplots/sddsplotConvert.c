@@ -119,6 +119,7 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
   double *x, *y, *x1, *y1, *split;
   long random_number_seed;
   char **enumerate, **pointLabel;
+  int32_t *graphicType, *graphicSubtype;
 
   random_number_seed = (long)time((time_t*)NULL);
   random_number_seed = 2*(random_number_seed/2) + 1;
@@ -135,8 +136,11 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
     split = plspec->dataset[dataset].split_data;
     enumerate = plspec->dataset[dataset].enumerate;
     pointLabel = plspec->dataset[dataset].pointLabel;
+    graphicType = plspec->dataset[dataset].graphicType;
+    graphicSubtype = plspec->dataset[dataset].graphicSubtype;
     
     plspec->dataset[dataset].points = remove_invalid_data(x, y, x1, y1, split, enumerate, pointLabel,
+                                graphicType, graphicSubtype,
                                                           plspec->dataset[dataset].points);
 
     if (plreq->sparse_interval) {
@@ -155,6 +159,10 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
           enumerate[j] = enumerate[i];
         if (pointLabel)
           pointLabel[j] = pointLabel[i];
+        if (graphicType)
+          graphicType[j] = graphicType[i];
+        if (graphicSubtype)
+          graphicSubtype[j] = graphicSubtype[i];
       }
       plspec->dataset[dataset].points = j;
     }
@@ -175,6 +183,10 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
             enumerate[j] = enumerate[i];
           if (pointLabel)
             pointLabel[j] = pointLabel[i];
+          if (graphicType)
+            graphicType[j] = graphicType[i];
+          if (graphicSubtype)
+            graphicSubtype[j] = graphicSubtype[i];
           j++;
         }
       }
@@ -200,6 +212,10 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
           enumerate[j] = enumerate[i];
         if (pointLabel)
           pointLabel[j] = pointLabel[i];
+        if (graphicType)
+          graphicType[j] = graphicType[i];
+        if (graphicSubtype)
+          graphicSubtype[j] = graphicSubtype[i];
         j++;
       }
       plspec->dataset[dataset].points = j;
@@ -225,6 +241,10 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
             enumerate[j] = enumerate[i];
           if (pointLabel)
             pointLabel[j] = pointLabel[i];
+          if (graphicType)
+            graphicType[j] = graphicType[i];
+          if (graphicSubtype)
+            graphicSubtype[j] = graphicSubtype[i];
         }
         plspec->dataset[dataset].points = j;
       }
@@ -243,6 +263,10 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
             enumerate[j] = enumerate[i];
           if (pointLabel)
             pointLabel[j] = pointLabel[i];
+          if (graphicType)
+            graphicType[j] = graphicType[i];
+          if (graphicSubtype)
+            graphicSubtype[j] = graphicSubtype[i];
         }
         plspec->dataset[dataset].points = j;
       }
@@ -479,8 +503,9 @@ void perform_dataset_conversions(PLOT_SPEC *plspec)
         if (mode&MODE_X_AUTOLOG)
           plspec->scalesGroupData[0][dataset->scalesGroupIndex[0]].mode |= MODE_X_LOG|MODE_X_SPECIALSCALES;
         pointsLeft = remove_nonpositive_data(dataset->x, dataset->y, dataset->x1, dataset->y1,
-                                             dataset->split_data, dataset->enumerate, 
-                                             dataset->pointLabel, dataset->pointsStored);
+                     dataset->split_data, dataset->enumerate, 
+                     dataset->pointLabel, dataset->graphicType, dataset->graphicSubtype,
+                     dataset->pointsStored);
         if (pointsLeft!=dataset->pointsStored && dataset->scrollParent) 
           bomb("using log mode for scrolling is not possible when data has non-positive values", NULL);
         dataset->pointsStored = pointsLeft;
@@ -507,8 +532,9 @@ void perform_dataset_conversions(PLOT_SPEC *plspec)
         if (mode&MODE_Y_AUTOLOG)
           plspec->scalesGroupData[1][dataset->scalesGroupIndex[1]].mode |= MODE_Y_LOG|MODE_Y_SPECIALSCALES;
         pointsLeft = remove_nonpositive_data(dataset->y, dataset->x, dataset->x1, dataset->y1, 
-                                                  dataset->split_data, dataset->enumerate, 
-                                                  dataset->pointLabel, dataset->pointsStored);
+                    dataset->split_data, dataset->enumerate, 
+                    dataset->pointLabel, dataset->graphicType, dataset->graphicSubtype,
+                    dataset->pointsStored);
 	if (pointsLeft==0 && dataset->pointsStored) 
 	  bomb("No data left after logarithm because all y data are non-positive values", NULL);
 	if (pointsLeft!=dataset->pointsStored) 
@@ -855,7 +881,7 @@ void perform_dataset_transpositions(PLOT_SPEC *plspec)
 }
 
 long remove_nonpositive_data(double *data1, double *data2, double *data3, double *data4, double *data5, 
-                             char **enumerate, char **pointLabel, long n)
+                             char **enumerate, char **pointLabel, int32_t *graphicType, int32_t *graphicSubtype, long n)
 {
   long i, j;
   static char *keep = NULL;
@@ -881,6 +907,10 @@ long remove_nonpositive_data(double *data1, double *data2, double *data3, double
           enumerate[j] = enumerate[i];
         if (pointLabel)
           pointLabel[j] = pointLabel[i];
+        if (graphicType)
+          graphicType[j] = graphicType[i];
+        if (graphicSubtype)
+          graphicSubtype[j] = graphicSubtype[i];
       }
       j++;
     }
@@ -889,7 +919,7 @@ long remove_nonpositive_data(double *data1, double *data2, double *data3, double
 }
 
 long remove_invalid_data(double *data1, double *data2, double *data3, double *data4, double *data5, 
-                         char **enumerate, char **pointLabel, long n)
+                         char **enumerate, char **pointLabel, int32_t *graphicType, int32_t *graphicSubtype, long n)
 {
   long i, j;
   static char *keep = NULL;
@@ -918,6 +948,10 @@ long remove_invalid_data(double *data1, double *data2, double *data3, double *da
           enumerate[j] = enumerate[i];
         if (pointLabel)
           pointLabel[j] = pointLabel[i];
+        if (graphicType)
+          graphicType[j] = graphicType[i];
+        if (graphicSubtype)
+          graphicSubtype[j] = graphicSubtype[i];
       }
       j++;
     }
@@ -1057,6 +1091,10 @@ void columnbin_sddsplot_data(PLOT_SPEC *plspec)
             plspec->dataset[jset].enumerate = tmalloc(sizeof(*plspec->dataset[jset].enumerate)*keepers);
           if (dataset.pointLabel)
             plspec->dataset[jset].pointLabel = tmalloc(sizeof(*plspec->dataset[jset].pointLabel)*keepers);
+          if (dataset.graphicType)
+            plspec->dataset[jset].graphicType = tmalloc(sizeof(*plspec->dataset[jset].graphicType)*keepers);
+          if (dataset.graphicSubtype)
+            plspec->dataset[jset].graphicSubtype = tmalloc(sizeof(*plspec->dataset[jset].graphicSubtype)*keepers);
           for (i=j=0; i<dataset.points; i++) {
             if (keep[i]) {
               plspec->dataset[jset].x[j] = dataset.x[i];
@@ -1069,6 +1107,10 @@ void columnbin_sddsplot_data(PLOT_SPEC *plspec)
                 plspec->dataset[jset].enumerate[j] = dataset.enumerate[i];
               if (dataset.pointLabel)
                 plspec->dataset[jset].pointLabel[j] = dataset.pointLabel[i];
+              if (dataset.graphicType)
+                plspec->dataset[jset].graphicType[j] = dataset.graphicType[i];
+              if (dataset.graphicSubtype)
+                plspec->dataset[jset].graphicSubtype[j] = dataset.graphicSubtype[i];
               j++;
             }
           }

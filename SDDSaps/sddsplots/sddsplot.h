@@ -65,6 +65,8 @@ typedef struct {
   long vary, modulus;
   ARROW_SETTINGS arrow;
   unsigned long flags;
+  char *type_column;
+  char *subtype_column;
 } GRAPHIC_SPEC;
 #define GRAPHIC_VARY_EACHPAGE      0x00000001
 #define GRAPHIC_VARY_EACHFILE      0x00000002
@@ -696,6 +698,7 @@ typedef struct {
   short replicant, scrollParent, enumPlane;
   double *x, *y, *x1, *y1;
   char **enumerate, **pointLabel;
+  int32_t *graphicType, *graphicSubtype;
   double *split_data;
   double split_min,split_max;
   DATA_INFO info[2]; /* x, y */
@@ -867,7 +870,7 @@ int plot_data_arrays(double **x, double **y, double **sigma_x, double **sigma_y,
                      );
 void sddsplotDataArrays(double *xn, double *yn, double *sxn, double *syn, long npts,
                         double xgap, double ygap, GRAPHIC_SPEC *graphic, unsigned long flags,
-                        double *pspace);
+                        double *pspace, PLOT_DATA *dataset);
 void draw_sddsplot_strings(PLOT_DATA *dataset, long linetypeDefault, double *limit);
 void drawSddsplotLines(PLOT_DATA *dataset, long linetypeDefault, 
                        double *limit);
@@ -880,7 +883,7 @@ void assign_enumerate_values(PLOT_SPEC *plspec);
 void columnbin_sddsplot_data(PLOT_SPEC *plspec);
 PLOT_DATA *add_dataset_slots(PLOT_DATA *dataset, long datasets, long datanames);
 void append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate, double *y, double *x1, double *y1, 
-                       double *split, char **pointLabel, long points);
+                       double *split, int32_t *graphicType, int32_t *graphicSubtype, char **pointLabel, long points);
 void determine_panel_assignments(PLOT_SPEC *plspec);
 long datanameCompare(PLOT_REQUEST *plreq1, long index1, PLOT_REQUEST *plreq2, long index2, long invertString);
 void perform_dataset_sort(PLOT_SPEC *plspec);
@@ -894,9 +897,9 @@ long perform_sddsplot_filtering(SDDS_TABLE *table, FILTER_DEFINITION **filter, l
 long perform_sddsplot_time_filtering(SDDS_TABLE *table, TIME_FILTER_DEFINITION **time_filter, long time_filters);
 long perform_sddsplot_matching(SDDS_TABLE *table, MATCH_DEFINITION **match, long matches);
 long remove_nonpositive_data(double *data1, double *data2, double *data3, double *data4, double *split, 
-                             char **enumerate, char **pointLabel, long n);
+                             char **enumerate, char **pointLabel, int32_t *graphicType, int32_t *graphicSubtype, long n);
 long remove_invalid_data(double *data1, double *data2, double *data3, double *data4, double *data5, 
-                         char **enumerate, char **pointLabel, long n);
+                         char **enumerate, char **pointLabel, int32_t *graphicType, int32_t *graphicSubtype, long n);
 void resolve_wildcard_datanames(PLOT_SPEC *plspec);
 void perform_dataname_swapping(PLOT_SPEC *plspec);
 void perform_arrow_autoscaling(PLOT_SPEC *plspec);

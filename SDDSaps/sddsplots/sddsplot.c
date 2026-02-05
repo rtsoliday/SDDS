@@ -69,7 +69,7 @@ char *USAGE1 = "sddsplot \n\
   -font=<font-name> -listFonts\n\
   -fixfontsize=[all=.02][,legend=.015][,<x|y>xlabel=<value>][,<x|y>ticks=<value>][,title=<value>][,topline=<value>]\n\
   -output=<filename>\n\
-  -graphic=<element>[,type=<type>][,fill][,subtype={<type>|type}][,thickness=<integer>][,connect[={<linetype>|type|subtype}]][,vary[={type|subtype}][,scale=<factor>][,eachFile][,eachPage][,eachRequest][,fixForName][,fixForFile]]\n\
+  -graphic=<element>[,type=<type|@column>][,fill][,subtype={<type>|type|@column}][,thickness=<integer>][,connect[={<linetype>|type|subtype}]][,vary[={type|subtype}][,scale=<factor>][,eachFile][,eachPage][,eachRequest][,fixForName][,fixForFile]]\n\
   -arrowSettings=[scale=<value>][,barbLength=<value>][,barbAngle=<deg>][,lineType=<number>][,centered][,cartesianData][,polarData][,scalarData][,singleBarb][,autoscale]\n\
   -scales=<xlo>,<xhi>,<ylo>,<yhi>\n\
   -pspace=<plo>,<phi>,<qlo>,<qhi>\n\
@@ -1831,10 +1831,14 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
               */
               if (plspec->panel[panel].dataset[idata]->request_index == request)
                 {
+                  long point;
                   jj++;
                   if (plspec->panel[panel].dataset[idata]->graphic.element == PLOT_LINE &&
                       (plspec->panel[panel].dataset[idata]->graphic.subtype > 0 ||
                        (plspec->panel[panel].dataset[idata]->graphic.flags & GRAPHIC_SUBTYPE_EQ_TYPE)))
+                    useSubtypeEncoding = 1;
+                  if (plspec->panel[panel].dataset[idata]->graphic.element == PLOT_LINE &&
+                      plspec->panel[panel].dataset[idata]->graphicSubtype)
                     useSubtypeEncoding = 1;
                   if (plspec->panel[panel].dataset[idata]->graphic.flags & GRAPHIC_VARY_SUBTYPE)
                     {
@@ -1843,12 +1847,34 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
                       if (plspec->panel[panel].dataset[idata]->graphic.subtype < ncolor_min)
                         ncolor_min = plspec->panel[panel].dataset[idata]->graphic.subtype;
                     }
+                  if (plspec->panel[panel].dataset[idata]->graphicSubtype)
+                    {
+                      for (point = 0; point < plspec->panel[panel].dataset[idata]->points; point++)
+                        {
+                          long subtypeValue = (long)plspec->panel[panel].dataset[idata]->graphicSubtype[point];
+                          if (subtypeValue > ncolor_max)
+                            ncolor_max = subtypeValue;
+                          if (subtypeValue < ncolor_min)
+                            ncolor_min = subtypeValue;
+                        }
+                    }
                   if (plspec->panel[panel].dataset[idata]->graphic.flags & GRAPHIC_VARY_TYPE)
                     {
                       if (plspec->panel[panel].dataset[idata]->graphic.type > ncolor_max)
                         ncolor_max = plspec->panel[panel].dataset[idata]->graphic.type;
                       if (plspec->panel[panel].dataset[idata]->graphic.type < ncolor_min)
                         ncolor_min = plspec->panel[panel].dataset[idata]->graphic.type;
+                    }
+                  if (plspec->panel[panel].dataset[idata]->graphicType)
+                    {
+                      for (point = 0; point < plspec->panel[panel].dataset[idata]->points; point++)
+                        {
+                          long typeValue = (long)plspec->panel[panel].dataset[idata]->graphicType[point];
+                          if (typeValue > ncolor_max)
+                            ncolor_max = typeValue;
+                          if (typeValue < ncolor_min)
+                            ncolor_min = typeValue;
+                        }
                     }
                 }
             }
@@ -2232,6 +2258,48 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
                 {
                   if (plspec->panel[panel].dataset[idata]->request_index == request)
                     {
+                      if (plspec->panel[panel].dataset[idata]->graphicType ||
+                          plspec->panel[panel].dataset[idata]->graphicSubtype)
+                        {
+                          long point;
+                          if (offsettype == -1)
+                            {
+                              if (ncolor_min != 65535)
+                                offsettype = ncolor_min;
+                              else if (plspec->panel[panel].dataset[idata]->graphicSubtype)
+                                offsettype = plspec->panel[panel].dataset[idata]->graphicSubtype[0];
+                              else if (plspec->panel[panel].dataset[idata]->graphicType)
+                                offsettype = plspec->panel[panel].dataset[idata]->graphicType[0];
+                              else
+                                offsettype = 0;
+                            }
+                          if (plspec->panel[panel].dataset[idata]->graphicSubtype)
+                            {
+                              for (point = 0; point < plspec->panel[panel].dataset[idata]->points; point++)
+                                {
+                                  plspec->panel[panel].dataset[idata]->graphicSubtype[point] += typeIncrThisRequest;
+                                  plspec->panel[panel].dataset[idata]->graphicSubtype[point] -= offsettype;
+                                }
+                              plspec->panel[panel].dataset[idata]->graphic.subtype =
+                                (long)plspec->panel[panel].dataset[idata]->graphicSubtype[0];
+                              if (plspec->plot_request[request].graphic.flags & GRAPHIC_CONNECT_EQ_SUBTYPE)
+                                plspec->panel[panel].dataset[idata]->graphic.connect_linetype =
+                                  plspec->panel[panel].dataset[idata]->graphic.subtype;
+                            }
+                          if (plspec->panel[panel].dataset[idata]->graphicType)
+                            {
+                              for (point = 0; point < plspec->panel[panel].dataset[idata]->points; point++)
+                                {
+                                  plspec->panel[panel].dataset[idata]->graphicType[point] += typeIncrThisRequest;
+                                  plspec->panel[panel].dataset[idata]->graphicType[point] -= offsettype;
+                                }
+                              plspec->panel[panel].dataset[idata]->graphic.type =
+                                (long)plspec->panel[panel].dataset[idata]->graphicType[0];
+                              if (plspec->plot_request[request].graphic.flags & GRAPHIC_CONNECT_EQ_TYPE)
+                                plspec->panel[panel].dataset[idata]->graphic.connect_linetype =
+                                  plspec->panel[panel].dataset[idata]->graphic.type;
+                            }
+                        }
                       if (plspec->plot_request[request].graphic.flags & GRAPHIC_VARY_SUBTYPE)
                         {
                           if (offsettype == -1)
@@ -2689,7 +2757,8 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
                                      plreq->flags & PLREQ_XGAP ? plreq->xgap : 0.0,
                                      plreq->flags & PLREQ_YGAP ? plreq->ygap : 0.0,
                                      &plspec->panel[panel].dataset[idata]->graphic,
-                                     plreq->flags, plspec->panel[panel].pspace);
+                                     plreq->flags, plspec->panel[panel].pspace,
+                                     plspec->panel[panel].dataset[idata]);
                   labelDataPoints(x, y,
                                   plspec->panel[panel].dataset[idata]->points,
                                   plspec->panel[panel].dataset[idata]->pointLabel,
@@ -3084,90 +3153,216 @@ void draw_sddsplot_strings(PLOT_DATA *dataset, long linetypeDefault, double *lim
 
 void sddsplotDataArrays(double *xn, double *yn, double *sxn, double *syn, long npts,
                         double xgap, double ygap, GRAPHIC_SPEC *graphic, unsigned long flags,
-                        double *pspace)
+                        double *pspace, PLOT_DATA *dataset)
 {
-  long orig_linetype;
+  long orig_linetype, i;
+  int32_t *typeColumn, *subtypeColumn;
 
   set_clipping(1, 1, 1);
   if (npts == 0)
     return;
 
   orig_linetype = get_linetype();
+  typeColumn = dataset ? dataset->graphicType : NULL;
+  subtypeColumn = dataset ? dataset->graphicSubtype : NULL;
 
-  if (graphic->flags & GRAPHIC_CONNECT &&
-      (graphic->element == PLOT_SYMBOL || graphic->element == PLOT_ERRORBAR ||
-       graphic->element == PLOT_IMPULSE || graphic->element == PLOT_YIMPULSE ||
-       graphic->element == PLOT_BAR || graphic->element == PLOT_YBAR))
+  if (!typeColumn && !subtypeColumn)
     {
-      if (xgap || ygap)
-        plot_lines_gap(xn, yn, xgap, ygap, npts,
+      if (graphic->flags & GRAPHIC_CONNECT &&
+          (graphic->element == PLOT_SYMBOL || graphic->element == PLOT_ERRORBAR ||
+           graphic->element == PLOT_IMPULSE || graphic->element == PLOT_YIMPULSE ||
+           graphic->element == PLOT_BAR || graphic->element == PLOT_YBAR))
+        {
+          if (xgap || ygap)
+            plot_lines_gap(xn, yn, xgap, ygap, npts,
+                           graphic->connect_linetype == -1 ? graphic->subtype : graphic->connect_linetype, graphic->thickness);
+          else if (flags & PLREQ_SEVER)
+            plot_lines_sever(xn, yn, npts,
+                             graphic->connect_linetype == -1 ? graphic->subtype : graphic->connect_linetype, graphic->thickness);
+          else
+            plot_lines(xn, yn, npts,
                        graphic->connect_linetype == -1 ? graphic->subtype : graphic->connect_linetype, graphic->thickness);
-      else if (flags & PLREQ_SEVER)
-        plot_lines_sever(xn, yn, npts,
-                         graphic->connect_linetype == -1 ? graphic->subtype : graphic->connect_linetype, graphic->thickness);
-      else
-        plot_lines(xn, yn, npts,
-                   graphic->connect_linetype == -1 ? graphic->subtype : graphic->connect_linetype, graphic->thickness);
+        }
+      switch (graphic->element)
+        {
+        case PLOT_LINE:
+           {
+            long lineType = graphic->type;
+            if (graphic->subtype > 0 || (graphic->flags & (GRAPHIC_SUBTYPE_EQ_TYPE | GRAPHIC_VARY_SUBTYPE)))
+              lineType += SDDS_LINETYPE_SUBTYPE_FLAG + graphic->subtype * SDDS_LINETYPE_SUBTYPE_MULT;
+            if (xgap || ygap)
+              {
+                plot_lines_gap(xn, yn, xgap, ygap, npts, lineType, graphic->thickness);
+              }
+            else if (flags & PLREQ_SEVER)
+              {
+                plot_lines_sever(xn, yn, npts, lineType, graphic->thickness);
+              }
+            else
+              {
+                plot_lines(xn, yn, npts, lineType, graphic->thickness);
+              }
+          }
+          break;
+        case PLOT_SYMBOL:
+          plot_points_fill(xn, yn, npts, graphic->type, graphic->subtype,
+                           graphic->scale * (pspace[1] - pspace[0]) / 0.75, graphic->thickness, graphic->fill);
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_ERRORBAR:
+          set_linetype(graphic->subtype);
+          plot_error_bars(xn, yn, sxn, syn, npts, graphic->type, graphic->thickness);
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_DOTS:
+          plot_dots(xn, yn, npts, graphic->type, graphic->subtype);
+          break;
+        case PLOT_IMPULSE:
+          set_linetype(graphic->type);
+          plot_impulses(xn, yn, npts, graphic->type, graphic->thickness);
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_YIMPULSE:
+          set_linetype(graphic->type);
+          plot_yimpulses(xn, yn, npts, graphic->type, graphic->thickness);
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_BAR:
+          set_linetype(graphic->subtype);
+          plot_bars(xn, yn, npts, graphic->type, graphic->thickness);
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_YBAR:
+          set_linetype(graphic->subtype);
+          plot_ybars(xn, yn, npts, graphic->type, graphic->thickness);
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_ARROW:
+          plot_arrows(xn, yn, sxn, syn, npts, &graphic->arrow);
+          set_linetype(orig_linetype);
+          break;
+        }
     }
-  switch (graphic->element)
+  else
     {
-    case PLOT_LINE:
-      {
-        long lineType = graphic->type;
-        if (graphic->subtype > 0 || (graphic->flags & (GRAPHIC_SUBTYPE_EQ_TYPE | GRAPHIC_VARY_SUBTYPE)))
-          lineType += SDDS_LINETYPE_SUBTYPE_FLAG + graphic->subtype * SDDS_LINETYPE_SUBTYPE_MULT;
-        if (xgap || ygap)
-          {
-            plot_lines_gap(xn, yn, xgap, ygap, npts, lineType, graphic->thickness);
-          }
-        else if (flags & PLREQ_SEVER)
-          {
-            plot_lines_sever(xn, yn, npts, lineType, graphic->thickness);
-          }
-        else
-          {
-            plot_lines(xn, yn, npts, lineType, graphic->thickness);
-          }
-      }
-      break;
-    case PLOT_SYMBOL:
-      plot_points_fill(xn, yn, npts, graphic->type, graphic->subtype,
-                       graphic->scale * (pspace[1] - pspace[0]) / 0.75, graphic->thickness, graphic->fill);
-      set_linetype(orig_linetype);
-      break;
-    case PLOT_ERRORBAR:
-      set_linetype(graphic->subtype);
-      plot_error_bars(xn, yn, sxn, syn, npts, graphic->type, graphic->thickness);
-      set_linetype(orig_linetype);
-      break;
-    case PLOT_DOTS:
-      plot_dots(xn, yn, npts, graphic->type, graphic->subtype);
-      break;
-    case PLOT_IMPULSE:
-      set_linetype(graphic->type);
-      plot_impulses(xn, yn, npts, graphic->type, graphic->thickness);
-      set_linetype(orig_linetype);
-      break;
-    case PLOT_YIMPULSE:
-      set_linetype(graphic->type);
-      plot_yimpulses(xn, yn, npts, graphic->type, graphic->thickness);
-      set_linetype(orig_linetype);
-      break;
-    case PLOT_BAR:
-      set_linetype(graphic->subtype);
-      plot_bars(xn, yn, npts, graphic->type, graphic->thickness);
-      set_linetype(orig_linetype);
-      break;
-    case PLOT_YBAR:
-      set_linetype(graphic->subtype);
-      plot_ybars(xn, yn, npts, graphic->type, graphic->thickness);
-      set_linetype(orig_linetype);
-      break;
-    case PLOT_ARROW:
-      plot_arrows(xn, yn, sxn, syn, npts, &graphic->arrow);
-      set_linetype(orig_linetype);
-      break;
-    }
+      if (graphic->flags & GRAPHIC_CONNECT &&
+          (graphic->element == PLOT_SYMBOL || graphic->element == PLOT_ERRORBAR ||
+           graphic->element == PLOT_IMPULSE || graphic->element == PLOT_YIMPULSE ||
+           graphic->element == PLOT_BAR || graphic->element == PLOT_YBAR))
+        {
+          long connectSubtype = subtypeColumn ? subtypeColumn[0] : graphic->subtype;
+          if (xgap || ygap)
+            plot_lines_gap(xn, yn, xgap, ygap, npts,
+                           graphic->connect_linetype == -1 ? connectSubtype : graphic->connect_linetype, graphic->thickness);
+          else if (flags & PLREQ_SEVER)
+            plot_lines_sever(xn, yn, npts,
+                             graphic->connect_linetype == -1 ? connectSubtype : graphic->connect_linetype, graphic->thickness);
+          else
+            plot_lines(xn, yn, npts,
+                       graphic->connect_linetype == -1 ? connectSubtype : graphic->connect_linetype, graphic->thickness);
+        }
+      switch (graphic->element)
+        {
+        case PLOT_LINE:
+          for (i = 1; i < npts; i++)
+            {
+              long type = typeColumn ? (long)typeColumn[i] : graphic->type;
+              long subtype = subtypeColumn ? (long)subtypeColumn[i] : graphic->subtype;
+              long lineType = type;
+              if (!subtypeColumn && (graphic->flags & GRAPHIC_SUBTYPE_EQ_TYPE))
+                subtype = type;
+              if (subtype > 0 || (graphic->flags & (GRAPHIC_SUBTYPE_EQ_TYPE | GRAPHIC_VARY_SUBTYPE)))
+                lineType += SDDS_LINETYPE_SUBTYPE_FLAG + subtype * SDDS_LINETYPE_SUBTYPE_MULT;
+              if (xgap || ygap)
+                plot_lines_gap(xn + i - 1, yn + i - 1, xgap, ygap, 2, lineType, graphic->thickness);
+              else if (flags & PLREQ_SEVER)
+                plot_lines_sever(xn + i - 1, yn + i - 1, 2, lineType, graphic->thickness);
+              else
+                plot_lines(xn + i - 1, yn + i - 1, 2, lineType, graphic->thickness);
+            }
+          break;
+        case PLOT_SYMBOL:
+          for (i = 0; i < npts; i++)
+            {
+              long type = typeColumn ? (long)typeColumn[i] : graphic->type;
+              long subtype = subtypeColumn ? (long)subtypeColumn[i] : graphic->subtype;
+              if (!subtypeColumn && (graphic->flags & GRAPHIC_SUBTYPE_EQ_TYPE))
+                subtype = type;
+              plot_points_fill(xn + i, yn + i, 1, type, subtype,
+                               graphic->scale * (pspace[1] - pspace[0]) / 0.75, graphic->thickness, graphic->fill);
+            }
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_ERRORBAR:
+          for (i = 0; i < npts; i++)
+            {
+              long type = typeColumn ? (long)typeColumn[i] : graphic->type;
+              long subtype = subtypeColumn ? (long)subtypeColumn[i] : graphic->subtype;
+              if (!subtypeColumn && (graphic->flags & GRAPHIC_SUBTYPE_EQ_TYPE))
+                subtype = type;
+              set_linetype(subtype);
+              plot_error_bars(xn + i, yn + i, sxn + i, syn + i, 1, type, graphic->thickness);
+            }
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_DOTS:
+          for (i = 0; i < npts; i++)
+            {
+              long type = typeColumn ? (long)typeColumn[i] : graphic->type;
+              long subtype = subtypeColumn ? (long)subtypeColumn[i] : graphic->subtype;
+              if (!subtypeColumn && (graphic->flags & GRAPHIC_SUBTYPE_EQ_TYPE))
+                subtype = type;
+              plot_dots(xn + i, yn + i, 1, type, subtype);
+            }
+          break;
+        case PLOT_IMPULSE:
+          for (i = 0; i < npts; i++)
+            {
+              long type = typeColumn ? (long)typeColumn[i] : graphic->type;
+              set_linetype(type);
+              plot_impulses(xn + i, yn + i, 1, type, graphic->thickness);
+            }
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_YIMPULSE:
+          for (i = 0; i < npts; i++)
+            {
+              long type = typeColumn ? (long)typeColumn[i] : graphic->type;
+              set_linetype(type);
+              plot_yimpulses(xn + i, yn + i, 1, type, graphic->thickness);
+            }
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_BAR:
+          for (i = 0; i < npts; i++)
+            {
+              long type = typeColumn ? (long)typeColumn[i] : graphic->type;
+              long subtype = subtypeColumn ? (long)subtypeColumn[i] : graphic->subtype;
+              if (!subtypeColumn && (graphic->flags & GRAPHIC_SUBTYPE_EQ_TYPE))
+                subtype = type;
+              set_linetype(subtype);
+              plot_bars(xn + i, yn + i, 1, type, graphic->thickness);
+            }
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_YBAR:
+          for (i = 0; i < npts; i++)
+            {
+              long type = typeColumn ? (long)typeColumn[i] : graphic->type;
+              long subtype = subtypeColumn ? (long)subtypeColumn[i] : graphic->subtype;
+              if (!subtypeColumn && (graphic->flags & GRAPHIC_SUBTYPE_EQ_TYPE))
+                subtype = type;
+              set_linetype(subtype);
+              plot_ybars(xn + i, yn + i, 1, type, graphic->thickness);
+            }
+          set_linetype(orig_linetype);
+          break;
+        case PLOT_ARROW:
+          plot_arrows(xn, yn, sxn, syn, npts, &graphic->arrow);
+          set_linetype(orig_linetype);
+          break;
+        }
+   }
   pmove(xn[npts - 1], yn[npts - 1]);
 
   set_linetype(orig_linetype);
@@ -3189,7 +3384,7 @@ PLOT_DATA *add_dataset_slots(PLOT_DATA *dataset, long datasets, long datanames)
 
 void append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate,
                        double *y, double *x1, double *y1, double *split_data,
-                       char **pointLabel, long points)
+                       int32_t *graphicType, int32_t *graphicSubtype, char **pointLabel, long points)
 {
   long i;
   dataset->x = trealloc(dataset->x, sizeof(*dataset->x) * (dataset->points + points));
@@ -3222,6 +3417,10 @@ void append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate,
     dataset->y1 = trealloc(dataset->y1, sizeof(*dataset->y1) * (dataset->points + points));
   if (split_data)
     dataset->split_data = trealloc(dataset->split_data, sizeof(*dataset->split_data) * (dataset->points + points));
+  if (graphicType)
+    dataset->graphicType = trealloc(dataset->graphicType, sizeof(*dataset->graphicType) * (dataset->points + points));
+  if (graphicSubtype)
+    dataset->graphicSubtype = trealloc(dataset->graphicSubtype, sizeof(*dataset->graphicSubtype) * (dataset->points + points));
   for (i = 0; i < points; i++)
     {
       if (enumerate && !x)
@@ -3250,6 +3449,10 @@ void append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate,
           if (dataset->split_max < split_data[i])
             dataset->split_max = split_data[i];
         }
+      if (graphicType)
+        dataset->graphicType[i + dataset->points] = graphicType[i];
+      if (graphicSubtype)
+        dataset->graphicSubtype[i + dataset->points] = graphicSubtype[i];
       if (pointLabel)
         dataset->pointLabel[i + dataset->points] = pointLabel[i];
     }
@@ -4383,6 +4586,8 @@ void EraseDatasetSpecification(PLOT_DATA *dataset)
       freeN(&dataset->x1);
       freeN(&dataset->y1);
       freeN(&dataset->split_data);
+      freeN(&dataset->graphicType);
+      freeN(&dataset->graphicSubtype);
       /*freeN(&dataset->legend);*/
       if (dataset->enumerate)
         {
