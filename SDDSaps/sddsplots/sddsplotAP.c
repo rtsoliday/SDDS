@@ -1144,8 +1144,14 @@ long plotlabel_AP(PLOT_SPEC *plotspec, long label_index, char **item, long items
     if (label_index<0 || label_index>3)
         return bombre("programming error--invalid label_index in plotlabel_AP", NULL, 0);
     lspec = &plotspec->plot_request[plotspec->plot_requests-1].label[label_index];
-    if (items<1)
-        return bombre("invalid labeling syntax", usage[label_index], 0);
+    if (items<1) {
+      if (label_index==2 || label_index==3) {
+        lspec->flags |= LABEL_STRING_GIVEN;
+        SDDS_CopyString(&lspec->label, "");
+        return 1;
+      }
+      return bombre("invalid labeling syntax", usage[label_index], 0);
+    }
     if (!contains_keyword_phrase(item[0]))
         offset = 1;
     else 
