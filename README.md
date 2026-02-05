@@ -78,7 +78,7 @@ cd ..
 ├── gd/             # GD support for Windows
 ├── tiff/           # TIFF support for Windows
 ├── SDDSaps/        # SDDS ToolKit applications
-│   ├── sddsplots/  # SDDS plotting tool
+│   ├── sddsplots/  # SDDS plotting tool (see SDDSaps/sddsplots/sddsplot-json-schema.md for JSON output schema)
 │       ├── qtDriver/  # plotting GUI used by sddsplot
 │       ├── winMotifDriver/  # Windows plotting tool (deprecated)
 │       ├── motifDriver/     # Motif (Linux and MacOS) plotting tool (deprecated)

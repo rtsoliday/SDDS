@@ -742,14 +742,16 @@ long mplfiles_AP(PLOT_SPEC *plotspec, char **item, long items)
 
 long outputfile_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
-    if (items!=1)
-        return bombre("invalid -outputfile syntax", "-outputfile=<filename>", 0);
-    SDDS_CopyString(&plotspec->outputfile, item[0]);
+  if (items!=1)
+    return bombre("invalid -output syntax", "-output=<filename>", 0);
+  SDDS_CopyString(&plotspec->outputfile, item[0]);
     return 1;
     }
 
 long columnnames_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
+  if (strcmp_case_insensitive(item[0], "json")==0)
+    plotspec->outputMode = PLOT_OUTPUT_JSON;
   static char *columnnames_usage = 
     "-columnnames=<xname>,<yname-list>[,{<y1name-list> | <x1name>,<y1name-list>}]";
   return plotnames_AP1(plotspec, item, items, columnnames_usage, COLUMN_DATA);

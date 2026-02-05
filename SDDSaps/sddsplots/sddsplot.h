@@ -778,9 +778,15 @@ typedef struct {
   double topline;
 } FONT_SIZE;
 
+typedef enum {
+  PLOT_OUTPUT_GRAPHICS = 0,
+  PLOT_OUTPUT_JSON = 1
+} PLOT_OUTPUT_MODE;
+
 typedef struct {
   char *outputfile, *device, **deviceArgv, *font;
   FONT_SIZE fontsize[1];
+  PLOT_OUTPUT_MODE outputMode;
   long deviceArgc;
   GROUPBY_SETTINGS groupBy;
   /* unsigned long flags; */

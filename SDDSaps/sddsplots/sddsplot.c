@@ -20,6 +20,7 @@
 #include "SDDS.h"
 #include "sddsplot.h"
 #include <ctype.h>
+#include <math.h>
 #include <string.h>
 #include "graphics.h"
 
@@ -133,7 +134,7 @@ char *USAGE5 = "  -offset=[{x|y}change={value>][,{x|y}parameter=<name>][,{x|y}in
   -equalAspect[={-1,1}] (currently applies to -3d plots)\n\
   -orderColors={temperature|rtemperature|spectral|rspectral|start=(<red>,<green>,<blue>){[,finish=(<red>,<green>,<blue>)]|[,increment=(<red>,<green>,<blue>)]}}\n\
   All colors range from 0 to 65535.\n\
-  -device={qt|motif|png|postscript}[,dashes,linetypetable=<lineDefineFile>,movie,interval=<seconds>,keep=<number>,share=<name>,timeoutHours=<hours>,spectrum]\n\
+  -device={qt|motif|png|postscript|json}[,dashes,linetypetable=<lineDefineFile>,movie,interval=<seconds>,keep=<number>,share=<name>,timeoutHours=<hours>,spectrum]\n\
   qt device arguments: '-dashes <0|1> -linetype <filename> -movie 1 [-interval <seconds>] -keep <number> -share <name> -timeoutHours <hours> -spectrum'\n\
   motif device arguments: '-dashes 1 -linetype lineDefineFile'\n\
   png device arguments: 'rootname=<name>,template=<string>,onwhite,onblack,dashes,movie' \n\n\
@@ -537,6 +538,7 @@ static char *build_outboard_device_args(char **argv, long argc)
 
 extern int term;
 int dataBehind = 0;
+extern LINE_TYPE_TABLE lineTypeTable;
 
 void show_filter(FILE *fp, FILTER_DEFINITION *filter);
 void show_time_filter(FILE *fp, TIME_FILTER_DEFINITION *timeFilter);
@@ -545,6 +547,13 @@ void ErasePlotSpecification(PLOT_SPEC *plspec);
 long ReadMoreArguments(char ***argv, int *argc, char **commandlineArgv, int commandlineArgc);
 void waitForFilesToUpdate(PLOT_SPEC *plspec, long firstCall, long interval, long timeout);
 void EraseScannedArgs(SCANNED_ARG *scanned, long argc);
+static void output_sddsplot_json(PLOT_SPEC *plspec);
+static void json_print_escaped(FILE *fp, const char *text);
+static void json_print_number(FILE *fp, double value);
+static void json_load_linetype_table(PLOT_SPEC *plspec);
+static long json_get_linetype_from_graphic(const GRAPHIC_SPEC *graphic);
+static int json_get_png_color_hex(char *buffer, size_t bufferSize, long linetype, int onBlack);
+static const char *json_get_plotly_symbol(long type);
 
 #ifdef COMPILE_AS_SUBROUTINE
 int sddsplot_main(int commandlineArgc, char **commandlineArgv)
@@ -600,6 +609,7 @@ int sddsplot_main(int commandlineArgc, char **commandlineArgv)
 
   SDDS_ZeroMemory((void *)&plot_spec, sizeof(plot_spec));
   add_plot_request(&plot_spec);
+  plot_spec.outputMode = PLOT_OUTPUT_GRAPHICS;
 
   plot_spec.fontsize[0].autosize = 1;
 
@@ -671,6 +681,8 @@ int sddsplot_main(int commandlineArgc, char **commandlineArgv)
 #endif
           if (!plot_spec.device)
             SDDS_CopyString(&plot_spec.device, DEFAULT_DEVICE);
+          if (plot_spec.device && strcmp_case_insensitive(plot_spec.device, "json")==0)
+            plot_spec.outputMode = PLOT_OUTPUT_JSON;
 
           if (plot_spec.deviceArgc)
             {
@@ -866,11 +878,15 @@ int sddsplot_main(int commandlineArgc, char **commandlineArgv)
           filesInitialized = 1;
           waitForFilesToUpdate(&plot_spec, 1, repeatModeCheckInterval, repeatModeTimeout);
         }
-      plot_sddsplot_data(&plot_spec, !deviceInitialized);
+      if (plot_spec.outputMode == PLOT_OUTPUT_JSON) {
+        output_sddsplot_json(&plot_spec);
+      } else {
+        plot_sddsplot_data(&plot_spec, !deviceInitialized);
+        deviceInitialized = 1;
+      }
 #ifdef DEBUG
       fprintf(stderr, "memory: %10ld  after   plot_sddsplot_data(&plot_spec, !deviceInitialized)\n", memory_count());
 #endif
-      deviceInitialized = 1;
 
       if (multicommandMode)
         {
@@ -1181,6 +1197,561 @@ void makeEnumeratedScale(long plane,
                          double allowedSpace, long adjustForTicks, double tickFraction,
                          long tickLineThickness, long tickLabelThickness,
                          char *labelString, long labelLineType);
+
+static void json_print_string_or_null(FILE *fp, const char *text)
+{
+  if (text) {
+    fputc('"', fp);
+    json_print_escaped(fp, text);
+    fputc('"', fp);
+  } else
+    fputs("null", fp);
+}
+
+static void json_load_linetype_table(PLOT_SPEC *plspec)
+{
+  long i;
+  char *tableFile = NULL;
+
+  if (!plspec->deviceArgv || plspec->deviceArgc <= 0)
+    return;
+
+  for (i = 0; i < plspec->deviceArgc; i++) {
+    char *arg = plspec->deviceArgv[i];
+    char *eqptr = NULL;
+    if (!arg)
+      continue;
+    if ((eqptr = strchr(arg, '=')))
+      *eqptr = 0;
+    if (strcmp_case_insensitive(arg, "linetypetable")==0 ||
+        strcmp_case_insensitive(arg, "linetype")==0 ||
+        strcmp_case_insensitive(arg, "linecolortable")==0) {
+      if (eqptr && *(eqptr + 1))
+        tableFile = eqptr + 1;
+      else if (i + 1 < plspec->deviceArgc)
+        tableFile = plspec->deviceArgv[++i];
+    }
+    if (eqptr)
+      *eqptr = '=';
+  }
+
+  if (tableFile && !SDDS_ReadLineTypeTable(&lineTypeTable, tableFile)) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    bomb("problem reading line-type table for json output", NULL);
+  }
+  if (!tableFile) {
+    lineTypeTable.nEntries = 0;
+    lineTypeTable.typeFlag = 0;
+  }
+}
+
+static long json_get_linetype_from_graphic(const GRAPHIC_SPEC *graphic)
+{
+  long lineType = graphic->type;
+
+  switch (graphic->element) {
+  case PLOT_LINE:
+    if (graphic->subtype > 0 || (graphic->flags & (GRAPHIC_SUBTYPE_EQ_TYPE | GRAPHIC_VARY_SUBTYPE)))
+      lineType += SDDS_LINETYPE_SUBTYPE_FLAG + graphic->subtype * SDDS_LINETYPE_SUBTYPE_MULT;
+    break;
+  case PLOT_ERRORBAR:
+  case PLOT_BAR:
+  case PLOT_YBAR:
+    lineType = graphic->subtype;
+    break;
+  case PLOT_IMPULSE:
+  case PLOT_YIMPULSE:
+  case PLOT_DOTS:
+  case PLOT_SYMBOL:
+  default:
+    lineType = graphic->type;
+    break;
+  }
+  return lineType;
+}
+
+static int json_get_png_color_hex(char *buffer, size_t bufferSize, long linetype, int onBlack)
+{
+  static const unsigned char pngDefaultColors[16][3] = {
+    {0, 0, 0},       /* 0: black (or white when onblack) */
+    {255, 0, 0},     /* 1: red */
+    {0, 191, 255},   /* 2: deep sky blue */
+    {0, 255, 0},     /* 3: green */
+    {255, 255, 0},   /* 4: yellow */
+    {0, 255, 255},   /* 5: cyan */
+    {255, 165, 0},   /* 6: orange */
+    {0, 250, 154},   /* 7: medium spring green */
+    {255, 215, 0},   /* 8: gold */
+    {255, 105, 180}, /* 9: hot pink */
+    {0, 0, 255},     /* 10: blue */
+    {50, 205, 50},   /* 11: lime green */
+    {255, 99, 71},   /* 12: tomato */
+    {210, 180, 140}, /* 13: tan */
+    {255, 0, 255},   /* 14: magenta */
+    {191, 191, 191}  /* 15: grey */
+  };
+  unsigned char r, g, b;
+  long index;
+
+  if ((lineTypeTable.nEntries > 0) && (lineTypeTable.typeFlag & LINE_TABLE_DEFINE_COLOR)) {
+    if (linetype >= SDDS_LINETYPE_SUBTYPE_FLAG)
+      linetype = (linetype - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
+    index = linetype % lineTypeTable.nEntries;
+    r = (unsigned char)lineTypeTable.red[index];
+    g = (unsigned char)lineTypeTable.green[index];
+    b = (unsigned char)lineTypeTable.blue[index];
+  } else {
+    if (linetype >= SDDS_LINETYPE_SUBTYPE_FLAG)
+      linetype = (linetype - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
+    index = linetype % 16;
+    r = pngDefaultColors[index][0];
+    g = pngDefaultColors[index][1];
+    b = pngDefaultColors[index][2];
+    if (index == 0 && onBlack) {
+      r = 255;
+      g = 255;
+      b = 255;
+    }
+  }
+
+  if (!buffer || bufferSize < 8)
+    return 0;
+  snprintf(buffer, bufferSize, "#%02x%02x%02x", r, g, b);
+  return 1;
+}
+
+static const char *json_get_plotly_symbol(long type)
+{
+  static const char *symbols[] = {
+    "circle",      /* 0 */
+    "square",      /* 1 */
+    "diamond",     /* 2 */
+    "cross",       /* 3 */
+    "x",           /* 4 */
+    "triangle-up", /* 5 */
+    "triangle-down", /* 6 */
+    "triangle-left", /* 7 */
+    "triangle-right", /* 8 */
+    "star",          /* 9 */
+    "hexagon",       /* 10 */
+    "hexagon2",      /* 11 */
+    "pentagon",      /* 12 */
+    "pentagon2",     /* 13 */
+    "star-square",   /* 14 */
+    "star-diamond",  /* 15 */
+    "hourglass",     /* 16 */
+    "bowtie"         /* 17 */
+  };
+  long count = (long)(sizeof(symbols) / sizeof(symbols[0]));
+  if (type < 0)
+    type = -type;
+  if (count == 0)
+    return "circle";
+  return symbols[type % count];
+}
+
+static const char *plotly_trace_type_and_mode(long element, const char **mode)
+{
+  switch (element) {
+  case PLOT_BAR:
+  case PLOT_YBAR:
+    *mode = NULL;
+    return "bar";
+  case PLOT_SYMBOL:
+  case PLOT_DOTS:
+    *mode = "markers";
+    return "scatter";
+  case PLOT_ERRORBAR:
+    *mode = "lines+markers";
+    return "scatter";
+  case PLOT_IMPULSE:
+  case PLOT_YIMPULSE:
+    *mode = "lines";
+    return "scatter";
+  case PLOT_LINE:
+  default:
+    *mode = "lines";
+    return "scatter";
+  }
+}
+
+static void output_sddsplot_json(PLOT_SPEC *plspec)
+{
+  FILE *fp = outfile ? outfile : stdout;
+  long panel, idata, ip;
+  int onBlack = 0;
+
+  json_load_linetype_table(plspec);
+  if (plspec->deviceArgv && plspec->deviceArgc > 0) {
+    long i;
+    for (i = 0; i < plspec->deviceArgc; i++) {
+      if (plspec->deviceArgv[i] && strcmp_case_insensitive(plspec->deviceArgv[i], "onblack")==0) {
+        onBlack = 1;
+        break;
+      }
+    }
+  }
+
+  fputs("{\n  \"schemaVersion\": \"sddsplot-json-1\",\n  \"plots\": [\n", fp);
+  for (panel = 0; panel < plspec->panels; panel++) {
+    PLOT_PANEL *pp = plspec->panel + panel;
+    const char *title = pp->title[0];
+    const char *topline = pp->title[1];
+    const char *xLabel = NULL, *yLabel = NULL, *xUnits = NULL, *yUnits = NULL;
+    long *yGroups = NULL;
+    char **yGroupLabels = NULL;
+    char **yGroupUnits = NULL;
+    char **yGroupSides = NULL;
+    double *yGroupMin = NULL;
+    double *yGroupMax = NULL;
+    unsigned long *yGroupLimitFlags = NULL;
+    long yGroupCount = 0;
+    int legendOn = 0;
+    int titleProvided = 0;
+    if (pp->titleSpec[0].label ||
+        (pp->titleSpec[0].flags & (LABEL_STRING_GIVEN | LABEL_PARAMETER_GIVEN | LABEL_USE_NAME |
+                                   LABEL_USE_SYMBOL | LABEL_USE_DESCRIPTION | LABEL_USE_DEFAULT)))
+      titleProvided = 1;
+    if (!titleProvided)
+      title = "";
+    if (pp->datasets > 0) {
+      PLOT_DATA *ds0 = pp->dataset[0];
+      xLabel = ds0->info[0].symbol;
+      yLabel = ds0->info[1].symbol;
+      xUnits = ds0->info[0].units;
+      yUnits = ds0->info[1].units;
+    }
+    if (pp->scalesUsed[1] > 0 && pp->scalesGroupIndex[1]) {
+      long i;
+      for (i = 0; i < pp->scalesUsed[1]; i++) {
+        long yGroup = pp->scalesGroupIndex[1][i];
+        long j;
+        long exists = 0;
+        if (yGroup < 0)
+          continue;
+        for (j = 0; j < yGroupCount; j++) {
+          if (yGroups[j] == yGroup) {
+            exists = 1;
+            break;
+          }
+        }
+        if (exists)
+          continue;
+        yGroups = SDDS_Realloc(yGroups, sizeof(*yGroups) * (yGroupCount + 1));
+        yGroupLabels = SDDS_Realloc(yGroupLabels, sizeof(*yGroupLabels) * (yGroupCount + 1));
+        yGroupUnits = SDDS_Realloc(yGroupUnits, sizeof(*yGroupUnits) * (yGroupCount + 1));
+        yGroupSides = SDDS_Realloc(yGroupSides, sizeof(*yGroupSides) * (yGroupCount + 1));
+        yGroupMin = SDDS_Realloc(yGroupMin, sizeof(*yGroupMin) * (yGroupCount + 1));
+        yGroupMax = SDDS_Realloc(yGroupMax, sizeof(*yGroupMax) * (yGroupCount + 1));
+        yGroupLimitFlags = SDDS_Realloc(yGroupLimitFlags, sizeof(*yGroupLimitFlags) * (yGroupCount + 1));
+        yGroups[yGroupCount] = yGroup;
+        yGroupLabels[yGroupCount] = NULL;
+        yGroupUnits[yGroupCount] = NULL;
+        yGroupSides[yGroupCount] = NULL;
+        yGroupMin[yGroupCount] = 0;
+        yGroupMax[yGroupCount] = 0;
+        yGroupLimitFlags[yGroupCount] = 0;
+        if (plspec->scalesGroupData[1]) {
+          yGroupMin[yGroupCount] = plspec->scalesGroupData[1][yGroup].limit[0];
+          yGroupMax[yGroupCount] = plspec->scalesGroupData[1][yGroup].limit[1];
+          yGroupLimitFlags[yGroupCount] = plspec->scalesGroupData[1][yGroup].limitFlags;
+        }
+        if (plspec->scaleLabelInfo[1] && plspec->scaleLabelInfo[1][yGroup].label &&
+            !SDDS_StringIsBlank(plspec->scaleLabelInfo[1][yGroup].label))
+          SDDS_CopyString(&yGroupLabels[yGroupCount], plspec->scaleLabelInfo[1][yGroup].label);
+        yGroupCount++;
+      }
+    }
+    if (yGroupCount > 0) {
+      long g;
+      for (g = 0; g < yGroupCount; g++) {
+        long yGroup = yGroups[g];
+        long sideRight = 0;
+        long unitsSet = 0;
+        long labelSet = yGroupLabels[g] ? 1 : 0;
+        long d;
+        for (d = 0; d < pp->datasets; d++) {
+          PLOT_DATA *ds = pp->dataset[d];
+          if (ds->scalesGroupIndex[1] != yGroup)
+            continue;
+          if (!unitsSet && ds->info[1].units && !SDDS_StringIsBlank(ds->info[1].units)) {
+            SDDS_CopyString(&yGroupUnits[g], ds->info[1].units);
+            unitsSet = 1;
+          }
+          if (!labelSet && ds->info[1].symbol) {
+            SDDS_CopyString(&yGroupLabels[g], ds->info[1].symbol);
+            labelSet = 1;
+          }
+          if (plspec->plot_request[ds->request_index].scalesGroupSpec[1].flags & SCALESGROUP_OTHER_SIDE)
+            sideRight = 1;
+        }
+        SDDS_CopyString(&yGroupSides[g], sideRight ? "right" : "left");
+      }
+      if (yGroupLabels[0])
+        yLabel = yGroupLabels[0];
+      if (yGroupUnits[0])
+        yUnits = yGroupUnits[0];
+    }
+    for (idata = 0; idata < pp->datasets; idata++) {
+      if (pp->dataset[idata]->legend && !SDDS_StringIsBlank(pp->dataset[idata]->legend)) {
+        legendOn = 1;
+        break;
+      }
+    }
+
+    if (panel)
+      fputs(",\n", fp);
+    fprintf(fp, "    {\n      \"panelIndex\": %ld,\n", panel);
+    fputs("      \"layout\": {", fp);
+    {
+      int hasLayout = 0;
+      if (title) {
+        fputs("\n        \"title\": ", fp);
+        json_print_string_or_null(fp, title);
+        hasLayout = 1;
+      }
+      if (topline) {
+        fputs(hasLayout ? "," : "", fp);
+        fputs("\n        \"topline\": ", fp);
+        json_print_string_or_null(fp, topline);
+        hasLayout = 1;
+      }
+      if (xLabel || xUnits) {
+        fputs(hasLayout ? "," : "", fp);
+        fputs("\n        \"xaxis\": {", fp);
+        if (xLabel) {
+          fputs("\n          \"title\": ", fp);
+          json_print_string_or_null(fp, xLabel);
+          if (xUnits)
+            fputs(",", fp);
+        }
+        if (xUnits) {
+          fputs("\n          \"units\": ", fp);
+          json_print_string_or_null(fp, xUnits);
+        }
+        fputs("\n        }", fp);
+        hasLayout = 1;
+      }
+      if (yLabel || yUnits) {
+        fputs(hasLayout ? "," : "", fp);
+        fputs("\n        \"yaxis\": {", fp);
+        if (yLabel) {
+          fputs("\n          \"title\": ", fp);
+          json_print_string_or_null(fp, yLabel);
+          if (yUnits)
+            fputs(",", fp);
+        }
+        if (yUnits) {
+          fputs("\n          \"units\": ", fp);
+          json_print_string_or_null(fp, yUnits);
+        }
+        if (yGroupCount > 0 &&
+            (yGroupLimitFlags[0] & LIMIT0_SET) && (yGroupLimitFlags[0] & LIMIT1_SET)) {
+          fputs(",\n          \"range\": [", fp);
+          json_print_number(fp, yGroupMin[0]);
+          fputs(", ", fp);
+          json_print_number(fp, yGroupMax[0]);
+          fputs("]", fp);
+        }
+        fputs("\n        }", fp);
+        hasLayout = 1;
+      }
+      if (yGroupCount > 0) {
+        long g;
+        fputs(hasLayout ? "," : "", fp);
+        fputs("\n        \"yaxes\": [", fp);
+        for (g = 0; g < yGroupCount; g++) {
+          if (g)
+            fputs(", ", fp);
+          fputs("{\"id\": ", fp);
+          fprintf(fp, "%ld", yGroups[g]);
+          fputs(", \"title\": ", fp);
+          json_print_string_or_null(fp, yGroupLabels[g]);
+          fputs(", \"units\": ", fp);
+          json_print_string_or_null(fp, yGroupUnits[g]);
+          if ((yGroupLimitFlags[g] & LIMIT0_SET) && (yGroupLimitFlags[g] & LIMIT1_SET)) {
+            fputs(", \"range\": [", fp);
+            json_print_number(fp, yGroupMin[g]);
+            fputs(", ", fp);
+            json_print_number(fp, yGroupMax[g]);
+            fputs("]", fp);
+          }
+          fputs(", \"side\": ", fp);
+          json_print_string_or_null(fp, yGroupSides[g]);
+          fputs("}", fp);
+        }
+        fputs("]", fp);
+        hasLayout = 1;
+      }
+      fputs(hasLayout ? "," : "", fp);
+      fputs("\n        \"legend\": {\"show\": ", fp);
+      fputs(legendOn ? "true" : "false", fp);
+      fputs("}", fp);
+      hasLayout = 1;
+      if (hasLayout)
+        fputs("\n      },\n", fp);
+      else
+        fputs("},\n", fp);
+    }
+
+    fputs("      \"traces\": [\n", fp);
+    for (idata = 0; idata < pp->datasets; idata++) {
+      PLOT_DATA *ds = pp->dataset[idata];
+      const char *mode = NULL;
+      const char *traceType = plotly_trace_type_and_mode(ds->graphic.element, &mode);
+      const char *name = ds->legend ? ds->legend : ds->info[1].symbol;
+      long linetype = json_get_linetype_from_graphic(&ds->graphic);
+      char colorHex[16];
+      const char *markerSymbol = NULL;
+      long colorKey = linetype;
+      int hasColor;
+      if (ds->graphic.element == PLOT_SYMBOL || ds->graphic.element == PLOT_DOTS) {
+        markerSymbol = json_get_plotly_symbol(ds->graphic.type);
+        if (ds->graphic.flags & (GRAPHIC_VARY_SUBTYPE | GRAPHIC_VARY_TYPE))
+          colorKey = ds->graphic.subtype;
+        else
+          colorKey = ds->graphic.type;
+      }
+      hasColor = json_get_png_color_hex(colorHex, sizeof(colorHex), colorKey, onBlack);
+      if (!name)
+        name = "dataset";
+
+      if ((ds->graphic.flags & GRAPHIC_CONNECT) &&
+          (ds->graphic.element == PLOT_SYMBOL || ds->graphic.element == PLOT_DOTS ||
+           ds->graphic.element == PLOT_ERRORBAR || ds->graphic.element == PLOT_IMPULSE ||
+           ds->graphic.element == PLOT_YIMPULSE || ds->graphic.element == PLOT_BAR ||
+           ds->graphic.element == PLOT_YBAR))
+        mode = "lines+markers";
+
+      if (idata)
+        fputs(",\n", fp);
+      fputs("        {\n          \"name\": ", fp);
+      json_print_string_or_null(fp, name);
+      fputs(",\n          \"type\": ", fp);
+      json_print_string_or_null(fp, traceType);
+      if (mode) {
+        fputs(",\n          \"mode\": ", fp);
+        json_print_string_or_null(fp, mode);
+      }
+      fputs(",\n          \"x\": [", fp);
+      for (ip = 0; ip < ds->points; ip++) {
+        if (ip)
+          fputs(", ", fp);
+        json_print_number(fp, ds->x ? ds->x[ip] : NAN);
+      }
+      fputs("],\n          \"y\": [", fp);
+      for (ip = 0; ip < ds->points; ip++) {
+        if (ip)
+          fputs(", ", fp);
+        json_print_number(fp, ds->y ? ds->y[ip] : NAN);
+      }
+            fputs("],\n          \"meta\": {", fp);
+      fprintf(fp, "\"requestIndex\": %ld, \"fileIndex\": %ld, ",
+              ds->request_index, ds->file_index);
+      fprintf(fp, "\"datanameIndex\": %ld, \"page\": %ld, \"subpage\": %ld, ",
+              ds->dataname_index, ds->datapage, ds->subpage);
+      fputs("\"xUnits\": ", fp);
+      json_print_string_or_null(fp, ds->info[0].units);
+      fputs(", \"yUnits\": ", fp);
+      json_print_string_or_null(fp, ds->info[1].units);
+      fputs(", \"graphicElement\": ", fp);
+      fprintf(fp, "%ld", ds->graphic.element);
+      fputs(", \"yAxisId\": ", fp);
+      fprintf(fp, "%ld", ds->scalesGroupIndex[1]);
+      fputs(", \"connected\": ", fp);
+      fputs((ds->graphic.flags & GRAPHIC_CONNECT) ? "true" : "false", fp);
+          fputs("},\n          \"style\": {", fp);
+          if (hasColor) {
+            fputs("\"line\": {\"color\": ", fp);
+            json_print_string_or_null(fp, colorHex);
+            fputs("}", fp);
+          }
+          if (markerSymbol || hasColor) {
+            if (hasColor)
+              fputs(", ", fp);
+            fputs("\"marker\": {", fp);
+            if (hasColor) {
+              fputs("\"color\": ", fp);
+              json_print_string_or_null(fp, colorHex);
+              if (markerSymbol)
+                fputs(", ", fp);
+            }
+            if (markerSymbol) {
+              fputs("\"symbol\": ", fp);
+              json_print_string_or_null(fp, markerSymbol);
+            }
+            fputs("}", fp);
+          }
+          fputs("}\n        }", fp);
+    }
+    fputs("\n      ]\n    }", fp);
+    if (yGroupSides) {
+      long g;
+      for (g = 0; g < yGroupCount; g++) {
+        free(yGroupLabels[g]);
+        free(yGroupUnits[g]);
+        free(yGroupSides[g]);
+      }
+      free(yGroups);
+      free(yGroupLabels);
+      free(yGroupUnits);
+      free(yGroupSides);
+      free(yGroupMin);
+      free(yGroupMax);
+      free(yGroupLimitFlags);
+    }
+  }
+  fputs("\n  ]\n}\n", fp);
+  fflush(fp);
+}
+
+static void json_print_escaped(FILE *fp, const char *text)
+{
+  const unsigned char *ptr;
+  if (!text)
+    return;
+  ptr = (const unsigned char *)text;
+  while (*ptr) {
+    switch (*ptr) {
+    case '"':
+      fputs("\\\"", fp);
+      break;
+    case '\\':
+      fputs("\\\\", fp);
+      break;
+    case '\b':
+      fputs("\\b", fp);
+      break;
+    case '\f':
+      fputs("\\f", fp);
+      break;
+    case '\n':
+      fputs("\\n", fp);
+      break;
+    case '\r':
+      fputs("\\r", fp);
+      break;
+    case '\t':
+      fputs("\\t", fp);
+      break;
+    default:
+      if (*ptr < 0x20)
+        fprintf(fp, "\\u%04x", *ptr);
+      else
+        fputc(*ptr, fp);
+      break;
+    }
+    ptr++;
+  }
+}
+
+static void json_print_number(FILE *fp, double value)
+{
+  if (isfinite(value))
+    fprintf(fp, "%.15g", value);
+  else
+    fputs("null", fp);
+}
 
 void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
 {
@@ -3991,6 +4562,7 @@ void ErasePlotSpecification(PLOT_SPEC *plspec)
 
   SDDS_ZeroMemory((void *)plspec, sizeof(*plspec));
   add_plot_request(plspec);
+  plspec->outputMode = PLOT_OUTPUT_GRAPHICS;
 }
 
 #define CL_BUFFER_SIZE 16384
