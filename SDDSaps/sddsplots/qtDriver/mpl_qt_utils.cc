@@ -684,6 +684,11 @@ void setup_shortcuts(QMainWindow *mainWindow, bool for3D) {
   QObject::connect(shortcut_W, &QShortcut::activated, []() {
     whiteTheme = !whiteTheme;
     apply_theme();
+    if (whiteThemeAction) {
+      whiteThemeAction->blockSignals(true);
+      whiteThemeAction->setChecked(whiteTheme);
+      whiteThemeAction->blockSignals(false);
+    }
   });
   if (!for3D) {
     QObject::connect(shortcut_Z, &QShortcut::activated, []() {

@@ -158,11 +158,13 @@ bool replotZoom = true;
 bool tracking = false;
 bool domovie = false;
 double movieIntervalTime = 0.1;
+extern bool whiteTheme;
 extern "C" {
   FILE* outfile;
 }
 QAction *replotZoomAction;
 QAction *mouseTrackerAction = nullptr;
+QAction *whiteThemeAction = nullptr;
 QWidget *canvas;
 QMainWindow *mainWindowPointer;
 QT_DATAVIS_NAMESPACE::QAbstract3DGraph *surfaceGraph = nullptr;
@@ -2784,6 +2786,15 @@ int main(int argc, char *argv[]) {
                        tracking = checked;
                        if (!tracking)
                          clearRelativeMouseAnchor();
+                     });
+    whiteThemeAction = new QAction("White Background (W)", &mainWindow);
+    whiteThemeAction->setCheckable(true);
+    whiteThemeAction->setChecked(whiteTheme);
+    optionsMenu->addAction(whiteThemeAction);
+    QObject::connect(whiteThemeAction, &QAction::toggled, &app,
+                     [&](bool checked) {
+                       whiteTheme = checked;
+                       apply_theme();
                      });
     QMenu *placementMenu = optionsMenu->addMenu("Placement/Size");
     QAction *topHalfAction = placementMenu->addAction("Top Half (T)");
