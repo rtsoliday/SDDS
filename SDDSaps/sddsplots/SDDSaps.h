@@ -256,7 +256,7 @@ long SDDS_RedefineColumn(SDDS_DATASET *SDDS_dataset, char *column, char **argv, 
 extern long edit_string(char *text, char *edit);
 
 /* rpn function for getting logical values */
-extern long pop_log(long *logical);
+extern long pop_log(int32_t *logical);
 
 #define is_logic_character(c) ((c)=='|' || (c)=='&' || (c)=='!')
 
