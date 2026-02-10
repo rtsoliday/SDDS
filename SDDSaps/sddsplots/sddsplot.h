@@ -543,9 +543,10 @@ typedef struct {
   FILTER_DEFINITION **filter;
   TIME_FILTER_DEFINITION **time_filter;
   MATCH_DEFINITION **match;
+  EQUATION_DEFINITION **define;
   LIMIT_SETTINGS limit;
   ALIGN_SETTINGS alignSettings;
-  long filters, matches,time_filters;
+  long filters, matches,time_filters, defines;
   long sparse_interval, sparse_offset, clip_head, clip_tail;
   long presparse_interval, presparse_offset;
   int32_t separate_group_size;
