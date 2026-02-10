@@ -21,6 +21,52 @@
 #include <ctype.h>
 
 long CheckForMplFile(char *filename, PLOT_REQUEST *plreq, long requests);
+extern int32_t SDDS_StoreParametersInRpnMemories(SDDS_DATASET *SDDS_dataset);
+extern int32_t SDDS_StoreColumnsInRpnArrays(SDDS_DATASET *SDDS_dataset);
+extern int32_t SDDS_ComputeParameter(SDDS_DATASET *SDDS_dataset, int32_t parameter, char *equation);
+extern int32_t SDDS_ComputeColumn(SDDS_DATASET *SDDS_dataset, int32_t column, char *equation);
+static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq);
+
+static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq)
+{
+  long i;
+  EQUATION_DEFINITION *def;
+  int32_t index;
+
+  for (i = 0; i < plreq->defines; i++) {
+    def = plreq->define[i];
+    if (!def)
+      continue;
+    if (def->is_parameter) {
+      if ((index = SDDS_GetParameterIndex(table, def->name)) < 0) {
+        if (!SDDS_ProcessParameterString(table, def->text, SDDS_WRITEONLY_DEFINITION))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+        index = SDDS_GetParameterIndex(table, def->name);
+      } else if (def->argc) {
+        if (!SDDS_RedefineParameter(table, def->name, def->argv, def->argc))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+      }
+      SDDS_StoreParametersInRpnMemories(table);
+      SDDS_StoreColumnsInRpnArrays(table);
+      if (!SDDS_ComputeParameter(table, index, def->equation))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    } else {
+      if ((index = SDDS_GetColumnIndex(table, def->name)) < 0) {
+        if (!SDDS_ProcessColumnString(table, def->text, SDDS_WRITEONLY_DEFINITION))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+        index = SDDS_GetColumnIndex(table, def->name);
+      } else if (def->argc) {
+        if (!SDDS_RedefineColumn(table, def->name, def->argv, def->argc))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+      }
+      SDDS_StoreParametersInRpnMemories(table);
+      SDDS_StoreColumnsInRpnArrays(table);
+      if (!SDDS_ComputeColumn(table, index, def->equation))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    }
+  }
+  return 1;
+}
 
 void read_sddsplot_data(PLOT_SPEC *plspec)
 {
@@ -258,6 +304,12 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                !SDDS_GetDescription(&table, plreq->description_text+ifile, NULL)) ||
               !SDDS_SetRowFlags(&table, 1))
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+
+          if (plreq->defines) {
+            if (plreq->filenames != 1)
+              SDDS_Bomb("-define is only supported for plot requests with a single data file");
+            apply_plot_definitions(&table, plreq);
+          }
 
           if (!find_datanames_absent(&table, &dataname_absent, &datanames_absent, 
                                      plreq->yname, plreq->y1name,
