@@ -19,6 +19,7 @@
 #include "table.h"
 #include "SDDS.h"
 #include "sddsplot.h"
+#include "rpn.h"
 #include <ctype.h>
 #include <math.h>
 #include <string.h>
@@ -120,7 +121,7 @@ char *USAGE4 = "  -yScalesGroup={ID=<string>|fileIndex|fileString|nameIndex|name
   -stagger=[{xy}Increment=<value>][,files][,datanames]\n\
   -factor=[{xy}Multiplier=<value>][,{xy}Parameter=<value>][,{xy}Invert]\n";
 
-char *USAGE5 = "  -offset=[{x|y}change={value>][,{x|y}parameter=<name>][,{x|y}invert][,{x|y}beforelog]\n \
+char *USAGE5 = "  -offset=[{x|y}change={value>][,{x|y}parameter=<name>][,{x|y}invert][,{x|y}beforelog]\n\
   -dither=[{x|y}range=<fraction>]\n\
   -overlay=[{xy}Mode=<mode>][,{xy}Factor=<value>][,{xy}Offset=<value>][,{xy}Center]\n\
   -sample=<fraction>  -sparse=<interval>[,<offset>]  -presparse=<interval>[,<offset>]\n\
@@ -131,6 +132,7 @@ char *USAGE5 = "  -offset=[{x|y}change={value>][,{x|y}parameter=<name>][,{x|y}in
   -intensityBar=[text=<string>,][labelsize=<value>][,unitsize=<value>][,xadjust=<value>]\n\
   -convertunits={column|parameter},<name>,<new-units-name>,<old-units-name>[,<factor>]\n\
   -3d={column|array},<x-name>,<y-name>,<z-name>[,<intensity-name>]\n\
+  -define={column|parameter},<name>,<equation>[,<keyword>=<value>...]\n\
   -equalAspect[={-1,1}] (currently applies to -3d plots)\n\
   -orderColors={temperature|rtemperature|spectral|rspectral|start=(<red>,<green>,<blue>){[,finish=(<red>,<green>,<blue>)]|[,increment=(<red>,<green>,<blue>)]}}\n\
   All colors range from 0 to 65535.\n\
@@ -203,6 +205,7 @@ static char *main_keyword[] = {
   "filter",
   "timeFilter",
   "match",
+  "define",
   "drawline",
   "swap",
   "_showlinkdate",
@@ -299,6 +302,7 @@ extern long aspectratio_AP(PLOT_SPEC *plotspec, char **item, long items),
   filter_AP(PLOT_SPEC *plotspec, char **item, long items),
   time_filter_AP(PLOT_SPEC *plotspec, char **item, long items),
   match_AP(PLOT_SPEC *plotspec, char **item, long items),
+  define_AP(PLOT_SPEC *plotspec, char **item, long items),
   drawline_AP(PLOT_SPEC *plotspec, char **item, long items),
   swap_AP(PLOT_SPEC *plotspec, char **item, long items),
   showlinkdate_AP(PLOT_SPEC *plotspec, char **item, long items),
@@ -394,6 +398,7 @@ static long (*main_parser[])(PLOT_SPEC *plotspec, char **item, long items) = {
   filter_AP,
   time_filter_AP,
   match_AP,
+  define_AP,
   drawline_AP,
   swap_AP,
   showlinkdate_AP,
@@ -612,6 +617,10 @@ int sddsplot_main(int commandlineArgc, char **commandlineArgv)
   plot_spec.outputMode = PLOT_OUTPUT_GRAPHICS;
 
   plot_spec.fontsize[0].autosize = 1;
+
+  rpn(getenv("RPN_DEFNS"));
+  if (rpn_check_error())
+    exit(1);
 
   parseCommandlineToMotif(commandlineArgc, commandlineArgv);
   parseCommandlineToQT(commandlineArgc, commandlineArgv);
@@ -3623,6 +3632,13 @@ void add_plot_request(PLOT_SPEC *plspec)
           memcpy((char *)newReq->time_filter, (char *)firstReq->time_filter,
                  firstReq->time_filters * sizeof(TIME_FILTER_DEFINITION *));
         }
+      if (firstReq->defines)
+        {
+          newReq->define = (EQUATION_DEFINITION **)calloc(sizeof(EQUATION_DEFINITION *),
+                                                          firstReq->defines);
+          memcpy((char *)newReq->define, (char *)firstReq->define,
+                 firstReq->defines * sizeof(EQUATION_DEFINITION *));
+        }
       if (plspec->plot_request[plspec->plot_requests].graphic.type == 0)
         {
           plspec->plot_request[plspec->plot_requests].graphic.type = plspec->plot_request[plspec->plot_requests].linetype_default;
@@ -3750,6 +3766,11 @@ long add_filename(PLOT_SPEC *plotspec, char *filename)
     {
       if (strcmp(filename, plreq->filename[i]) == 0)
         return 1;
+    }
+  if (plreq->defines && plreq->filenames >= 1)
+    {
+      fprintf(stderr, "error: -define is only supported for plot requests with a single data file\n");
+      return 0;
     }
   plreq->filename = SDDS_Realloc(plreq->filename, sizeof(*plreq->filename) * (plreq->filenames + 1));
   SDDS_CopyString(&plreq->filename[plreq->filenames], filename);
