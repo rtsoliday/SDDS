@@ -167,6 +167,11 @@ local switches.
   \item {\tt -namescan=\{all | first\}} --- Specifies whether \verb|sddsplot| should scan all input files when searching
         for matches to wildcard datanames, or only the first.  The default is to scan all files, which may be slow
         for many files with large numbers of columns or parameters.
+
+  \item {\tt -define=\{column | parameter\},{\em equation}\[,{\em definition-entries}\]} --- Defines a column or parameter
+    for plotting, in terms of columns and parameters in the input file. This option must be given inside a plot request
+    and the request must have only one file.
+    
   \end{itemize}
    
 \item Controlling output type:
