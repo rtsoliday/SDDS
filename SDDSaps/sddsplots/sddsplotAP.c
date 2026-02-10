@@ -2322,6 +2322,22 @@ long match_AP(PLOT_SPEC *plotspec, char **item, long items)
     return 1;
     }
 
+static char *define_usage = "-define={column|parameter},<name>,<equation>[,<keyword>=<value>...]";
+
+long define_AP(PLOT_SPEC *plotspec, char **item, long items)
+{
+  PLOT_REQUEST *plreq;
+  plreq = &plotspec->plot_request[plotspec->plot_requests-1];
+  if (plreq->filenames > 1)
+    return bombre("invalid -define syntax (multiple files)", define_usage, 0);
+  plreq->define = (EQUATION_DEFINITION**)SDDS_Realloc(plreq->define,
+                             sizeof(*plreq->define)*(plreq->defines+1));
+  if (!(plreq->define[plreq->defines]=process_new_equation_definition(item, items)))
+    return bombre("invalid -define syntax", define_usage, 0);
+  plreq->defines ++;
+  return 1;
+}
+
 
 long drawline_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
