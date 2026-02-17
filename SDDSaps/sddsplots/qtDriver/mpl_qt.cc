@@ -21,6 +21,8 @@ static bool isEqualAspectArgument(const char *arg) {
 #include <unistd.h>
 #ifndef _WIN32
 #  include <fcntl.h>
+#  include <sys/stat.h>
+#  include <sys/types.h>
 #endif
 
 #include <QLocalServer>
@@ -2545,6 +2547,42 @@ static void customMessageHandler(QtMsgType type, const QMessageLogContext &conte
   }
 }
 
+#ifdef __linux__
+static bool isSecureRuntimeDir(const char *path) {
+  if (!path || !path[0])
+    return false;
+
+  struct stat st;
+  if (stat(path, &st) != 0)
+    return false;
+  if (!S_ISDIR(st.st_mode))
+    return false;
+  if (st.st_uid != getuid())
+    return false;
+  return (st.st_mode & 0777) == 0700;
+}
+
+static void configureXdgRuntimeDir() {
+  const char *runtimeDir = getenv("XDG_RUNTIME_DIR");
+  if (isSecureRuntimeDir(runtimeDir))
+    return;
+
+  char fallback[256];
+  snprintf(fallback, sizeof(fallback), "/tmp/mpl_qt-runtime-%ld", (long)getuid());
+
+  struct stat st;
+  if (stat(fallback, &st) == 0) {
+    if (!S_ISDIR(st.st_mode) || st.st_uid != getuid())
+      return;
+    chmod(fallback, 0700);
+  } else if (mkdir(fallback, 0700) != 0) {
+    return;
+  }
+
+  setenv("XDG_RUNTIME_DIR", fallback, 1);
+}
+#endif
+
 /**
  * @brief Main entry point of the MPL Outboard Driver application.
  *
@@ -2558,6 +2596,10 @@ int main(int argc, char *argv[]) {
   qInstallMessageHandler(customMessageHandler);
   lineTypeTable.nEntries = 0;
   lineTypeTable.typeFlag = 0x0000;
+
+#ifdef __linux__
+  configureXdgRuntimeDir();
+#endif
 
   QApplication app(argc, argv);
   QVector<Plot3DArgs> plots;
