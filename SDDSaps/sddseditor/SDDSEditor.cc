@@ -43,6 +43,7 @@
 #include <QRegularExpression>
 #include <QItemSelectionModel>
 #include <QSet>
+#include <QHash>
 #include <QMouseEvent>
 #include <QKeyEvent>
 #include <QTimer>
@@ -77,6 +78,163 @@
 #endif
 
 static bool validateTextForType(const QString &text, int type, bool showMessage);
+
+static void configureEditorPopupDialog(QDialog *dialog, const QWidget *owner,
+                                       Qt::WindowModality modality = Qt::WindowModal) {
+  if (!dialog)
+    return;
+
+  const QWidget *anchor = owner ? owner->window() : nullptr;
+  if (!anchor)
+    anchor = QApplication::activeWindow();
+
+  Qt::WindowFlags flags = dialog->windowFlags();
+  flags |= Qt::Window;
+  flags |= Qt::Dialog;
+  flags &= ~Qt::Sheet;
+  dialog->setParent(nullptr, flags);
+
+  auto placeDialog = [dialog, owner]() {
+    if (!dialog)
+      return;
+    const QWidget *anchor = owner ? owner->window() : nullptr;
+    if (!anchor)
+      anchor = QApplication::activeWindow();
+    if (!anchor)
+      return;
+
+    QRect parentFrame = anchor->frameGeometry();
+    int x = parentFrame.x() + (parentFrame.width() - dialog->width()) / 2;
+    int y = parentFrame.y();
+    if (y < 0)
+      y = 0;
+    dialog->move(x, y);
+  };
+
+  Qt::WindowModality effectiveModality = modality;
+  if (effectiveModality == Qt::WindowModal)
+    effectiveModality = Qt::ApplicationModal;
+  dialog->setWindowModality(effectiveModality);
+  dialog->adjustSize();
+  placeDialog();
+  QTimer::singleShot(0, dialog, [placeDialog]() { placeDialog(); });
+}
+
+class PositionedMessageBox {
+public:
+  using Icon = ::QMessageBox::Icon;
+  using StandardButton = ::QMessageBox::StandardButton;
+  using StandardButtons = ::QMessageBox::StandardButtons;
+
+  static constexpr StandardButton NoButton = ::QMessageBox::NoButton;
+  static constexpr StandardButton Ok = ::QMessageBox::Ok;
+  static constexpr StandardButton Save = ::QMessageBox::Save;
+  static constexpr StandardButton Discard = ::QMessageBox::Discard;
+  static constexpr StandardButton Cancel = ::QMessageBox::Cancel;
+
+  static StandardButton warning(QWidget *parent, const QString &title,
+                                const QString &text,
+                                StandardButtons buttons = ::QMessageBox::Ok,
+                                StandardButton defaultButton = ::QMessageBox::NoButton) {
+    return show(parent, ::QMessageBox::Warning, title, text, buttons,
+                defaultButton);
+  }
+
+  static StandardButton information(
+      QWidget *parent, const QString &title, const QString &text,
+      StandardButtons buttons = ::QMessageBox::Ok,
+      StandardButton defaultButton = ::QMessageBox::NoButton) {
+    return show(parent, ::QMessageBox::Information, title, text, buttons,
+                defaultButton);
+  }
+
+  static void about(QWidget *parent, const QString &title, const QString &text) {
+    show(parent, ::QMessageBox::Information, title, text, ::QMessageBox::Ok,
+         ::QMessageBox::Ok);
+  }
+
+private:
+  static StandardButton show(QWidget *parent, Icon icon, const QString &title,
+                             const QString &text, StandardButtons buttons,
+                             StandardButton defaultButton) {
+    ::QMessageBox box(icon, title, text, buttons, nullptr);
+    if (defaultButton != ::QMessageBox::NoButton)
+      box.setDefaultButton(defaultButton);
+    configureEditorPopupDialog(&box, parent);
+    return static_cast<StandardButton>(box.exec());
+  }
+};
+
+class PositionedInputDialog {
+public:
+  static int getInt(QWidget *parent, const QString &title, const QString &label,
+                    int value = 0, int min = -2147483647,
+                    int max = 2147483647, int step = 1, bool *ok = nullptr,
+                    Qt::WindowFlags flags = Qt::WindowFlags()) {
+    ::QInputDialog dialog(nullptr, flags);
+    dialog.setInputMode(::QInputDialog::IntInput);
+    dialog.setWindowTitle(title);
+    dialog.setLabelText(label);
+    dialog.setIntRange(min, max);
+    dialog.setIntStep(step);
+    dialog.setIntValue(value);
+    configureEditorPopupDialog(&dialog, parent);
+    const bool accepted = (dialog.exec() == QDialog::Accepted);
+    if (ok)
+      *ok = accepted;
+    return dialog.intValue();
+  }
+
+  static QString getItem(
+      QWidget *parent, const QString &title, const QString &label,
+      const QStringList &items, int current = 0, bool editable = true,
+      bool *ok = nullptr, Qt::WindowFlags flags = Qt::WindowFlags(),
+      Qt::InputMethodHints inputMethodHints = Qt::ImhNone) {
+    ::QInputDialog dialog(nullptr, flags);
+    dialog.setInputMode(::QInputDialog::TextInput);
+    dialog.setWindowTitle(title);
+    dialog.setLabelText(label);
+    dialog.setComboBoxItems(items);
+    dialog.setComboBoxEditable(editable);
+    dialog.setInputMethodHints(inputMethodHints);
+    if (!items.isEmpty()) {
+      int index = current;
+      if (index < 0)
+        index = 0;
+      if (index >= items.size())
+        index = items.size() - 1;
+      dialog.setTextValue(items.at(index));
+    }
+    configureEditorPopupDialog(&dialog, parent);
+    const bool accepted = (dialog.exec() == QDialog::Accepted);
+    if (ok)
+      *ok = accepted;
+    return dialog.textValue();
+  }
+
+  static QString getText(
+      QWidget *parent, const QString &title, const QString &label,
+      QLineEdit::EchoMode echo = QLineEdit::Normal,
+      const QString &text = QString(), bool *ok = nullptr,
+      Qt::WindowFlags flags = Qt::WindowFlags(),
+      Qt::InputMethodHints inputMethodHints = Qt::ImhNone) {
+    ::QInputDialog dialog(nullptr, flags);
+    dialog.setInputMode(::QInputDialog::TextInput);
+    dialog.setWindowTitle(title);
+    dialog.setLabelText(label);
+    dialog.setTextEchoMode(echo);
+    dialog.setTextValue(text);
+    dialog.setInputMethodHints(inputMethodHints);
+    configureEditorPopupDialog(&dialog, parent);
+    const bool accepted = (dialog.exec() == QDialog::Accepted);
+    if (ok)
+      *ok = accepted;
+    return dialog.textValue();
+  }
+};
+
+#define QMessageBox PositionedMessageBox
+#define QInputDialog PositionedInputDialog
 static int dimProduct(const QVector<int> &dims);
 
 class SingleClickEditTableView : public QTableView {
@@ -789,6 +947,470 @@ static bool evaluateExpressionText(const QString &expression,
   return parser.parse(out);
 }
 
+struct RowFilterValue {
+  QString text;
+  bool hasNumber;
+  long double number;
+};
+
+static bool parseNumericValueForFilter(const QString &text, long double *out) {
+  if (!out)
+    return false;
+  bool ok = false;
+  const QString trimmed = text.trimmed();
+  if (trimmed.isEmpty()) {
+    *out = 0.0L;
+    return true;
+  }
+  const double value = QLocale::c().toDouble(trimmed, &ok);
+  if (!ok)
+    return false;
+  *out = static_cast<long double>(value);
+  return true;
+}
+
+enum class RowFilterTokenKind {
+  Invalid,
+  End,
+  Identifier,
+  Number,
+  String,
+  LParen,
+  RParen,
+  And,
+  Or,
+  Not,
+  Eq,
+  Ne,
+  Lt,
+  Le,
+  Gt,
+  Ge
+};
+
+struct RowFilterToken {
+  RowFilterTokenKind kind;
+  QString text;
+};
+
+class RowFilterParser {
+public:
+  using Resolver = std::function<bool(const QString &, QString *)>;
+
+  RowFilterParser(const QString &expression, Resolver resolver)
+      : input(expression), pos(0), resolver(std::move(resolver)) {
+    next();
+  }
+
+  bool parse(bool *result, QString *errorText) {
+    if (!result)
+      return false;
+    if (current.kind == RowFilterTokenKind::Invalid) {
+      if (errorText)
+        *errorText = current.text;
+      return false;
+    }
+    bool value = false;
+    if (!parseOr(&value, errorText))
+      return false;
+    if (current.kind == RowFilterTokenKind::Invalid) {
+      if (errorText)
+        *errorText = current.text;
+      return false;
+    }
+    if (current.kind != RowFilterTokenKind::End) {
+      if (errorText)
+        *errorText = QObject::tr("Unexpected token '%1'").arg(current.text);
+      return false;
+    }
+    *result = value;
+    return true;
+  }
+
+private:
+  bool parseOr(bool *out, QString *errorText) {
+    bool lhs = false;
+    if (!parseAnd(&lhs, errorText))
+      return false;
+    while (current.kind == RowFilterTokenKind::Or) {
+      next();
+      bool rhs = false;
+      if (!parseAnd(&rhs, errorText))
+        return false;
+      lhs = lhs || rhs;
+    }
+    *out = lhs;
+    return true;
+  }
+
+  bool parseAnd(bool *out, QString *errorText) {
+    bool lhs = false;
+    if (!parseUnary(&lhs, errorText))
+      return false;
+    while (current.kind == RowFilterTokenKind::And) {
+      next();
+      bool rhs = false;
+      if (!parseUnary(&rhs, errorText))
+        return false;
+      lhs = lhs && rhs;
+    }
+    *out = lhs;
+    return true;
+  }
+
+  bool parseUnary(bool *out, QString *errorText) {
+    if (current.kind == RowFilterTokenKind::Not) {
+      next();
+      bool inner = false;
+      if (!parseUnary(&inner, errorText))
+        return false;
+      *out = !inner;
+      return true;
+    }
+    return parsePrimary(out, errorText);
+  }
+
+  bool parsePrimary(bool *out, QString *errorText) {
+    if (current.kind == RowFilterTokenKind::LParen) {
+      next();
+      bool inner = false;
+      if (!parseOr(&inner, errorText))
+        return false;
+      if (current.kind != RowFilterTokenKind::RParen) {
+        if (errorText)
+          *errorText = QObject::tr("Missing closing ')' in filter expression");
+        return false;
+      }
+      next();
+      *out = inner;
+      return true;
+    }
+    return parseComparisonOrTruthiness(out, errorText);
+  }
+
+  bool parseComparisonOrTruthiness(bool *out, QString *errorText) {
+    RowFilterValue left;
+    if (!parseValue(&left, errorText))
+      return false;
+
+    const RowFilterTokenKind op = current.kind;
+    if (op == RowFilterTokenKind::Eq || op == RowFilterTokenKind::Ne ||
+        op == RowFilterTokenKind::Lt || op == RowFilterTokenKind::Le ||
+        op == RowFilterTokenKind::Gt || op == RowFilterTokenKind::Ge) {
+      next();
+      RowFilterValue right;
+      if (!parseValue(&right, errorText))
+        return false;
+      *out = compareValues(left, op, right);
+      return true;
+    }
+
+    *out = toBool(left);
+    return true;
+  }
+
+  bool parseValue(RowFilterValue *out, QString *errorText) {
+    if (!out)
+      return false;
+
+    if (current.kind == RowFilterTokenKind::String) {
+      out->text = current.text;
+      out->hasNumber = parseNumericValueForFilter(out->text, &out->number);
+      next();
+      return true;
+    }
+
+    if (current.kind == RowFilterTokenKind::Number) {
+      out->text = current.text;
+      out->hasNumber = parseNumericValueForFilter(out->text, &out->number);
+      if (!out->hasNumber) {
+        if (errorText)
+          *errorText = QObject::tr("Invalid numeric literal '%1'").arg(out->text);
+        return false;
+      }
+      next();
+      return true;
+    }
+
+    if (current.kind == RowFilterTokenKind::Identifier) {
+      const QString ident = current.text;
+      const QString lowered = ident.toLower();
+      if (lowered == "true") {
+        out->text = "1";
+        out->hasNumber = true;
+        out->number = 1.0L;
+        next();
+        return true;
+      }
+      if (lowered == "false") {
+        out->text = "0";
+        out->hasNumber = true;
+        out->number = 0.0L;
+        next();
+        return true;
+      }
+
+      QString resolved;
+      if (!resolver(ident, &resolved)) {
+        if (errorText)
+          *errorText = QObject::tr("Unknown row variable/column '%1'").arg(ident);
+        return false;
+      }
+      out->text = resolved;
+      out->hasNumber = parseNumericValueForFilter(out->text, &out->number);
+      next();
+      return true;
+    }
+
+    if (errorText)
+      *errorText = QObject::tr("Expected value in filter expression");
+    return false;
+  }
+
+  static bool toBool(const RowFilterValue &value) {
+    if (value.hasNumber)
+      return value.number != 0.0L;
+    const QString t = value.text.trimmed().toLower();
+    return !(t.isEmpty() || t == "0" || t == "false" || t == "no" || t == "off");
+  }
+
+  static bool compareValues(const RowFilterValue &left,
+                            RowFilterTokenKind op,
+                            const RowFilterValue &right) {
+    if (left.hasNumber && right.hasNumber) {
+      switch (op) {
+      case RowFilterTokenKind::Eq:
+        return left.number == right.number;
+      case RowFilterTokenKind::Ne:
+        return left.number != right.number;
+      case RowFilterTokenKind::Lt:
+        return left.number < right.number;
+      case RowFilterTokenKind::Le:
+        return left.number <= right.number;
+      case RowFilterTokenKind::Gt:
+        return left.number > right.number;
+      case RowFilterTokenKind::Ge:
+        return left.number >= right.number;
+      default:
+        return false;
+      }
+    }
+
+    const int cmp = QString::compare(left.text, right.text, Qt::CaseSensitive);
+    switch (op) {
+    case RowFilterTokenKind::Eq:
+      return cmp == 0;
+    case RowFilterTokenKind::Ne:
+      return cmp != 0;
+    case RowFilterTokenKind::Lt:
+      return cmp < 0;
+    case RowFilterTokenKind::Le:
+      return cmp <= 0;
+    case RowFilterTokenKind::Gt:
+      return cmp > 0;
+    case RowFilterTokenKind::Ge:
+      return cmp >= 0;
+    default:
+      return false;
+    }
+  }
+
+  void skipWs() {
+    while (pos < input.size() && input[pos].isSpace())
+      ++pos;
+  }
+
+  static bool isIdentStart(QChar ch) {
+    return ch.isLetter() || ch == '_';
+  }
+
+  static bool isIdentPart(QChar ch) {
+    return ch.isLetterOrNumber() || ch == '_';
+  }
+
+  RowFilterToken readNumber() {
+    const int start = pos;
+    bool seenDigit = false;
+    bool seenDot = false;
+    if (pos < input.size() && (input[pos] == '+' || input[pos] == '-'))
+      ++pos;
+    while (pos < input.size()) {
+      QChar ch = input[pos];
+      if (ch.isDigit()) {
+        seenDigit = true;
+        ++pos;
+        continue;
+      }
+      if (ch == '.' && !seenDot) {
+        seenDot = true;
+        ++pos;
+        continue;
+      }
+      if ((ch == 'e' || ch == 'E') && seenDigit) {
+        int look = pos + 1;
+        if (look < input.size() && (input[look] == '+' || input[look] == '-'))
+          ++look;
+        bool expDigits = false;
+        while (look < input.size() && input[look].isDigit()) {
+          expDigits = true;
+          ++look;
+        }
+        if (!expDigits)
+          break;
+        pos = look;
+        continue;
+      }
+      break;
+    }
+    if (!seenDigit)
+      return {RowFilterTokenKind::Invalid, QString()};
+    return {RowFilterTokenKind::Number, input.mid(start, pos - start)};
+  }
+
+  RowFilterToken readString(QChar quote) {
+    ++pos;
+    QString value;
+    while (pos < input.size()) {
+      QChar ch = input[pos++];
+      if (ch == quote)
+        return {RowFilterTokenKind::String, value};
+      if (ch == '\\' && pos < input.size()) {
+        const QChar esc = input[pos++];
+        if (esc == 'n')
+          value.append('\n');
+        else if (esc == 'r')
+          value.append('\r');
+        else if (esc == 't')
+          value.append('\t');
+        else
+          value.append(esc);
+      } else {
+        value.append(ch);
+      }
+    }
+    return {RowFilterTokenKind::Invalid, QString()};
+  }
+
+  RowFilterToken readBracketIdentifier() {
+    ++pos;
+    const int start = pos;
+    while (pos < input.size() && input[pos] != ']')
+      ++pos;
+    if (pos >= input.size())
+      return {RowFilterTokenKind::Invalid, QString()};
+    const QString ident = input.mid(start, pos - start).trimmed();
+    ++pos;
+    return {RowFilterTokenKind::Identifier, ident};
+  }
+
+  void next() {
+    skipWs();
+    if (pos >= input.size()) {
+      current = {RowFilterTokenKind::End, QString()};
+      return;
+    }
+
+    const QChar ch = input[pos];
+    if (isIdentStart(ch)) {
+      const int start = pos;
+      ++pos;
+      while (pos < input.size() && isIdentPart(input[pos]))
+        ++pos;
+      current = {RowFilterTokenKind::Identifier, input.mid(start, pos - start)};
+      return;
+    }
+
+    if (ch == '[') {
+      RowFilterToken token = readBracketIdentifier();
+      if (token.kind == RowFilterTokenKind::Invalid) {
+        current = token;
+        current.text = QObject::tr("Unterminated [column] name");
+      } else {
+        current = token;
+      }
+      return;
+    }
+
+    if (ch.isDigit() || ch == '.' || ch == '+' || ch == '-') {
+      RowFilterToken token = readNumber();
+      if (token.kind != RowFilterTokenKind::Invalid) {
+        current = token;
+        return;
+      }
+    }
+
+    if (ch == '"' || ch == '\'') {
+      RowFilterToken token = readString(ch);
+      if (token.kind == RowFilterTokenKind::Invalid) {
+        current = token;
+        current.text = QObject::tr("Unterminated string literal");
+      } else {
+        current = token;
+      }
+      return;
+    }
+
+    if (input.mid(pos, 2) == "&&") {
+      pos += 2;
+      current = {RowFilterTokenKind::And, "&&"};
+      return;
+    }
+    if (input.mid(pos, 2) == "||") {
+      pos += 2;
+      current = {RowFilterTokenKind::Or, "||"};
+      return;
+    }
+    if (input.mid(pos, 2) == "==") {
+      pos += 2;
+      current = {RowFilterTokenKind::Eq, "=="};
+      return;
+    }
+    if (input.mid(pos, 2) == "!=") {
+      pos += 2;
+      current = {RowFilterTokenKind::Ne, "!="};
+      return;
+    }
+    if (input.mid(pos, 2) == "<=") {
+      pos += 2;
+      current = {RowFilterTokenKind::Le, "<="};
+      return;
+    }
+    if (input.mid(pos, 2) == ">=") {
+      pos += 2;
+      current = {RowFilterTokenKind::Ge, ">="};
+      return;
+    }
+
+    ++pos;
+    switch (ch.unicode()) {
+    case '(':
+      current = {RowFilterTokenKind::LParen, "("};
+      return;
+    case ')':
+      current = {RowFilterTokenKind::RParen, ")"};
+      return;
+    case '!':
+      current = {RowFilterTokenKind::Not, "!"};
+      return;
+    case '<':
+      current = {RowFilterTokenKind::Lt, "<"};
+      return;
+    case '>':
+      current = {RowFilterTokenKind::Gt, ">"};
+      return;
+    default:
+      current = {RowFilterTokenKind::Invalid,
+                 QObject::tr("Unexpected character '%1'").arg(ch)};
+      return;
+    }
+  }
+
+  QString input;
+  int pos;
+  Resolver resolver;
+  RowFilterToken current;
+};
+
 static QString longDoubleToText(long double value) {
   return QString::asprintf("%.*Lg", std::numeric_limits<long double>::max_digits10 - 1,
                            value);
@@ -1411,6 +2033,8 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
     lastSearchPattern(QString()), lastReplaceText(QString()),
     lastFillSeriesStart("0"), lastFillSeriesStep("1"),
     lastNumericalExpression("x"), lastTextFormula("${x}"),
+    lastRowFilterExpression("X>0 && Status==\"OK\""),
+    rowFilterExpression(QString()), rowFilterActive(false),
     undoStack(new QUndoStack(this)), updatingModels(false),
     applyingStructuralUndo(false),
     darkPalette(darkPalette) {
@@ -1543,16 +2167,22 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
           [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
             if (!updatingModels)
               markDirty();
+            if (rowFilterActive)
+              refreshColumnRowFilter(false);
           });
   connect(columnModel, &QAbstractItemModel::rowsInserted, this,
           [this](const QModelIndex &, int, int) {
             if (!updatingModels)
               markDirty();
+            if (rowFilterActive)
+              refreshColumnRowFilter(false);
           });
   connect(columnModel, &QAbstractItemModel::rowsRemoved, this,
           [this](const QModelIndex &, int, int) {
             if (!updatingModels)
               markDirty();
+            if (rowFilterActive)
+              refreshColumnRowFilter(false);
           });
   columnView->setItemDelegate(new SDDSItemDelegate(
       [this](const QModelIndex &idx) {
@@ -1712,8 +2342,13 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   QMenu *columnRowsMenu = editMenu->addMenu(tr("Column Rows"));
   QAction *colRowIns = columnRowsMenu->addAction(tr("Insert"));
   QAction *colRowDel = columnRowsMenu->addAction(tr("Delete"));
+  QAction *colRowFilter = columnRowsMenu->addAction(tr("Filter/View..."));
+  QAction *colRowClearFilter = columnRowsMenu->addAction(tr("Clear Filter/View"));
+  colRowFilter->setShortcut(QKeySequence(tr("Ctrl+Shift+R")));
   connect(colRowIns, &QAction::triggered, this, &SDDSEditor::insertColumnRows);
   connect(colRowDel, &QAction::triggered, this, &SDDSEditor::deleteColumnRows);
+  connect(colRowFilter, &QAction::triggered, this, &SDDSEditor::filterColumnRows);
+  connect(colRowClearFilter, &QAction::triggered, this, &SDDSEditor::clearColumnRowFilter);
 
   QMenu *formulaMenu = editMenu->addMenu(tr("Formula / Fill"));
   QAction *fillSeriesAct = formulaMenu->addAction(tr("Fill Series..."));
@@ -3648,6 +4283,7 @@ void SDDSEditor::populateModels() {
 
   updatePanelSizing(pcount, ccount, acount);
   updatingModels = false;
+  refreshColumnRowFilter(false);
 }
 
 void SDDSEditor::updatePanelSizing(int32_t pcount, int32_t ccount, int32_t acount) {
@@ -3737,6 +4373,8 @@ void SDDSEditor::clearDataset() {
     columnModel->refresh();
     arrayModel->refresh();
   }
+  rowFilterActive = false;
+  rowFilterExpression.clear();
   undoStack->clear();
 }
 
@@ -3823,6 +4461,7 @@ void SDDSEditor::editParameterAttributes() {
   PARAMETER_DEFINITION *def = &dataset.layout.parameter_definition[row];
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Parameter Attributes"));
+  configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
   QLineEdit name(def->name ? def->name : "", &dlg);
   QLineEdit symbol(def->symbol ? def->symbol : "", &dlg);
@@ -3921,6 +4560,7 @@ void SDDSEditor::editColumnAttributes() {
   COLUMN_DEFINITION *def = &dataset.layout.column_definition[col];
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Column Attributes"));
+  configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
   QLineEdit name(def->name ? def->name : "", &dlg);
   QLineEdit symbol(def->symbol ? def->symbol : "", &dlg);
@@ -4019,6 +4659,7 @@ void SDDSEditor::editArrayAttributes() {
   ARRAY_DEFINITION *def = &dataset.layout.array_definition[col];
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Array Attributes"));
+  configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
   QLineEdit name(def->name ? def->name : "", &dlg);
   QLineEdit symbol(def->symbol ? def->symbol : "", &dlg);
@@ -4251,9 +4892,13 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
   QAction *descAct = menu.addAction(tr("Sort descending"));
   QAction *searchAct = menu.addAction(tr("Search/Replace"));
   menu.addSeparator();
+  QAction *filterAct = menu.addAction(tr("Filter/View..."));
+  QAction *clearFilterAct = menu.addAction(tr("Clear Filter/View"));
+  menu.addSeparator();
   QAction *fillSeriesAct = menu.addAction(tr("Fill Series..."));
   QAction *applyExprAct = menu.addAction(tr("Apply Numerical Expression..."));
   QAction *copyFormulaAct = menu.addAction(tr("Apply Text Formula..."));
+  filterAct->setShortcut(QKeySequence(tr("Ctrl+Shift+R")));
   fillSeriesAct->setShortcut(QKeySequence(tr("Ctrl+Shift+F")));
   applyExprAct->setShortcut(QKeySequence(tr("Ctrl+Shift+E")));
   copyFormulaAct->setShortcut(QKeySequence(tr("Ctrl+Shift+M")));
@@ -4268,6 +4913,11 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
     sortColumn(column, Qt::DescendingOrder);
   else if (chosen == searchAct)
     searchColumn(column);
+  else if (chosen == filterAct) {
+    columnView->setFocus();
+    filterColumnRows();
+  } else if (chosen == clearFilterAct)
+    clearColumnRowFilter();
   else if (chosen == fillSeriesAct)
     fillSeriesSelection();
   else if (chosen == applyExprAct)
@@ -4302,9 +4952,13 @@ void SDDSEditor::columnRowMenuRequested(const QPoint &pos) {
   QAction *insAct = menu.addAction(tr("Insert"));
   QAction *delAct = menu.addAction(tr("Delete"));
   menu.addSeparator();
+  QAction *filterAct = menu.addAction(tr("Filter/View..."));
+  QAction *clearFilterAct = menu.addAction(tr("Clear Filter/View"));
+  menu.addSeparator();
   QAction *fillSeriesAct = menu.addAction(tr("Fill Series..."));
   QAction *applyExprAct = menu.addAction(tr("Apply Numerical Expression..."));
   QAction *copyFormulaAct = menu.addAction(tr("Apply Text Formula..."));
+  filterAct->setShortcut(QKeySequence(tr("Ctrl+Shift+R")));
   fillSeriesAct->setShortcut(QKeySequence(tr("Ctrl+Shift+F")));
   applyExprAct->setShortcut(QKeySequence(tr("Ctrl+Shift+E")));
   copyFormulaAct->setShortcut(QKeySequence(tr("Ctrl+Shift+M")));
@@ -4319,6 +4973,11 @@ void SDDSEditor::columnRowMenuRequested(const QPoint &pos) {
                   QItemSelectionModel::Rows |
                       QItemSelectionModel::ClearAndSelect);
     deleteColumnRows();
+  } else if (chosen == filterAct) {
+    columnView->setFocus();
+    filterColumnRows();
+  } else if (chosen == clearFilterAct) {
+    clearColumnRowFilter();
   } else if (chosen == fillSeriesAct) {
     columnView->setFocus();
     fillSeriesSelection();
@@ -4542,7 +5201,7 @@ void SDDSEditor::searchColumn(int column) {
   searchColumnDialog = dlg;
   dlg->setWindowTitle(tr("Search Column"));
   dlg->setAttribute(Qt::WA_DeleteOnClose);
-  dlg->setWindowModality(Qt::NonModal);
+  configureEditorPopupDialog(dlg, this, Qt::NonModal);
 
   QVBoxLayout *layout = new QVBoxLayout(dlg);
   QFormLayout *form = new QFormLayout();
@@ -4779,13 +5438,6 @@ void SDDSEditor::searchColumn(int column) {
     searchColumnDialog = nullptr;
   });
 
-  dlg->adjustSize();
-  QRect parentFrame = frameGeometry();
-  int x = parentFrame.x() + (parentFrame.width() - dlg->width()) / 2;
-  int y = parentFrame.y();
-  if (y < 0)
-    y = 0;
-  dlg->move(x, y);
   dlg->show();
   dlg->raise();
   dlg->activateWindow();
@@ -4806,6 +5458,7 @@ void SDDSEditor::resizeArray(int column) {
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Resize Array"));
+  configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
   QVector<QSpinBox *> boxes(def->dimensions);
   for (int i = 0; i < def->dimensions; ++i) {
@@ -4847,6 +5500,7 @@ void SDDSEditor::searchArray(int column) {
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Search Array"));
+  configureEditorPopupDialog(&dlg, this);
   QVBoxLayout layout(&dlg);
   QFormLayout form;
   QLineEdit patternEdit(&dlg);
@@ -5263,6 +5917,7 @@ void SDDSEditor::insertParameter() {
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("New Parameter"));
+  configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
   QLineEdit name(&dlg);
   QLineEdit symbol(&dlg);
@@ -5350,6 +6005,7 @@ void SDDSEditor::insertColumn() {
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("New Column"));
+  configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
   QLineEdit name(&dlg);
   QLineEdit symbol(&dlg);
@@ -5439,6 +6095,7 @@ void SDDSEditor::insertArray() {
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("New Array"));
+  configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
   QLineEdit name(&dlg);
   QLineEdit symbol(&dlg);
@@ -5696,6 +6353,209 @@ void SDDSEditor::deleteColumnRows() {
                             tr("Delete %1 Rows").arg(rows.size()));
 }
 
+void SDDSEditor::filterColumnRows() {
+  if (!datasetLoaded) {
+    QMessageBox::information(this, tr("Row Filter"), tr("Load a file first."));
+    return;
+  }
+  if (dataset.layout.n_columns <= 0) {
+    QMessageBox::information(this, tr("Row Filter"), tr("No columns available to filter."));
+    return;
+  }
+
+  commitModels();
+
+  QString selectedColumnDefault;
+  int selectedColumn = -1;
+  if (columnView) {
+    const QModelIndex current = columnView->currentIndex();
+    if (current.isValid())
+      selectedColumn = current.column();
+    else if (QItemSelectionModel *sel = columnView->selectionModel()) {
+      const QModelIndexList cols = sel->selectedColumns();
+      if (!cols.isEmpty())
+        selectedColumn = cols.first().column();
+    }
+  }
+  if (selectedColumn >= 0 && selectedColumn < dataset.layout.n_columns) {
+    QString columnName =
+        QString::fromLocal8Bit(dataset.layout.column_definition[selectedColumn].name);
+    const QRegularExpression identRe(QStringLiteral("^[A-Za-z_][A-Za-z0-9_]*$"));
+    if (!identRe.match(columnName).hasMatch())
+      columnName = QStringLiteral("[%1]").arg(columnName);
+    selectedColumnDefault = QStringLiteral("%1 > 0").arg(columnName);
+  }
+
+  QString defaultExpression = rowFilterExpression;
+  if (defaultExpression.isEmpty()) {
+    if (!selectedColumnDefault.isEmpty())
+      defaultExpression = selectedColumnDefault;
+    else
+      defaultExpression = lastRowFilterExpression;
+  }
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Filter/View Rows"));
+  configureEditorPopupDialog(&dlg, this);
+  QVBoxLayout layout(&dlg);
+
+  QLabel prompt(tr("Expression (non-destructive view filter):"), &dlg);
+  QLineEdit exprEdit(defaultExpression, &dlg);
+  QLabel help(tr("Examples: X>0 && Status==\"OK\"    or    [Beam Current] >= 100"), &dlg);
+
+  layout.addWidget(&prompt);
+  layout.addWidget(&exprEdit);
+  layout.addWidget(&help);
+
+  QDialogButtonBox box(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dlg);
+  QPushButton *clearBtn = box.addButton(tr("Clear"), QDialogButtonBox::ActionRole);
+  layout.addWidget(&box);
+  bool cleared = false;
+
+  connect(&box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  connect(&box, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  connect(clearBtn, &QPushButton::clicked, &dlg, [this, &dlg, &cleared]() {
+    cleared = true;
+    clearColumnRowFilter();
+    dlg.accept();
+  });
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+  if (cleared)
+    return;
+
+  const QString expr = exprEdit.text().trimmed();
+  if (expr.isEmpty()) {
+    clearColumnRowFilter();
+    return;
+  }
+
+  rowFilterExpression = expr;
+  lastRowFilterExpression = expr;
+  rowFilterActive = true;
+  refreshColumnRowFilter(true);
+}
+
+void SDDSEditor::clearColumnRowFilter() {
+  rowFilterActive = false;
+  rowFilterExpression.clear();
+  refreshColumnRowFilter(false);
+  message(tr("Row filter cleared"));
+}
+
+bool SDDSEditor::applyColumnRowFilter(QString *errorText, int *visibleRows) {
+  if (!columnView || !columnModel)
+    return false;
+
+  const int rows = columnModel->rowCount();
+  int visible = 0;
+
+  if (!rowFilterActive || rowFilterExpression.trimmed().isEmpty()) {
+    for (int r = 0; r < rows; ++r)
+      columnView->setRowHidden(r, false);
+    if (visibleRows)
+      *visibleRows = rows;
+    return true;
+  }
+
+  if (currentPage < 0 || currentPage >= pages.size()) {
+    for (int r = 0; r < rows; ++r)
+      columnView->setRowHidden(r, false);
+    if (visibleRows)
+      *visibleRows = rows;
+    return true;
+  }
+
+  const PageStore &pd = pages[currentPage];
+  QHash<QString, int> columnLookup;
+  columnLookup.reserve(dataset.layout.n_columns * 2 + 1);
+  for (int c = 0; c < dataset.layout.n_columns; ++c) {
+    const char *name = dataset.layout.column_definition[c].name;
+    if (!name)
+      continue;
+    const QString n = QString::fromLocal8Bit(name).trimmed();
+    if (n.isEmpty())
+      continue;
+    columnLookup.insert(n.toLower(), c);
+  }
+
+  auto resolverForRow = [&](int row, const QString &ident, QString *outText) -> bool {
+    if (!outText)
+      return false;
+    const QString lowered = ident.toLower();
+    if (lowered == "row" || lowered == "i") {
+      *outText = QString::number(row);
+      return true;
+    }
+
+    auto it = columnLookup.constFind(lowered);
+    if (it == columnLookup.constEnd())
+      return false;
+
+    const int col = it.value();
+    if (col < 0 || col >= pd.columns.size()) {
+      *outText = QString();
+      return true;
+    }
+    const QVector<QString> &values = pd.columns[col];
+    *outText = (row >= 0 && row < values.size()) ? values[row] : QString();
+    return true;
+  };
+
+  const QString expression = rowFilterExpression;
+  for (int r = 0; r < rows; ++r) {
+    RowFilterParser parser(expression,
+                           [&](const QString &ident, QString *value) {
+                             return resolverForRow(r, ident, value);
+                           });
+    bool pass = false;
+    QString parseError;
+    if (!parser.parse(&pass, &parseError)) {
+      if (errorText) {
+        *errorText = tr("Row filter error at row %1: %2")
+                         .arg(r + 1)
+                         .arg(parseError.isEmpty() ? tr("invalid expression") : parseError);
+      }
+      return false;
+    }
+    columnView->setRowHidden(r, !pass);
+    if (pass)
+      ++visible;
+  }
+
+  if (visibleRows)
+    *visibleRows = visible;
+  return true;
+}
+
+void SDDSEditor::refreshColumnRowFilter(bool showMessageOnError) {
+  if (!columnView || !columnModel)
+    return;
+
+  QString errorText;
+  int visibleRows = 0;
+  if (!applyColumnRowFilter(&errorText, &visibleRows)) {
+    for (int r = 0; r < columnModel->rowCount(); ++r)
+      columnView->setRowHidden(r, false);
+    rowFilterActive = false;
+    if (showMessageOnError) {
+      QMessageBox::warning(this, tr("Row Filter"),
+                           errorText.isEmpty() ? tr("Failed to apply row filter") : errorText);
+    }
+    if (!errorText.isEmpty())
+      message(tr("Row filter disabled: %1").arg(errorText));
+    return;
+  }
+
+  if (rowFilterActive && showMessageOnError) {
+    const int totalRows = columnModel->rowCount();
+    message(tr("Row filter active: %1/%2 rows visible")
+                .arg(visibleRows)
+                .arg(totalRows));
+  }
+}
+
 void SDDSEditor::fillSeriesSelection() {
   QTableView *view = focusedTable();
   if (!view || !view->selectionModel()) {
@@ -5720,6 +6580,7 @@ void SDDSEditor::fillSeriesSelection() {
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Fill Series"));
+  configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
   QLineEdit startEdit(lastFillSeriesStart, &dlg);
   QLineEdit stepEdit(lastFillSeriesStep, &dlg);
@@ -6145,6 +7006,7 @@ void SDDSEditor::restartApp() {
 void SDDSEditor::showHelp() {
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Help"));
+  configureEditorPopupDialog(&dlg, this);
   QVBoxLayout layout(&dlg);
   QPlainTextEdit text(&dlg);
   text.setReadOnly(true);
@@ -6161,6 +7023,11 @@ void SDDSEditor::showHelp() {
                        " - Apply Numerical Expression... (Ctrl+Shift+E): evaluate expression per selected cell\n"
                        " - Apply Text Formula... (Ctrl+Shift+M): apply text template to selection\n"
                        "   Tokens: ${x}, ${a}, ${i}, ${row}, ${col}, ${dr}, ${dc}\n\n"
+                       "Column row view filter (Edit->Column Rows):\n"
+                       " - Filter/View... (Ctrl+Shift+R): show rows matching expression without deleting data\n"
+                       " - Clear Filter/View: return to full row view\n"
+                       " - Expression operators: &&, ||, !, ==, !=, <, <=, >, >=\n"
+                       " - Use [Column Name] for names containing spaces\n\n"
                        "Variables reference\n"
                        " - x / ${x}: current cell value\n"
                        " - a / ${a}: anchor value (first selected cell)\n"

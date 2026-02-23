@@ -90,6 +90,8 @@ private slots:
   void deleteArray();
   void insertColumnRows();
   void deleteColumnRows();
+  void filterColumnRows();
+  void clearColumnRowFilter();
   void fillSeriesSelection();
   void applyNumericalExpressionSelection();
   void applyTextFormulaSelection();
@@ -145,6 +147,8 @@ private:
   void searchColumn(int column);
   void searchArray(int column);
   void updatePanelSizing(int32_t pcount, int32_t ccount, int32_t acount);
+  bool applyColumnRowFilter(QString *errorText = nullptr, int *visibleRows = nullptr);
+  void refreshColumnRowFilter(bool showMessageOnError);
   void message(const QString &text);
   void markDirty();
   bool maybeSave();
@@ -183,6 +187,9 @@ private:
   QString lastFillSeriesStep;
   QString lastNumericalExpression;
   QString lastTextFormula;
+  QString lastRowFilterExpression;
+  QString rowFilterExpression;
+  bool rowFilterActive;
   QUndoStack *undoStack;
   bool updatingModels;
   bool applyingStructuralUndo;
