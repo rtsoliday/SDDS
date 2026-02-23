@@ -32,6 +32,15 @@ class QProgressDialog;
 class ParameterPageModel;
 class ColumnPageModel;
 class ArrayPageModel;
+class StructuralChangeCommand;
+class SDDSEditor;
+struct StructuralSnapshot;
+
+bool captureStructuralSnapshot(SDDSEditor *editor, StructuralSnapshot *snapshot);
+bool restoreStructuralSnapshot(SDDSEditor *editor, const StructuralSnapshot &snapshot);
+void pushStructuralUndoCommand(SDDSEditor *editor,
+                               StructuralSnapshot &&before,
+                               const QString &label);
 
 struct ArrayStore {
   QVector<QString> values;
@@ -81,6 +90,9 @@ private slots:
   void deleteArray();
   void insertColumnRows();
   void deleteColumnRows();
+  void fillSeriesSelection();
+  void applyNumericalExpressionSelection();
+  void applyTextFormulaSelection();
   void clonePage();
   void insertPage();
   void deletePage();
@@ -103,6 +115,14 @@ protected:
   void resizeEvent(QResizeEvent *event) override;
 
 private:
+  friend class StructuralChangeCommand;
+  friend struct StructuralSnapshot;
+  friend bool captureStructuralSnapshot(SDDSEditor *editor, StructuralSnapshot *snapshot);
+  friend bool restoreStructuralSnapshot(SDDSEditor *editor, const StructuralSnapshot &snapshot);
+  friend void pushStructuralUndoCommand(SDDSEditor *editor,
+                                        StructuralSnapshot &&before,
+                                        const QString &label);
+
   void applyTheme(bool dark);
   void flushPendingEdits();
   void loadPage(int page);
@@ -159,8 +179,13 @@ private:
   int lastRowAddCount;
   QString lastSearchPattern;
   QString lastReplaceText;
+  QString lastFillSeriesStart;
+  QString lastFillSeriesStep;
+  QString lastNumericalExpression;
+  QString lastTextFormula;
   QUndoStack *undoStack;
   bool updatingModels;
+  bool applyingStructuralUndo;
   bool darkPalette;
   QPointer<QDialog> searchColumnDialog;
 

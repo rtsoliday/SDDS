@@ -56,6 +56,7 @@
 #include <cctype>
 #include <algorithm>
 #include <limits>
+#include <cmath>
 #include <QLocale>
 #include <QResizeEvent>
 
@@ -583,6 +584,405 @@ static bool applyCellEditWithUndo(QUndoStack *undoStack, QAbstractItemModel *mod
   return true;
 }
 
+struct ExpressionContext {
+  long double x;
+  long double a;
+  int i;
+  int row;
+  int col;
+  int dr;
+  int dc;
+};
+
+class ExpressionParser {
+public:
+  ExpressionParser(const QString &expression, const ExpressionContext &context)
+      : text(expression), ctx(context), pos(0), ok(true) {}
+
+  bool parse(long double *out) {
+    if (!out)
+      return false;
+    skipWs();
+    long double value = parseExpression();
+    skipWs();
+    if (!ok || pos != text.size())
+      return false;
+    *out = value;
+    return true;
+  }
+
+private:
+  long double parseExpression() {
+    long double lhs = parseTerm();
+    while (ok) {
+      skipWs();
+      if (match('+'))
+        lhs += parseTerm();
+      else if (match('-'))
+        lhs -= parseTerm();
+      else
+        break;
+    }
+    return lhs;
+  }
+
+  long double parseTerm() {
+    long double lhs = parsePower();
+    while (ok) {
+      skipWs();
+      if (match('*'))
+        lhs *= parsePower();
+      else if (match('/')) {
+        long double rhs = parsePower();
+        if (rhs == 0.0L) {
+          ok = false;
+          return 0.0L;
+        }
+        lhs /= rhs;
+      } else
+        break;
+    }
+    return lhs;
+  }
+
+  long double parsePower() {
+    long double base = parseUnary();
+    skipWs();
+    if (match('^')) {
+      long double expv = parsePower();
+      base = powl(base, expv);
+    }
+    return base;
+  }
+
+  long double parseUnary() {
+    skipWs();
+    if (match('+'))
+      return parseUnary();
+    if (match('-'))
+      return -parseUnary();
+    return parsePrimary();
+  }
+
+  long double parsePrimary() {
+    skipWs();
+    if (match('(')) {
+      long double value = parseExpression();
+      skipWs();
+      if (!match(')'))
+        ok = false;
+      return value;
+    }
+
+    if (pos < text.size() && (text[pos].isDigit() || text[pos] == '.'))
+      return parseNumber();
+
+    if (pos < text.size() && (text[pos].isLetter() || text[pos] == '_')) {
+      const QString ident = parseIdentifier();
+      skipWs();
+      if (match('(')) {
+        long double arg = parseExpression();
+        skipWs();
+        if (!match(')')) {
+          ok = false;
+          return 0.0L;
+        }
+        return applyFunction(ident, arg);
+      }
+      return variableValue(ident);
+    }
+
+    ok = false;
+    return 0.0L;
+  }
+
+  long double parseNumber() {
+    QByteArray tail = text.mid(pos).toLocal8Bit();
+    const char *start = tail.constData();
+    char *end = nullptr;
+    errno = 0;
+    long double value = strtold(start, &end);
+    if (end == start || errno == ERANGE) {
+      ok = false;
+      return 0.0L;
+    }
+    pos += static_cast<int>(end - start);
+    return value;
+  }
+
+  QString parseIdentifier() {
+    const int start = pos;
+    while (pos < text.size() && (text[pos].isLetterOrNumber() || text[pos] == '_'))
+      ++pos;
+    return text.mid(start, pos - start).toLower();
+  }
+
+  long double variableValue(const QString &ident) {
+    if (ident == "x")
+      return ctx.x;
+    if (ident == "a")
+      return ctx.a;
+    if (ident == "i")
+      return static_cast<long double>(ctx.i);
+    if (ident == "row")
+      return static_cast<long double>(ctx.row);
+    if (ident == "col")
+      return static_cast<long double>(ctx.col);
+    if (ident == "dr")
+      return static_cast<long double>(ctx.dr);
+    if (ident == "dc")
+      return static_cast<long double>(ctx.dc);
+    if (ident == "pi")
+      return acosl(-1.0L);
+    if (ident == "e")
+      return expl(1.0L);
+    ok = false;
+    return 0.0L;
+  }
+
+  long double applyFunction(const QString &ident, long double arg) {
+    if (ident == "abs")
+      return fabsl(arg);
+    if (ident == "sqrt")
+      return sqrtl(arg);
+    if (ident == "sin")
+      return sinl(arg);
+    if (ident == "cos")
+      return cosl(arg);
+    if (ident == "tan")
+      return tanl(arg);
+    if (ident == "log")
+      return logl(arg);
+    if (ident == "exp")
+      return expl(arg);
+    if (ident == "floor")
+      return floorl(arg);
+    if (ident == "ceil")
+      return ceill(arg);
+    ok = false;
+    return 0.0L;
+  }
+
+  void skipWs() {
+    while (pos < text.size() && text[pos].isSpace())
+      ++pos;
+  }
+
+  bool match(QChar ch) {
+    if (pos < text.size() && text[pos] == ch) {
+      ++pos;
+      return true;
+    }
+    return false;
+  }
+
+  QString text;
+  ExpressionContext ctx;
+  int pos;
+  bool ok;
+};
+
+static bool evaluateExpressionText(const QString &expression,
+                                   const ExpressionContext &ctx,
+                                   long double *out) {
+  ExpressionParser parser(expression, ctx);
+  return parser.parse(out);
+}
+
+static QString longDoubleToText(long double value) {
+  return QString::asprintf("%.*Lg", std::numeric_limits<long double>::max_digits10 - 1,
+                           value);
+}
+
+static QString applyTemplateVariables(const QString &templ,
+                                      const QString &x,
+                                      const QString &a,
+                                      int i,
+                                      int row,
+                                      int col,
+                                      int dr,
+                                      int dc) {
+  QString out = templ;
+  out.replace("${x}", x);
+  out.replace("${a}", a);
+  out.replace("${i}", QString::number(i));
+  out.replace("${row}", QString::number(row));
+  out.replace("${col}", QString::number(col));
+  out.replace("${dr}", QString::number(dr));
+  out.replace("${dc}", QString::number(dc));
+  return out;
+}
+
+struct StructuralSnapshot {
+  SDDS_DATASET dataset;
+  QVector<PageStore> pages;
+  int currentPage;
+  bool hasDataset;
+
+  StructuralSnapshot() : currentPage(0), hasDataset(false) {
+    memset(&dataset, 0, sizeof(dataset));
+  }
+
+  ~StructuralSnapshot() { clear(); }
+
+  StructuralSnapshot(const StructuralSnapshot &) = delete;
+  StructuralSnapshot &operator=(const StructuralSnapshot &) = delete;
+
+  StructuralSnapshot(StructuralSnapshot &&other) noexcept
+      : dataset(other.dataset), pages(std::move(other.pages)),
+        currentPage(other.currentPage), hasDataset(other.hasDataset) {
+    memset(&other.dataset, 0, sizeof(other.dataset));
+    other.currentPage = 0;
+    other.hasDataset = false;
+  }
+
+  StructuralSnapshot &operator=(StructuralSnapshot &&other) noexcept {
+    if (this == &other)
+      return *this;
+    clear();
+    dataset = other.dataset;
+    pages = std::move(other.pages);
+    currentPage = other.currentPage;
+    hasDataset = other.hasDataset;
+    memset(&other.dataset, 0, sizeof(other.dataset));
+    other.currentPage = 0;
+    other.hasDataset = false;
+    return *this;
+  }
+
+  void clear() {
+    if (hasDataset)
+      SDDS_Terminate(&dataset);
+    memset(&dataset, 0, sizeof(dataset));
+    pages.clear();
+    currentPage = 0;
+    hasDataset = false;
+  }
+};
+
+bool captureStructuralSnapshot(SDDSEditor *editor, StructuralSnapshot *snapshot) {
+  if (!editor || !snapshot)
+    return false;
+  snapshot->clear();
+  snapshot->pages = editor->pages;
+  snapshot->currentPage = editor->currentPage;
+  snapshot->hasDataset = editor->datasetLoaded;
+  if (!snapshot->hasDataset)
+    return true;
+  if (!SDDS_InitializeCopy(&snapshot->dataset, &editor->dataset, NULL, (char *)"m")) {
+    QMessageBox::warning(editor, QObject::tr("SDDS"),
+                         QObject::tr("Failed to capture editor state for undo"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    snapshot->clear();
+    return false;
+  }
+  return true;
+}
+
+bool restoreStructuralSnapshot(SDDSEditor *editor, const StructuralSnapshot &snapshot) {
+  if (!editor)
+    return false;
+
+  if (editor->datasetLoaded) {
+    SDDS_Terminate(&editor->dataset);
+    memset(&editor->dataset, 0, sizeof(editor->dataset));
+    editor->datasetLoaded = false;
+  }
+
+  if (snapshot.hasDataset) {
+    if (!SDDS_InitializeCopy(&editor->dataset,
+                             const_cast<SDDS_DATASET *>(&snapshot.dataset),
+                             NULL, (char *)"m")) {
+      QMessageBox::warning(editor, QObject::tr("SDDS"),
+                           QObject::tr("Failed to restore editor state from undo"));
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      return false;
+    }
+    editor->datasetLoaded = true;
+  }
+
+  editor->pages = snapshot.pages;
+  if (!editor->pages.isEmpty()) {
+    editor->currentPage = std::clamp(snapshot.currentPage, 0, editor->pages.size() - 1);
+  } else {
+    editor->currentPage = 0;
+  }
+
+  if (editor->datasetLoaded) {
+    editor->asciiSave = editor->dataset.layout.data_mode.mode == SDDS_ASCII;
+    editor->asciiBtn->setChecked(editor->asciiSave);
+    editor->binaryBtn->setChecked(!editor->asciiSave);
+  }
+
+  editor->pageCombo->blockSignals(true);
+  editor->pageCombo->clear();
+  for (int i = 0; i < editor->pages.size(); ++i)
+    editor->pageCombo->addItem(QObject::tr("Page %1").arg(i + 1));
+  if (!editor->pages.isEmpty())
+    editor->pageCombo->setCurrentIndex(editor->currentPage);
+  editor->pageCombo->blockSignals(false);
+
+  editor->populateModels();
+  if (editor->datasetLoaded && !editor->pages.isEmpty())
+    editor->loadPage(editor->currentPage + 1);
+  editor->updateWindowTitle();
+  return true;
+}
+
+class StructuralChangeCommand : public QUndoCommand {
+public:
+  StructuralChangeCommand(SDDSEditor *editor,
+                          StructuralSnapshot &&before,
+                          StructuralSnapshot &&after,
+                          const QString &label)
+      : editor(editor),
+        beforeState(std::move(before)),
+        afterState(std::move(after)),
+        skipInitialRedo(true) {
+    setText(label);
+  }
+
+  void undo() override { apply(beforeState); }
+
+  void redo() override {
+    if (skipInitialRedo) {
+      skipInitialRedo = false;
+      return;
+    }
+    apply(afterState);
+  }
+
+private:
+  void apply(const StructuralSnapshot &state) {
+    if (!editor)
+      return;
+    editor->applyingStructuralUndo = true;
+    bool ok = restoreStructuralSnapshot(editor, state);
+    editor->applyingStructuralUndo = false;
+    if (ok)
+      editor->markDirty();
+  }
+
+  SDDSEditor *editor;
+  StructuralSnapshot beforeState;
+  StructuralSnapshot afterState;
+  bool skipInitialRedo;
+};
+
+void pushStructuralUndoCommand(SDDSEditor *editor,
+                               StructuralSnapshot &&before,
+                               const QString &label) {
+  if (!editor || !editor->undoStack)
+    return;
+  StructuralSnapshot after;
+  if (!captureStructuralSnapshot(editor, &after))
+    return;
+  editor->undoStack->push(new StructuralChangeCommand(editor,
+                                                      std::move(before),
+                                                      std::move(after),
+                                                      label));
+}
+
 class CaretOnDoubleClickLineEdit : public QLineEdit {
 public:
   explicit CaretOnDoubleClickLineEdit(QWidget *parent = nullptr) : QLineEdit(parent) {}
@@ -1009,7 +1409,10 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   : QMainWindow(parent), datasetLoaded(false), dirty(false), asciiSave(true),
     currentPage(0), currentFilename(QString()), lastRowAddCount(1),
     lastSearchPattern(QString()), lastReplaceText(QString()),
+    lastFillSeriesStart("0"), lastFillSeriesStep("1"),
+    lastNumericalExpression("x"), lastTextFormula("${x}"),
     undoStack(new QUndoStack(this)), updatingModels(false),
+    applyingStructuralUndo(false),
     darkPalette(darkPalette) {
   loadProgressDialog = nullptr;
   loadProgressMin = 0;
@@ -1312,6 +1715,17 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   connect(colRowIns, &QAction::triggered, this, &SDDSEditor::insertColumnRows);
   connect(colRowDel, &QAction::triggered, this, &SDDSEditor::deleteColumnRows);
 
+  QMenu *formulaMenu = editMenu->addMenu(tr("Formula / Fill"));
+  QAction *fillSeriesAct = formulaMenu->addAction(tr("Fill Series..."));
+  QAction *applyExprAct = formulaMenu->addAction(tr("Apply Numerical Expression..."));
+  QAction *copyFormulaAct = formulaMenu->addAction(tr("Apply Text Formula..."));
+  fillSeriesAct->setShortcut(QKeySequence(tr("Ctrl+Shift+F")));
+  applyExprAct->setShortcut(QKeySequence(tr("Ctrl+Shift+E")));
+  copyFormulaAct->setShortcut(QKeySequence(tr("Ctrl+Shift+M")));
+  connect(fillSeriesAct, &QAction::triggered, this, &SDDSEditor::fillSeriesSelection);
+  connect(applyExprAct, &QAction::triggered, this, &SDDSEditor::applyNumericalExpressionSelection);
+  connect(copyFormulaAct, &QAction::triggered, this, &SDDSEditor::applyTextFormulaSelection);
+
   QMenu *pageMenu = editMenu->addMenu(tr("Page"));
   QAction *pageClone = pageMenu->addAction(tr("Insert and clone current page"));
   QAction *pageIns = pageMenu->addAction(tr("Insert"));
@@ -1396,7 +1810,12 @@ QTableView *SDDSEditor::focusedTable() const {
 void SDDSEditor::parameterMoved(int, int, int) {
   if (!datasetLoaded)
     return;
+  if (applyingStructuralUndo)
+    return;
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
   QHeaderView *vh = paramView->verticalHeader();
   int count = dataset.layout.n_parameters;
   QVector<int> order(count);
@@ -1438,12 +1857,18 @@ void SDDSEditor::parameterMoved(int, int, int) {
   vh->blockSignals(false);
 
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Reorder Parameters"));
 }
 
 void SDDSEditor::columnMoved(int, int, int) {
   if (!datasetLoaded)
     return;
+  if (applyingStructuralUndo)
+    return;
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
   QHeaderView *hh = columnView->horizontalHeader();
   int count = dataset.layout.n_columns;
   QVector<int> order(count);
@@ -1485,12 +1910,18 @@ void SDDSEditor::columnMoved(int, int, int) {
   hh->blockSignals(false);
 
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Reorder Columns"));
 }
 
 void SDDSEditor::arrayMoved(int, int, int) {
   if (!datasetLoaded)
     return;
+  if (applyingStructuralUndo)
+    return;
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
   QHeaderView *hh = arrayView->horizontalHeader();
   int count = dataset.layout.n_arrays;
   QVector<int> order(count);
@@ -1532,6 +1963,7 @@ void SDDSEditor::arrayMoved(int, int, int) {
   hh->blockSignals(false);
 
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Reorder Arrays"));
 }
 
 void SDDSEditor::copy() {
@@ -3818,6 +4250,14 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
   QAction *ascAct = menu.addAction(tr("Sort ascending"));
   QAction *descAct = menu.addAction(tr("Sort descending"));
   QAction *searchAct = menu.addAction(tr("Search/Replace"));
+  menu.addSeparator();
+  QAction *fillSeriesAct = menu.addAction(tr("Fill Series..."));
+  QAction *applyExprAct = menu.addAction(tr("Apply Numerical Expression..."));
+  QAction *copyFormulaAct = menu.addAction(tr("Apply Text Formula..."));
+  fillSeriesAct->setShortcut(QKeySequence(tr("Ctrl+Shift+F")));
+  applyExprAct->setShortcut(QKeySequence(tr("Ctrl+Shift+E")));
+  copyFormulaAct->setShortcut(QKeySequence(tr("Ctrl+Shift+M")));
+  menu.addSeparator();
   QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
   if (chosen == plotAct)
@@ -3828,6 +4268,12 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
     sortColumn(column, Qt::DescendingOrder);
   else if (chosen == searchAct)
     searchColumn(column);
+  else if (chosen == fillSeriesAct)
+    fillSeriesSelection();
+  else if (chosen == applyExprAct)
+    applyNumericalExpressionSelection();
+  else if (chosen == copyFormulaAct)
+    applyTextFormulaSelection();
   else if (chosen == delAct) {
     columnView->setCurrentIndex(columnModel->index(0, column));
     deleteColumn();
@@ -3855,6 +4301,13 @@ void SDDSEditor::columnRowMenuRequested(const QPoint &pos) {
   QMenu menu(columnView);
   QAction *insAct = menu.addAction(tr("Insert"));
   QAction *delAct = menu.addAction(tr("Delete"));
+  menu.addSeparator();
+  QAction *fillSeriesAct = menu.addAction(tr("Fill Series..."));
+  QAction *applyExprAct = menu.addAction(tr("Apply Numerical Expression..."));
+  QAction *copyFormulaAct = menu.addAction(tr("Apply Text Formula..."));
+  fillSeriesAct->setShortcut(QKeySequence(tr("Ctrl+Shift+F")));
+  applyExprAct->setShortcut(QKeySequence(tr("Ctrl+Shift+E")));
+  copyFormulaAct->setShortcut(QKeySequence(tr("Ctrl+Shift+M")));
   QAction *chosen = menu.exec(columnView->verticalHeader()->mapToGlobal(pos));
   if (chosen == insAct) {
     columnView->setCurrentIndex(columnModel->index(row, 0));
@@ -3866,6 +4319,15 @@ void SDDSEditor::columnRowMenuRequested(const QPoint &pos) {
                   QItemSelectionModel::Rows |
                       QItemSelectionModel::ClearAndSelect);
     deleteColumnRows();
+  } else if (chosen == fillSeriesAct) {
+    columnView->setFocus();
+    fillSeriesSelection();
+  } else if (chosen == applyExprAct) {
+    columnView->setFocus();
+    applyNumericalExpressionSelection();
+  } else if (chosen == copyFormulaAct) {
+    columnView->setFocus();
+    applyTextFormulaSelection();
   }
 }
 
@@ -3876,12 +4338,26 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
   QMenu menu(view);
   QAction *searchAct = menu.addAction(tr("Search"));
   QAction *resizeAct = menu.addAction(tr("Resize"));
+  menu.addSeparator();
+  QAction *fillSeriesAct = menu.addAction(tr("Fill Series..."));
+  QAction *applyExprAct = menu.addAction(tr("Apply Numerical Expression..."));
+  QAction *copyFormulaAct = menu.addAction(tr("Apply Text Formula..."));
+  fillSeriesAct->setShortcut(QKeySequence(tr("Ctrl+Shift+F")));
+  applyExprAct->setShortcut(QKeySequence(tr("Ctrl+Shift+E")));
+  copyFormulaAct->setShortcut(QKeySequence(tr("Ctrl+Shift+M")));
+  menu.addSeparator();
   QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
   if (chosen == searchAct)
     searchArray(column);
   else if (chosen == resizeAct)
     resizeArray(column);
+  else if (chosen == fillSeriesAct)
+    fillSeriesSelection();
+  else if (chosen == applyExprAct)
+    applyNumericalExpressionSelection();
+  else if (chosen == copyFormulaAct)
+    applyTextFormulaSelection();
   else if (chosen == delAct) {
     arrayView->setCurrentIndex(arrayModel->index(0, column));
     deleteArray();
@@ -4781,6 +5257,9 @@ void SDDSEditor::insertParameter() {
     return;
 
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("New Parameter"));
@@ -4857,6 +5336,7 @@ void SDDSEditor::insertParameter() {
 
   populateModels();
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Insert Parameter"));
 }
 
 void SDDSEditor::insertColumn() {
@@ -4864,6 +5344,9 @@ void SDDSEditor::insertColumn() {
     return;
 
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("New Column"));
@@ -4942,6 +5425,7 @@ void SDDSEditor::insertColumn() {
 
   populateModels();
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Insert Column"));
 }
 
 void SDDSEditor::insertArray() {
@@ -4949,6 +5433,9 @@ void SDDSEditor::insertArray() {
     return;
 
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("New Array"));
@@ -5033,12 +5520,16 @@ void SDDSEditor::insertArray() {
 
   populateModels();
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Insert Array"));
 }
 
 void SDDSEditor::deleteParameter() {
   if (!datasetLoaded)
     return;
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
   QModelIndex idx = paramView->currentIndex();
   if (!idx.isValid())
     return;
@@ -5059,12 +5550,16 @@ void SDDSEditor::deleteParameter() {
 
   populateModels();
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Delete Parameter"));
 }
 
 void SDDSEditor::deleteColumn() {
   if (!datasetLoaded)
     return;
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
   QModelIndex idx = columnView->currentIndex();
   if (!idx.isValid())
     return;
@@ -5085,12 +5580,16 @@ void SDDSEditor::deleteColumn() {
 
   populateModels();
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Delete Column"));
 }
 
 void SDDSEditor::deleteArray() {
   if (!datasetLoaded)
     return;
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
   QModelIndex idx = arrayView->currentIndex();
   if (!idx.isValid())
     return;
@@ -5111,6 +5610,7 @@ void SDDSEditor::deleteArray() {
 
   populateModels();
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Delete Array"));
 }
 
 void SDDSEditor::insertColumnRows() {
@@ -5126,6 +5626,10 @@ void SDDSEditor::insertColumnRows() {
   if (!ok || rowsToAdd <= 0)
     return;
   lastRowAddCount = rowsToAdd;
+
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
 
   QModelIndex idx = columnView->currentIndex();
   int insertPos = idx.isValid() ? idx.row() + 1 : -1;
@@ -5145,6 +5649,8 @@ void SDDSEditor::insertColumnRows() {
   columnView->clearSelection();
   columnView->setCurrentIndex(QModelIndex());
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before),
+                            tr("Insert %1 Rows").arg(rowsToAdd));
 }
 
 void SDDSEditor::deleteColumnRows() {
@@ -5168,6 +5674,10 @@ void SDDSEditor::deleteColumnRows() {
   QVector<int> rows = uniqueRows.values().toVector();
   std::sort(rows.begin(), rows.end(), std::greater<int>());
 
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
+
   if (currentPage >= 0 && currentPage < pages.size()) {
     PageStore &pd = pages[currentPage];
     for (QVector<QString> &col : pd.columns) {
@@ -5182,6 +5692,307 @@ void SDDSEditor::deleteColumnRows() {
   columnView->clearSelection();
   columnView->setCurrentIndex(QModelIndex());
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before),
+                            tr("Delete %1 Rows").arg(rows.size()));
+}
+
+void SDDSEditor::fillSeriesSelection() {
+  QTableView *view = focusedTable();
+  if (!view || !view->selectionModel()) {
+    QMessageBox::information(this, tr("Fill Series"), tr("Select one or more cells first."));
+    return;
+  }
+
+  QModelIndexList selection = view->selectionModel()->selectedIndexes();
+  if (selection.isEmpty()) {
+    QModelIndex idx = view->currentIndex();
+    if (idx.isValid())
+      selection << idx;
+  }
+  if (selection.isEmpty()) {
+    QMessageBox::information(this, tr("Fill Series"), tr("Select one or more cells first."));
+    return;
+  }
+
+  std::sort(selection.begin(), selection.end(), [](const QModelIndex &a, const QModelIndex &b) {
+    return a.row() == b.row() ? a.column() < b.column() : a.row() < b.row();
+  });
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Fill Series"));
+  QFormLayout form(&dlg);
+  QLineEdit startEdit(lastFillSeriesStart, &dlg);
+  QLineEdit stepEdit(lastFillSeriesStep, &dlg);
+  form.addRow(tr("Start"), &startEdit);
+  form.addRow(tr("Step"), &stepEdit);
+  QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                           Qt::Horizontal, &dlg);
+  form.addRow(&buttons);
+  connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  long double start = 0.0L;
+  long double step = 0.0L;
+  if (!parseLongDoubleStrict(startEdit.text(), &start) ||
+      !parseLongDoubleStrict(stepEdit.text(), &step)) {
+    QMessageBox::warning(this, tr("Fill Series"), tr("Start and step must be valid numbers."));
+    return;
+  }
+
+  lastFillSeriesStart = startEdit.text();
+  lastFillSeriesStep = stepEdit.text();
+
+  struct Pending { QModelIndex idx; QString value; };
+  QVector<Pending> updates;
+  updates.reserve(selection.size());
+
+  for (int i = 0; i < selection.size(); ++i) {
+    const QModelIndex idx = selection[i];
+    if (!idx.isValid())
+      continue;
+
+    int type = SDDS_STRING;
+    if (view == paramView)
+      type = dataset.layout.parameter_definition[idx.row()].type;
+    else if (view == columnView)
+      type = dataset.layout.column_definition[idx.column()].type;
+    else if (view == arrayView)
+      type = dataset.layout.array_definition[idx.column()].type;
+
+    if (!SDDS_NUMERIC_TYPE(type)) {
+      QMessageBox::warning(this, tr("Fill Series"),
+                           tr("Selected cells include non-numeric fields."));
+      return;
+    }
+
+    QString newText = longDoubleToText(start + step * static_cast<long double>(i));
+    if (!validateTextForType(newText, type, true))
+      return;
+    updates.append({idx, newText});
+  }
+
+  if (updates.isEmpty())
+    return;
+
+  bool changed = false;
+  undoStack->beginMacro(tr("Fill Series"));
+  for (const Pending &u : updates)
+    changed = applyCellEditWithUndo(undoStack, view->model(), u.idx, u.value) || changed;
+  undoStack->endMacro();
+  if (changed)
+    markDirty();
+}
+
+void SDDSEditor::applyNumericalExpressionSelection() {
+  QTableView *view = focusedTable();
+  if (!view || !view->selectionModel()) {
+    QMessageBox::information(this, tr("Apply Numerical Expression"), tr("Select one or more cells first."));
+    return;
+  }
+
+  QModelIndexList selection = view->selectionModel()->selectedIndexes();
+  if (selection.isEmpty()) {
+    QModelIndex idx = view->currentIndex();
+    if (idx.isValid())
+      selection << idx;
+  }
+  if (selection.isEmpty()) {
+    QMessageBox::information(this, tr("Apply Numerical Expression"), tr("Select one or more cells first."));
+    return;
+  }
+
+  std::sort(selection.begin(), selection.end(), [](const QModelIndex &a, const QModelIndex &b) {
+    return a.row() == b.row() ? a.column() < b.column() : a.row() < b.row();
+  });
+
+  QDialog exprDlg(nullptr);
+  exprDlg.setWindowModality(Qt::ApplicationModal);
+  exprDlg.setWindowFlag(Qt::Window, true);
+  exprDlg.setWindowTitle(tr("Apply Numerical Expression"));
+  QVBoxLayout exprLayout(&exprDlg);
+  QLabel exprLabel(tr("Expression:"), &exprDlg);
+  QLineEdit exprEdit(lastNumericalExpression, &exprDlg);
+  exprLayout.addWidget(&exprLabel);
+  exprLayout.addWidget(&exprEdit);
+  QPlainTextEdit exprHelp(&exprDlg);
+  exprHelp.setReadOnly(true);
+  exprHelp.setLineWrapMode(QPlainTextEdit::NoWrap);
+  exprHelp.setPlainText(tr(
+      "Variables reference\n"
+      " - x: current cell value\n"
+      " - a: anchor value (first selected cell)\n"
+      " - i: index in selected cells (0-based)\n"
+      " - row, col: absolute row/column index (0-based)\n"
+      " - dr, dc: row/column offset from anchor\n\n"
+      "Functions: abs, sqrt, sin, cos, tan, log, exp, floor, ceil\n\n"
+      "Examples\n"
+      " - x + 10\n"
+      " - a + i*0.5\n"
+      " - x * (1 + dr*0.01)\n"
+      " - sin(x) * exp(-i/10)"));
+  exprHelp.setMinimumHeight(220);
+  exprLayout.addWidget(&exprHelp);
+  QDialogButtonBox exprButtons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                               Qt::Horizontal, &exprDlg);
+  connect(&exprButtons, &QDialogButtonBox::accepted, &exprDlg, &QDialog::accept);
+  connect(&exprButtons, &QDialogButtonBox::rejected, &exprDlg, &QDialog::reject);
+  exprLayout.addWidget(&exprButtons);
+  exprDlg.resize(900, 420);
+
+  if (exprDlg.exec() != QDialog::Accepted)
+    return;
+  const QString expr = exprEdit.text().trimmed();
+  if (expr.isEmpty())
+    return;
+  lastNumericalExpression = expr;
+
+  const QModelIndex anchor = selection.first();
+  const QString anchorText = anchor.data(Qt::EditRole).toString();
+  long double aValue = 0.0L;
+  parseLongDoubleStrict(anchorText, &aValue);
+  const int minRow = anchor.row();
+  const int minCol = anchor.column();
+
+  struct Pending { QModelIndex idx; QString value; };
+  QVector<Pending> updates;
+  updates.reserve(selection.size());
+
+  for (int i = 0; i < selection.size(); ++i) {
+    const QModelIndex idx = selection[i];
+    if (!idx.isValid())
+      continue;
+
+    int type = SDDS_STRING;
+    if (view == paramView)
+      type = dataset.layout.parameter_definition[idx.row()].type;
+    else if (view == columnView)
+      type = dataset.layout.column_definition[idx.column()].type;
+    else if (view == arrayView)
+      type = dataset.layout.array_definition[idx.column()].type;
+
+    if (!SDDS_NUMERIC_TYPE(type)) {
+      QMessageBox::warning(this, tr("Apply Numerical Expression"),
+                           tr("Selected cells include non-numeric fields."));
+      return;
+    }
+
+    long double xValue = 0.0L;
+    if (!parseLongDoubleStrict(idx.data(Qt::EditRole).toString(), &xValue)) {
+        QMessageBox::warning(this, tr("Apply Numerical Expression"),
+                           tr("Cell contains invalid numeric value: %1")
+                               .arg(truncateForMessage(idx.data(Qt::EditRole).toString())));
+      return;
+    }
+
+    ExpressionContext ctx;
+    ctx.x = xValue;
+    ctx.a = aValue;
+    ctx.i = i;
+    ctx.row = idx.row();
+    ctx.col = idx.column();
+    ctx.dr = idx.row() - minRow;
+    ctx.dc = idx.column() - minCol;
+
+    long double result = 0.0L;
+    if (!evaluateExpressionText(expr, ctx, &result)) {
+      QMessageBox::warning(this, tr("Apply Numerical Expression"), tr("Failed to evaluate expression."));
+      return;
+    }
+
+    QString newText = longDoubleToText(result);
+    if (!validateTextForType(newText, type, true))
+      return;
+    updates.append({idx, newText});
+  }
+
+  if (updates.isEmpty())
+    return;
+
+  bool changed = false;
+  undoStack->beginMacro(tr("Apply Numerical Expression"));
+  for (const Pending &u : updates)
+    changed = applyCellEditWithUndo(undoStack, view->model(), u.idx, u.value) || changed;
+  undoStack->endMacro();
+  if (changed)
+    markDirty();
+}
+
+void SDDSEditor::applyTextFormulaSelection() {
+  QTableView *view = focusedTable();
+  if (!view || !view->selectionModel()) {
+    QMessageBox::information(this, tr("Apply Text Formula"), tr("Select one or more cells first."));
+    return;
+  }
+
+  QModelIndexList selection = view->selectionModel()->selectedIndexes();
+  if (selection.isEmpty()) {
+    QModelIndex idx = view->currentIndex();
+    if (idx.isValid())
+      selection << idx;
+  }
+  if (selection.isEmpty()) {
+    QMessageBox::information(this, tr("Apply Text Formula"), tr("Select one or more cells first."));
+    return;
+  }
+
+  std::sort(selection.begin(), selection.end(), [](const QModelIndex &a, const QModelIndex &b) {
+    return a.row() == b.row() ? a.column() < b.column() : a.row() < b.row();
+  });
+
+  bool ok = false;
+  QString templ = QInputDialog::getText(
+      this, tr("Apply Text Formula"),
+      tr("Template (tokens: ${x}, ${a}, ${i}, ${row}, ${col}, ${dr}, ${dc}):"),
+      QLineEdit::Normal, lastTextFormula, &ok);
+  if (!ok || templ.isEmpty()) {
+    return;
+  }
+    lastTextFormula = templ;
+
+  const QModelIndex anchor = selection.first();
+  const QString anchorText = anchor.data(Qt::EditRole).toString();
+  const int minRow = anchor.row();
+  const int minCol = anchor.column();
+
+  struct Pending { QModelIndex idx; QString value; int type; };
+  QVector<Pending> updates;
+  updates.reserve(selection.size());
+
+  for (int i = 0; i < selection.size(); ++i) {
+    const QModelIndex idx = selection[i];
+    if (!idx.isValid())
+      continue;
+
+    int type = SDDS_STRING;
+    if (view == paramView)
+      type = dataset.layout.parameter_definition[idx.row()].type;
+    else if (view == columnView)
+      type = dataset.layout.column_definition[idx.column()].type;
+    else if (view == arrayView)
+      type = dataset.layout.array_definition[idx.column()].type;
+
+    QString x = idx.data(Qt::EditRole).toString();
+    QString newText = applyTemplateVariables(templ, x, anchorText, i,
+                                             idx.row(), idx.column(),
+                                             idx.row() - minRow,
+                                             idx.column() - minCol);
+    if (!validateTextForType(newText, type, true))
+      return;
+    updates.append({idx, newText, type});
+  }
+
+  if (updates.isEmpty())
+    return;
+
+  bool changed = false;
+  undoStack->beginMacro(tr("Apply Text Formula"));
+  for (const Pending &u : updates)
+    changed = applyCellEditWithUndo(undoStack, view->model(), u.idx, u.value) || changed;
+  undoStack->endMacro();
+  if (changed)
+    markDirty();
 }
 
 void SDDSEditor::clonePage() {
@@ -5189,6 +6000,9 @@ void SDDSEditor::clonePage() {
     return;
 
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
   PageStore pd = pages[currentPage];
   int insertPos = currentPage + 1;
   pages.insert(insertPos, pd);
@@ -5201,6 +6015,7 @@ void SDDSEditor::clonePage() {
   pageCombo->setCurrentIndex(insertPos);
 
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Clone Page"));
 }
 
 void SDDSEditor::insertPage() {
@@ -5208,6 +6023,9 @@ void SDDSEditor::insertPage() {
     return;
 
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
 
   PageStore pd;
   pd.parameters = QVector<QString>(dataset.layout.n_parameters);
@@ -5248,6 +6066,7 @@ void SDDSEditor::insertPage() {
   pageCombo->setCurrentIndex(insertPos);
 
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Insert Page"));
 }
 
 void SDDSEditor::deletePage() {
@@ -5256,6 +6075,9 @@ void SDDSEditor::deletePage() {
     return;
 
   commitModels();
+  StructuralSnapshot before;
+  if (!captureStructuralSnapshot(this, &before))
+    return;
   pages.remove(currentPage);
 
   if (currentPage >= pages.size())
@@ -5270,6 +6092,7 @@ void SDDSEditor::deletePage() {
 
   loadPage(currentPage + 1);
   markDirty();
+  pushStructuralUndoCommand(this, std::move(before), tr("Delete Page"));
 }
 
 void SDDSEditor::applyTheme(bool dark) {
@@ -5332,7 +6155,28 @@ void SDDSEditor::showHelp() {
                        " - Sorting column or array data\n"
                        " - Searching or replacing values in columns or arrays\n"
                        " - Resizing arrays\n"
-                       "Use the Edit menu to insert or delete items, and File->Save to commit changes."));
+                       "Use the Edit menu to insert or delete items, and File->Save to commit changes.\n\n"
+                       "Formula / Fill tools (Edit->Formula / Fill):\n"
+                       " - Fill Series... (Ctrl+Shift+F): fill selected cells with start + step*i\n"
+                       " - Apply Numerical Expression... (Ctrl+Shift+E): evaluate expression per selected cell\n"
+                       " - Apply Text Formula... (Ctrl+Shift+M): apply text template to selection\n"
+                       "   Tokens: ${x}, ${a}, ${i}, ${row}, ${col}, ${dr}, ${dc}\n\n"
+                       "Variables reference\n"
+                       " - x / ${x}: current cell value\n"
+                       " - a / ${a}: anchor value (first selected cell)\n"
+                       " - i / ${i}: index in selected cells (0-based)\n"
+                       " - row / ${row}: absolute row index (0-based)\n"
+                       " - col / ${col}: absolute column index (0-based)\n"
+                       " - dr / ${dr}: row offset from anchor\n"
+                       " - dc / ${dc}: column offset from anchor\n\n"
+                       "Selection ordering\n"
+                       " - Cells are processed top-to-bottom, then left-to-right\n"
+                       " - The first selected cell in that order is the anchor\n\n"
+                       "Apply Numerical Expression examples\n"
+                       " - x + 10\n"
+                       " - a + i*0.5\n"
+                       " - x * (1 + dr*0.01)\n"
+                       " - sin(x) * exp(-i/10)"));
   text.setMinimumSize(400, 300);
   layout.addWidget(&text);
   QDialogButtonBox box(QDialogButtonBox::Ok, Qt::Horizontal, &dlg);
