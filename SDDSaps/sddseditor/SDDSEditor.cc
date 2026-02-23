@@ -42,7 +42,9 @@
 #include <QUndoStack>
 #include <QRegularExpression>
 #include <QItemSelectionModel>
+#include <QSet>
 #include <QMouseEvent>
+#include <QKeyEvent>
 #include <QTimer>
 #include <QCoreApplication>
 #include <QProgressDialog>
@@ -217,6 +219,15 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
   const int pcount = layout.n_parameters;
   const int ccount = layout.n_columns;
   const int acount = layout.n_arrays;
+
+  if (pcount > 0 && pd.parameters.size() < pcount) {
+    if (errorText)
+      *errorText = QObject::tr("Page %1: internal error: parameter data missing (have %2, need %3)")
+                       .arg(pageIndex + 1)
+                       .arg(pd.parameters.size())
+                       .arg(pcount);
+    return false;
+  }
 
   // Parameters
   for (int i = 0; i < pcount; ++i) {
@@ -437,13 +448,15 @@ static bool validateTextForType(const QString &text, int type,
 static int dimProduct(const QVector<int> &dims) {
   if (dims.isEmpty())
     return 0;
-  int prod = 1;
+  int64_t prod = 1;
   for (int d : dims) {
     if (d <= 0)
-      return 0;
+      return -1;
+    if (prod > std::numeric_limits<int>::max() / d)
+      return -1;
     prod *= d;
   }
-  return prod;
+  return (int)prod;
 }
 
 static void normalizeEmptyNumericsToZero(const SDDS_LAYOUT &layout, QVector<PageStore> &pages) {
@@ -551,14 +564,32 @@ public:
 
 private:
   QAbstractItemModel *m;
-  QModelIndex idx;
+  QPersistentModelIndex idx;
   QString oldValue;
   QString newValue;
 };
 
+static bool applyCellEditWithUndo(QUndoStack *undoStack, QAbstractItemModel *model,
+                                  const QModelIndex &index, const QString &newValue) {
+  if (!model || !index.isValid())
+    return false;
+  const QString oldValue = index.data(Qt::EditRole).toString();
+  if (oldValue == newValue)
+    return false;
+  if (undoStack)
+    undoStack->push(new SetDataCommand(model, index, oldValue, newValue));
+  else
+    model->setData(index, newValue);
+  return true;
+}
+
 class CaretOnDoubleClickLineEdit : public QLineEdit {
 public:
   explicit CaretOnDoubleClickLineEdit(QWidget *parent = nullptr) : QLineEdit(parent) {}
+
+  void setMultiCellPasteHandler(std::function<void()> handler) {
+    multiCellPasteHandler = std::move(handler);
+  }
 
 protected:
   void mouseDoubleClickEvent(QMouseEvent *event) override {
@@ -568,6 +599,22 @@ protected:
     deselect();
     event->accept();
   }
+
+  void keyPressEvent(QKeyEvent *event) override {
+    if (event && event->matches(QKeySequence::Paste)) {
+      const QString text = QApplication::clipboard()->text();
+      if ((text.contains('\t') || text.contains('\n') || text.contains('\r')) &&
+          multiCellPasteHandler) {
+        multiCellPasteHandler();
+        event->accept();
+        return;
+      }
+    }
+    QLineEdit::keyPressEvent(event);
+  }
+
+private:
+  std::function<void()> multiCellPasteHandler;
 };
 
 class ParameterPageModel : public QAbstractTableModel {
@@ -907,7 +954,15 @@ public:
                         const QModelIndex &index) const override {
     Q_UNUSED(option);
     Q_UNUSED(index);
-    return new CaretOnDoubleClickLineEdit(parent);
+    CaretOnDoubleClickLineEdit *editor = new CaretOnDoubleClickLineEdit(parent);
+    if (QWidget *window = parent ? parent->window() : nullptr) {
+      if (SDDSEditor *sddsEditor = qobject_cast<SDDSEditor *>(window)) {
+        editor->setMultiCellPasteHandler([sddsEditor]() {
+          QMetaObject::invokeMethod(sddsEditor, "paste", Qt::DirectConnection);
+        });
+      }
+    }
+    return editor;
   }
 
   void initStyleOption(QStyleOptionViewItem *option,
@@ -1353,6 +1408,10 @@ void SDDSEditor::parameterMoved(int, int, int) {
   PARAMETER_DEFINITION *oldDefs = dataset.layout.parameter_definition;
   PARAMETER_DEFINITION *newDefs =
       (PARAMETER_DEFINITION *)malloc(sizeof(PARAMETER_DEFINITION) * count);
+  if (!newDefs) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Out of memory while reordering parameters"));
+    return;
+  }
   for (int i = 0; i < count; ++i)
     newDefs[i] = oldDefs[order[i]];
   free(oldDefs);
@@ -1396,6 +1455,10 @@ void SDDSEditor::columnMoved(int, int, int) {
   COLUMN_DEFINITION *oldDefs = dataset.layout.column_definition;
   COLUMN_DEFINITION *newDefs =
       (COLUMN_DEFINITION *)malloc(sizeof(COLUMN_DEFINITION) * count);
+  if (!newDefs) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Out of memory while reordering columns"));
+    return;
+  }
   for (int i = 0; i < count; ++i)
     newDefs[i] = oldDefs[order[i]];
   free(oldDefs);
@@ -1439,6 +1502,10 @@ void SDDSEditor::arrayMoved(int, int, int) {
   ARRAY_DEFINITION *oldDefs = dataset.layout.array_definition;
   ARRAY_DEFINITION *newDefs =
       (ARRAY_DEFINITION *)malloc(sizeof(ARRAY_DEFINITION) * count);
+  if (!newDefs) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Out of memory while reordering arrays"));
+    return;
+  }
   for (int i = 0; i < count; ++i)
     newDefs[i] = oldDefs[order[i]];
   free(oldDefs);
@@ -1474,24 +1541,46 @@ void SDDSEditor::copy() {
   QModelIndexList indexes = view->selectionModel()->selectedIndexes();
   if (indexes.isEmpty())
     return;
-  std::sort(indexes.begin(), indexes.end(), [](const QModelIndex &a,
-                                               const QModelIndex &b) {
-    return a.row() == b.row() ? a.column() < b.column() : a.row() < b.row();
-  });
-  int prevRow = indexes.first().row();
-  QStringList rowTexts;
-  QString rowText;
+
+  int minRow = std::numeric_limits<int>::max();
+  int maxRow = std::numeric_limits<int>::min();
+  int minCol = std::numeric_limits<int>::max();
+  int maxCol = std::numeric_limits<int>::min();
+  QSet<quint64> selected;
+  selected.reserve(indexes.size());
+
+  auto keyFor = [](int r, int c) -> quint64 {
+    return (static_cast<quint64>(static_cast<uint32_t>(r)) << 32) |
+           static_cast<uint32_t>(c);
+  };
+
   for (const QModelIndex &idx : indexes) {
-    if (idx.row() != prevRow) {
-      rowTexts << rowText;
-      rowText.clear();
-      prevRow = idx.row();
-    } else if (!rowText.isEmpty()) {
-      rowText += '\t';
-    }
-    rowText += idx.data().toString();
+    if (!idx.isValid())
+      continue;
+    minRow = std::min(minRow, idx.row());
+    maxRow = std::max(maxRow, idx.row());
+    minCol = std::min(minCol, idx.column());
+    maxCol = std::max(maxCol, idx.column());
+    selected.insert(keyFor(idx.row(), idx.column()));
   }
-  rowTexts << rowText;
+
+  if (selected.isEmpty())
+    return;
+
+  QStringList rowTexts;
+  for (int r = minRow; r <= maxRow; ++r) {
+    QStringList cols;
+    cols.reserve(maxCol - minCol + 1);
+    for (int c = minCol; c <= maxCol; ++c) {
+      if (selected.contains(keyFor(r, c))) {
+        QModelIndex idx = view->model()->index(r, c);
+        cols << (idx.isValid() ? idx.data().toString() : QString());
+      } else {
+        cols << QString();
+      }
+    }
+    rowTexts << cols.join('\t');
+  }
   QApplication::clipboard()->setText(rowTexts.join('\n'));
 }
 
@@ -1503,14 +1592,22 @@ void SDDSEditor::paste() {
   if (!start.isValid())
     return;
   QString text = QApplication::clipboard()->text();
+  text.replace("\r\n", "\n");
+  text.replace('\r', '\n');
   QStringList rows = text.split('\n');
+  while (!rows.isEmpty() && rows.last().isEmpty())
+    rows.removeLast();
+  if (rows.isEmpty())
+    rows << QString();
   bool multiPaste = rows.size() > 1 || text.contains('\t');
   bool changed = false;
   bool warned = false;
+  bool macroStarted = false;
+  QAbstractItemModel *model = view->model();
   for (int r = 0; r < rows.size(); ++r) {
     QStringList cols = rows[r].split('\t');
     for (int c = 0; c < cols.size(); ++c) {
-      QModelIndex idx = view->model()->index(start.row() + r, start.column() + c);
+      QModelIndex idx = model->index(start.row() + r, start.column() + c);
       if (!idx.isValid())
         continue;
       int type = SDDS_STRING;
@@ -1523,13 +1620,19 @@ void SDDSEditor::paste() {
       bool show = multiPaste ? !warned : true;
       bool valid = validateTextForType(cols[c], type, show);
       if (valid) {
-        view->model()->setData(idx, cols[c]);
-        changed = true;
+        if (undoStack && !macroStarted) {
+          undoStack->beginMacro(tr("Paste"));
+          macroStarted = true;
+        }
+        if (applyCellEditWithUndo(undoStack, model, idx, cols[c]))
+          changed = true;
       }
       if (!valid && show)
         warned = true;
     }
   }
+  if (macroStarted)
+    undoStack->endMacro();
   if (changed)
     markDirty();
 }
@@ -1541,10 +1644,19 @@ void SDDSEditor::deleteCells() {
   QModelIndexList indexes = view->selectionModel()->selectedIndexes();
   if (indexes.isEmpty())
     return;
+  bool macroStarted = false;
+  QAbstractItemModel *model = view->model();
   for (const QModelIndex &idx : indexes) {
-    if (idx.isValid())
-      view->model()->setData(idx, QString());
+    if (!idx.isValid())
+      continue;
+    if (undoStack && !macroStarted) {
+      undoStack->beginMacro(tr("Delete Cells"));
+      macroStarted = true;
+    }
+    applyCellEditWithUndo(undoStack, model, idx, QString());
   }
+  if (macroStarted)
+    undoStack->endMacro();
   markDirty();
 }
 
@@ -1559,7 +1671,6 @@ void SDDSEditor::openFile() {
 }
 
 bool SDDSEditor::loadFile(const QString &path) {
-  clearDataset();
   SDDS_DATASET in;
   memset(&in, 0, sizeof(in));
   if (!SDDS_InitializeInput(&in,
@@ -1568,10 +1679,6 @@ bool SDDSEditor::loadFile(const QString &path) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return false;
   }
-
-  currentFilename = path;
-  dirty = false;
-  message(tr("Loaded %1").arg(path));
 
   QProgressDialog progress(this);
   progress.setWindowTitle(tr("SDDS"));
@@ -1598,9 +1705,10 @@ bool SDDSEditor::loadFile(const QString &path) {
     }
   };
 
-  pages.clear();
+  QVector<PageStore> newPages;
   int pageIndex = 0;
-  while (SDDS_ReadPage(&in) > 0) {
+  int32_t readResult = 0;
+  while ((readResult = SDDS_ReadPage(&in)) > 0) {
     ++pageIndex;
     progress.setLabelText(tr("Loading %1 (page %2)…").arg(QFileInfo(path).fileName()).arg(pageIndex));
     progress.setValue(0);
@@ -1612,6 +1720,8 @@ bool SDDSEditor::loadFile(const QString &path) {
 
     int32_t pcount;
     char **pnames = SDDS_GetParameterNames(&in, &pcount);
+    if (pcount > 0 && !pnames)
+      pcount = 0;
     if (pcount > 0)
       totalUnits += pcount;
     for (int32_t i = 0; i < pcount; ++i) {
@@ -1630,6 +1740,8 @@ bool SDDSEditor::loadFile(const QString &path) {
     SDDS_FreeStringArray(pnames, pcount);
     int32_t ccount;
     char **cnames = SDDS_GetColumnNames(&in, &ccount);
+    if (ccount > 0 && !cnames)
+      ccount = 0;
     int64_t rows = SDDS_RowCount(&in);
     if (ccount > 0 && rows > 0)
       totalUnits += static_cast<int64_t>(ccount) * rows;
@@ -1654,6 +1766,8 @@ bool SDDSEditor::loadFile(const QString &path) {
     SDDS_FreeStringArray(cnames, ccount);
     int32_t acount;
     char **anames = SDDS_GetArrayNames(&in, &acount);
+    if (acount > 0 && !anames)
+      acount = 0;
 
     // Add array work units up front so progress stays monotonic.
     if (acount > 0) {
@@ -1661,11 +1775,14 @@ bool SDDSEditor::loadFile(const QString &path) {
         ARRAY_DEFINITION *adef = SDDS_GetArrayDefinition(&in, anames[a]);
         if (!adef || adef->dimensions <= 0)
           continue;
+        int32_t arrayIndex = SDDS_GetArrayIndex(&in, anames[a]);
+        if (arrayIndex < 0 || arrayIndex >= in.layout.n_arrays)
+          continue;
         int64_t elements = 1;
         for (int d = 0; d < adef->dimensions; ++d) {
           int dim = 0;
-          if (in.array && in.array[a].dimension)
-            dim = in.array[a].dimension[d];
+          if (in.array && in.array[arrayIndex].dimension)
+            dim = in.array[arrayIndex].dimension[d];
           if (dim <= 0) {
             elements = 0;
             break;
@@ -1684,14 +1801,25 @@ bool SDDSEditor::loadFile(const QString &path) {
     pd.arrays.resize(acount);
     for (int32_t a = 0; a < acount; ++a) {
       ARRAY_DEFINITION *adef = SDDS_GetArrayDefinition(&in, anames[a]);
-      int32_t dim;
+      if (!adef)
+        continue;
+      int32_t arrayIndex = SDDS_GetArrayIndex(&in, anames[a]);
+      if (arrayIndex < 0 || arrayIndex >= in.layout.n_arrays)
+        continue;
+      int32_t dim = 0;
       char **vals = SDDS_GetArrayInString(&in, anames[a], &dim);
-      pd.arrays[a].dims.resize(adef->dimensions);
-      for (int d = 0; d < adef->dimensions; ++d)
-        pd.arrays[a].dims[d] = in.array[a].dimension[d];
-      pd.arrays[a].values.resize(dim);
-      for (int i = 0; i < dim; ++i) {
-        pd.arrays[a].values[i] = QString(vals[i]);
+      const int dimsCount = std::max(0, adef->dimensions);
+      pd.arrays[a].dims.resize(dimsCount);
+      for (int d = 0; d < dimsCount; ++d) {
+        int dimValue = 0;
+        if (in.array && in.array[arrayIndex].dimension)
+          dimValue = in.array[arrayIndex].dimension[d];
+        pd.arrays[a].dims[d] = dimValue;
+      }
+      const int valueCount = std::max(0, (int)dim);
+      pd.arrays[a].values.resize(valueCount);
+      for (int i = 0; i < valueCount; ++i) {
+        pd.arrays[a].values[i] = QString(vals && vals[i] ? vals[i] : "");
         ++doneUnits;
         if (totalUnits > 0 && (doneUnits % updateEvery) == 0) {
           int percent = static_cast<int>((doneUnits * 100) / totalUnits);
@@ -1700,35 +1828,50 @@ bool SDDSEditor::loadFile(const QString &path) {
           }
         }
       }
-      SDDS_FreeStringArray(vals, dim);
+      if (vals)
+        SDDS_FreeStringArray(vals, valueCount);
     }
-    SDDS_FreeStringArray(anames, acount);
-    pages.append(pd);
+    if (anames)
+      SDDS_FreeStringArray(anames, acount);
+    newPages.append(pd);
 
     // End-of-page: treat SDDS read/copy as 25% complete.
     setReadProgress(99);
   }
+
+  if (readResult == 0) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed while reading file"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Terminate(&in);
+    return false;
+  }
  
+  if (newPages.isEmpty()) {
+    QMessageBox::warning(this, tr("SDDS"), tr("File contains no pages"));
+    SDDS_Terminate(&in);
+    return false;
+  }
+
   // Copy layout information for later editing and close the file
-  memset(&dataset, 0, sizeof(dataset));
-  if (!SDDS_InitializeCopy(&dataset, &in, NULL, (char *)"m")) {
+  SDDS_DATASET newDataset;
+  memset(&newDataset, 0, sizeof(newDataset));
+  if (!SDDS_InitializeCopy(&newDataset, &in, NULL, (char *)"m")) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to copy layout"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     SDDS_Terminate(&in);
     return false;
   }
   SDDS_Terminate(&in);
+
+  clearDataset();
+  dataset = newDataset;
   datasetLoaded = true;
+  pages = std::move(newPages);
 
   // Update radio buttons to reflect the file's storage mode
   asciiSave = dataset.layout.data_mode.mode == SDDS_ASCII;
   asciiBtn->setChecked(asciiSave);
   binaryBtn->setChecked(!asciiSave);
-
-  if (pages.isEmpty()) {
-    QMessageBox::warning(this, tr("SDDS"), tr("File contains no pages"));
-    return false;
-  }
 
   // At this point the file is in memory; now we populate Qt models/views.
   // This can take noticeable time for large datasets, so keep the indicator visible.
@@ -1748,6 +1891,9 @@ bool SDDSEditor::loadFile(const QString &path) {
   pageCombo->blockSignals(false);
   currentPage = 0;
   loadPage(1);
+  currentFilename = path;
+  dirty = false;
+  message(tr("Loaded %1").arg(path));
   updateWindowTitle();
 
   progress.setValue(100);
@@ -1814,6 +1960,13 @@ bool SDDSEditor::writeFile(const QString &path) {
   int ccount = dataset.layout.n_columns;
   int acount = dataset.layout.n_arrays;
 
+  auto failWriteCall = [&](const QString &context) -> bool {
+    QMessageBox::warning(this, tr("SDDS"), context);
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Terminate(&out);
+    return false;
+  };
+
   for (int pg = 0; pg < pages.size(); ++pg) {
     const PageStore &pd = pages[pg];
     int64_t rows = 0;
@@ -1848,7 +2001,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             SDDS_Terminate(&out);
             return false;
           }
-          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (short)v, NULL);
+          if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (short)v, NULL))
+            return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         }
         break;
       case SDDS_USHORT:
@@ -1864,7 +2018,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             SDDS_Terminate(&out);
             return false;
           }
-          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (unsigned short)v, NULL);
+          if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (unsigned short)v, NULL))
+            return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         }
         break;
       case SDDS_LONG:
@@ -1880,7 +2035,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             SDDS_Terminate(&out);
             return false;
           }
-          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (int32_t)v, NULL);
+          if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (int32_t)v, NULL))
+            return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         }
         break;
       case SDDS_ULONG:
@@ -1896,7 +2052,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             SDDS_Terminate(&out);
             return false;
           }
-          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (uint32_t)v, NULL);
+          if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (uint32_t)v, NULL))
+            return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         }
         break;
       case SDDS_LONG64:
@@ -1910,7 +2067,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             SDDS_Terminate(&out);
             return false;
           }
-          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (int64_t)v, NULL);
+          if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (int64_t)v, NULL))
+            return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         }
         break;
       case SDDS_ULONG64:
@@ -1924,7 +2082,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             SDDS_Terminate(&out);
             return false;
           }
-          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (uint64_t)v, NULL);
+          if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, (uint64_t)v, NULL))
+            return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         }
         break;
       case SDDS_FLOAT:
@@ -1938,7 +2097,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             SDDS_Terminate(&out);
             return false;
           }
-          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, v, NULL);
+          if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, v, NULL))
+            return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         }
         break;
       case SDDS_DOUBLE:
@@ -1952,7 +2112,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             SDDS_Terminate(&out);
             return false;
           }
-          SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, v, NULL);
+          if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, v, NULL))
+            return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         }
         break;
       case SDDS_LONGDOUBLE: {
@@ -1965,17 +2126,20 @@ bool SDDSEditor::writeFile(const QString &path) {
           SDDS_Terminate(&out);
           return false;
         }
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, v, NULL);
+        if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, v, NULL))
+          return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         break;
       }
       case SDDS_STRING:
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toLocal8Bit().data(), NULL);
+        if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toLocal8Bit().data(), NULL))
+          return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         break;
       case SDDS_CHARACTER: {
         QByteArray ba = text.toLatin1();
         char ch = ba.isEmpty() ? '\0' : ba.at(0);
-        SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name,
-                           ch, NULL);
+        if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name,
+                                ch, NULL))
+          return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         break;
       }
       default:
@@ -1994,7 +2158,11 @@ bool SDDSEditor::writeFile(const QString &path) {
           const QString text = pd.columns[c][r];
           arr[r] = strdup(text.toLocal8Bit().constData());
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name)) {
+          for (auto p : arr)
+            free(p);
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
+        }
         for (auto p : arr)
           free(p);
       } else if (type == SDDS_CHARACTER) {
@@ -2004,7 +2172,8 @@ bool SDDSEditor::writeFile(const QString &path) {
           QByteArray ba = text.toLatin1();
           arr[r] = ba.isEmpty() ? '\0' : ba.at(0);
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name))
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       } else if (type == SDDS_LONGDOUBLE) {
         QVector<long double> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
@@ -2019,7 +2188,8 @@ bool SDDSEditor::writeFile(const QString &path) {
           SDDS_Terminate(&out);
           return false;
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name))
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       } else if (type == SDDS_LONG64) {
         QVector<int64_t> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
@@ -2035,7 +2205,8 @@ bool SDDSEditor::writeFile(const QString &path) {
           SDDS_Terminate(&out);
           return false;
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name))
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       } else if (type == SDDS_ULONG64) {
         QVector<uint64_t> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
@@ -2051,7 +2222,8 @@ bool SDDSEditor::writeFile(const QString &path) {
           SDDS_Terminate(&out);
           return false;
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name))
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       } else if (type == SDDS_DOUBLE) {
         QVector<double> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
@@ -2067,7 +2239,8 @@ bool SDDSEditor::writeFile(const QString &path) {
           SDDS_Terminate(&out);
           return false;
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name))
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       } else if (type == SDDS_FLOAT) {
         QVector<float> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
@@ -2083,7 +2256,8 @@ bool SDDSEditor::writeFile(const QString &path) {
           SDDS_Terminate(&out);
           return false;
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name))
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       } else if (type == SDDS_LONG) {
         QVector<int32_t> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
@@ -2102,7 +2276,8 @@ bool SDDSEditor::writeFile(const QString &path) {
           SDDS_Terminate(&out);
           return false;
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name))
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       } else if (type == SDDS_ULONG) {
         QVector<uint32_t> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
@@ -2121,7 +2296,8 @@ bool SDDSEditor::writeFile(const QString &path) {
           SDDS_Terminate(&out);
           return false;
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name))
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       } else if (type == SDDS_SHORT) {
         QVector<short> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
@@ -2140,7 +2316,8 @@ bool SDDSEditor::writeFile(const QString &path) {
           SDDS_Terminate(&out);
           return false;
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name))
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       } else if (type == SDDS_USHORT) {
         QVector<unsigned short> arr(rows);
         for (int64_t r = 0; r < rows; ++r) {
@@ -2159,7 +2336,8 @@ bool SDDSEditor::writeFile(const QString &path) {
           SDDS_Terminate(&out);
           return false;
         }
-        SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name);
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, arr.data(), rows, name))
+          return failWriteCall(tr("Failed to set column '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       }
     }
 
@@ -2176,7 +2354,11 @@ bool SDDSEditor::writeFile(const QString &path) {
           QString cell = as.values[i];
           arr[i] = strdup(cell.toLocal8Bit().constData());
         }
-        SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, arr.data(), dims.data());
+        if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, arr.data(), dims.data())) {
+          for (auto p : arr)
+            free(p);
+          return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
+        }
         for (auto p : arr)
           free(p);
       } else if (type == SDDS_CHARACTER) {
@@ -2186,8 +2368,9 @@ bool SDDSEditor::writeFile(const QString &path) {
           QByteArray ba = cell.toLatin1();
           arr[i] = ba.isEmpty() ? '\0' : ba.at(0);
         }
-        SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA,
-                      arr.data(), dims.data());
+        if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA,
+                           arr.data(), dims.data()))
+          return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
       } else {
         if (type == SDDS_LONGDOUBLE) {
           QVector<long double> buffer(elements);
@@ -2195,7 +2378,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             if (!parseLongDoubleStrict(as.values[i], &buffer[i]))
               ok = false;
           if (ok)
-            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+            if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data()))
+              return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         } else if (type == SDDS_DOUBLE) {
           QVector<double> buffer(elements);
           for (int i = 0; i < elements; ++i) {
@@ -2205,7 +2389,8 @@ bool SDDSEditor::writeFile(const QString &path) {
               break;
           }
           if (ok)
-            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+            if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data()))
+              return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         } else if (type == SDDS_FLOAT) {
           QVector<float> buffer(elements);
           for (int i = 0; i < elements; ++i) {
@@ -2215,7 +2400,8 @@ bool SDDSEditor::writeFile(const QString &path) {
               break;
           }
           if (ok)
-            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+            if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data()))
+              return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         } else if (type == SDDS_LONG64) {
           QVector<int64_t> buffer(elements);
           for (int i = 0; i < elements; ++i) {
@@ -2225,7 +2411,8 @@ bool SDDSEditor::writeFile(const QString &path) {
               break;
           }
           if (ok)
-            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+            if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data()))
+              return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         } else if (type == SDDS_ULONG64) {
           QVector<uint64_t> buffer(elements);
           for (int i = 0; i < elements; ++i) {
@@ -2235,7 +2422,8 @@ bool SDDSEditor::writeFile(const QString &path) {
               break;
           }
           if (ok)
-            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+            if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data()))
+              return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         } else if (type == SDDS_LONG) {
           QVector<int32_t> buffer(elements);
           for (int i = 0; i < elements; ++i) {
@@ -2248,7 +2436,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             buffer[i] = (int32_t)v;
           }
           if (ok)
-            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+            if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data()))
+              return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         } else if (type == SDDS_ULONG) {
           QVector<uint32_t> buffer(elements);
           for (int i = 0; i < elements; ++i) {
@@ -2261,7 +2450,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             buffer[i] = (uint32_t)v;
           }
           if (ok)
-            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+            if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data()))
+              return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         } else if (type == SDDS_SHORT) {
           QVector<short> buffer(elements);
           for (int i = 0; i < elements; ++i) {
@@ -2274,7 +2464,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             buffer[i] = (short)v;
           }
           if (ok)
-            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+            if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data()))
+              return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         } else if (type == SDDS_USHORT) {
           QVector<unsigned short> buffer(elements);
           for (int i = 0; i < elements; ++i) {
@@ -2287,7 +2478,8 @@ bool SDDSEditor::writeFile(const QString &path) {
             buffer[i] = (unsigned short)v;
           }
           if (ok)
-            SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data());
+            if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, buffer.data(), dims.data()))
+              return failWriteCall(tr("Failed to set array '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         }
 
         if (!ok) {
@@ -2350,37 +2542,74 @@ bool SDDSEditor::writeHDF(const QString &path) {
   int ccount = dataset.layout.n_columns;
   int acount = dataset.layout.n_arrays;
 
+  auto failHdf = [&](const QString &context) -> bool {
+    QMessageBox::warning(this, tr("SDDS"), context);
+    H5Fclose(file);
+    return false;
+  };
+
+  auto writeDataset = [&](hid_t grp, const char *name, hid_t dtype,
+                          hid_t space, const void *data) -> bool {
+    hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
+    if (ds < 0)
+      return false;
+    herr_t writeStatus = H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
+    herr_t closeStatus = H5Dclose(ds);
+    return writeStatus >= 0 && closeStatus >= 0;
+  };
+
   for (int pg = 0; pg < pages.size(); ++pg) {
     const PageStore &pd = pages[pg];
     QByteArray gname = QString("page%1").arg(pg + 1).toLocal8Bit();
     hid_t page = H5Gcreate1(file, gname.constData(), 0);
     if (page < 0) {
-      H5Fclose(file);
-      return false;
+      return failHdf(tr("Failed to create page group %1").arg(pg + 1));
     }
 
     if (pcount > 0) {
       hid_t grp = H5Gcreate1(page, "parameters", 0);
+      if (grp < 0) {
+        H5Gclose(page);
+        return failHdf(tr("Failed to create parameter group for page %1").arg(pg + 1));
+      }
       for (int i = 0; i < pcount && i < pd.parameters.size(); ++i) {
         const char *name = dataset.layout.parameter_definition[i].name;
         int32_t type = dataset.layout.parameter_definition[i].type;
         QString val = pd.parameters[i];
         hid_t space = H5Screate(H5S_SCALAR);
+        if (space < 0) {
+          H5Gclose(grp);
+          H5Gclose(page);
+          return failHdf(tr("Failed to create parameter dataspace for '%1' on page %2")
+                             .arg(QString::fromLocal8Bit(name))
+                             .arg(pg + 1));
+        }
         if (type == SDDS_STRING) {
           QByteArray ba = val.toLocal8Bit();
           hid_t dtype = H5Tcopy(H5T_C_S1);
-          H5Tset_size(dtype, ba.size() + 1);
-          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
-          const char *ptr = ba.constData();
-          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, &ptr);
-          H5Dclose(ds);
-          H5Tclose(dtype);
+          bool ok = dtype >= 0 && H5Tset_size(dtype, ba.size() + 1) >= 0 &&
+                    writeDataset(grp, name, dtype, space, ba.constData());
+          if (dtype >= 0)
+            H5Tclose(dtype);
+          if (!ok) {
+            H5Sclose(space);
+            H5Gclose(grp);
+            H5Gclose(page);
+            return failHdf(tr("Failed to write parameter '%1' on page %2")
+                               .arg(QString::fromLocal8Bit(name))
+                               .arg(pg + 1));
+          }
         } else if (type == SDDS_CHARACTER) {
           QByteArray ba = val.toLatin1();
           char ch = ba.isEmpty() ? '\0' : ba.at(0);
-          hid_t ds = H5Dcreate1(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
-          H5Dwrite(ds, H5T_NATIVE_CHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, &ch);
-          H5Dclose(ds);
+          if (!writeDataset(grp, name, H5T_NATIVE_CHAR, space, &ch)) {
+            H5Sclose(space);
+            H5Gclose(grp);
+            H5Gclose(page);
+            return failHdf(tr("Failed to write parameter '%1' on page %2")
+                               .arg(QString::fromLocal8Bit(name))
+                               .arg(pg + 1));
+          }
         } else {
           hid_t dtype = hdfTypeForSdds(type);
           long double ldbuf;
@@ -2435,23 +2664,47 @@ bool SDDSEditor::writeHDF(const QString &path) {
             buf = &dbuf;
             break;
           }
-          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
-          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
-          H5Dclose(ds);
+          if (!writeDataset(grp, name, dtype, space, buf)) {
+            H5Sclose(space);
+            H5Gclose(grp);
+            H5Gclose(page);
+            return failHdf(tr("Failed to write parameter '%1' on page %2")
+                               .arg(QString::fromLocal8Bit(name))
+                               .arg(pg + 1));
+          }
         }
-        H5Sclose(space);
+        if (H5Sclose(space) < 0) {
+          H5Gclose(grp);
+          H5Gclose(page);
+          return failHdf(tr("Failed to close parameter dataspace on page %1").arg(pg + 1));
+        }
       }
-      H5Gclose(grp);
+      if (H5Gclose(grp) < 0) {
+        H5Gclose(page);
+        return failHdf(tr("Failed to close parameter group on page %1").arg(pg + 1));
+      }
     }
 
     if (ccount > 0) {
       hid_t grp = H5Gcreate1(page, "columns", 0);
+      if (grp < 0) {
+        H5Gclose(page);
+        return failHdf(tr("Failed to create column group for page %1").arg(pg + 1));
+      }
       int64_t rows = (ccount > 0 && pd.columns.size() > 0) ? pd.columns[0].size() : 0;
       hsize_t dims[1] = { (hsize_t)rows };
       for (int c = 0; c < ccount && c < pd.columns.size(); ++c) {
         const char *name = dataset.layout.column_definition[c].name;
         int32_t type = dataset.layout.column_definition[c].type;
         hid_t space = H5Screate_simple(1, dims, NULL);
+        if (space < 0) {
+          H5Gclose(grp);
+          H5Gclose(page);
+          return failHdf(tr("Failed to create column dataspace for '%1' on page %2")
+                             .arg(QString::fromLocal8Bit(name))
+                             .arg(pg + 1));
+        }
+        bool ok = true;
         if (type == SDDS_STRING) {
           QVector<QByteArray> store(rows);
           QVector<char *> ptrs(rows);
@@ -2461,69 +2714,138 @@ bool SDDSEditor::writeHDF(const QString &path) {
             ptrs[r] = store[r].data();
           }
           hid_t dtype = H5Tcopy(H5T_C_S1);
-          H5Tset_size(dtype, H5T_VARIABLE);
-          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
-          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, ptrs.data());
-          H5Dclose(ds);
-          H5Tclose(dtype);
+          ok = dtype >= 0 && H5Tset_size(dtype, H5T_VARIABLE) >= 0 &&
+               writeDataset(grp, name, dtype, space, ptrs.data());
+          if (dtype >= 0)
+            H5Tclose(dtype);
         } else if (type == SDDS_CHARACTER) {
           QVector<char> arr(rows);
           for (int64_t r = 0; r < rows; ++r) {
             QByteArray ba = (r < pd.columns[c].size()) ? pd.columns[c][r].toLatin1() : QByteArray();
             arr[r] = ba.isEmpty() ? '\0' : ba.at(0);
           }
-          hid_t ds = H5Dcreate1(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
-          H5Dwrite(ds, H5T_NATIVE_CHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
-          H5Dclose(ds);
+          ok = writeDataset(grp, name, H5T_NATIVE_CHAR, space, arr.data());
         } else if (type == SDDS_LONGDOUBLE) {
           QVector<long double> arr(rows);
           for (int64_t r = 0; r < rows; ++r)
             arr[r] = r < pd.columns[c].size() ? strtold(pd.columns[c][r].toLocal8Bit().constData(), nullptr) : 0.0L;
-          hid_t ds = H5Dcreate1(grp, name, H5T_NATIVE_LDOUBLE, space, H5P_DEFAULT);
-          H5Dwrite(ds, H5T_NATIVE_LDOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
-          H5Dclose(ds);
+          ok = writeDataset(grp, name, H5T_NATIVE_LDOUBLE, space, arr.data());
         } else if (type == SDDS_LONG64) {
           QVector<int64_t> arr(rows);
           for (int64_t r = 0; r < rows; ++r)
             arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toLongLong() : 0;
           hid_t dtype = hdfTypeForSdds(type);
-          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
-          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
-          H5Dclose(ds);
+          ok = writeDataset(grp, name, dtype, space, arr.data());
         } else if (type == SDDS_ULONG64) {
           QVector<uint64_t> arr(rows);
           for (int64_t r = 0; r < rows; ++r)
             arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toULongLong() : 0;
           hid_t dtype = hdfTypeForSdds(type);
-          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
-          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
-          H5Dclose(ds);
-        } else {
+          ok = writeDataset(grp, name, dtype, space, arr.data());
+        } else if (type == SDDS_DOUBLE) {
           QVector<double> arr(rows);
           for (int64_t r = 0; r < rows; ++r)
             arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toDouble() : 0.0;
           hid_t dtype = hdfTypeForSdds(type);
-          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
-          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
-          H5Dclose(ds);
+          ok = writeDataset(grp, name, dtype, space, arr.data());
+        } else if (type == SDDS_FLOAT) {
+          QVector<float> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toFloat() : 0.0f;
+          hid_t dtype = hdfTypeForSdds(type);
+          ok = writeDataset(grp, name, dtype, space, arr.data());
+        } else if (type == SDDS_LONG) {
+          QVector<int32_t> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toInt() : 0;
+          hid_t dtype = hdfTypeForSdds(type);
+          ok = writeDataset(grp, name, dtype, space, arr.data());
+        } else if (type == SDDS_ULONG) {
+          QVector<uint32_t> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toUInt() : 0;
+          hid_t dtype = hdfTypeForSdds(type);
+          ok = writeDataset(grp, name, dtype, space, arr.data());
+        } else if (type == SDDS_SHORT) {
+          QVector<short> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? (short)pd.columns[c][r].toInt() : (short)0;
+          hid_t dtype = hdfTypeForSdds(type);
+          ok = writeDataset(grp, name, dtype, space, arr.data());
+        } else if (type == SDDS_USHORT) {
+          QVector<unsigned short> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? (unsigned short)pd.columns[c][r].toUInt() : (unsigned short)0;
+          hid_t dtype = hdfTypeForSdds(type);
+          ok = writeDataset(grp, name, dtype, space, arr.data());
+        } else {
+          QVector<double> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toDouble() : 0.0;
+          ok = writeDataset(grp, name, H5T_NATIVE_DOUBLE, space, arr.data());
         }
-        H5Sclose(space);
+
+        if (!ok) {
+          H5Sclose(space);
+          H5Gclose(grp);
+          H5Gclose(page);
+          return failHdf(tr("Failed to write column '%1' on page %2")
+                             .arg(QString::fromLocal8Bit(name))
+                             .arg(pg + 1));
+        }
+        if (H5Sclose(space) < 0) {
+          H5Gclose(grp);
+          H5Gclose(page);
+          return failHdf(tr("Failed to close column dataspace on page %1").arg(pg + 1));
+        }
       }
-      H5Gclose(grp);
+      if (H5Gclose(grp) < 0) {
+        H5Gclose(page);
+        return failHdf(tr("Failed to close column group on page %1").arg(pg + 1));
+      }
     }
 
     if (acount > 0) {
       hid_t grp = H5Gcreate1(page, "arrays", 0);
+      if (grp < 0) {
+        H5Gclose(page);
+        return failHdf(tr("Failed to create array group for page %1").arg(pg + 1));
+      }
       for (int a = 0; a < acount && a < pd.arrays.size(); ++a) {
         const char *name = dataset.layout.array_definition[a].name;
         int32_t type = dataset.layout.array_definition[a].type;
         const ArrayStore &as = pd.arrays[a];
         int dimsCount = as.dims.size();
+        if (dimsCount <= 0) {
+          H5Gclose(grp);
+          H5Gclose(page);
+          return failHdf(tr("Array '%1' on page %2 has invalid dimensions")
+                             .arg(QString::fromLocal8Bit(name))
+                             .arg(pg + 1));
+        }
+        for (int i = 0; i < dimsCount; ++i) {
+          if (as.dims[i] <= 0) {
+            H5Gclose(grp);
+            H5Gclose(page);
+            return failHdf(tr("Array '%1' on page %2 has non-positive dimension %3")
+                               .arg(QString::fromLocal8Bit(name))
+                               .arg(pg + 1)
+                               .arg(i + 1));
+          }
+        }
         QVector<hsize_t> dims(dimsCount);
         for (int i = 0; i < dimsCount; ++i)
           dims[i] = as.dims[i];
         hid_t space = H5Screate_simple(dimsCount, dims.data(), NULL);
+        if (space < 0) {
+          H5Gclose(grp);
+          H5Gclose(page);
+          return failHdf(tr("Failed to create array dataspace for '%1' on page %2")
+                             .arg(QString::fromLocal8Bit(name))
+                             .arg(pg + 1));
+        }
         int elements = as.values.size();
+        bool ok = true;
         if (type == SDDS_STRING) {
           QVector<QByteArray> store(elements);
           QVector<char *> ptrs(elements);
@@ -2532,20 +2854,17 @@ bool SDDSEditor::writeHDF(const QString &path) {
             ptrs[i] = store[i].data();
           }
           hid_t dtype = H5Tcopy(H5T_C_S1);
-          H5Tset_size(dtype, H5T_VARIABLE);
-          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
-          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, ptrs.data());
-          H5Dclose(ds);
-          H5Tclose(dtype);
+          ok = dtype >= 0 && H5Tset_size(dtype, H5T_VARIABLE) >= 0 &&
+               writeDataset(grp, name, dtype, space, ptrs.data());
+          if (dtype >= 0)
+            H5Tclose(dtype);
         } else if (type == SDDS_CHARACTER) {
           QVector<char> arr(elements);
           for (int i = 0; i < elements; ++i) {
             QByteArray ba = as.values[i].toLatin1();
             arr[i] = ba.isEmpty() ? '\0' : ba.at(0);
           }
-          hid_t ds = H5Dcreate1(grp, name, H5T_NATIVE_CHAR, space, H5P_DEFAULT);
-          H5Dwrite(ds, H5T_NATIVE_CHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
-          H5Dclose(ds);
+          ok = writeDataset(grp, name, H5T_NATIVE_CHAR, space, arr.data());
         } else {
           size_t size = SDDS_type_size[type - 1];
           QVector<char> buffer(size * elements);
@@ -2585,23 +2904,37 @@ bool SDDSEditor::writeHDF(const QString &path) {
             }
           }
           hid_t dtype = hdfTypeForSdds(type);
-          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
-          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer.data());
-          H5Dclose(ds);
+          ok = writeDataset(grp, name, dtype, space, buffer.data());
         }
-        H5Sclose(space);
+
+        if (!ok) {
+          H5Sclose(space);
+          H5Gclose(grp);
+          H5Gclose(page);
+          return failHdf(tr("Failed to write array '%1' on page %2")
+                             .arg(QString::fromLocal8Bit(name))
+                             .arg(pg + 1));
+        }
+        if (H5Sclose(space) < 0) {
+          H5Gclose(grp);
+          H5Gclose(page);
+          return failHdf(tr("Failed to close array dataspace on page %1").arg(pg + 1));
+        }
       }
-      H5Gclose(grp);
+      if (H5Gclose(grp) < 0) {
+        H5Gclose(page);
+        return failHdf(tr("Failed to close array group on page %1").arg(pg + 1));
+      }
     }
 
-    H5Gclose(page);
+    if (H5Gclose(page) < 0)
+      return failHdf(tr("Failed to close page group %1").arg(pg + 1));
   }
 
-  H5Fclose(file);
-
-  // Make the UI match what was exported: empty numeric fields become 0.
-  normalizeEmptyNumericsToZero(dataset.layout, pages);
-  populateModels();
+  if (H5Fclose(file) < 0) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to close HDF file"));
+    return false;
+  }
 
   return true;
 }
@@ -2664,7 +2997,7 @@ bool SDDSEditor::writeCSV(const QString &path) {
       int64_t rows = (pd.columns.size() > 0) ? pd.columns[0].size() : 0;
       for (int64_t r = 0; r < rows; ++r) {
         for (int32_t c = 0; c < ccount; ++c) {
-          QString cell = (r < pd.columns[c].size()) ? pd.columns[c][r] : QString();
+          QString cell = (c < pd.columns.size() && r < pd.columns[c].size()) ? pd.columns[c][r] : QString();
           const int32_t type = dataset.layout.column_definition[c].type;
           if (SDDS_NUMERIC_TYPE(type) && cell.trimmed().isEmpty())
             cell = "0";
@@ -2711,10 +3044,6 @@ bool SDDSEditor::writeCSV(const QString &path) {
   }
 
   file.close();
-
-  // Make the UI match what was exported: empty numeric fields become 0.
-  normalizeEmptyNumericsToZero(dataset.layout, pages);
-  populateModels();
 
   return true;
 }
@@ -2976,6 +3305,7 @@ void SDDSEditor::clearDataset() {
     columnModel->refresh();
     arrayModel->refresh();
   }
+  undoStack->clear();
 }
 
 /**
@@ -3003,6 +3333,8 @@ bool SDDSEditor::ensureDataset() {
   pageCombo->clear();
   pageCombo->addItem(tr("Page %1").arg(1));
   pageCombo->blockSignals(false);
+
+  undoStack->clear();
 
   populateModels();
   return true;
@@ -3041,6 +3373,8 @@ void SDDSEditor::commitModels() {
   for (int32_t a = 0; a < acount && a < pd.arrays.size(); ++a) {
     ArrayStore &as = pd.arrays[a];
     int expected = dimProduct(as.dims);
+    if (expected < 0)
+      continue;
     if (expected != as.values.size())
       as.values.resize(expected);
   }
@@ -3100,38 +3434,46 @@ void SDDSEditor::editParameterAttributes() {
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted)
     return;
+  auto applyParamInfo = [&](char *fieldName, void *value, int32_t mode) -> bool {
+    if (SDDS_ChangeParameterInformation(&dataset, fieldName, value, mode, row))
+      return true;
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Failed to update parameter attribute '%1'").arg(QString::fromLocal8Bit(fieldName)));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return false;
+  };
   QByteArray ba;
   ba = name.text().toLocal8Bit();
-  SDDS_ChangeParameterInformation(&dataset, (char *)"name", ba.data(),
-                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+  if (!applyParamInfo((char *)"name", ba.data(), SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = symbol.text().toLocal8Bit();
-  SDDS_ChangeParameterInformation(&dataset, (char *)"symbol",
-                                  symbol.text().isEmpty() ? (char *)"" : ba.data(),
-                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+  if (!applyParamInfo((char *)"symbol", symbol.text().isEmpty() ? (char *)"" : ba.data(),
+                      SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = units.text().toLocal8Bit();
-  SDDS_ChangeParameterInformation(&dataset, (char *)"units",
-                                  units.text().isEmpty() ? (char *)"" : ba.data(),
-                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+  if (!applyParamInfo((char *)"units", units.text().isEmpty() ? (char *)"" : ba.data(),
+                      SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = desc.text().toLocal8Bit();
-  SDDS_ChangeParameterInformation(&dataset, (char *)"description",
-                                  desc.text().isEmpty() ? (char *)"" : ba.data(),
-                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+  if (!applyParamInfo((char *)"description", desc.text().isEmpty() ? (char *)"" : ba.data(),
+                      SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = fmt.text().toLocal8Bit();
-  SDDS_ChangeParameterInformation(&dataset, (char *)"format_string",
-                                  fmt.text().isEmpty() ? NULL : ba.data(),
-                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+  if (!applyParamInfo((char *)"format_string", fmt.text().isEmpty() ? NULL : ba.data(),
+                      SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = fixed.text().toLocal8Bit();
-  SDDS_ChangeParameterInformation(&dataset, (char *)"fixed_value",
-                                  fixed.text().isEmpty() ? NULL : ba.data(),
-                                  SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, row);
+  if (!applyParamInfo((char *)"fixed_value", fixed.text().isEmpty() ? NULL : ba.data(),
+                      SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
   int32_t tval = typeGroup.checkedId();
-  SDDS_ChangeParameterInformation(&dataset, (char *)"type", &tval,
-                                  SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, row);
+  if (!applyParamInfo((char *)"type", &tval, SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX))
+    return;
   paramModel->refreshRowHeaders(row, row);
   markDirty();
 }
@@ -3192,36 +3534,44 @@ void SDDSEditor::editColumnAttributes() {
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted)
     return;
+  auto applyColumnInfo = [&](char *fieldName, void *value, int32_t mode) -> bool {
+    if (SDDS_ChangeColumnInformation(&dataset, fieldName, value, mode, col))
+      return true;
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Failed to update column attribute '%1'").arg(QString::fromLocal8Bit(fieldName)));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return false;
+  };
   QByteArray ba;
   ba = name.text().toLocal8Bit();
-  SDDS_ChangeColumnInformation(&dataset, (char *)"name", ba.data(),
-                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyColumnInfo((char *)"name", ba.data(), SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = symbol.text().toLocal8Bit();
-  SDDS_ChangeColumnInformation(&dataset, (char *)"symbol",
-                               symbol.text().isEmpty() ? (char *)"" : ba.data(),
-                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyColumnInfo((char *)"symbol", symbol.text().isEmpty() ? (char *)"" : ba.data(),
+                       SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = units.text().toLocal8Bit();
-  SDDS_ChangeColumnInformation(&dataset, (char *)"units",
-                               units.text().isEmpty() ? (char *)"" : ba.data(),
-                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyColumnInfo((char *)"units", units.text().isEmpty() ? (char *)"" : ba.data(),
+                       SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = desc.text().toLocal8Bit();
-  SDDS_ChangeColumnInformation(&dataset, (char *)"description",
-                               desc.text().isEmpty() ? (char *)"" : ba.data(),
-                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyColumnInfo((char *)"description", desc.text().isEmpty() ? (char *)"" : ba.data(),
+                       SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = fmt.text().toLocal8Bit();
-  SDDS_ChangeColumnInformation(&dataset, (char *)"format_string",
-                               fmt.text().isEmpty() ? NULL : ba.data(),
-                               SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyColumnInfo((char *)"format_string", fmt.text().isEmpty() ? NULL : ba.data(),
+                       SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
   int32_t len = length.value();
-  SDDS_ChangeColumnInformation(&dataset, (char *)"field_length", &len,
-                               SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
+  if (!applyColumnInfo((char *)"field_length", &len, SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX))
+    return;
   int32_t tval = typeGroup.checkedId();
-  SDDS_ChangeColumnInformation(&dataset, (char *)"type", &tval,
-                               SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
+  if (!applyColumnInfo((char *)"type", &tval, SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX))
+    return;
   columnModel->refreshHeaders(col, col);
   markDirty();
 }
@@ -3288,38 +3638,60 @@ void SDDSEditor::editArrayAttributes() {
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted)
     return;
+  auto applyArrayInfo = [&](char *fieldName, void *value, int32_t mode) -> bool {
+    if (SDDS_ChangeArrayInformation(&dataset, fieldName, value, mode, col))
+      return true;
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Failed to update array attribute '%1'").arg(QString::fromLocal8Bit(fieldName)));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return false;
+  };
   QByteArray ba;
   ba = name.text().toLocal8Bit();
-  SDDS_ChangeArrayInformation(&dataset, (char *)"name", ba.data(),
-                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyArrayInfo((char *)"name", ba.data(), SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = symbol.text().toLocal8Bit();
-  SDDS_ChangeArrayInformation(&dataset, (char *)"symbol",
-                              symbol.text().isEmpty() ? (char *)"" : ba.data(),
-                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyArrayInfo((char *)"symbol", symbol.text().isEmpty() ? (char *)"" : ba.data(),
+                      SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = units.text().toLocal8Bit();
-  SDDS_ChangeArrayInformation(&dataset, (char *)"units",
-                              units.text().isEmpty() ? (char *)"" : ba.data(),
-                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyArrayInfo((char *)"units", units.text().isEmpty() ? (char *)"" : ba.data(),
+                      SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = desc.text().toLocal8Bit();
-  SDDS_ChangeArrayInformation(&dataset, (char *)"description",
-                              desc.text().isEmpty() ? (char *)"" : ba.data(),
-                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyArrayInfo((char *)"description", desc.text().isEmpty() ? (char *)"" : ba.data(),
+                      SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = fmt.text().toLocal8Bit();
-  SDDS_ChangeArrayInformation(&dataset, (char *)"format_string",
-                              fmt.text().isEmpty() ? NULL : ba.data(),
-                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyArrayInfo((char *)"format_string", fmt.text().isEmpty() ? NULL : ba.data(),
+                      SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
 
   ba = group.text().toLocal8Bit();
-  SDDS_ChangeArrayInformation(&dataset, (char *)"group_name",
-                              group.text().isEmpty() ? (char *)"" : ba.data(),
-                              SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX, col);
+  if (!applyArrayInfo((char *)"group_name", group.text().isEmpty() ? (char *)"" : ba.data(),
+                      SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
+    return;
   int32_t dimCnt = dimsCount.value();
-  SDDS_ChangeArrayInformation(&dataset, (char *)"dimensions", &dimCnt,
-                              SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
+  if (!applyArrayInfo((char *)"dimensions", &dimCnt, SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX))
+    return;
+  for (const PageStore &pd : pages) {
+    if (col >= pd.arrays.size())
+      continue;
+    QVector<int> newDims = pd.arrays[col].dims;
+    int old = newDims.size();
+    newDims.resize(dimCnt);
+    for (int i = old; i < dimCnt; ++i)
+      newDims[i] = 1;
+    if (dimProduct(newDims) < 0) {
+      QMessageBox::warning(this, tr("SDDS"),
+                           tr("Array dimensions are too large."));
+      return;
+    }
+  }
   for (PageStore &pd : pages) {
     if (col >= pd.arrays.size())
       continue;
@@ -3328,14 +3700,16 @@ void SDDSEditor::editArrayAttributes() {
     as.dims.resize(dimCnt);
     for (int i = old; i < dimCnt; ++i)
       as.dims[i] = 1;
-    as.values.resize(dimProduct(as.dims));
+    int newSize = dimProduct(as.dims);
+    if (newSize >= 0)
+      as.values.resize(newSize);
   }
   int32_t len = length.value();
-  SDDS_ChangeArrayInformation(&dataset, (char *)"field_length", &len,
-                              SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
+  if (!applyArrayInfo((char *)"field_length", &len, SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX))
+    return;
   int32_t tval = typeGroup.checkedId();
-  SDDS_ChangeArrayInformation(&dataset, (char *)"type", &tval,
-                              SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX, col);
+  if (!applyArrayInfo((char *)"type", &tval, SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX))
+    return;
   arrayModel->refreshHeaders(col, col);
   populateModels();
   markDirty();
@@ -3346,7 +3720,7 @@ void SDDSEditor::changeParameterType(int row) {
   commitModels();
   QStringList types;
   types << "short" << "ushort" << "long" << "ulong" << "long64"
-        << "ulong64" << "float" << "double" << "long double" << "string"
+      << "ulong64" << "float" << "double" << "longdouble" << "string"
         << "character";
   if (row < 0 || row >= dataset.layout.n_parameters)
     return;
@@ -3358,9 +3732,18 @@ void SDDSEditor::changeParameterType(int row) {
   if (!ok || newType == current)
     return;
   int32_t sddsType = SDDS_IdentifyType(const_cast<char *>(newType.toLocal8Bit().constData()));
-  SDDS_ChangeParameterInformation(&dataset, (char *)"type", &sddsType,
-                                  SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
-                                  const_cast<char *>(name.toLocal8Bit().constData()));
+  if (sddsType <= 0) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Invalid type selection: %1").arg(newType));
+    return;
+  }
+  if (!SDDS_ChangeParameterInformation(&dataset, (char *)"type", &sddsType,
+                                       SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
+                                       const_cast<char *>(name.toLocal8Bit().constData()))) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to change parameter type"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
   // Type affects validation/formatting; repaint is sufficient.
   paramView->viewport()->update();
   markDirty();
@@ -3398,7 +3781,7 @@ void SDDSEditor::changeColumnType(int column) {
   commitModels();
   QStringList types;
   types << "short" << "ushort" << "long" << "ulong" << "long64"
-        << "ulong64" << "float" << "double" << "long double" << "string"
+      << "ulong64" << "float" << "double" << "longdouble" << "string"
         << "character";
   if (column < 0 || column >= dataset.layout.n_columns)
     return;
@@ -3410,9 +3793,18 @@ void SDDSEditor::changeColumnType(int column) {
   if (!ok || newType == current)
     return;
   int32_t sddsType = SDDS_IdentifyType(const_cast<char *>(newType.toLocal8Bit().constData()));
-  SDDS_ChangeColumnInformation(&dataset, (char *)"type", &sddsType,
-                               SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
-                               const_cast<char *>(name.toLocal8Bit().constData()));
+  if (sddsType <= 0) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Invalid type selection: %1").arg(newType));
+    return;
+  }
+  if (!SDDS_ChangeColumnInformation(&dataset, (char *)"type", &sddsType,
+                                    SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
+                                    const_cast<char *>(name.toLocal8Bit().constData()))) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to change column type"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
   columnModel->refreshHeaders(column, column);
   markDirty();
 }
@@ -3554,9 +3946,91 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
     QString av = a < pd.columns[column].size() ? pd.columns[column][a] : QString();
     QString bv = b < pd.columns[column].size() ? pd.columns[column][b] : QString();
     if (SDDS_NUMERIC_TYPE(type)) {
-      long double aval = av.toDouble();
-      long double bval = bv.toDouble();
-      return order == Qt::AscendingOrder ? aval < bval : aval > bval;
+      const QString at = av.trimmed();
+      const QString bt = bv.trimmed();
+
+      if (type == SDDS_LONG64 || type == SDDS_LONG || type == SDDS_SHORT) {
+        bool aok = true;
+        bool bok = true;
+        qint64 ai = 0;
+        qint64 bi = 0;
+        if (!at.isEmpty())
+          ai = at.toLongLong(&aok);
+        if (!bt.isEmpty())
+          bi = bt.toLongLong(&bok);
+        if (type == SDDS_LONG) {
+          if (aok && (ai < std::numeric_limits<int32_t>::min() || ai > std::numeric_limits<int32_t>::max()))
+            aok = false;
+          if (bok && (bi < std::numeric_limits<int32_t>::min() || bi > std::numeric_limits<int32_t>::max()))
+            bok = false;
+        } else if (type == SDDS_SHORT) {
+          if (aok && (ai < std::numeric_limits<short>::min() || ai > std::numeric_limits<short>::max()))
+            aok = false;
+          if (bok && (bi < std::numeric_limits<short>::min() || bi > std::numeric_limits<short>::max()))
+            bok = false;
+        }
+        if (aok && bok && ai != bi)
+          return order == Qt::AscendingOrder ? ai < bi : ai > bi;
+      } else if (type == SDDS_ULONG64 || type == SDDS_ULONG || type == SDDS_USHORT) {
+        bool aok = true;
+        bool bok = true;
+        qulonglong ai = 0;
+        qulonglong bi = 0;
+        if (!at.isEmpty())
+          ai = at.toULongLong(&aok);
+        if (!bt.isEmpty())
+          bi = bt.toULongLong(&bok);
+        if (type == SDDS_ULONG) {
+          if (aok && ai > std::numeric_limits<uint32_t>::max())
+            aok = false;
+          if (bok && bi > std::numeric_limits<uint32_t>::max())
+            bok = false;
+        } else if (type == SDDS_USHORT) {
+          if (aok && ai > std::numeric_limits<unsigned short>::max())
+            aok = false;
+          if (bok && bi > std::numeric_limits<unsigned short>::max())
+            bok = false;
+        }
+        if (aok && bok && ai != bi)
+          return order == Qt::AscendingOrder ? ai < bi : ai > bi;
+      } else {
+        long double ai = 0.0L;
+        long double bi = 0.0L;
+        bool aok = true;
+        bool bok = true;
+        if (type == SDDS_LONGDOUBLE) {
+          aok = parseLongDoubleStrict(at, &ai);
+          bok = parseLongDoubleStrict(bt, &bi);
+        } else if (type == SDDS_DOUBLE) {
+          bool ok = true;
+          ai = at.isEmpty() ? 0.0L : static_cast<long double>(at.toDouble(&ok));
+          aok = ok;
+          ok = true;
+          bi = bt.isEmpty() ? 0.0L : static_cast<long double>(bt.toDouble(&ok));
+          bok = ok;
+        } else if (type == SDDS_FLOAT) {
+          bool ok = true;
+          ai = at.isEmpty() ? 0.0L : static_cast<long double>(at.toFloat(&ok));
+          aok = ok;
+          ok = true;
+          bi = bt.isEmpty() ? 0.0L : static_cast<long double>(bt.toFloat(&ok));
+          bok = ok;
+        } else {
+          bool ok = true;
+          ai = at.isEmpty() ? 0.0L : static_cast<long double>(at.toDouble(&ok));
+          aok = ok;
+          ok = true;
+          bi = bt.isEmpty() ? 0.0L : static_cast<long double>(bt.toDouble(&ok));
+          bok = ok;
+        }
+        if (aok && bok && ai != bi)
+          return order == Qt::AscendingOrder ? ai < bi : ai > bi;
+      }
+
+      QByteArray aa = at.toUtf8();
+      QByteArray bb = bt.toUtf8();
+      int r = strcmp_nh(aa.constData(), bb.constData());
+      return order == Qt::AscendingOrder ? r < 0 : r > 0;
     } else if (type == SDDS_STRING) {
       QByteArray aa = av.toUtf8();
       QByteArray bb = bv.toUtf8();
@@ -3581,6 +4055,8 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
 
 void SDDSEditor::searchColumn(int column) {
   if (!datasetLoaded)
+    return;
+  if (column < 0 || column >= dataset.layout.n_columns)
     return;
 
   if (searchColumnDialog)
@@ -3633,6 +4109,7 @@ void SDDSEditor::searchColumn(int column) {
 
   auto state = std::make_shared<SearchState>();
   state->matchIndex = -1;
+  const int columnType = dataset.layout.column_definition[column].type;
 
   std::function<void()> focusMatch;
   std::function<void(bool, bool)> runSearch;
@@ -3687,7 +4164,7 @@ void SDDSEditor::searchColumn(int column) {
     }
   };
 
-  auto replaceCurrent = [this, column, patternEdit, replaceEdit, state, runSearch]() {
+  auto replaceCurrent = [this, column, patternEdit, replaceEdit, state, runSearch, columnType]() {
     if (state->matches.isEmpty())
       runSearch(true, true);
     if (state->matches.isEmpty())
@@ -3700,12 +4177,14 @@ void SDDSEditor::searchColumn(int column) {
       return;
     QString val = idx.data(Qt::EditRole).toString();
     val.replace(m.start, patternEdit->text().length(), replaceEdit->text());
-    columnModel->setData(idx, val);
-    markDirty();
+    if (!validateTextForType(val, columnType, true))
+      return;
+    if (applyCellEditWithUndo(undoStack, columnModel, idx, val))
+      markDirty();
     runSearch(true, true);
   };
 
-  auto replaceAll = [this, column, patternEdit, replaceEdit, state, runSearch]() {
+  auto replaceAll = [this, column, patternEdit, replaceEdit, state, runSearch, columnType]() {
     if (state->matches.isEmpty())
       runSearch(true, true);
     if (state->matches.isEmpty())
@@ -3715,6 +4194,8 @@ void SDDSEditor::searchColumn(int column) {
       return;
     QString repl = replaceEdit->text();
     int replaced = 0;
+    bool warned = false;
+    bool macroStarted = false;
     for (int r = 0; r < columnModel->rowCount(); ++r) {
       QModelIndex idx = columnModel->index(r, column);
       if (!idx.isValid())
@@ -3722,21 +4203,35 @@ void SDDSEditor::searchColumn(int column) {
       QString val = idx.data(Qt::EditRole).toString();
       int pos = 0;
       bool changed = false;
+      int rowReplaced = 0;
       while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
         val.replace(pos, pat.length(), repl);
         pos += repl.length();
-        ++replaced;
+        ++rowReplaced;
         changed = true;
       }
-      if (changed)
-        columnModel->setData(idx, val);
+      if (changed) {
+        bool show = !warned;
+        if (validateTextForType(val, columnType, show)) {
+          if (undoStack && !macroStarted) {
+            undoStack->beginMacro(tr("Replace All"));
+            macroStarted = true;
+          }
+          if (applyCellEditWithUndo(undoStack, columnModel, idx, val))
+            replaced += rowReplaced;
+        } else if (show) {
+          warned = true;
+        }
+      }
     }
+    if (macroStarted)
+      undoStack->endMacro();
     if (replaced > 0)
       markDirty();
     runSearch(replaced == 0, true);
   };
 
-  auto replaceSelected = [this, column, patternEdit, replaceEdit, state, runSearch]() {
+  auto replaceSelected = [this, column, patternEdit, replaceEdit, state, runSearch, columnType]() {
     QString pat = patternEdit->text();
     if (pat.isEmpty())
       return;
@@ -3748,21 +4243,37 @@ void SDDSEditor::searchColumn(int column) {
       return;
     QString repl = replaceEdit->text();
     int replaced = 0;
+    bool warned = false;
+    bool macroStarted = false;
     for (const QModelIndex &idx : indexes) {
       if (!idx.isValid() || idx.column() != column)
         continue;
       QString val = idx.data(Qt::EditRole).toString();
       int pos = 0;
       bool changed = false;
+      int rowReplaced = 0;
       while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
         val.replace(pos, pat.length(), repl);
         pos += repl.length();
-        ++replaced;
+        ++rowReplaced;
         changed = true;
       }
-      if (changed)
-        columnModel->setData(idx, val);
+      if (changed) {
+        bool show = !warned;
+        if (validateTextForType(val, columnType, show)) {
+          if (undoStack && !macroStarted) {
+            undoStack->beginMacro(tr("Replace Selected"));
+            macroStarted = true;
+          }
+          if (applyCellEditWithUndo(undoStack, columnModel, idx, val))
+            replaced += rowReplaced;
+        } else if (show) {
+          warned = true;
+        }
+      }
     }
+    if (macroStarted)
+      undoStack->endMacro();
     if (replaced > 0)
       markDirty();
     runSearch(replaced == 0, false);
@@ -3807,11 +4318,13 @@ void SDDSEditor::searchColumn(int column) {
 void SDDSEditor::resizeArray(int column) {
   if (!datasetLoaded || currentPage < 0 || currentPage >= pages.size())
     return;
-
-  ARRAY_DEFINITION *def = &dataset.layout.array_definition[column];
   PageStore &pd = pages[currentPage];
   if (column < 0 || column >= pd.arrays.size())
     return;
+  if (column >= dataset.layout.n_arrays)
+    return;
+
+  ARRAY_DEFINITION *def = &dataset.layout.array_definition[column];
 
   ArrayStore &as = pd.arrays[column];
 
@@ -3839,6 +4352,11 @@ void SDDSEditor::resizeArray(int column) {
   for (int i = 0; i < def->dimensions; ++i)
     as.dims[i] = boxes[i]->value();
   int newSize = dimProduct(as.dims);
+  if (newSize < 0) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Array dimensions are too large."));
+    return;
+  }
   as.values.resize(newSize);
 
   populateModels();
@@ -3847,6 +4365,8 @@ void SDDSEditor::resizeArray(int column) {
 
 void SDDSEditor::searchArray(int column) {
   if (!datasetLoaded)
+    return;
+  if (column < 0 || column >= dataset.layout.n_arrays)
     return;
 
   QDialog dlg(this);
@@ -3879,6 +4399,7 @@ void SDDSEditor::searchArray(int column) {
   QVector<Match> matches;
   int matchIndex = -1;
   QPersistentModelIndex activeEditor;
+  const int arrayType = dataset.layout.array_definition[column].type;
 
   auto focusMatch = [&]() {
     if (matchIndex < 0 || matchIndex >= matches.size())
@@ -3940,8 +4461,10 @@ void SDDSEditor::searchArray(int column) {
       return;
     QString val = idx.data(Qt::EditRole).toString();
     val.replace(m.start, patternEdit.text().length(), replaceEdit.text());
-    arrayModel->setData(idx, val);
-    markDirty();
+    if (!validateTextForType(val, arrayType, true))
+      return;
+    if (applyCellEditWithUndo(undoStack, arrayModel, idx, val))
+      markDirty();
     runSearch(true);
   };
 
@@ -3955,6 +4478,8 @@ void SDDSEditor::searchArray(int column) {
       return;
     QString repl = replaceEdit.text();
     int replaced = 0;
+    bool warned = false;
+    bool macroStarted = false;
     for (int r = 0; r < arrayModel->rowCount(); ++r) {
       QModelIndex idx = arrayModel->index(r, column);
       if (!idx.isValid())
@@ -3962,15 +4487,29 @@ void SDDSEditor::searchArray(int column) {
       QString val = idx.data(Qt::EditRole).toString();
       int pos = 0;
       bool changed = false;
+      int rowReplaced = 0;
       while ((pos = val.indexOf(pat, pos, Qt::CaseSensitive)) >= 0) {
         val.replace(pos, pat.length(), repl);
         pos += repl.length();
-        ++replaced;
+        ++rowReplaced;
         changed = true;
       }
-      if (changed)
-        arrayModel->setData(idx, val);
+      if (changed) {
+        bool show = !warned;
+        if (validateTextForType(val, arrayType, show)) {
+          if (undoStack && !macroStarted) {
+            undoStack->beginMacro(tr("Replace All"));
+            macroStarted = true;
+          }
+          if (applyCellEditWithUndo(undoStack, arrayModel, idx, val))
+            replaced += rowReplaced;
+        } else if (show) {
+          warned = true;
+        }
+      }
     }
+    if (macroStarted)
+      undoStack->endMacro();
     if (replaced > 0)
       markDirty();
     runSearch(replaced == 0);
@@ -4004,7 +4543,7 @@ void SDDSEditor::changeArrayType(int column) {
   commitModels();
   QStringList types;
   types << "short" << "ushort" << "long" << "ulong" << "long64"
-        << "ulong64" << "float" << "double" << "long double" << "string"
+      << "ulong64" << "float" << "double" << "longdouble" << "string"
         << "character";
   if (column < 0 || column >= dataset.layout.n_arrays)
     return;
@@ -4016,9 +4555,18 @@ void SDDSEditor::changeArrayType(int column) {
   if (!ok || newType == current)
     return;
   int32_t sddsType = SDDS_IdentifyType(const_cast<char *>(newType.toLocal8Bit().constData()));
-  SDDS_ChangeArrayInformation(&dataset, (char *)"type", &sddsType,
-                              SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
-                              const_cast<char *>(name.toLocal8Bit().constData()));
+  if (sddsType <= 0) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Invalid type selection: %1").arg(newType));
+    return;
+  }
+  if (!SDDS_ChangeArrayInformation(&dataset, (char *)"type", &sddsType,
+                                   SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
+                                   const_cast<char *>(name.toLocal8Bit().constData()))) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to change array type"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
   arrayModel->refreshHeaders(column, column);
   markDirty();
 }
@@ -4053,8 +4601,14 @@ static void removeParameterFromLayout(SDDS_LAYOUT *layout, int row) {
     defs[i - 1] = defs[i];
 
   if (count - 1 > 0)
-    layout->parameter_definition =
+  {
+    PARAMETER_DEFINITION *newDefs =
         (PARAMETER_DEFINITION *)realloc(defs, sizeof(PARAMETER_DEFINITION) * (count - 1));
+    if (newDefs)
+      layout->parameter_definition = newDefs;
+    else
+      layout->parameter_definition = defs;
+  }
   else {
     free(defs);
     layout->parameter_definition = nullptr;
@@ -4070,8 +4624,14 @@ static void removeParameterFromLayout(SDDS_LAYOUT *layout, int row) {
       indexes[i]->index--;
 
   if (count - 1 > 0)
-    layout->parameter_index =
+  {
+    SORTED_INDEX **newIndexes =
         (SORTED_INDEX **)realloc(indexes, sizeof(SORTED_INDEX *) * (count - 1));
+    if (newIndexes)
+      layout->parameter_index = newIndexes;
+    else
+      layout->parameter_index = indexes;
+  }
   else {
     free(indexes);
     layout->parameter_index = nullptr;
@@ -4108,8 +4668,14 @@ static void removeColumnFromLayout(SDDS_LAYOUT *layout, int col) {
     defs[i - 1] = defs[i];
 
   if (count - 1 > 0)
-    layout->column_definition =
+  {
+    COLUMN_DEFINITION *newDefs =
         (COLUMN_DEFINITION *)realloc(defs, sizeof(COLUMN_DEFINITION) * (count - 1));
+    if (newDefs)
+      layout->column_definition = newDefs;
+    else
+      layout->column_definition = defs;
+  }
   else {
     free(defs);
     layout->column_definition = nullptr;
@@ -4125,8 +4691,14 @@ static void removeColumnFromLayout(SDDS_LAYOUT *layout, int col) {
       indexes[i]->index--;
 
   if (count - 1 > 0)
-    layout->column_index =
+  {
+    SORTED_INDEX **newIndexes =
         (SORTED_INDEX **)realloc(indexes, sizeof(SORTED_INDEX *) * (count - 1));
+    if (newIndexes)
+      layout->column_index = newIndexes;
+    else
+      layout->column_index = indexes;
+  }
   else {
     free(indexes);
     layout->column_index = nullptr;
@@ -4165,8 +4737,14 @@ static void removeArrayFromLayout(SDDS_LAYOUT *layout, int col) {
     defs[i - 1] = defs[i];
 
   if (count - 1 > 0)
-    layout->array_definition =
+  {
+    ARRAY_DEFINITION *newDefs =
         (ARRAY_DEFINITION *)realloc(defs, sizeof(ARRAY_DEFINITION) * (count - 1));
+    if (newDefs)
+      layout->array_definition = newDefs;
+    else
+      layout->array_definition = defs;
+  }
   else {
     free(defs);
     layout->array_definition = nullptr;
@@ -4182,8 +4760,14 @@ static void removeArrayFromLayout(SDDS_LAYOUT *layout, int col) {
       indexes[i]->index--;
 
   if (count - 1 > 0)
-    layout->array_index =
+  {
+    SORTED_INDEX **newIndexes =
         (SORTED_INDEX **)realloc(indexes, sizeof(SORTED_INDEX *) * (count - 1));
+    if (newIndexes)
+      layout->array_index = newIndexes;
+    else
+      layout->array_index = indexes;
+  }
   else {
     free(indexes);
     layout->array_index = nullptr;
@@ -4263,7 +4847,11 @@ void SDDSEditor::insertParameter() {
     return;
   }
 
-  SDDS_SaveLayout(&dataset);
+  if (!SDDS_SaveLayout(&dataset)) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to update layout after adding parameter"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
   for (PageStore &pd : pages)
     pd.parameters.append(QString());
 
@@ -4342,7 +4930,11 @@ void SDDSEditor::insertColumn() {
     return;
   }
 
-  SDDS_SaveLayout(&dataset);
+  if (!SDDS_SaveLayout(&dataset)) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to update layout after adding column"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
   for (PageStore &pd : pages) {
     int rows = pd.columns.size() ? pd.columns[0].size() : 0;
     pd.columns.append(QVector<QString>(rows));
@@ -4427,7 +5019,11 @@ void SDDSEditor::insertArray() {
     return;
   }
 
-  SDDS_SaveLayout(&dataset);
+  if (!SDDS_SaveLayout(&dataset)) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to update layout after adding array"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
   for (PageStore &pd : pages) {
     ArrayStore as;
     as.dims = QVector<int>(1, 5);
@@ -4452,7 +5048,11 @@ void SDDSEditor::deleteParameter() {
     return;
 
   removeParameterFromLayout(&dataset.layout, row);
-  SDDS_SaveLayout(&dataset);
+  if (!SDDS_SaveLayout(&dataset)) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to update layout after deleting parameter"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
   for (PageStore &pd : pages)
     if (row < pd.parameters.size())
       pd.parameters.remove(row);
@@ -4474,7 +5074,11 @@ void SDDSEditor::deleteColumn() {
     return;
 
   removeColumnFromLayout(&dataset.layout, col);
-  SDDS_SaveLayout(&dataset);
+  if (!SDDS_SaveLayout(&dataset)) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to update layout after deleting column"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
   for (PageStore &pd : pages)
     if (col < pd.columns.size())
       pd.columns.remove(col);
@@ -4496,7 +5100,11 @@ void SDDSEditor::deleteArray() {
     return;
 
   removeArrayFromLayout(&dataset.layout, col);
-  SDDS_SaveLayout(&dataset);
+  if (!SDDS_SaveLayout(&dataset)) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to update layout after deleting array"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return;
+  }
   for (PageStore &pd : pages)
     if (col < pd.arrays.size())
       pd.arrays.remove(col);
@@ -4545,14 +5153,19 @@ void SDDSEditor::deleteColumnRows() {
 
   commitModels();
 
-  QModelIndexList selection = columnView->selectionModel()->selectedRows();
+  QModelIndexList selection = columnView->selectionModel()->selectedIndexes();
   if (selection.isEmpty())
     return;
 
-  QVector<int> rows;
-  rows.reserve(selection.size());
+  QSet<int> uniqueRows;
+  uniqueRows.reserve(selection.size());
   for (const QModelIndex &idx : selection)
-    rows.append(idx.row());
+    if (idx.isValid())
+      uniqueRows.insert(idx.row());
+  if (uniqueRows.isEmpty())
+    return;
+
+  QVector<int> rows = uniqueRows.values().toVector();
   std::sort(rows.begin(), rows.end(), std::greater<int>());
 
   if (currentPage >= 0 && currentPage < pages.size()) {
@@ -4615,7 +5228,13 @@ void SDDSEditor::insertPage() {
       pd.arrays[a].dims = pages[currentPage].arrays[a].dims;
     else
       pd.arrays[a].dims = QVector<int>(dims, 1);
-    pd.arrays[a].values.resize(dimProduct(pd.arrays[a].dims));
+    int size = dimProduct(pd.arrays[a].dims);
+    if (size < 0) {
+      QMessageBox::warning(this, tr("SDDS"),
+                           tr("Array dimensions are too large."));
+      return;
+    }
+    pd.arrays[a].values.resize(size);
   }
 
   int insertPos = currentPage + 1;
