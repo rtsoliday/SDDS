@@ -6,9 +6,9 @@ URL:		https://www.aps.anl.gov/Accelerator-Operations-Physics
 Packager:	Robert Soliday <soliday@aps.anl.gov>
 Prefix:		%{_bindir}
 Autoreq:	0
-Version:	5.9
+Version:	5.10
 Release:	1
-Source:		SDDSToolKit-5.9.tar.gz
+Source:		SDDSToolKit-5.10.tar.gz
 
 %define debug_package %{nil}
 %undefine __check_files
@@ -73,6 +73,7 @@ install -s -m 755 sddsdiff %{buildroot}%{_bindir}/sddsdiff
 install -s -m 755 sddsdigfilter %{buildroot}%{_bindir}/sddsdigfilter
 install -s -m 755 sddsdistest %{buildroot}%{_bindir}/sddsdistest
 install -s -m 755 sddsduplicate %{buildroot}%{_bindir}/sddsduplicate
+install -s -m 755 sddseditor %{buildroot}%{_bindir}/sddseditor
 install -s -m 755 sddsendian %{buildroot}%{_bindir}/sddsendian
 install -s -m 755 sddsenvelope %{buildroot}%{_bindir}/sddsenvelope
 install -s -m 755 sddseventhist %{buildroot}%{_bindir}/sddseventhist
@@ -85,6 +86,7 @@ install -s -m 755 sddsgfit %{buildroot}%{_bindir}/sddsgfit
 install -s -m 755 sddslorentzianfit %{buildroot}%{_bindir}/sddslorentzianfit
 install -s -m 755 sddshist %{buildroot}%{_bindir}/sddshist
 install -s -m 755 sddshist2d %{buildroot}%{_bindir}/sddshist2d
+install -s -m 755 sddsica %{buildroot}%{_bindir}/sddsica
 install -s -m 755 sddsimageconvert %{buildroot}%{_bindir}/sddsimageconvert
 install -s -m 755 sddsimageprofiles %{buildroot}%{_bindir}/sddsimageprofiles
 install -s -m 755 sddsinsideboundaries %{buildroot}%{_bindir}/sddsinsideboundaries
@@ -203,6 +205,7 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/sddsdigfilter
 %{_bindir}/sddsdistest
 %{_bindir}/sddsduplicate
+%{_bindir}/sddseditor
 %{_bindir}/sddsendian
 %{_bindir}/sddsenvelope
 %{_bindir}/sddseventhist
@@ -215,6 +218,7 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/sddslorentzianfit
 %{_bindir}/sddshist
 %{_bindir}/sddshist2d
+%{_bindir}/sddsica
 %{_bindir}/sddsimageconvert
 %{_bindir}/sddsimageprofiles
 %{_bindir}/sddsinsideboundaries
