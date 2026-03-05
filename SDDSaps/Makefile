@@ -157,6 +157,9 @@ ifneq ($(wildcard $(DD)../.svn),)
   ifeq ($(SVN_VERSION),)
     SVN_VERSION=unknown
   endif
+  ifeq ($(SVN_VERSION),Unversioned directory)
+    SVN_VERSION=unknown
+  endif
 else
   SVN_VERSION=GIT_$(shell git log --oneline | wc -l | sed 's/^[[:space:]]*//')
 endif
