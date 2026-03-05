@@ -102,8 +102,9 @@ void parseCommandlineToQT(int argc, char **argv) {
     p = op;
     do {
       if (*p == '"') {
-
-        op = trealloc(op, sizeof(char) * (strlen(op) + 1));
+        int offset = p - op;
+        op = trealloc(op, sizeof(char) * (strlen(op) + 2));
+        p = op + offset;
         n = n + 1;
         insert(p, "\\");
         p++;
@@ -217,7 +218,20 @@ int QT_init(void) {
     if (sddsplotCommandline) {
       strcat(QT_name, " -command ");
       length = strlen(QT_name) + strlen(sddsplotCommandline);
-      if (length > 1024) {
+#if defined(_WIN32)
+      if (length >= 32767) {
+        fprintf(stderr, "error: Graphical driver command line is %d bytes, exceeding the 32KB Windows argument limit.\n", length);
+        fprintf(stderr, "       Please reduce the number of plotted files/columns.\n");
+        exit(1);
+      }
+#else
+      if (length >= 131072) {
+        fprintf(stderr, "error: Graphical driver command line is %d bytes, exceeding the 128KB POSIX single-argument limit (MAX_ARG_STRLEN).\n", length);
+        fprintf(stderr, "       Please reduce the number of plotted files/columns.\n");
+        exit(1);
+      }
+#endif
+      if (length >= 1024) {
         QT_name_long = tmalloc(sizeof(char) * (length + 1));
         strcat(QT_name_long, QT_name);
         strcat(QT_name_long, sddsplotCommandline);

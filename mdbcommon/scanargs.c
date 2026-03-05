@@ -457,11 +457,13 @@ long add_file_arguments(int argc, char **argv, char ***argvNew) {
   long iarg, isSDDS, dataIndex = 0, comment = 0;
   int64_t iNew, argcMax;
   FILE *fp;
-  char buffer[16384], *ptr, *filename, *class, *dataName = NULL;
+  char *buffer, *ptr, *filename, *class, *dataName = NULL;
   int isParameter = 0;
   SDDS_DATASET SDDSinput;
   char *classOption[2] = {
     "column", "parameter"};
+
+  buffer = tmalloc(sizeof(char) * 131072);
 
   *argvNew = tmalloc(sizeof(**argvNew) * argc);
   argcMax = argc;
@@ -521,7 +523,7 @@ long add_file_arguments(int argc, char **argv, char ***argvNew) {
           fprintf(stderr, "couldn't read argument file: %s\n", filename);
           exit(1);
         }
-        while (fgets(buffer, 16384, fp)) {
+        while (fgets(buffer, 131072, fp)) {
           buffer[strlen(buffer) - 1] = 0;
           if (!strlen(buffer))
             continue;
@@ -573,6 +575,7 @@ long add_file_arguments(int argc, char **argv, char ***argvNew) {
       iNew++;
     }
   }
+  free(buffer);
   return iNew;
 }
 

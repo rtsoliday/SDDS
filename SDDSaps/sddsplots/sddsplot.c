@@ -4791,13 +4791,16 @@ void ErasePlotSpecification(PLOT_SPEC *plspec)
   plspec->outputMode = PLOT_OUTPUT_GRAPHICS;
 }
 
-#define CL_BUFFER_SIZE 16384
+#define CL_BUFFER_SIZE 131072
 int count_arguments(char *s);
 
 long ReadMoreArguments(char ***argv, int *argc, char **commandlineArgv, int commandlineArgc)
 {
   long i, l;
-  static char buffer[CL_BUFFER_SIZE];
+  static char *buffer = NULL;
+  
+  if (!buffer)
+    buffer = tmalloc(sizeof(char) * CL_BUFFER_SIZE);
 
   if (!fgets(buffer, CL_BUFFER_SIZE, stdin) ||
       SDDS_StringIsBlank(buffer))
