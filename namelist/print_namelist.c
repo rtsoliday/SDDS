@@ -41,8 +41,11 @@ void print_namelist(FILE *fp, NAMELIST *nl)
     float a_float;
     double a_double;
     char a_char;
-    long column, first_item, first_value, end_required;
-    char buffer[16384], buffer2[16384];
+    long column, first_item, first_value, end_required, bufsize;
+    char *buffer, *buffer2;
+
+    buffer = tmalloc(sizeof(*buffer)*(bufsize=get_namelist_buffer_size()));
+    buffer2 = tmalloc(sizeof(*buffer2)*bufsize);
 
 #if defined(DEBUG)
     printf("working on namelist %s\n", nl->name);
@@ -155,11 +158,11 @@ void print_namelist(FILE *fp, NAMELIST *nl)
                     strcpy_ss(buffer2, *((STRING*)ptr)?*((STRING*)ptr):"{NULL}");
                     escape_quotes(buffer2);
                     if (containsWhitespace(buffer2) || strlen(buffer2)==0 || strpbrk(buffer2, "$\",&"))
-                      snprintf(buffer, sizeof(buffer), "\"%.*s\",%c", 
-                               (int)(sizeof(buffer) - 5), buffer2, j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' ');
+                      snprintf(buffer, bufsize, "\"%.*s\",%c", 
+                               (int)(bufsize - 5), buffer2, j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' ');
                     else
-                      snprintf(buffer, sizeof(buffer), "%.*s,%c", 
-                               (int)(sizeof(buffer) - 3), buffer2, j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' ');
+                      snprintf(buffer, bufsize, "%.*s,%c", 
+                               (int)(bufsize - 3), buffer2, j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' ');
                     print_namelist_output(buffer, &column, fp);
                     }
                 ptr  += sizeof(ptr);
@@ -188,6 +191,8 @@ void print_namelist(FILE *fp, NAMELIST *nl)
         fprintf(fp, "&end\n");
         }
     fflush(fp);
+    free(buffer);
+    free(buffer2);
     }
 
 void print_namelist_output(char *buffer, long *column, FILE *fp)
@@ -211,8 +216,9 @@ void print_namelist_output(char *buffer, long *column, FILE *fp)
 void print_namelist_tags(long *end_required, long *first_item, long *first_value, long *column,
                          char *nlname, ITEM *item, FILE *fp)
 {
-    static char buffer[16384];
+    char *buffer;
     long i;
+    buffer = tmalloc(sizeof(*buffer)*get_namelist_buffer_size());
 
     if (*first_item) {
         fprintf(fp, "&%s\n", nlname);
@@ -239,6 +245,7 @@ void print_namelist_tags(long *end_required, long *first_item, long *first_value
         *end_required = 1;
         *first_value = 0;
         }
+    free(buffer);
     }
 
 long containsWhitespace(char *string)
