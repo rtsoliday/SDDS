@@ -58,6 +58,8 @@ typedef struct {
 
 
 long scan_namelist(NAMELIST_TEXT *nl, char *line);
+void set_namelist_buffer_size(long size);
+long get_namelist_buffer_size();
 char *get_namelist(char *s, long n, FILE *fp);
 char *get_namelist_e(char *s, long n, FILE *fp, long *errorCode);
 void free_namelist_text(NAMELIST_TEXT *nl);
