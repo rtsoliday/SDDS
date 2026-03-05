@@ -26,6 +26,36 @@
  */
 
 #define DOLLARSIGN_TOO 0
+#define BIGBUFSIZE 16384
+
+static long scan_namelist_buffer_size = BIGBUFSIZE;
+
+void set_namelist_buffer_size(long size)
+{
+    if (size>BIGBUFSIZE)
+        scan_namelist_buffer_size = size;
+}
+
+long get_namelist_buffer_size()
+{
+  return scan_namelist_buffer_size;
+}
+
+static void cleanup_scan_namelist_buffers(char *ptr_to_free, char *values,
+                                          char *psBuffer, char *tempptr,
+                                          char *command)
+{
+    if (psBuffer)
+        free(psBuffer);
+    if (tempptr)
+        free(tempptr);
+    if (command)
+        free(command);
+    if (values)
+        free(values);
+    if (ptr_to_free)
+        free(ptr_to_free);
+}
 
 long scan_namelist(NAMELIST_TEXT *nl, char *line)
 {
@@ -35,21 +65,31 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
     char *values;
     static char *buffer = NULL;
     static long bufsize = 0;
-#define BIGBUFSIZE 16384
-#define INDEX_LIMIT 16380
+    char *psBuffer, *tempptr, *command;
 #if !defined(vxWorks)
-    long k, m, n, len, insideCommand;
-    char psBuffer[16384], tempptr[16384], command[16384];
+    long k, m, n, len, insideCommand, indexLimit, workingBufferSize;
     FILE *fID;
 #ifdef CONDOR_COMPILE
     char tmpName[1024];
 #endif
 #endif
 
+    ptr_to_free = NULL;
     values = NULL;
     length_values = 0;
+    psBuffer = tempptr = command = NULL;
     if (!buffer)
         buffer = tmalloc(sizeof(*buffer)*(bufsize = 128));
+
+#if !defined(vxWorks)
+    workingBufferSize = scan_namelist_buffer_size;
+    if (workingBufferSize<128)
+        workingBufferSize = 128;
+    indexLimit = workingBufferSize-4;
+    psBuffer = tmalloc(sizeof(*psBuffer)*workingBufferSize);
+    tempptr = tmalloc(sizeof(*tempptr)*workingBufferSize);
+    command = tmalloc(sizeof(*command)*workingBufferSize);
+#endif
 
     nl->n_entities = 0;
     nl->group_name = NULL;
@@ -68,21 +108,21 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
 #if DOLLARSIGN_TOO
     if (!(ptr_p=next_unquoted_char(ptr, '$', '"')) &&
         !(ptr_p=next_unquoted_char(ptr, '&', '"')) ) {
-        free(ptr_to_free);
         fprintf(stderr, "error: namelist scanning problem---missing group name:\n%s\n", ptr);
+    cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
         return(-1);
         }
 #else
     if (!(ptr_p=next_unquoted_char(ptr, '&', '"'))) {
-        free(ptr_to_free);
         fprintf(stderr, "error: namelist scanning problem---missing group name:\n%s\n", ptr);
+        cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
         return(-1);
         }
 #endif
     ptr_p++;
     if ((nl->group_name=get_token(ptr_p))==NULL) {
-        free(ptr_to_free);
         fprintf(stderr, "error: namelist scanning problem---missing group name:\n%s\n", ptr);
+        cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
         return(-1);
         }
 #ifdef DEBUG
@@ -97,7 +137,7 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
     n_entities = count_occurences(ptr_p, '=', "&");
 #endif
     if (n_entities==0) {
-        free(ptr_to_free);
+        cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
         return(nl->n_entities=0);
         }
 #ifdef DEBUG
@@ -197,11 +237,13 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
 #if DOLLARSIGN_TOO
             if (!(ptr_e=next_unquoted_char(ptr, '&', '"')) && !(ptr_e=next_unquoted_char(ptr, '$', '"')) ) {
                 fprintf(stderr, "error: namelist improperly terminated\n");
+                cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
                 return(-1);
                 }
 #else
             if (!(ptr_e=next_unquoted_char(ptr, '&', '"'))) {
                 fprintf(stderr, "error: namelist improperly terminated\n");
+                cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
                 return(-1);
                 }
 #endif
@@ -214,6 +256,7 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
                 printf("scan_namelist: fatal error: n_entites=%ld, i=%ld\n", n_entities,
                       i);
 #endif
+            cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
                 return(-1);
                 }
 
@@ -229,6 +272,7 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
 #endif
                 fprintf(stderr, "error: no values listed for namelist field %s\n",
                         nl->entity[i]);
+                cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
                 return(-1);     /* No values listed. */
                 }
             *ptr_e = 0;
@@ -246,17 +290,19 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
 	if (length == 0) {
             fprintf(stderr, "error: missing values for namelist field %s\n",
                     nl->entity[i]);
-            return -1;
+        cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+        return(-1);
 	}
 	n = 0;
 	j = 0;
 	k = 0;
 	insideCommand = 0;
 	while (n<length) {
-	  if (j>INDEX_LIMIT) {
+      if (j>indexLimit) {
 	      fprintf(stderr, "error: values for namelist field %s is too long\n",
 		      nl->entity[i]);
-	      return -1;
+          cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+          return(-1);
 	  }
 	  if (ptr[n]=='\\') {
             if (ptr[n+1]!='}' && ptr[n+1]!='{')
@@ -278,7 +324,8 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
 	    if (insideCommand) {
 	      fprintf(stderr, "error: values for namelist field %s has invalid command brackets\n",
 		      nl->entity[i]);
-	      return -1;
+          cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+          return(-1);
 	    }
 	    insideCommand = 1;
 	    k = 0;
@@ -287,7 +334,8 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
 	    if (!insideCommand) {
 	      fprintf(stderr, "error: values for namelist field %s has invalid command brackets\n",
 		      nl->entity[i]);
-	      return -1;
+          cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+          return(-1);
 	    }
 	    insideCommand = 0;
 	    command[k] = 0;
@@ -297,36 +345,45 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
 	      fprintf(stderr, "error: invalid command for namelist field %s\n",
 		      nl->entity[i]);
               fprintf(stderr, "command was %s\n", command);
-	      return -1;
+          cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+          return(-1);
 	    }
 	    if (feof(fID)) {
 	      fprintf(stderr, "error: command for namelist field %s returns EOF\n",
 		      nl->entity[i]);
               fprintf(stderr, "command was %s\n", command);
-	      return -1;
+          pclose(fID);
+          cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+          return(-1);
 	    }
-	    if (fgets(psBuffer, 128, fID) == NULL) {
+        if (fgets(psBuffer, workingBufferSize, fID) == NULL) {
 	      fprintf(stderr, "error: command for namelist field %s returns NULL\n",
 		      nl->entity[i]);
               fprintf(stderr, "command was %s\n", command);
-	      return -1;
+          pclose(fID);
+          cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+          return(-1);
 	    }
             pclose(fID);
 #else
             tmpnam(tmpName);
-            sprintf(psBuffer, "%s > %s", command, tmpName);
+            snprintf(psBuffer, workingBufferSize, "%s > %s", command, tmpName);
             system(psBuffer);
             if (!(fID = fopen(tmpName, "r"))) {
 	      fprintf(stderr, "error: command for namelist field %s failed\n",
 		      nl->entity[i]);
               fprintf(stderr, "command was %s\n", command);
-	      return -1;
+	      cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+	      return(-1);
             }
-            if (fgets(psBuffer, 128, fID) == NULL) {
+            if (fgets(psBuffer, workingBufferSize, fID) == NULL) {
 	      fprintf(stderr, "error: command for namelist field %s returns NULL\n",
 		      nl->entity[i]);
               fprintf(stderr, "command was %s\n", command);
-	      return -1;
+	      fclose(fID);
+	      remove(tmpName);
+	      cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+	      return(-1);
             }
             fclose(fID);
             remove(tmpName);
@@ -337,10 +394,11 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
 	    }
 	    m = 0;
 	    len = strlen(psBuffer);
-	    if (j+len>INDEX_LIMIT) {
+        if (j+len>indexLimit) {
 	      fprintf(stderr, "error: values for namelist field %s is too long\n",
 		      nl->entity[i]);
-	      return -1;
+          cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+          return(-1);
 	    }
 	    while (m < len) {
 	      tempptr[j] = psBuffer[m];
@@ -368,7 +426,8 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
         if (length==1) {
             fprintf(stderr, "error: missing values for namelist field %s\n",
                     nl->entity[i]);
-            return -1;
+            cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+            return(-1);
             }
         if (values==NULL) {
             values = tmalloc(length*sizeof(*values));
@@ -401,7 +460,8 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
             if (!ptr) {
                 fprintf(stderr, "error: missing values for namelist field %s\n",
                         nl->entity[i]);
-                return -1;
+                cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
+                return(-1);
                 }
             if (!isdigit(*ptr)) {
                 nl->repeat[i][j] = 1;
@@ -436,8 +496,7 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
             }
         }
 
-    free(values);
-    free(ptr_to_free);
+    cleanup_scan_namelist_buffers(ptr_to_free, values, psBuffer, tempptr, command);
 #ifdef DEBUG
     nl->n_entities = n_entities;
     show_namelist(stdout, nl);
