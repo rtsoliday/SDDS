@@ -1179,6 +1179,13 @@ void determine_dataset_offsets(PLOT_SPEC *plspec, SDDS_TABLE *table, PLOT_DATA *
     if (request->factor_flags&(FACTOR_XINVERT_GIVEN<<i))
       dataset->factor[i] = 1/dataset->factor[i];
   }
+  for (i=0; i<2; i++) {
+    dataset->modulus[i] = 0;
+    if (request->modulus_flags&(MODULUS_XPARAMETER_GIVEN<<i)) {
+      if (!SDDS_GetParameterAsDouble(table, request->modulus_parameter[i], dataset->modulus+i))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    }
+  }
 }
 
 
