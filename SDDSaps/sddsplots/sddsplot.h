@@ -555,9 +555,9 @@ typedef struct {
   char *user_tag; /*change the type of user_tag from double to string (shang) */
   double xgap, ygap;
   SCALES_GROUP_SPEC scalesGroupSpec[2];
-  char *tag_parameter, *offset_parameter[2], *factor_parameter[2];
-  double sample_fraction, stagger_amount[2], factor[2], offset[2];
-  unsigned long stagger_flags, factor_flags, offset_flags;
+  char *tag_parameter, *offset_parameter[2], *factor_parameter[2], *modulus_parameter[2];
+  double sample_fraction, stagger_amount[2], factor[2], offset[2], modulus[2];
+  unsigned long stagger_flags, factor_flags, offset_flags, modulus_flags;
   double mapping[4], pspace[4], lspace[4], aspect_ratio;
   double labelsize_fraction, xorig, yorig;
   double dither[2];
@@ -690,6 +690,13 @@ typedef struct {
 #define OFFSET_XBEFORELOG_GIVEN  0x00000040
 #define OFFSET_YBEFORELOG_GIVEN  0x00000080
 
+#define MODULUS_XVALUE_GIVEN      0x00000001
+#define MODULUS_YVALUE_GIVEN      0x00000002
+#define MODULUS_XPARAMETER_GIVEN  0x00000004
+#define MODULUS_YPARAMETER_GIVEN  0x00000008
+#define MODULUS_XBEFORELOG_GIVEN  0x00000010
+#define MODULUS_YBEFORELOG_GIVEN  0x00000020
+
 #define PLREQ_JOINSCALE_X     0x0001U
 #define PLREQ_JOINSCALE_Y     0x0002U
 #define JOINSCALE_NOTOP 0x0004U
@@ -711,7 +718,7 @@ typedef struct {
   DRAW_LINE_SPEC *drawLineSpec;
   long drawLineSpecs;
   double limit[4];     /* (effective) data limits (xmin, xmax, ymin, ymax) */
-  double offset[2], factor[2];
+  double offset[2], factor[2], modulus[2];
   char *tag; /*change the type of tag from double to string (shang) */
   long datapage, subpage, plotpanel;
   long request_index, file_index, dataname_index;
