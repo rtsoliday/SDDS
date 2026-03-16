@@ -29,11 +29,49 @@ BACKGROUND_DATA = """SDDS1
 2 3 4
 """
 
+AUTO_BACKGROUND_DATA = """SDDS1
+&column name=I1, type=double, &end
+&column name=I2, type=double, &end
+&column name=I3, type=double, &end
+&column name=I4, type=double, &end
+&column name=I5, type=double, &end
+&data mode=ascii, &end
+! page number 1
+5
+1 1 6 1 1
+1 1 7 1 1
+1 1 8 1 1
+1 1 7 1 1
+1 1 6 1 1
+"""
+
+AUTO_BACKGROUND_KEEP_NEGATIVE_DATA = """SDDS1
+&column name=I1, type=double, &end
+&column name=I2, type=double, &end
+&column name=I3, type=double, &end
+&column name=I4, type=double, &end
+&column name=I5, type=double, &end
+&data mode=ascii, &end
+! page number 1
+5
+1 1 6 1 0
+1 1 7 1 0
+1 1 8 1 0
+1 1 7 1 0
+1 1 6 1 0
+"""
+
 def write_image(path):
   path.write_text(IMAGE_DATA)
 
 def write_background(path):
   path.write_text(BACKGROUND_DATA)
+
+def write_auto_background_image(path):
+  path.write_text(AUTO_BACKGROUND_DATA)
+
+def write_auto_background_keep_negative_image(path):
+  path.write_text(AUTO_BACKGROUND_KEEP_NEGATIVE_DATA)
 
 def read_sdds(path_or_bytes):
   if isinstance(path_or_bytes, bytes):
@@ -119,6 +157,48 @@ def test_background(tmp_path):
   )
   data = read_sdds(output)
   assert data == [[1, 1], [2, 3], [3, 5]]
+
+@pytest.mark.skipif(not SDDSIMAGEPROFILES.exists(), reason="sddsimageprofiles not built")
+def test_auto_background_integrated(tmp_path):
+  image = tmp_path / "image.sdds"
+  output = tmp_path / "out.sdds"
+  write_auto_background_image(image)
+  result = subprocess.run(
+    [
+      str(SDDSIMAGEPROFILES),
+      str(image),
+      str(output),
+      "-columnPrefix=I",
+      "-method=integrated",
+      "-background=auto",
+    ],
+    check=True,
+    stdout=subprocess.PIPE,
+  )
+  data = read_sdds(output)
+  assert data == [[1, 5], [2, 6], [3, 7], [4, 6], [5, 5]]
+  assert result.stdout.decode() == "Background level subtracted: 1\n"
+
+@pytest.mark.skipif(not SDDSIMAGEPROFILES.exists(), reason="sddsimageprofiles not built")
+def test_auto_background_keep_negative(tmp_path):
+  image = tmp_path / "image.sdds"
+  output = tmp_path / "out.sdds"
+  write_auto_background_keep_negative_image(image)
+  result = subprocess.run(
+    [
+      str(SDDSIMAGEPROFILES),
+      str(image),
+      str(output),
+      "-columnPrefix=I",
+      "-method=integrated",
+      "-background=auto,keepNegative",
+    ],
+    check=True,
+    stdout=subprocess.PIPE,
+  )
+  data = read_sdds(output)
+  assert data == [[1, 4], [2, 5], [3, 6], [4, 5], [5, 4]]
+  assert result.stdout.decode() == "Background level subtracted: 1\n"
 
 @pytest.mark.skipif(not SDDSIMAGEPROFILES.exists(), reason="sddsimageprofiles not built")
 def test_area_of_interest(tmp_path):

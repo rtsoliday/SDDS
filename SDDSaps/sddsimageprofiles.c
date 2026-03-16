@@ -14,7 +14,7 @@
  *                    -columnPrefix=<prefix>
  *                   [-profileType={x|y}]
  *                   [-method={centerLine|integrated|averaged|peak}]
- *                   [-background=<filename>]
+ *                   [-background=<filename>|auto[,halfwidth=<value>][,keepNegative]]
  *                   [-areaOfInterest=<rowStart>,<rowEnd>,<columnStart>,<columnEnd>]
  * ```
  *
@@ -28,7 +28,7 @@
  * | `-pipe`           | Specify input and/or output via pipe.                                                |
  * | `-profileType`    | Choose profile type: `x` or `y`.                                                     |
  * | `-method`         | Select the method for profile analysis: `centerLine`, `integrated`, `averaged`, `peak`.|
- * | `-background`     | Specify a background image file.                                                     |
+ * | `-background`     | Specify a background image file or estimate background from the image.               |
  * | `-areaOfInterest` | Define the area of interest within the image.                                        |
  *
  * @copyright
@@ -47,6 +47,11 @@
 #include "mdb.h"
 #include "SDDS.h"
 #include "scan.h"
+#include <float.h>
+
+#define BACKGROUND_AUTO 0x0001UL
+#define BACKGROUND_KEEP_NEGATIVE 0x0002UL
+#define AUTO_BACKGROUND_BINS 256
 
 /* Enumeration for option types */
 enum option_type {
@@ -69,7 +74,7 @@ char *USAGE =
   "                   -columnPrefix=<prefix>\n"
   "                  [-profileType={x|y}]\n"
   "                  [-method={centerLine|integrated|averaged|peak}]\n"
-  "                  [-background=<filename>]\n"
+  "                  [-background=<filename>|auto[,halfwidth=<value>][,keepNegative]]\n"
   "                  [-areaOfInterest=<rowStart>,<rowEnd>,<columnStart>,<columnEnd>]\n"
   "Options:\n"
   "  -pipe=[input][,output]                                     Specify input and/or output via pipe.\n"
@@ -77,6 +82,9 @@ char *USAGE =
   "  -profileType={x|y}                                         Choose profile type: 'x' or 'y'.\n"
   "  -method={centerLine|integrated|averaged|peak}              Select the method for profile analysis.\n"
   "  -background=<filename>                                     Specify a background image file.\n"
+  "  -background=auto[,halfwidth=<value>][,keepNegative]        Estimate background from the image, subtract it\n"
+  "                                                             before profiling, and clip negatives unless\n"
+  "                                                             keepNegative is given.\n"
   "  -areaOfInterest=<rowStart>,<rowEnd>,<columnStart>,<columnEnd>  Define the area of interest.\n\n"
   "Program by Robert Soliday. (\"" __DATE__ " " __TIME__ "\", SVN revision: " SVN_VERSION ")\n\n"
   "-method:\n"
@@ -117,6 +125,16 @@ long yCenterLine(IMAGE_DATA *data, int32_t *type, long *colIndex, int64_t x1, in
 int64_t GetData(SDDS_DATASET *SDDS_orig, char *input, IMAGE_DATA **data, int32_t **type, long **colIndex,
                 double **colIndex2, char *colPrefix, long *validColumns);
 
+double getImageValue(const IMAGE_DATA *data, int32_t type, int64_t row);
+
+void convertImageDataToDouble(IMAGE_DATA *data, int32_t *type, int64_t rows, long *colIndex, long validColumns);
+
+double estimateBackgroundLevel(IMAGE_DATA *data, int32_t *type, int64_t rows, long *colIndex, long validColumns,
+                               long backgroundHalfWidth);
+
+void subtractBackgroundLevel(IMAGE_DATA *data, int32_t *type, int64_t rows, long *colIndex, long validColumns,
+                             double backgroundLevel, long clipNegative);
+
 int main(int argc, char **argv) {
   SDDS_DATASET SDDS_dataset, SDDS_orig, SDDS_bg;
   long i_arg;
@@ -125,9 +143,12 @@ int main(int argc, char **argv) {
   char *input = NULL, *output = NULL, *colPrefix = NULL, *background = NULL;
   long profileType = 1, noWarnings = 0, tmpfile_used = 0, method = 0;
   unsigned long pipeFlags = 0;
+  unsigned long backgroundFlags = 0;
   int64_t rows, bg_rows, j;
   long i, validColumns = 0, bg_validColumns = 0;
   int32_t *type = NULL, *bg_type = NULL;
+  long backgroundHalfWidth = 1;
+  double backgroundLevel = 0;
 
   int64_t rowStart = 1, rowEnd = 0;
   long columnStart = 1, columnEnd = 0;
@@ -183,9 +204,23 @@ int main(int argc, char **argv) {
           SDDS_Bomb("invalid -areaOfInterest syntax or value");
         break;
       case SET_BACKGROUND:
-        if (s_arg[i_arg].n_items != 2)
+        if (s_arg[i_arg].n_items < 2)
           SDDS_Bomb("invalid -background syntax");
-        background = s_arg[i_arg].list[1];
+        if (strcasecmp(s_arg[i_arg].list[1], "auto") == 0) {
+          long items;
+          items = s_arg[i_arg].n_items - 1;
+          if (!scanItemList(&backgroundFlags, s_arg[i_arg].list + 1, &items, 0,
+                            "auto", -1, NULL, 0, BACKGROUND_AUTO,
+                            "halfwidth", SDDS_LONG, &backgroundHalfWidth, 1, 0,
+                            "keepNegative", -1, NULL, 0, BACKGROUND_KEEP_NEGATIVE, NULL) ||
+              !(backgroundFlags & BACKGROUND_AUTO) ||
+              backgroundHalfWidth < 0)
+            SDDS_Bomb("invalid -background syntax/values");
+        } else {
+          if (s_arg[i_arg].n_items != 2)
+            SDDS_Bomb("invalid -background syntax");
+          background = s_arg[i_arg].list[1];
+        }
         break;
       case SET_PIPE:
         if (!processPipeOption(s_arg[i_arg].list + 1, s_arg[i_arg].n_items - 1, &pipeFlags))
@@ -279,6 +314,15 @@ int main(int argc, char **argv) {
         continue;
       }
     }
+  }
+
+  if (backgroundFlags & BACKGROUND_AUTO) {
+    convertImageDataToDouble(data, type, rows, colIndex, validColumns);
+    backgroundLevel = estimateBackgroundLevel(data, type, rows, colIndex, validColumns, backgroundHalfWidth);
+    if (!(pipeFlags & USE_STDOUT))
+      printf("Background level subtracted: %.15g\n", backgroundLevel);
+    subtractBackgroundLevel(data, type, rows, colIndex, validColumns, backgroundLevel,
+                            !(backgroundFlags & BACKGROUND_KEEP_NEGATIVE));
   }
 
   /* Initialize the output file and define the columns */
@@ -405,6 +449,168 @@ int main(int argc, char **argv) {
   }
 
   return EXIT_SUCCESS;
+}
+
+double getImageValue(const IMAGE_DATA *data, int32_t type, int64_t row) {
+  switch (type) {
+  case SDDS_SHORT:
+    return data->shortData[row];
+  case SDDS_USHORT:
+    return data->ushortData[row];
+  case SDDS_LONG:
+    return data->longData[row];
+  case SDDS_ULONG:
+    return data->ulongData[row];
+  case SDDS_LONG64:
+    return (double)data->long64Data[row];
+  case SDDS_ULONG64:
+    return (double)data->ulong64Data[row];
+  case SDDS_FLOAT:
+    return data->floatData[row];
+  case SDDS_DOUBLE:
+    return data->doubleData[row];
+  default:
+    return 0;
+  }
+}
+
+void convertImageDataToDouble(IMAGE_DATA *data, int32_t *type, int64_t rows, long *colIndex, long validColumns) {
+  double *doubleData;
+  int64_t row;
+  long i, column;
+
+  for (i = 0; i < validColumns; i++) {
+    column = colIndex[i];
+    if (type[column] == SDDS_DOUBLE)
+      continue;
+    if (!(doubleData = malloc(sizeof(*doubleData) * rows)))
+      SDDS_Bomb("memory allocation failure");
+    for (row = 0; row < rows; row++)
+      doubleData[row] = getImageValue(data + column, type[column], row);
+    switch (type[column]) {
+    case SDDS_SHORT:
+      free(data[column].shortData);
+      break;
+    case SDDS_USHORT:
+      free(data[column].ushortData);
+      break;
+    case SDDS_LONG:
+      free(data[column].longData);
+      break;
+    case SDDS_ULONG:
+      free(data[column].ulongData);
+      break;
+    case SDDS_LONG64:
+      free(data[column].long64Data);
+      break;
+    case SDDS_ULONG64:
+      free(data[column].ulong64Data);
+      break;
+    case SDDS_FLOAT:
+      free(data[column].floatData);
+      break;
+    default:
+      break;
+    }
+    data[column].doubleData = doubleData;
+    type[column] = SDDS_DOUBLE;
+  }
+}
+
+double estimateBackgroundLevel(IMAGE_DATA *data, int32_t *type, int64_t rows, long *colIndex, long validColumns,
+                               long backgroundHalfWidth) {
+  double minValue, maxValue, binWidth, backgroundLevel, value;
+  double sum = 0;
+  int64_t row, pixelCount = 0;
+  long i, bin, modeBin = 0;
+  int64_t *histogram;
+  int64_t backgroundPixels = 0, maxCount = 0;
+
+  minValue = DBL_MAX;
+  maxValue = -DBL_MAX;
+  for (i = 0; i < validColumns; i++) {
+    for (row = 0; row < rows; row++) {
+      value = getImageValue(data + colIndex[i], type[colIndex[i]], row);
+      if (value < minValue)
+        minValue = value;
+      if (value > maxValue)
+        maxValue = value;
+      pixelCount++;
+    }
+  }
+  if (!pixelCount)
+    return 0;
+  if (minValue == maxValue)
+    return minValue;
+
+  if (!(histogram = calloc(AUTO_BACKGROUND_BINS, sizeof(*histogram))))
+    SDDS_Bomb("memory allocation failure");
+  binWidth = (maxValue - minValue) / AUTO_BACKGROUND_BINS;
+  if (binWidth <= 0) {
+    free(histogram);
+    return minValue;
+  }
+
+  for (i = 0; i < validColumns; i++) {
+    for (row = 0; row < rows; row++) {
+      value = getImageValue(data + colIndex[i], type[colIndex[i]], row);
+      bin = (long)((value - minValue) / binWidth);
+      if (bin < 0)
+        bin = 0;
+      else if (bin >= AUTO_BACKGROUND_BINS)
+        bin = AUTO_BACKGROUND_BINS - 1;
+      histogram[bin]++;
+    }
+  }
+
+  for (bin = 0; bin < AUTO_BACKGROUND_BINS; bin++) {
+    if (histogram[bin] > maxCount) {
+      maxCount = histogram[bin];
+      modeBin = bin;
+    }
+  }
+
+  for (i = 0; i < validColumns; i++) {
+    for (row = 0; row < rows; row++) {
+      value = getImageValue(data + colIndex[i], type[colIndex[i]], row);
+      bin = (long)((value - minValue) / binWidth);
+      if (bin < 0)
+        bin = 0;
+      else if (bin >= AUTO_BACKGROUND_BINS)
+        bin = AUTO_BACKGROUND_BINS - 1;
+      if (bin >= modeBin - backgroundHalfWidth && bin <= modeBin + backgroundHalfWidth) {
+        sum += value;
+        backgroundPixels++;
+      }
+    }
+  }
+  free(histogram);
+
+  if (backgroundPixels)
+    backgroundLevel = sum / backgroundPixels;
+  else
+    backgroundLevel = minValue + (modeBin + 0.5) * binWidth;
+
+  return backgroundLevel;
+}
+
+void subtractBackgroundLevel(IMAGE_DATA *data, int32_t *type, int64_t rows, long *colIndex, long validColumns,
+                             double backgroundLevel, long clipNegative) {
+  double value;
+  int64_t row;
+  long i, column;
+
+  for (i = 0; i < validColumns; i++) {
+    column = colIndex[i];
+    if (type[column] != SDDS_DOUBLE)
+      continue;
+    for (row = 0; row < rows; row++) {
+      value = data[column].doubleData[row] - backgroundLevel;
+      if (clipNegative && value < 0)
+        value = 0;
+      data[column].doubleData[row] = value;
+    }
+  }
 }
 
 int xImageProfile(IMAGE_DATA *data, int32_t *type, int64_t rows, SDDS_DATASET *SDDS_dataset, long method,

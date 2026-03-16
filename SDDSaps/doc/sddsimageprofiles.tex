@@ -10,7 +10,7 @@ sddsimageprofiles [Inputfile] [Outputfile] [-pipe[=in][,out]]
  [-columnPrefix=prefix]
  [-profileType=<x|y>]
  [-method=<centerLine|integrated|averaged|peak>]
- [-background=filename]
+ [-background=filename|auto[,halfwidth=value][,keepNegative]]
  [-aVector=ax,ay]
  [-bVector=bx,by]
  [-offset=x,y]
@@ -26,6 +26,7 @@ sddsimageprofiles [Inputfile] [Outputfile] [-pipe[=in][,out]]
       \item {\tt -profileType=<x|y>} --- Used to select the profile along the X or Y axis.
       \item {\tt -method=<centerLine|integrated|averaged|peak>} --- If this option is not specified it is a real profile. If centerLine is specified it will find the row with the greatest integrated profile and display that line only. If integrated is specified it will sum all the profiles together. If averaged is specified it will divide the sum of all the profiles by the number of profiles. If peak is specified it will find the peak point and display the profile for that row.
       \item {\tt -background=filename} --- Used to specify a background image file which will be subtracted from the input image file.
+      \item {\tt -background=auto[,halfwidth=value][,keepNegative]} --- Estimate a scalar background level from the image itself, subtract it before the profile is computed, and clip negative values to zero unless {\tt keepNegative} is given. The optional {\tt halfwidth} qualifier controls how many histogram bins on either side of the most-populated bin are included in the background average.
     \end{itemize}
   \item \textbf{see also:}
     \begin{itemize}
@@ -36,4 +37,3 @@ sddsimageprofiles [Inputfile] [Outputfile] [-pipe[=in][,out]]
     \end{itemize}
   \item \textbf{author:} R. Soliday, ANL/APS.
 \end{sddsprog}
-
