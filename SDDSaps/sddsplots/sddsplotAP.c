@@ -607,117 +607,117 @@ long graphic_AP1(GRAPHIC_SPEC *graphic_spec, long element, char **item, long ite
     graphic_spec->type_column = NULL;
     graphic_spec->subtype_column = NULL;
     for (i=0; i<items; i++) {
-        if ((eqptr=strchr(item[i], '=')))
-            *eqptr = 0;
-        switch (match_string(item[i], graphic_kw, GRAPHIC_KWS, 0)) {
-          case GRAPHIC_KW_TYPE:
-        if (!eqptr || SDDS_StringIsBlank(eqptr+1))
-          return bombre("invalid type specification for -graphic", graphic_usage, 0);
-        if (eqptr[1] == '@') {
-          if (SDDS_StringIsBlank(eqptr+2))
-            return bombre("invalid type specification for -graphic", graphic_usage, 0);
-          if (!SDDS_CopyString(&graphic_spec->type_column, eqptr+2))
-            SDDS_Bomb("memory allocation failure (graphic_AP1)");
-        } else if (sscanf(eqptr+1, "%ld", &graphic_spec->type)!=1 || graphic_spec->type<0) {
-          return bombre("invalid type specification for -graphic", graphic_usage, 0);
-        }
-            break;
-          case GRAPHIC_KW_SUBTYPE:
-            if (!eqptr || SDDS_StringIsBlank(eqptr+1))
-                return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
-        if (eqptr[1] == '@') {
-          if (SDDS_StringIsBlank(eqptr+2))
-            return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
-          if (!SDDS_CopyString(&graphic_spec->subtype_column, eqptr+2))
-            SDDS_Bomb("memory allocation failure (graphic_AP1)");
-        } else if (sscanf(eqptr+1, "%ld", &graphic_spec->subtype)!=1) {
-          if (strncmp(eqptr+1, "type", strlen(eqptr+1))!=0)
-            return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
-          graphic_spec->flags |= GRAPHIC_SUBTYPE_EQ_TYPE;
-          }
-        else if (graphic_spec->subtype<0)
-          return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
-            break;
-          case GRAPHIC_KW_THICKNESS:
-            if (!eqptr || SDDS_StringIsBlank(eqptr+1) || sscanf(eqptr+1, "%ld", &graphic_spec->thickness)!=1)
-	      return bombre("invalid thickness specification for -graphic", graphic_usage, 0);
-	    if (graphic_spec->thickness<=0)
-	      graphic_spec->thickness = 1;
-	    if (graphic_spec->thickness>9)
-	      graphic_spec->thickness = 9;
-            break;
-          case GRAPHIC_KW_SCALE:
-            if (!eqptr || SDDS_StringIsBlank(eqptr+1) || sscanf(eqptr+1, "%lf", &graphic_spec->scale)!=1 ||
-                graphic_spec->scale<=0)
-                return bombre("invalid scale specification for -graphic", graphic_usage, 0);
-            break;
-          case GRAPHIC_KW_CONNECT:
-            if (eqptr) {
-                if (SDDS_StringIsBlank(eqptr+1))
-                    return bombre("invalid connect linetype for -graphic", graphic_usage, 0);
-                if (sscanf(eqptr+1, "%ld", &graphic_spec->connect_linetype)!=1) {
-                    switch (match_string(eqptr+1, connect_kw, CONNECT_KWS, 0)) {
-                      case CONNECT_KW_SUBTYPE:
-                        graphic_spec->flags |= GRAPHIC_CONNECT_EQ_SUBTYPE;
-                        break;
-                      case CONNECT_KW_TYPE:
-                        graphic_spec->flags |= GRAPHIC_CONNECT_EQ_TYPE;
-                        break;
-                      default:
-                        return bombre("invalid connect value for -graphic", graphic_usage, 0);
-                        }
-                    }
-                else if (graphic_spec->connect_linetype<0)
-                    return bombre("invalid connect linetype for -graphic", graphic_usage, 0);
-                }
-            else
-                graphic_spec->connect_linetype = 0;
-            graphic_spec->flags |= GRAPHIC_CONNECT;
-            break;
-          case GRAPHIC_KW_VARY:
-            if (eqptr) {
-                long code;
-                char *varyChoice[2] = {"type", "subtype"};
-                if (SDDS_StringIsBlank(eqptr+1) || 
-                    (code=match_string(eqptr+1, varyChoice, 2, 0))<0)
-                    return bombre("invalid -vary syntax", graphic_usage, 0);
-                switch (code) {
-                  case 0: graphic_spec->flags |= GRAPHIC_VARY_TYPE; break;
-                  case 1: graphic_spec->flags |= GRAPHIC_VARY_SUBTYPE; break;
-                    }
-                }
-            else
-                graphic_spec->flags |= GRAPHIC_VARY_TYPE;
-            graphic_spec->vary = 1;
-            break;
-          case GRAPHIC_KW_EACHPAGE:
-            graphic_spec->flags |= GRAPHIC_VARY_EACHPAGE;
-          case GRAPHIC_KW_EACHFILE:
-            graphic_spec->flags |= GRAPHIC_VARY_EACHFILE;
-            break;
-          case GRAPHIC_KW_EACHREQUEST:
-            graphic_spec->flags |= GRAPHIC_VARY_EACHREQUEST;
-            break;
-          case GRAPHIC_KW_FIXFORNAME:
-            graphic_spec->flags |= GRAPHIC_VARY_FIXFORNAME;
-            break;
-          case GRAPHIC_KW_FIXFORFILE:
-            graphic_spec->flags |= GRAPHIC_VARY_FIXFORFILE;
-            break;
-          case GRAPHIC_KW_FIXFORREQUEST:
-            graphic_spec->flags |= GRAPHIC_VARY_FIXFORREQUEST;
-            break;
-          case GRAPHIC_KW_MODULUS:
-            if (!eqptr || SDDS_StringIsBlank(eqptr+1) || sscanf(eqptr+1, "%ld", &graphic_spec->modulus)!=1 ||
-                graphic_spec->modulus<=0)
-                return bombre("invalid modulus specification for -graphic", graphic_usage, 0);
-            break;
-	  case GRAPHIC_KW_FILL:
-	    graphic_spec->fill = 1;
-	    break;  
-	  default:
-            return bombre("invalid keyword for -graphic", graphic_usage, 0);
+      if ((eqptr=strchr(item[i], '=')))
+	*eqptr = 0;
+      switch (match_string(item[i], graphic_kw, GRAPHIC_KWS, 0)) {
+      case GRAPHIC_KW_TYPE:
+	if (!eqptr || SDDS_StringIsBlank(eqptr+1))
+	  return bombre("invalid type specification for -graphic", graphic_usage, 0);
+	if (eqptr[1] == '@') {
+	  if (SDDS_StringIsBlank(eqptr+2))
+	    return bombre("invalid type specification for -graphic", graphic_usage, 0);
+	  if (!SDDS_CopyString(&graphic_spec->type_column, eqptr+2))
+	    SDDS_Bomb("memory allocation failure (graphic_AP1)");
+	} else if (sscanf(eqptr+1, "%ld", &graphic_spec->type)!=1 || graphic_spec->type<0) {
+	  return bombre("invalid type specification for -graphic", graphic_usage, 0);
 	}
+	break;
+      case GRAPHIC_KW_SUBTYPE:
+	if (!eqptr || SDDS_StringIsBlank(eqptr+1))
+	  return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
+	if (eqptr[1] == '@') {
+	  if (SDDS_StringIsBlank(eqptr+2))
+	    return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
+	  if (!SDDS_CopyString(&graphic_spec->subtype_column, eqptr+2))
+	    SDDS_Bomb("memory allocation failure (graphic_AP1)");
+	} else if (sscanf(eqptr+1, "%ld", &graphic_spec->subtype)!=1) {
+	  if (strncmp(eqptr+1, "type", strlen(eqptr+1))!=0)
+	    return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
+	  graphic_spec->flags |= GRAPHIC_SUBTYPE_EQ_TYPE;
+	}
+	else if (graphic_spec->subtype<0)
+	  return bombre("invalid subtype specification for -graphic", graphic_usage, 0);
+	break;
+      case GRAPHIC_KW_THICKNESS:
+	if (!eqptr || SDDS_StringIsBlank(eqptr+1) || sscanf(eqptr+1, "%ld", &graphic_spec->thickness)!=1)
+	  return bombre("invalid thickness specification for -graphic", graphic_usage, 0);
+	if (graphic_spec->thickness<=0)
+	  graphic_spec->thickness = 1;
+	if (graphic_spec->thickness>9)
+	  graphic_spec->thickness = 9;
+	break;
+      case GRAPHIC_KW_SCALE:
+	if (!eqptr || SDDS_StringIsBlank(eqptr+1) || sscanf(eqptr+1, "%lf", &graphic_spec->scale)!=1 ||
+	    graphic_spec->scale<=0)
+	  return bombre("invalid scale specification for -graphic", graphic_usage, 0);
+	break;
+      case GRAPHIC_KW_CONNECT:
+	if (eqptr) {
+	  if (SDDS_StringIsBlank(eqptr+1))
+	    return bombre("invalid connect linetype for -graphic", graphic_usage, 0);
+	  if (sscanf(eqptr+1, "%ld", &graphic_spec->connect_linetype)!=1) {
+	    switch (match_string(eqptr+1, connect_kw, CONNECT_KWS, 0)) {
+	    case CONNECT_KW_SUBTYPE:
+	      graphic_spec->flags |= GRAPHIC_CONNECT_EQ_SUBTYPE;
+	      break;
+	    case CONNECT_KW_TYPE:
+	      graphic_spec->flags |= GRAPHIC_CONNECT_EQ_TYPE;
+	      break;
+	    default:
+	      return bombre("invalid connect value for -graphic", graphic_usage, 0);
+	    }
+	  }
+	  else if (graphic_spec->connect_linetype<0)
+	    return bombre("invalid connect linetype for -graphic", graphic_usage, 0);
+	}
+	else
+	  graphic_spec->connect_linetype = 0;
+	graphic_spec->flags |= GRAPHIC_CONNECT;
+	break;
+      case GRAPHIC_KW_VARY:
+	if (eqptr) {
+	  long code;
+	  char *varyChoice[2] = {"type", "subtype"};
+	  if (SDDS_StringIsBlank(eqptr+1) || 
+	      (code=match_string(eqptr+1, varyChoice, 2, 0))<0)
+	    return bombre("invalid -vary syntax", graphic_usage, 0);
+	  switch (code) {
+	  case 0: graphic_spec->flags |= GRAPHIC_VARY_TYPE; break;
+	  case 1: graphic_spec->flags |= GRAPHIC_VARY_SUBTYPE; break;
+	  }
+	}
+	else
+	  graphic_spec->flags |= GRAPHIC_VARY_TYPE;
+	graphic_spec->vary = 1;
+	break;
+      case GRAPHIC_KW_EACHPAGE:
+	graphic_spec->flags |= GRAPHIC_VARY_EACHPAGE;
+      case GRAPHIC_KW_EACHFILE:
+	graphic_spec->flags |= GRAPHIC_VARY_EACHFILE;
+	break;
+      case GRAPHIC_KW_EACHREQUEST:
+	graphic_spec->flags |= GRAPHIC_VARY_EACHREQUEST;
+	break;
+      case GRAPHIC_KW_FIXFORNAME:
+	graphic_spec->flags |= GRAPHIC_VARY_FIXFORNAME;
+	break;
+      case GRAPHIC_KW_FIXFORFILE:
+	graphic_spec->flags |= GRAPHIC_VARY_FIXFORFILE;
+	break;
+      case GRAPHIC_KW_FIXFORREQUEST:
+	graphic_spec->flags |= GRAPHIC_VARY_FIXFORREQUEST;
+	break;
+      case GRAPHIC_KW_MODULUS:
+	if (!eqptr || SDDS_StringIsBlank(eqptr+1) || sscanf(eqptr+1, "%ld", &graphic_spec->modulus)!=1 ||
+	    graphic_spec->modulus<=0)
+	  return bombre("invalid modulus specification for -graphic", graphic_usage, 0);
+	break;
+      case GRAPHIC_KW_FILL:
+	graphic_spec->fill = 1;
+	break;  
+      default:
+	return bombre("invalid keyword for -graphic", graphic_usage, 0);
+      }
     }
     if (graphic_spec->flags&GRAPHIC_VARY_SUBTYPE &&
         graphic_spec->flags&GRAPHIC_SUBTYPE_EQ_TYPE)
@@ -2091,6 +2091,27 @@ long offset_AP(PLOT_SPEC *plotspec, char **item, long items)
           (plreq->offset_flags&(OFFSET_XCHANGE_GIVEN<<i)))
         plreq->offset[i] *= -1;
     }
+    return 1;
+  }
+
+static char *modulus_usage = "-modulus=[{x|y}value={value>][,{x|y}parameter=<name>][,{x|y}beforelog]";
+
+long modulus_AP(PLOT_SPEC *plotspec, char **item, long items)
+{
+    PLOT_REQUEST *plreq;
+    long i;
+    
+    plreq = plotspec->plot_request+plotspec->plot_requests-1;
+    if (!scanItemList(&plreq->modulus_flags,
+                        item, &items,  0,
+                        "xvalue", SDDS_DOUBLE, plreq->modulus+0, 1, MODULUS_XVALUE_GIVEN,
+                        "yvalue", SDDS_DOUBLE, plreq->modulus+1, 1, MODULUS_YVALUE_GIVEN,
+                        "xparameter", SDDS_STRING, plreq->modulus_parameter+0, 1, MODULUS_XPARAMETER_GIVEN,
+                        "yparameter", SDDS_STRING, plreq->modulus_parameter+1, 1, MODULUS_YPARAMETER_GIVEN,
+                        "xbeforelog", -1, NULL, 0, MODULUS_XBEFORELOG_GIVEN,
+                        "ybeforelog", -1, NULL, 0, MODULUS_YBEFORELOG_GIVEN,
+                        NULL))
+        return bombre("invalid -modulus syntax", modulus_usage, 0);
     return 1;
   }
 
