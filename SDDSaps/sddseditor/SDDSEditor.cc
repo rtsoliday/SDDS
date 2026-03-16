@@ -74,6 +74,7 @@
 
 static bool validateTextForType(const QString &text, int type, bool showMessage);
 static int dimProduct(const QVector<int> &dims);
+static int compareNumericTextByType(const QString &a, const QString &b, int type);
 
 class SingleClickEditTableView : public QTableView {
 public:
@@ -420,6 +421,61 @@ static int dimProduct(const QVector<int> &dims) {
   return prod;
 }
 
+static int compareNumericTextByType(const QString &a, const QString &b, int type) {
+  QString at = a.trimmed();
+  QString bt = b.trimmed();
+
+  if (at.isEmpty())
+    at = "0";
+  if (bt.isEmpty())
+    bt = "0";
+
+  switch (type) {
+  case SDDS_SHORT:
+  case SDDS_LONG:
+  case SDDS_LONG64: {
+    bool aok = false;
+    bool bok = false;
+    qint64 av = at.toLongLong(&aok);
+    qint64 bv = bt.toLongLong(&bok);
+    if (aok && bok)
+      return (av < bv) ? -1 : (av > bv) ? 1
+                                        : 0;
+    break;
+  }
+  case SDDS_USHORT:
+  case SDDS_ULONG:
+  case SDDS_ULONG64: {
+    bool aok = false;
+    bool bok = false;
+    qulonglong av = at.toULongLong(&aok);
+    qulonglong bv = bt.toULongLong(&bok);
+    if (aok && bok)
+      return (av < bv) ? -1 : (av > bv) ? 1
+                                        : 0;
+    break;
+  }
+  case SDDS_FLOAT:
+  case SDDS_DOUBLE:
+  case SDDS_LONGDOUBLE: {
+    long double av = 0.0L;
+    long double bv = 0.0L;
+    bool aok = parseLongDoubleStrict(at, &av);
+    bool bok = parseLongDoubleStrict(bt, &bv);
+    if (aok && bok)
+      return (av < bv) ? -1 : (av > bv) ? 1
+                                        : 0;
+    break;
+  }
+  default:
+    break;
+  }
+
+  QByteArray aa = at.toUtf8();
+  QByteArray bb = bt.toUtf8();
+  return strcmp_nh(aa.constData(), bb.constData());
+}
+
 static void normalizeEmptyNumericsToZero(const SDDS_LAYOUT &layout, QVector<PageStore> &pages) {
   const int pcount = layout.n_parameters;
   const int ccount = layout.n_columns;
@@ -602,6 +658,11 @@ public:
     QString text = value.toString();
     if (pd.parameters[r] == text)
       return false;
+    PARAMETER_DEFINITION *def = &dataset->layout.parameter_definition[r];
+    if (def->fixed_value) {
+      free(def->fixed_value);
+      def->fixed_value = nullptr;
+    }
     pd.parameters[r] = text;
     emit dataChanged(index, index, {Qt::DisplayRole, Qt::EditRole});
     return true;
@@ -2322,8 +2383,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
           hid_t dtype = H5Tcopy(H5T_C_S1);
           H5Tset_size(dtype, ba.size() + 1);
           hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
-          const char *ptr = ba.constData();
-          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, &ptr);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, ba.constData());
           H5Dclose(ds);
           H5Tclose(dtype);
         } else if (type == SDDS_CHARACTER) {
@@ -2449,6 +2509,54 @@ bool SDDSEditor::writeHDF(const QString &path) {
           hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
           H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
           H5Dclose(ds);
+        } else if (type == SDDS_DOUBLE) {
+          QVector<double> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toDouble() : 0.0;
+          hid_t dtype = hdfTypeForSdds(type);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        } else if (type == SDDS_FLOAT) {
+          QVector<float> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toFloat() : 0.0f;
+          hid_t dtype = hdfTypeForSdds(type);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        } else if (type == SDDS_LONG) {
+          QVector<int32_t> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toInt() : 0;
+          hid_t dtype = hdfTypeForSdds(type);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        } else if (type == SDDS_ULONG) {
+          QVector<uint32_t> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? pd.columns[c][r].toUInt() : 0;
+          hid_t dtype = hdfTypeForSdds(type);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        } else if (type == SDDS_SHORT) {
+          QVector<short> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? static_cast<short>(pd.columns[c][r].toInt()) : 0;
+          hid_t dtype = hdfTypeForSdds(type);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
+        } else if (type == SDDS_USHORT) {
+          QVector<unsigned short> arr(rows);
+          for (int64_t r = 0; r < rows; ++r)
+            arr[r] = r < pd.columns[c].size() ? static_cast<unsigned short>(pd.columns[c][r].toUInt()) : 0;
+          hid_t dtype = hdfTypeForSdds(type);
+          hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
+          H5Dwrite(ds, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, arr.data());
+          H5Dclose(ds);
         } else {
           QVector<double> arr(rows);
           for (int64_t r = 0; r < rows; ++r)
@@ -2549,10 +2657,6 @@ bool SDDSEditor::writeHDF(const QString &path) {
   }
 
   H5Fclose(file);
-
-  // Make the UI match what was exported: empty numeric fields become 0.
-  normalizeEmptyNumericsToZero(dataset.layout, pages);
-  populateModels();
 
   return true;
 }
@@ -2662,10 +2766,6 @@ bool SDDSEditor::writeCSV(const QString &path) {
   }
 
   file.close();
-
-  // Make the UI match what was exported: empty numeric fields become 0.
-  normalizeEmptyNumericsToZero(dataset.layout, pages);
-  populateModels();
 
   return true;
 }
@@ -3434,9 +3534,8 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
     QString av = a < pd.columns[column].size() ? pd.columns[column][a] : QString();
     QString bv = b < pd.columns[column].size() ? pd.columns[column][b] : QString();
     if (SDDS_NUMERIC_TYPE(type)) {
-      long double aval = av.toDouble();
-      long double bval = bv.toDouble();
-      return order == Qt::AscendingOrder ? aval < bval : aval > bval;
+      int result = compareNumericTextByType(av, bv, type);
+      return order == Qt::AscendingOrder ? result < 0 : result > 0;
     } else if (type == SDDS_STRING) {
       QByteArray aa = av.toUtf8();
       QByteArray bb = bv.toUtf8();
