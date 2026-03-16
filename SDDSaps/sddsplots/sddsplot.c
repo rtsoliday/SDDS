@@ -122,6 +122,7 @@ char *USAGE4 = "  -yScalesGroup={ID=<string>|fileIndex|fileString|nameIndex|name
   -factor=[{xy}Multiplier=<value>][,{xy}Parameter=<value>][,{xy}Invert]\n";
 
 char *USAGE5 = "  -offset=[{x|y}change={value>][,{x|y}parameter=<name>][,{x|y}invert][,{x|y}beforelog]\n\
+  -modulus=[{x|y}value={value>][,{x|y}parameter=<name>][,{x|y}beforelog]\n\
   -dither=[{x|y}range=<fraction>]\n\
   -overlay=[{xy}Mode=<mode>][,{xy}Factor=<value>][,{xy}Offset=<value>][,{xy}Center]\n\
   -sample=<fraction>  -sparse=<interval>[,<offset>]  -presparse=<interval>[,<offset>]\n\
@@ -253,6 +254,7 @@ static char *main_keyword[] = {
   "convertunits",
   "equalAspect",
   "3d",
+  "modulus",
   NULL,
 };
 
@@ -349,7 +351,8 @@ extern long aspectratio_AP(PLOT_SPEC *plotspec, char **item, long items),
   fixfontsize_AP(PLOT_SPEC *plotspec, char **item, long items),
   convertUnits_AP(PLOT_SPEC *plotspec, char **item, long items),
   equalAspect_AP(PLOT_SPEC *plotspec, char **item, long items),
-  threeD_AP(PLOT_SPEC *plotspec, char **item, long items);
+  threeD_AP(PLOT_SPEC *plotspec, char **item, long items),
+  modulus_AP(PLOT_SPEC *plotspec, char **item, long items);
 
 static long (*main_parser[])(PLOT_SPEC *plotspec, char **item, long items) = {
   aspectratio_AP,
@@ -446,6 +449,7 @@ static long (*main_parser[])(PLOT_SPEC *plotspec, char **item, long items) = {
   convertUnits_AP,
   equalAspect_AP,
   threeD_AP,
+  modulus_AP,
   NULL,
 };
 
