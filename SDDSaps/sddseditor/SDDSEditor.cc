@@ -30,6 +30,7 @@
 #include <hdf5.h>
 #include <QShortcut>
 #include <QClipboard>
+#include <QMimeData>
 #include <QDialog>
 #include <QFormLayout>
 #include <QDialogButtonBox>
@@ -47,6 +48,7 @@
 #include <QCoreApplication>
 #include <QProgressDialog>
 #include <QAbstractTableModel>
+#include <QDataStream>
 #include <functional>
 #include <memory>
 #include <cstdlib>
@@ -86,11 +88,18 @@ static bool evaluateNumericalExpression(const QString &expression, long double x
                                         long double column, long double *out,
                                         QString *errorText);
 
+static const char *kSparseClipboardMimeType = "application/x-sddseditor-cells";
+
 class SingleClickEditTableView : public QTableView {
 public:
   explicit SingleClickEditTableView(QWidget *parent = nullptr) : QTableView(parent) {}
 
 private:
+  QPoint pressPos;
+  QPersistentModelIndex pressIndex;
+  bool leftButtonDown{false};
+  bool dragSelecting{false};
+
   void forwardClickToEditorAt(const QPoint &viewPos, const QPoint &globalPos, int retries = 3) {
     QWidget *target = viewport()->childAt(viewPos);
     if (!target || target == viewport()) {
@@ -123,17 +132,38 @@ private:
 
 protected:
   void mousePressEvent(QMouseEvent *event) override {
+    if (event->button() == Qt::LeftButton) {
+      leftButtonDown = true;
+      dragSelecting = false;
+      pressPos = event->pos();
+      pressIndex = indexAt(event->pos());
+    }
     QTableView::mousePressEvent(event);
+  }
+
+  void mouseMoveEvent(QMouseEvent *event) override {
+    if (leftButtonDown && !dragSelecting) {
+      const int dist = (event->pos() - pressPos).manhattanLength();
+      if (dist >= QApplication::startDragDistance())
+        dragSelecting = true;
+    }
+    QTableView::mouseMoveEvent(event);
+  }
+
+  void mouseReleaseEvent(QMouseEvent *event) override {
+    QTableView::mouseReleaseEvent(event);
     if (event->button() != Qt::LeftButton)
       return;
-    QModelIndex idx = indexAt(event->pos());
-    if (!idx.isValid())
+    leftButtonDown = false;
+    if (dragSelecting)
       return;
-    if (QItemSelectionModel *sel = selectionModel())
-      sel->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
-    if (!(model()->flags(idx) & Qt::ItemIsEditable))
+    if (event->modifiers() != Qt::NoModifier)
       return;
-    edit(idx);
+    if (!pressIndex.isValid())
+      return;
+    if (!(model()->flags(pressIndex) & Qt::ItemIsEditable))
+      return;
+    edit(pressIndex);
   }
 
   void mouseDoubleClickEvent(QMouseEvent *event) override {
@@ -142,8 +172,6 @@ protected:
     if (event->button() == Qt::LeftButton) {
       QModelIndex idx = indexAt(event->pos());
       if (idx.isValid() && (model()->flags(idx) & Qt::ItemIsEditable)) {
-        if (QItemSelectionModel *sel = selectionModel())
-          sel->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
         edit(idx);
         const QPoint viewPos = event->pos();
       #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -1158,6 +1186,35 @@ public:
   explicit CaretOnDoubleClickLineEdit(QWidget *parent = nullptr) : QLineEdit(parent) {}
 
 protected:
+  void keyPressEvent(QKeyEvent *event) override {
+    if (event && event->matches(QKeySequence::Paste)) {
+      const QString text = QApplication::clipboard()->text();
+      if (text.contains('\t') || text.contains('\n')) {
+        QTableView *view = nullptr;
+        for (QWidget *w = parentWidget(); w; w = w->parentWidget()) {
+          if ((view = qobject_cast<QTableView *>(w)))
+            break;
+        }
+        if (view) {
+          if (SDDSEditor *editor = qobject_cast<SDDSEditor *>(window())) {
+            QPointer<QTableView> targetView(view);
+            QPointer<SDDSEditor> targetEditor(editor);
+            QTimer::singleShot(0, editor, [targetView, targetEditor]() {
+              if (!targetView || !targetEditor)
+                return;
+              targetView->setFocus(Qt::OtherFocusReason);
+              qApp->processEvents();
+              QMetaObject::invokeMethod(targetEditor, "paste", Qt::DirectConnection);
+            });
+            event->accept();
+            return;
+          }
+        }
+      }
+    }
+    QLineEdit::keyPressEvent(event);
+  }
+
   void mouseDoubleClickEvent(QMouseEvent *event) override {
     // QLineEdit normally selects a word on double-click; sddseditor wants double-click
     // to behave like a normal click (place caret).
@@ -2107,7 +2164,22 @@ void SDDSEditor::copy() {
       cols << values.value(row).value(column);
     rowTexts << cols.join('\t');
   }
-  QApplication::clipboard()->setText(rowTexts.join('\n'));
+  QByteArray sparsePayload;
+  {
+    QDataStream stream(&sparsePayload, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_5_15);
+    stream << quint32(1) << qint32(indexes.size());
+    for (const QModelIndex &idx : indexes) {
+      stream << qint32(idx.row() - minRow)
+             << qint32(idx.column() - minCol)
+             << idx.data(Qt::EditRole).toString();
+    }
+  }
+
+  QMimeData *mime = new QMimeData;
+  mime->setText(rowTexts.join('\n'));
+  mime->setData(kSparseClipboardMimeType, sparsePayload);
+  QApplication::clipboard()->setMimeData(mime);
 }
 
 void SDDSEditor::paste() {
@@ -2121,6 +2193,8 @@ void SDDSEditor::paste() {
   QStringList rows = text.split('\n', Qt::KeepEmptyParts);
   while (!rows.isEmpty() && rows.last().isEmpty() && text.endsWith('\n'))
     rows.removeLast();
+  const QMimeData *mime = QApplication::clipboard()->mimeData();
+  const bool hasSparsePayload = mime && mime->hasFormat(kSparseClipboardMimeType);
   bool multiPaste = rows.size() > 1 || text.contains('\t');
   StructuralSnapshot before;
   if (!captureSnapshotOrWarn(this, &before, tr("pasting cells")))
@@ -2128,32 +2202,66 @@ void SDDSEditor::paste() {
   bool changed = false;
   bool warned = false;
   bool truncated = false;
-  for (int r = 0; r < rows.size(); ++r) {
-    QString rowText = rows[r];
-    if (rowText.endsWith('\r'))
-      rowText.chop(1);
-    QStringList cols = rowText.split('\t', Qt::KeepEmptyParts);
-    for (int c = 0; c < cols.size(); ++c) {
-      QModelIndex idx = view->model()->index(start.row() + r, start.column() + c);
-      if (!idx.isValid()) {
-        truncated = true;
-        continue;
+
+  auto cellType = [this, view](const QModelIndex &idx) {
+    if (view == paramView)
+      return dataset.layout.parameter_definition[idx.row()].type;
+    if (view == columnView)
+      return dataset.layout.column_definition[idx.column()].type;
+    if (view == arrayView)
+      return dataset.layout.array_definition[idx.column()].type;
+    return SDDS_STRING;
+  };
+
+  auto applyValueAtOffset = [&](int rowOffset, int colOffset, const QString &value) {
+    QModelIndex idx = view->model()->index(start.row() + rowOffset, start.column() + colOffset);
+    if (!idx.isValid()) {
+      truncated = true;
+      return;
+    }
+    bool show = multiPaste ? !warned : true;
+    bool valid = validateTextForType(value, cellType(idx), show);
+    if (valid) {
+      view->model()->setData(idx, value);
+      changed = true;
+    }
+    if (!valid && show)
+      warned = true;
+  };
+
+  bool usedSparsePayload = false;
+  if (hasSparsePayload) {
+    QByteArray sparsePayload = mime->data(kSparseClipboardMimeType);
+    QDataStream stream(&sparsePayload, QIODevice::ReadOnly);
+    stream.setVersion(QDataStream::Qt_5_15);
+    quint32 version = 0;
+    qint32 cellCount = 0;
+    stream >> version >> cellCount;
+    if (stream.status() == QDataStream::Ok && version == 1 && cellCount >= 0) {
+      multiPaste = cellCount > 1;
+      for (qint32 i = 0; i < cellCount; ++i) {
+        qint32 rowOffset = 0;
+        qint32 colOffset = 0;
+        QString value;
+        stream >> rowOffset >> colOffset >> value;
+        if (stream.status() != QDataStream::Ok)
+          break;
+        applyValueAtOffset(rowOffset, colOffset, value);
       }
-      int type = SDDS_STRING;
-      if (view == paramView)
-        type = dataset.layout.parameter_definition[idx.row()].type;
-      else if (view == columnView)
-        type = dataset.layout.column_definition[idx.column()].type;
-      else if (view == arrayView)
-        type = dataset.layout.array_definition[idx.column()].type;
-      bool show = multiPaste ? !warned : true;
-      bool valid = validateTextForType(cols[c], type, show);
-      if (valid) {
-        view->model()->setData(idx, cols[c]);
-        changed = true;
-      }
-      if (!valid && show)
-        warned = true;
+      if (stream.status() == QDataStream::Ok)
+        usedSparsePayload = true;
+    }
+  }
+
+  if (!usedSparsePayload) {
+    multiPaste = rows.size() > 1 || text.contains('\t');
+    for (int r = 0; r < rows.size(); ++r) {
+      QString rowText = rows[r];
+      if (rowText.endsWith('\r'))
+        rowText.chop(1);
+      QStringList cols = rowText.split('\t', Qt::KeepEmptyParts);
+      for (int c = 0; c < cols.size(); ++c)
+        applyValueAtOffset(r, c, cols[c]);
     }
   }
   if (changed) {
@@ -2378,7 +2486,7 @@ bool SDDSEditor::loadFile(const QString &path) {
     // End-of-page: treat SDDS read/copy as 25% complete.
     setReadProgress(99);
   }
-  if (readStatus < 0) {
+  if (readStatus == 0) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to read file pages"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     SDDS_Terminate(&in);
