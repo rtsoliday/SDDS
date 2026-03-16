@@ -52,6 +52,7 @@
 #include <cstdlib>
 #include <cerrno>
 #include <cctype>
+#include <cmath>
 #include <algorithm>
 #include <limits>
 #include <QLocale>
@@ -75,6 +76,7 @@
 static bool validateTextForType(const QString &text, int type, bool showMessage);
 static int dimProduct(const QVector<int> &dims);
 static int compareNumericTextByType(const QString &a, const QString &b, int type);
+static bool formatNumericValueForType(long double value, int type, QString *out);
 static void clearStructuralSnapshot(StructuralSnapshot *snapshot);
 static bool captureSnapshotOrWarn(SDDSEditor *editor, StructuralSnapshot *snapshot,
                                   const QString &context);
@@ -191,6 +193,91 @@ static bool parseLongDoubleStrict(const QString &text, long double *out) {
   if (errno == ERANGE)
     return false;
   *out = v;
+  return true;
+}
+
+static bool formatNumericValueForType(long double value, int type, QString *out) {
+  if (!out || !std::isfinite(value))
+    return false;
+
+  const auto formatGeneral = [value]() {
+    return QString::asprintf("%.*Lg", std::numeric_limits<long double>::max_digits10, value);
+  };
+
+  long double integralPart = 0.0L;
+  const bool isIntegral = std::modf(value, &integralPart) == 0.0L;
+
+  switch (type) {
+  case SDDS_SHORT:
+    if (isIntegral &&
+        integralPart >= std::numeric_limits<short>::min() &&
+        integralPart <= std::numeric_limits<short>::max()) {
+      *out = QString::number(static_cast<qint64>(integralPart));
+      return true;
+    }
+    break;
+  case SDDS_USHORT:
+    if (isIntegral &&
+        integralPart >= 0.0L &&
+        integralPart <= std::numeric_limits<unsigned short>::max()) {
+      *out = QString::number(static_cast<qulonglong>(integralPart));
+      return true;
+    }
+    break;
+  case SDDS_LONG:
+    if (isIntegral &&
+        integralPart >= std::numeric_limits<int32_t>::min() &&
+        integralPart <= std::numeric_limits<int32_t>::max()) {
+      *out = QString::number(static_cast<qint64>(integralPart));
+      return true;
+    }
+    break;
+  case SDDS_ULONG:
+    if (isIntegral &&
+        integralPart >= 0.0L &&
+        integralPart <= std::numeric_limits<uint32_t>::max()) {
+      *out = QString::number(static_cast<qulonglong>(integralPart));
+      return true;
+    }
+    break;
+  case SDDS_LONG64:
+    if (isIntegral &&
+        integralPart >= static_cast<long double>(std::numeric_limits<int64_t>::min()) &&
+        integralPart <= static_cast<long double>(std::numeric_limits<int64_t>::max())) {
+      *out = QString::number(static_cast<qint64>(integralPart));
+      return true;
+    }
+    break;
+  case SDDS_ULONG64:
+    if (isIntegral &&
+        integralPart >= 0.0L &&
+        integralPart <= static_cast<long double>(std::numeric_limits<uint64_t>::max())) {
+      *out = QString::number(static_cast<qulonglong>(integralPart));
+      return true;
+    }
+    break;
+  case SDDS_FLOAT: {
+    const float v = static_cast<float>(value);
+    if (!std::isfinite(v))
+      return false;
+    *out = QLocale::c().toString(v, 'g', std::numeric_limits<float>::max_digits10);
+    return true;
+  }
+  case SDDS_DOUBLE: {
+    const double v = static_cast<double>(value);
+    if (!std::isfinite(v))
+      return false;
+    *out = QLocale::c().toString(v, 'g', std::numeric_limits<double>::max_digits10);
+    return true;
+  }
+  case SDDS_LONGDOUBLE:
+    *out = formatGeneral();
+    return true;
+  default:
+    break;
+  }
+
+  *out = formatGeneral();
   return true;
 }
 
@@ -2022,6 +2109,12 @@ bool SDDSEditor::loadFile(const QString &path) {
   pages.clear();
   int pageIndex = 0;
   int32_t readStatus = 0;
+  auto failLoad = [&](const QString &text) {
+    QMessageBox::warning(this, tr("SDDS"), text);
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Terminate(&in);
+    return false;
+  };
   while ((readStatus = SDDS_ReadPage(&in)) > 0) {
     ++pageIndex;
     progress.setLabelText(tr("Loading %1 (page %2)…").arg(QFileInfo(path).fileName()).arg(pageIndex));
@@ -2078,39 +2171,68 @@ bool SDDSEditor::loadFile(const QString &path) {
     char **anames = SDDS_GetArrayNames(&in, &acount);
 
     // Add array work units up front so progress stays monotonic.
-    if (acount > 0) {
-      for (int32_t a = 0; a < acount; ++a) {
-        ARRAY_DEFINITION *adef = SDDS_GetArrayDefinition(&in, anames[a]);
-        if (!adef || adef->dimensions <= 0)
-          continue;
-        int64_t elements = 1;
-        for (int d = 0; d < adef->dimensions; ++d) {
-          int dim = 0;
-          if (in.array && in.array[a].dimension)
-            dim = in.array[a].dimension[d];
-          if (dim <= 0) {
-            elements = 0;
-            break;
+	    if (acount > 0) {
+	      for (int32_t a = 0; a < acount; ++a) {
+	        ARRAY_DEFINITION *adef = SDDS_GetArrayDefinition(&in, anames[a]);
+	        if (!adef)
+	          return failLoad(tr("Failed to read array definition for '%1'.")
+	                              .arg(QString::fromLocal8Bit(anames[a])));
+	        if (adef->dimensions < 0) {
+	          SDDS_FreeArrayDefinition(adef);
+	          return failLoad(tr("Array '%1' has an invalid dimension count.")
+	                              .arg(QString::fromLocal8Bit(anames[a])));
+	        }
+	        int64_t elements = 1;
+	        if (adef->dimensions > 0 && (!in.array || !in.array[a].dimension)) {
+	          SDDS_FreeArrayDefinition(adef);
+	          return failLoad(tr("Array '%1' is missing dimension data.")
+	                              .arg(QString::fromLocal8Bit(anames[a])));
+	        }
+	        for (int d = 0; d < adef->dimensions; ++d) {
+	          int dim = 0;
+	          dim = in.array[a].dimension[d];
+	          if (dim <= 0) {
+	            elements = 0;
+	            break;
           }
           if (elements > std::numeric_limits<int64_t>::max() / dim) {
             elements = std::numeric_limits<int64_t>::max();
             break;
           }
           elements *= dim;
-        }
-        if (elements > 0 && elements < std::numeric_limits<int64_t>::max())
-          totalUnits += elements;
-      }
-    }
+	        }
+	        if (elements > 0 && elements < std::numeric_limits<int64_t>::max())
+	          totalUnits += elements;
+	        SDDS_FreeArrayDefinition(adef);
+	      }
+	    }
 
-    pd.arrays.resize(acount);
-    for (int32_t a = 0; a < acount; ++a) {
-      ARRAY_DEFINITION *adef = SDDS_GetArrayDefinition(&in, anames[a]);
-      int32_t dim;
-      char **vals = SDDS_GetArrayInString(&in, anames[a], &dim);
-      pd.arrays[a].dims.resize(adef->dimensions);
-      for (int d = 0; d < adef->dimensions; ++d)
-        pd.arrays[a].dims[d] = in.array[a].dimension[d];
+	    pd.arrays.resize(acount);
+	    for (int32_t a = 0; a < acount; ++a) {
+	      ARRAY_DEFINITION *adef = SDDS_GetArrayDefinition(&in, anames[a]);
+	      if (!adef)
+	        return failLoad(tr("Failed to read array definition for '%1'.")
+	                            .arg(QString::fromLocal8Bit(anames[a])));
+	      if (adef->dimensions < 0) {
+	        SDDS_FreeArrayDefinition(adef);
+	        return failLoad(tr("Array '%1' has an invalid dimension count.")
+	                            .arg(QString::fromLocal8Bit(anames[a])));
+	      }
+	      if (adef->dimensions > 0 && (!in.array || !in.array[a].dimension)) {
+	        SDDS_FreeArrayDefinition(adef);
+	        return failLoad(tr("Array '%1' is missing dimension data.")
+	                            .arg(QString::fromLocal8Bit(anames[a])));
+	      }
+	      int32_t dim;
+	      char **vals = SDDS_GetArrayInString(&in, anames[a], &dim);
+	      if (dim < 0 || (dim > 0 && !vals)) {
+	        SDDS_FreeArrayDefinition(adef);
+	        return failLoad(tr("Failed to read array data for '%1'.")
+	                            .arg(QString::fromLocal8Bit(anames[a])));
+	      }
+	      pd.arrays[a].dims.resize(adef->dimensions);
+	      for (int d = 0; d < adef->dimensions; ++d)
+	        pd.arrays[a].dims[d] = in.array[a].dimension[d];
       pd.arrays[a].values.resize(dim);
       for (int i = 0; i < dim; ++i) {
         pd.arrays[a].values[i] = QString(vals[i]);
@@ -2121,11 +2243,12 @@ bool SDDSEditor::loadFile(const QString &path) {
             setReadProgress(percent);
           }
         }
-      }
-      SDDS_FreeStringArray(vals, dim);
-    }
-    SDDS_FreeStringArray(anames, acount);
-    pages.append(pd);
+	      }
+	      SDDS_FreeStringArray(vals, dim);
+	      SDDS_FreeArrayDefinition(adef);
+	    }
+	    SDDS_FreeStringArray(anames, acount);
+	    pages.append(pd);
 
     // End-of-page: treat SDDS read/copy as 25% complete.
     setReadProgress(99);
@@ -5524,14 +5647,13 @@ void SDDSEditor::fillSeriesSelection() {
     return a.row() == b.row() ? a.column() < b.column() : a.row() < b.row();
   });
 
-  StructuralSnapshot before;
-  if (!captureSnapshotOrWarn(this, &before, tr("filling a series")))
-    return;
+  struct PendingChange {
+    QModelIndex index;
+    QString value;
+  };
+  QVector<PendingChange> changes;
+  changes.reserve(selection.size());
 
-  lastFillSeriesStart = startText;
-  lastFillSeriesStep = stepText;
-
-  bool changed = false;
   for (int i = 0; i < selection.size(); ++i) {
     const QModelIndex idx = selection[i];
     if (!idx.isValid())
@@ -5546,16 +5668,33 @@ void SDDSEditor::fillSeriesSelection() {
       type = dataset.layout.array_definition[idx.column()].type;
 
     if (!SDDS_NUMERIC_TYPE(type)) {
-      QMessageBox::warning(this, tr("Fill Series"), tr("Selected cells include non-numeric fields."));
+      QMessageBox::warning(this, tr("Fill Series"),
+                           tr("Selected cells include non-numeric fields."));
       return;
     }
 
     const long double value = start + step * static_cast<long double>(i);
-    QString valueText = QString::number(static_cast<double>(value), 'g', 16);
+    QString valueText;
+    if (!formatNumericValueForType(value, type, &valueText)) {
+      QMessageBox::warning(this, tr("Fill Series"),
+                           tr("A generated value could not be represented."));
+      return;
+    }
     if (!validateTextForType(valueText, type, true))
       return;
-    changed = view->model()->setData(idx, valueText) || changed;
+    changes.append({idx, valueText});
   }
+
+  StructuralSnapshot before;
+  if (!captureSnapshotOrWarn(this, &before, tr("filling a series")))
+    return;
+
+  lastFillSeriesStart = startText;
+  lastFillSeriesStep = stepText;
+
+  bool changed = false;
+  for (const PendingChange &change : changes)
+    changed = view->model()->setData(change.index, change.value) || changed;
 
   if (changed) {
     markDirty();
@@ -5642,10 +5781,15 @@ void SDDSEditor::applyNumericalExpressionSelection() {
                                : errorText);
       return;
     }
-    const QString valueText = QString::number(static_cast<double>(value), 'g', 16);
-    if (!validateTextForType(valueText, type, true))
-      return;
-    changes.append({idx, valueText});
+	    QString valueText;
+	    if (!formatNumericValueForType(value, type, &valueText)) {
+	      QMessageBox::warning(this, tr("Apply Numerical Expression"),
+	                           tr("The expression result could not be represented."));
+	      return;
+	    }
+	    if (!validateTextForType(valueText, type, true))
+	      return;
+	    changes.append({idx, valueText});
   }
 
   StructuralSnapshot before;
@@ -5798,14 +5942,14 @@ void SDDSEditor::showHelp() {
   QVBoxLayout layout(&dlg);
   QPlainTextEdit text(&dlg);
   text.setReadOnly(true);
-  text.setPlainText(tr("Open a file using File->Open.\n"
-                       "Select a page and edit parameters, columns or arrays in the tables.\n"
-                       "Right click headers for more actions such as:\n"
-                       " - Plotting a column\n"
-                       " - Sorting column or array data\n"
-                       " - Searching or replacing values in columns or arrays\n"
-                       " - Resizing arrays\n"
-                       "Use Edit->Column Rows to filter visible rows.\n"
+	  text.setPlainText(tr("Open a file using File->Open.\n"
+	                       "Select a page and edit parameters, columns or arrays in the tables.\n"
+	                       "Right click headers for more actions such as:\n"
+	                       " - Plotting a column\n"
+	                       " - Sorting column data\n"
+	                       " - Searching or replacing values in columns or arrays\n"
+	                       " - Resizing arrays\n"
+	                       "Use Edit->Column Rows to filter visible rows.\n"
                        "Use Edit->Selection for fill, numerical expressions, and text formulas.\n"
                        "Use the Edit menu to insert or delete items, and File->Save to commit changes."));
   text.setMinimumSize(400, 300);
