@@ -3451,7 +3451,7 @@ void SDDSEditor::saveFile() {
 
 void SDDSEditor::saveFileAs() {
   QString path = QFileDialog::getSaveFileName(this, tr("Save SDDS"), currentFilename,
-                                             tr("SDDS Files (*.sdds);;All Files (*)"));
+                                             tr("SDDS Files (*.sdds *.sdds.gz *.sdds.xz);;All Files (*)"));
   if (path.isEmpty())
     return;
   if (writeFile(path)) {
@@ -5652,6 +5652,11 @@ void SDDSEditor::insertPage() {
 
   PageStore pd;
   pd.parameters = QVector<QString>(dataset.layout.n_parameters);
+  for (int i = 0; i < dataset.layout.n_parameters; ++i) {
+    const PARAMETER_DEFINITION &def = dataset.layout.parameter_definition[i];
+    if (def.fixed_value)
+      pd.parameters[i] = QString::fromLocal8Bit(def.fixed_value);
+  }
 
   int ccount = dataset.layout.n_columns;
   pd.columns.resize(ccount);
