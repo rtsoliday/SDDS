@@ -58,6 +58,63 @@ void applyOffsets(PLOT_SPEC *plspec, long request, PLOT_DATA *dataset, short yPl
   }
 }
 
+void applyModulus(PLOT_SPEC *plspec, long request, PLOT_DATA *dataset, short yPlane) 
+{
+  long i;
+  PLOT_REQUEST *plreq;
+  double modulus=0;
+  plreq = plspec->plot_request+request;
+  if (!yPlane) {
+    if (plspec->plot_request[request].modulus_flags&MODULUS_XPARAMETER_GIVEN &&
+        dataset->modulus[0]>0) 
+      modulus = dataset->modulus[0];
+    else if (plspec->plot_request[request].modulus_flags&MODULUS_XVALUE_GIVEN &&
+               plspec->plot_request[request].modulus[0])
+      modulus = plspec->plot_request[request].modulus[0];
+    if (modulus>0) {
+      plreq->limit.cxmin = DBL_MAX;
+      plreq->limit.cxmax = -DBL_MAX;
+      for (i=dataset->pointsStored-1; i>=0; i--) {
+        // printf("modulus %le: %le -> ", modulus, dataset->x[i]);
+        if (dataset->x[i]<0) {
+          long n;
+          /* fmod doesn't behave as desired when x<0 */
+          n = -dataset->x[i]/modulus + 1;
+          dataset->x[i] = n*modulus + dataset->x[i];
+        } else {
+          dataset->x[i] = fmod(dataset->x[i], modulus);
+        }
+        // printf("%le\n", dataset->x[i]);
+        plreq->limit.cxmin = MIN(dataset->x[i], plreq->limit.cxmin);
+        plreq->limit.cxmax = MAX(dataset->x[i], plreq->limit.cxmax);
+      }
+    }
+  } else {
+    if (plspec->plot_request[request].modulus_flags&MODULUS_YPARAMETER_GIVEN &&
+        dataset->modulus[0]>0) 
+      modulus = dataset->modulus[0];
+    else if (plspec->plot_request[request].modulus_flags&MODULUS_YVALUE_GIVEN &&
+               plspec->plot_request[request].modulus[0])
+      modulus = plspec->plot_request[request].modulus[0];
+    if (modulus>0) {
+      plreq->limit.cymin = DBL_MAX;
+      plreq->limit.cymax = -DBL_MAX;
+      for (i=dataset->pointsStored-1; i>=0; i--) {
+        if (dataset->y[i]<0) {
+          long n;
+          /* fmod doesn't behave as desired when y<0 */
+          n = -dataset->y[i]/modulus + 1;
+          dataset->y[i] = n*modulus + dataset->y[i];
+        } else {
+          dataset->y[i] = fmod(dataset->y[i], modulus);
+        }
+        plreq->limit.cymin = MIN(dataset->y[i], plreq->limit.cymin);
+        plreq->limit.cymax = MAX(dataset->y[i], plreq->limit.cymax);
+      }
+    }
+  }
+}
+
 void applyFactors(PLOT_SPEC *plspec, long request, PLOT_DATA *dataset, short yPlane) 
 {
   long i;
@@ -494,6 +551,10 @@ void perform_dataset_conversions(PLOT_SPEC *plspec)
       applyFactors(plspec, request, dataset, 0);
     if (plspec->plot_request[request].factor_flags&FACTOR_YBEFORELOG_GIVEN)
       applyFactors(plspec, request, dataset, 1);
+    if (plspec->plot_request[request].modulus_flags&MODULUS_XBEFORELOG_GIVEN)
+      applyModulus(plspec, request, dataset, 0);
+    if (plspec->plot_request[request].modulus_flags&MODULUS_YBEFORELOG_GIVEN)
+      applyModulus(plspec, request, dataset, 1);
 
     if ((mode=plspec->plot_request[request].mode)) {
       if (mode&MODE_X_LOG || 
@@ -686,6 +747,10 @@ void perform_dataset_conversions(PLOT_SPEC *plspec)
       applyFactors(plspec, request, dataset, 0);
     if (!(plspec->plot_request[request].factor_flags&FACTOR_YBEFORELOG_GIVEN))
       applyFactors(plspec, request, dataset, 1);
+    if (!(plspec->plot_request[request].modulus_flags&MODULUS_XBEFORELOG_GIVEN))
+      applyModulus(plspec, request, dataset, 0);
+    if (!(plspec->plot_request[request].modulus_flags&MODULUS_YBEFORELOG_GIVEN))
+      applyModulus(plspec, request, dataset, 1);
     if (plreq->dither[0]) {
       double range, min, max;
       find_min_max(&min, &max, dataset->x, dataset->pointsStored);
