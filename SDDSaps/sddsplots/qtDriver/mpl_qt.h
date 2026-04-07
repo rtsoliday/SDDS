@@ -143,6 +143,7 @@ long readdata();
 void print();
 void save();
 void savePdfOrEps();
+void uploadToBely();
 QImage exportCurrentPlotImage(const QSize &targetSize);
 bool exportCurrentPlotToPainter(QPainter &painter, const QSize &targetSize);
 void nav_next(QMainWindow *mainWindow);

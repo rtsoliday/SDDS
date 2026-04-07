@@ -2745,6 +2745,11 @@ int main(int argc, char *argv[]) {
   fileMenu->addAction(savePdfEpsAction);
   QObject::connect(savePdfEpsAction, &QAction::triggered, &app, [](bool){ savePdfOrEps(); });
 
+  QAction *uploadToBelyAction = new QAction("Upload to BELY...", &mainWindow);
+  fileMenu->addAction(uploadToBelyAction);
+  QObject::connect(uploadToBelyAction, &QAction::triggered, &app,
+                   [](bool) { uploadToBely(); });
+
   QAction *quitAction = new QAction("Quit (Q)", &mainWindow);
   fileMenu->addAction(quitAction);
   QObject::connect(quitAction, &QAction::triggered, &app, &QApplication::quit);
