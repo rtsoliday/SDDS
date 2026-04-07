@@ -160,25 +160,19 @@ long page_faults() {
 long memory_count()
 {
   FILE *fp;
-  static short first = 1;
-  static char proc[100];
-  long size1;
+  long size, resident, pageSize;
 
-  if (first) {
-    sprintf(proc, "/proc/%ld/statm", (long)getpid());
-    first = 0;
-  }
-  if (!(fp = fopen(proc, "r"))) {
+  if (!(fp = fopen("/proc/self/statm", "r"))) {
     perror("fopen failed in memory_count()");
     exit(1);
   }
-  if (fscanf(fp, "%ld", &size1) != 1) {
+  if (fscanf(fp, "%ld %ld", &size, &resident) != 2) {
     perror("fscanf failed in memory_count()");
     exit(1);
   }
   fclose(fp);
-  /* Assume a page is 1 kB */
-  return size1;
+  pageSize = sysconf(_SC_PAGESIZE);
+  return resident*(pageSize/1024);
 }
 # else
 long memory_count() {
