@@ -31,6 +31,7 @@ static constexpr int kEpsResolutionDpi = 600;
 static constexpr int kBelyUploadTimeoutMs = 120000;
 static const char *kDefaultBelyUrl = "https://bely.aps.anl.gov/bely";
 static const char *kDefaultBelyEntryText = "Plot uploaded from sddsplot.";
+static const char *kBelySecretToolService = "mpl_qt-bely";
 
 struct BelyUploadOptions {
   QString belyUrl;
@@ -43,6 +44,65 @@ struct BelyUploadOptions {
 };
 
 static QString findPythonForBely();
+
+static QString findSecretToolForBely() {
+#if defined(Q_OS_LINUX)
+  return QStandardPaths::findExecutable(QStringLiteral("secret-tool"));
+#else
+  return QString();
+#endif
+}
+
+static QString loadBelyPasswordFromKeyring(const QString &belyUrl,
+                                           const QString &username) {
+  const QString secretTool = findSecretToolForBely();
+  if (secretTool.isEmpty() || belyUrl.isEmpty() || username.isEmpty())
+    return QString();
+
+  QProcess process;
+  process.start(secretTool,
+                QStringList() << QStringLiteral("lookup")
+                              << QStringLiteral("service")
+                              << QString::fromUtf8(kBelySecretToolService)
+                              << QStringLiteral("url") << belyUrl
+                              << QStringLiteral("username") << username);
+  if (!process.waitForStarted(3000))
+    return QString();
+  if (!process.waitForFinished(5000)) {
+    process.kill();
+    process.waitForFinished();
+    return QString();
+  }
+  if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+    return QString();
+  return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+}
+
+static void storeBelyPasswordInKeyring(const QString &belyUrl,
+                                       const QString &username,
+                                       const QString &password) {
+  const QString secretTool = findSecretToolForBely();
+  if (secretTool.isEmpty() || belyUrl.isEmpty() || username.isEmpty() ||
+      password.isEmpty())
+    return;
+
+  QProcess process;
+  process.start(secretTool,
+                QStringList() << QStringLiteral("store")
+                              << QStringLiteral("--label=mpl_qt BELY password")
+                              << QStringLiteral("service")
+                              << QString::fromUtf8(kBelySecretToolService)
+                              << QStringLiteral("url") << belyUrl
+                              << QStringLiteral("username") << username);
+  if (!process.waitForStarted(3000))
+    return;
+  process.write(password.toUtf8());
+  process.closeWriteChannel();
+  if (!process.waitForFinished(5000)) {
+    process.kill();
+    process.waitForFinished();
+  }
+}
 
 static QString commandLineMetadata() {
   if (sddsplotCommandline2 && sddsplotCommandline2[0]) {
@@ -822,6 +882,7 @@ static bool lookupLatestBelyIds(QWidget *parent, const QString &pythonExecutable
 
   *logDocumentId = payload.value(QStringLiteral("log_document_id")).toString();
   *logEntryId = payload.value(QStringLiteral("log_entry_id")).toString();
+  storeBelyPasswordInKeyring(belyUrl, username, password);
   return !logDocumentId->isEmpty() && !logEntryId->isEmpty();
 }
 
@@ -860,6 +921,10 @@ static bool promptForBelyUploadOptions(QWidget *parent,
 
   QLineEdit *passwordEdit = new QLineEdit(&dialog);
   passwordEdit->setEchoMode(QLineEdit::Password);
+  const QString initialKeyringPassword = loadBelyPasswordFromKeyring(
+      urlEdit->text().trimmed(), usernameEdit->text().trimmed());
+  if (!initialKeyringPassword.isEmpty())
+    passwordEdit->setText(initialKeyringPassword);
   form->addRow(QStringLiteral("Password"), passwordEdit);
 
   QRegularExpression digits(QStringLiteral("[0-9]+"));
@@ -915,7 +980,12 @@ static bool promptForBelyUploadOptions(QWidget *parent,
                    [&]() {
                      const QString belyUrl = urlEdit->text().trimmed();
                      const QString username = usernameEdit->text().trimmed();
-                     const QString password = passwordEdit->text();
+                     QString password = passwordEdit->text();
+                     if (password.isEmpty()) {
+                       password = loadBelyPasswordFromKeyring(belyUrl, username);
+                       if (!password.isEmpty())
+                         passwordEdit->setText(password);
+                     }
                      if (belyUrl.isEmpty() || username.isEmpty() || password.isEmpty()) {
                        QMessageBox::warning(
                            &dialog, QStringLiteral("Missing Information"),
@@ -948,6 +1018,12 @@ static bool promptForBelyUploadOptions(QWidget *parent,
                    });
   QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog,
                    [&]() {
+                     if (passwordEdit->text().isEmpty()) {
+                       const QString keyringPassword = loadBelyPasswordFromKeyring(
+                           urlEdit->text().trimmed(), usernameEdit->text().trimmed());
+                       if (!keyringPassword.isEmpty())
+                         passwordEdit->setText(keyringPassword);
+                     }
                      if (urlEdit->text().trimmed().isEmpty() ||
                          usernameEdit->text().trimmed().isEmpty() ||
                          passwordEdit->text().isEmpty() ||
@@ -1834,6 +1910,9 @@ void uploadToBely() {
     QMessageBox::warning(parent, QStringLiteral("Upload Failed"), message);
     return;
   }
+
+  storeBelyPasswordInKeyring(options.belyUrl, options.username,
+                             options.password);
 
   QStringList details;
   const QString finalLogDocumentId =
