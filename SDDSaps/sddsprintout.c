@@ -26,6 +26,7 @@
  *              [-spreadsheet[=delimiter=<string>][,quotemark=<string>][,nolabels][,csv][,schfile=<filename>]]
  *              [-latexFormat[=longtable][,booktable][,sideways][,label={<string>|@<parameterName>}][,caption={<string>|@<parameterName>}][,group=<columnName>][,translate=<filename>][,justify=<codeList>][,complete][,comment=<string>]]
  *              [-htmlFormat[=caption=<string>][,translate=<filename>]]
+ *              [-markdown]
  *              [-noWarnings]
  * ```
  *
@@ -49,6 +50,7 @@
  * | `-spreadsheet`                      | Enables CSV or delimited file output with optional formatting.                   |
  * | `-latexFormat`                      | Configures LaTeX table formatting.                                               |
  * | `-htmlFormat`                       | Configures HTML table formatting.                                                |
+ * | `-markdown`                         | Configures Markdown table formatting.                                            |
  * | `-noWarnings`                       | Suppress warning messages                                                        |
  *
  * @subsection Incompatibilities
@@ -60,6 +62,7 @@
  *   - `-spreadsheet`
  *   - `-latexFormat`
  *   - `-htmlFormat`
+ *   - `-markdown`
  *
  * @subsection spec_req Specific Requirements
  * - When using `-latexFormat` with `label` or `caption`, ensure they are either literal strings or refer to parameter names using `@<parameterName>`.
@@ -104,6 +107,7 @@ enum option_type {
   SET_BUFFERLINES,
   SET_LATEXFORMAT,
   SET_HTMLFORMAT,
+  SET_MARKDOWN,
   N_OPTIONS
 };
 
@@ -126,7 +130,8 @@ char *option[N_OPTIONS] = {
   "nolabels",
   "bufferlines",
   "latexformat",
-  "htmlformat"
+  "htmlformat",
+  "markdown"
 };
 
 char *USAGE =
@@ -148,6 +153,7 @@ char *USAGE =
     "             [-spreadsheet[=delimiter=<string>][,quotemark=<string>][,nolabels][,csv][,schfile=<filename>]]\n"
     "             [-latexFormat[=longtable][,booktable][,sideways][,label={<string>|@<parameterName>}][,caption={<string>|@<parameterName>}][,group=<columnName>][,translate=<filename>][,justify=<codeList>][,complete][,comment=<string>]]\n"
     "             [-htmlFormat[=caption=<string>][,translate=<filename>]]\n"
+    "             [-markdown]\n"
     "             [-noWarnings]\n"
     // Additional explanations
     "-spreadsheet=csv is the simple way of -spreadsheet=nolabels,quote=\",delimiter=\\, -notitle \n"
@@ -177,6 +183,8 @@ char *USAGE =
 #define HTML_FORMAT 0x0001U
 #define HTML_CAPTION 0x0002U
 #define HTML_TRANSLATE 0x0004U
+
+#define MARKDOWN_FORMAT 0x0001U
 
 typedef struct
 {
@@ -226,7 +234,7 @@ void setDefaultFormats(void);
 long processPrintColumns(PRINT_COLUMN **printRequestPtr, long printRequests, SDDS_DATASET *inTable, long noWarnings,
                          unsigned long spreadsheetFlags, long csv, unsigned long latexformat, htab *translationTable, unsigned long htmlformat);
 void printColumnHeaders(FILE *fpOut, PRINT_COLUMN *printColumn, long printColumns, long width, PAGINATION *pagination,
-                        long latexFormat, char *latexTitle, long htmlFormat, char *htmlTitle);
+                        long latexFormat, char *latexTitle, long htmlFormat, char *htmlTitle, long markdownFormat);
 long processPrintParameters(PRINT_PARAMETER **printRequestPtr, long printRequests, SDDS_DATASET *inTable,
                             long noWarnings, long noLabels, long csv);
 long processPrintArrays(PRINT_ARRAY **printRequestPtr, long printRequests, SDDS_DATASET *inTable);
@@ -240,7 +248,7 @@ long printPageTitle(FILE *fpOut, char *title);
 void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long printColumns,
                     long width, FILE *fpOut, unsigned long spreadsheetFlags, char *spreadsheetDelimiter, char *spreadsheetQuoteMark,
                     long latexFormat, char *latexTitle, char *latexLabel, char *latexGroupColumn,
-                    long htmlFormat, char *htmlTitle,
+                    long htmlFormat, char *htmlTitle, long markdownFormat,
                     PAGINATION *pagination, char *title, long noLabels);
 long checkPagination(FILE *fpOut, PAGINATION *pagination, char *title);
 void replaceFormatWidth(char *buffer, char *format, long width);
@@ -249,6 +257,7 @@ void CreateSCHFile(char *output, char *input, unsigned long flags, char *delimit
 htab *readTranslationTable(char *TranslationFile);
 char *findTranslation(htab *ht, char *key);
 char *modifyUnitsWithFactor(char *units0, double factor, unsigned long latexFormat);
+char *makeMarkdownSafeString(char *source);
 
 static char **defaultFormat = NULL;
 static char **csvFormat = NULL;
@@ -271,7 +280,7 @@ int main(int argc, char **argv) {
   long printColumns, printParameters, printArrays, firstPage, bufferLines;
   long fromPage, toPage, names, pageAdvance, noTitle, noLabels, noWarnings;
   int32_t blankLines;
-  unsigned long latexFormat, htmlFormat;
+  unsigned long latexFormat, htmlFormat, markdownFormat;
   FILE *fpOut;
   unsigned long flags, pipeFlags, spreadsheetFlags, dummyFlags, postPageLines, CSV = 0;
   char *spreadsheetDelimiter, *spreadsheetQuoteMark;
@@ -310,6 +319,7 @@ int main(int argc, char **argv) {
   latexFormat = 0;
   TranslationTable = NULL;
   htmlFormat = 0;
+  markdownFormat = 0;
 
   for (i_arg = 1; i_arg < argc; i_arg++) {
     if (s_arg[i_arg].arg_type == OPTION) {
@@ -547,6 +557,11 @@ int main(int argc, char **argv) {
           SDDS_Bomb("invalid -htmlFormat syntax/values");
         htmlFormat |= HTML_FORMAT;
         break;
+      case SET_MARKDOWN:
+        if (s_arg[i_arg].n_items != 1)
+          SDDS_Bomb("invalid -markdown syntax");
+        markdownFormat |= MARKDOWN_FORMAT;
+        break;
       default:
         fprintf(stderr, "error: unknown switch: %s\n", s_arg[i_arg].list[0]);
         SDDS_Bomb(NULL);
@@ -581,8 +596,8 @@ int main(int argc, char **argv) {
     SDDS_Bomb("you must specify at least one of -columns, -parameters, or -arrays");
   if (fromPage && toPage && fromPage > toPage)
     SDDS_Bomb("invalid -fromPage and -toPage");
-  if (latexFormat && htmlFormat)
-    SDDS_Bomb("-latexFormat and -htmlFormat are incompatible");
+  if ((latexFormat ? 1 : 0) + (htmlFormat ? 1 : 0) + (markdownFormat ? 1 : 0) > 1)
+    SDDS_Bomb("-latexFormat, -htmlFormat, and -markdown are mutually exclusive");
 
   if (latexFormat & LATEX_TRANSLATE)
     TranslationTable = readTranslationTable(latexTranslationFile);
@@ -610,6 +625,8 @@ int main(int argc, char **argv) {
   if (!title) {
     title = tmalloc(sizeof(*title) * ((input ? strlen(input) : 10) + 100));
     if (htmlFormat)
+      sprintf(title, "Printout for SDDS file %s", input ? input : "stdin");
+    else if (markdownFormat)
       sprintf(title, "Printout for SDDS file %s", input ? input : "stdin");
     else
       sprintf(title, "Printout for SDDS file %s%s", input ? input : "stdin", latexFormat ? "" : "\n");
@@ -652,6 +669,9 @@ int main(int argc, char **argv) {
   if (htmlFormat) {
     noTitle = 1;
   }
+  if (markdownFormat) {
+    noTitle = 1;
+  }
 
   while ((pageNumber = SDDS_ReadPageSparse(&SDDS_dataset, 0, (printColumns || SDDS_dataset.layout.data_mode.column_major) ? 1 : 1000000, 0, 0)) > 0) {
     if ((fromPage && pageNumber < fromPage) || (toPage && pageNumber > toPage))
@@ -675,7 +695,7 @@ int main(int argc, char **argv) {
           fputc('\n', fpOut);
       }
     }
-    if (!latexFormat && !htmlFormat)
+    if (!latexFormat && !htmlFormat && !markdownFormat)
       doPrintParameters(&SDDS_dataset, printParameter, printParameters, width, fpOut, spreadsheetFlags,
                         spreadsheetDelimiter, spreadsheetQuoteMark, &pagination, title, noLabels);
     /*        doPrintArrays(&SDDS_dataset, printArray, printArrays, width, fpOut, &pagination); */
@@ -694,7 +714,7 @@ int main(int argc, char **argv) {
                    spreadsheetQuoteMark, latexFormat,
                    latexFormat & LATEX_CAPTION_PARAM ? latexCaptionBuffer : latexCaption,
                    latexFormat & LATEX_LABEL_PARAM ? latexLabelBuffer : latexLabel,
-                   latexGroup, htmlFormat, htmlCaption,
+                   latexGroup, htmlFormat, htmlCaption, markdownFormat,
                    &pagination, title, noLabels);
     if (latexFormat & LATEX_CAPTION_PARAM && latexCaptionBuffer)
       free(latexCaptionBuffer);
@@ -798,8 +818,9 @@ long processPrintColumns(PRINT_COLUMN **printRequestPtr, long printRequests, SDD
                               printRequest[irequest].noUnits ? NULL : units, printRequest[irequest].factor,
                               &printColumn[printColumns].format, spreadsheetFlags, latexFormat, TranslationTable, htmlFormat);
 #if defined(DEBUG)
-          fprintf(stderr, "%s has format >%s<\n",
-                  printRequest[irequest].label ? printRequest[irequest].label : name[iname], printColumn[printColumns].format);
+          fprintf(stderr, "%s has format >%s<, name %s, units %s\n",
+                  printRequest[irequest].label ? printRequest[irequest].label : name[iname], printColumn[printColumns].format,
+                  name[iname], units?units:"NULL");
 #endif
           printColumn[printColumns].data = NULL;
           printColumn[printColumns].factor = printRequest[irequest].factor;
@@ -990,7 +1011,10 @@ long makeColumnHeaders(char ***header, long *fieldWidth, char *name, char *editL
   static char nameBuffer[1024];
 
   formatWidth = 0;
-
+#if defined(DEBUG)
+  fprintf(stderr, "makeColumnHeaders(name=%s, units=%s,...)\n",
+          name, units?units:"NULL");
+#endif
   if (latexFormat & LATEX_TRANSLATE) {
     name = findTranslation(TranslationTable, name);
     units = findTranslation(TranslationTable, units);
@@ -1294,9 +1318,35 @@ long checkPagination(FILE *fpOut, PAGINATION *pagination, char *title) {
 }
 
 void printColumnHeaders(FILE *fpOut, PRINT_COLUMN *printColumn, long printColumns, long width,
-                        PAGINATION *pagination, long latexFormat, char *latexTitle, long htmlFormat, char *htmlTitle) {
+                        PAGINATION *pagination, long latexFormat, char *latexTitle, long htmlFormat, char *htmlTitle,
+                        long markdownFormat) {
   char *label;
   long row, column, header, outputRow, maxOutputRow, length, noUnitsLine;
+
+  if (markdownFormat) {
+    fputs("|", fpOut);
+    for (column = 0; column < printColumns; column++) {
+      const char *name = trim_spaces(printColumn[column].header[0]);
+      const char *units = trim_spaces(printColumn[column].header[1]);
+      if (units && !SDDS_StringIsBlank((char *)units)) {
+#if defined(DEBUG)
+        printf("markdown: name %s, units %s\n", name, units);
+#endif
+        fprintf(fpOut, " %s (", makeMarkdownSafeString((char *)name));
+        fprintf(fpOut, "%s) |", makeMarkdownSafeString((char *)units));
+      } else {
+        fprintf(fpOut, " %s |", makeMarkdownSafeString((char *)name));
+      }
+    }
+    fputc('\n', fpOut);
+
+    fputs("|", fpOut);
+    for (column = 0; column < printColumns; column++)
+      fputs(" --- |", fpOut);
+    fputc('\n', fpOut);
+    pagination->currentLine += 2;
+    return;
+  }
 
   if (latexFormat) {
     if (latexFormat & LATEX_LONGTABLE) {
@@ -1401,7 +1451,7 @@ void printColumnHeaders(FILE *fpOut, PRINT_COLUMN *printColumn, long printColumn
 void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long printColumns,
                     long width, FILE *fpOut, unsigned long spreadsheetFlags, char *spreadsheetDelimiter, char *spreadsheetQuoteMark,
                     long latexFormat, char *latexTitle, char *latexLabel, char *latexGroupColumn,
-                    long htmlFormat, char *htmlTitle,
+                    long htmlFormat, char *htmlTitle, long markdownFormat,
                     PAGINATION *pagination, char *title, long noLabels) {
   long column;
   int64_t row, rows, nGroups, maxGroupLength, groupLength;
@@ -1431,7 +1481,7 @@ void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long print
   if (!(spreadsheetFlags & SPREADSHEET_ON) && !noLabels)
     printColumnHeaders(fpOut, printColumn, printColumns, width, pagination,
                        latexFormat, latexTitle ? latexTitle : title,
-                       htmlFormat, htmlTitle ? htmlTitle : title);
+                       htmlFormat, htmlTitle ? htmlTitle : title, markdownFormat);
   else if (!(spreadsheetFlags & SPREADSHEET_NOLABELS) && !noLabels) {
     for (column = 0; column < printColumns; column++)
       fprintf(fpOut, "%s%s", printColumn[column].name, column != printColumns - 1 ? spreadsheetDelimiter : "\n");
@@ -1516,6 +1566,12 @@ void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long print
         fputs(column != printColumns - 1 ? " & " : (latexFormat & LATEX_BOOKTABLE ? " \\\\ " : " \\\\ \\hline"), fpOut);
         continue;
       }
+      if (markdownFormat) {
+        if (column == 0)
+          fputs("|", fpOut);
+        fprintf(fpOut, " %s |", makeMarkdownSafeString(trim_spaces(printBuffer)));
+        continue;
+      }
       if (htmlFormat) {
         fputs(trim_spaces(printBuffer), fpOut);
         fprintf(fpOut, "</td>\n");
@@ -1526,21 +1582,23 @@ void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long print
         long i;
         fputc('\n', fpOut);
         if (checkPagination(fpOut, pagination, title))
-          printColumnHeaders(fpOut, printColumn, printColumns, width, pagination, latexFormat, latexTitle ? latexTitle : title, htmlFormat, htmlTitle ? htmlTitle : title);
+          printColumnHeaders(fpOut, printColumn, printColumns, width, pagination, latexFormat, latexTitle ? latexTitle : title, htmlFormat, htmlTitle ? htmlTitle : title, markdownFormat);
         for (i = 0; i < printColumn[column].blankLines; i++) {
           fputc('\n', fpOut);
           if (checkPagination(fpOut, pagination, title))
-            printColumnHeaders(fpOut, printColumn, printColumns, width, pagination, latexFormat, latexTitle ? latexTitle : title, htmlFormat, htmlTitle ? htmlTitle : title);
+            printColumnHeaders(fpOut, printColumn, printColumns, width, pagination, latexFormat, latexTitle ? latexTitle : title, htmlFormat, htmlTitle ? htmlTitle : title, markdownFormat);
         }
       }
     }
     if (htmlFormat) {
       fprintf(fpOut, "  </tr>\n");
+    } else if (markdownFormat) {
+      fputc('\n', fpOut);
     } else {
       if (!(spreadsheetFlags & SPREADSHEET_ON) && !printColumn[column - 1].endsLine) {
         fputc('\n', fpOut);
         if (!latexFormat && !htmlFormat && checkPagination(fpOut, pagination, title))
-          printColumnHeaders(fpOut, printColumn, printColumns, width, pagination, latexFormat, latexTitle ? latexTitle : title, htmlFormat, htmlTitle ? htmlTitle : title);
+          printColumnHeaders(fpOut, printColumn, printColumns, width, pagination, latexFormat, latexTitle ? latexTitle : title, htmlFormat, htmlTitle ? htmlTitle : title, markdownFormat);
       }
     }
   }
@@ -1720,4 +1778,27 @@ char *modifyUnitsWithFactor(char *units0, double factor, unsigned long latexForm
     sprintf(units, "%.2g%s", factor, units0 ? units0 : "");
   }
   return units;
+}
+
+char *makeMarkdownSafeString(char *source) {
+  static char *buffer = NULL;
+  static long buflen = 0;
+  long i, j, length;
+
+  if (!source)
+    return source;
+
+  length = strlen(source);
+  if (length * 2 + 1 > buflen) {
+    buflen = length * 2 + 1;
+    buffer = SDDS_Realloc(buffer, sizeof(*buffer) * buflen);
+  }
+
+  for (i = 0, j = 0; source[i]; i++) {
+    if (source[i] == '|' || source[i] == '\\')
+      buffer[j++] = '\\';
+    buffer[j++] = source[i];
+  }
+  buffer[j] = 0;
+  return buffer;
 }
