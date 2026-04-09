@@ -1906,12 +1906,15 @@ long SDDS_ComputeSetOfColumns(SDDS_DATASET *SDDS_dataset, long equ_begin, long e
   double value;
   long equations_present;
   COLUMN_LIST *column_list;
-  long column_list_ptr, max_column_list_counter;
+  long column_list_ptr, max_column_list_counter, column_list_entries;
+  long return_value;
   int64_t j;
 
   column_list = NULL;
   column_list_ptr = -1;
   max_column_list_counter = 0;
+  column_list_entries = 0;
+  return_value = 0;
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_ComputeColumn"))
     return (0);
   layout = &SDDS_dataset->layout;
@@ -1935,7 +1938,7 @@ long SDDS_ComputeSetOfColumns(SDDS_DATASET *SDDS_dataset, long equ_begin, long e
         free(ptr);
         if (!SDDS_CopyString(equation, pfix)) {
           fprintf(stderr, "error: problem copying argument string\n");
-          return 0;
+          goto cleanup;
         }
       } else {
         if (!(equation = SDDS_GetParameter(SDDS_dataset, equation_ptr->equation + 1, NULL)))
@@ -1947,13 +1950,9 @@ long SDDS_ComputeSetOfColumns(SDDS_DATASET *SDDS_dataset, long equ_begin, long e
     }
     cp_str(&column_list[column_list_ptr].equation, equation_ptr->udf_name);
     if (column_list[column_list_ptr].column < 0 || column_list[column_list_ptr].column >= layout->n_columns)
-      return (0);
+      goto cleanup;
+    column_list_entries++;
   }
-
-  if (!SDDS_StoreParametersInRpnMemories(SDDS_dataset))
-    return (0);
-  if (!SDDS_StoreColumnsInRpnArrays(SDDS_dataset))
-    return 0;
 
   if (table_number_mem == -1) {
     table_number_mem = rpn_create_mem("table_number", 0);
@@ -1966,22 +1965,33 @@ long SDDS_ComputeSetOfColumns(SDDS_DATASET *SDDS_dataset, long equ_begin, long e
   rpn_store((double)SDDS_dataset->page_number, NULL, i_page_mem);
   rpn_store((double)SDDS_dataset->n_rows, NULL, n_rows_mem);
 
-  for (j = 0; j < SDDS_dataset->n_rows; j++) {
+  /*
+     Preserve command-line evaluation order for consecutive column definitions.
+     In particular, expressions using array access (e.g. "&column [") must see
+     the fully materialized results of earlier definitions on the current page,
+     not a stale snapshot from before the batch started.
+   */
+  column_list_ptr = 0;
+  for (equations_present = equ_begin; equations_present < equ_end; equations_present++, column_list_ptr++) {
+    if (!SDDS_StoreParametersInRpnMemories(SDDS_dataset))
+      goto cleanup;
+    if (!SDDS_StoreColumnsInRpnArrays(SDDS_dataset))
+      goto cleanup;
+
+    column = column_list[column_list_ptr].column;
+    for (j = 0; j < SDDS_dataset->n_rows; j++) {
 #if defined(DEBUG)
-    fprintf(stderr, "Working on row %ld\n", j);
+      fprintf(stderr, "Working on row %ld\n", j);
 #endif
-    if (!SDDS_StoreRowInRpnMemories(SDDS_dataset, j))
-      return (0);
-    column_list_ptr = 0;
-    for (equations_present = equ_begin; equations_present < equ_end; equations_present++, column_list_ptr++) {
-      column = column_list[column_list_ptr].column;
+      if (!SDDS_StoreRowInRpnMemories(SDDS_dataset, j))
+        goto cleanup;
       rpn_clear();
       rpn_store((double)j, NULL, i_row_mem);
       value = rpn(column_list[column_list_ptr].equation);
       rpn_store(value, NULL, layout->column_definition[column].memory_number);
       if (rpn_check_error()) {
         SDDS_SetError("Unable to compute rpn expression--rpn error (SDDS_ComputeDefinedColumn)");
-        return (0);
+        goto cleanup;
       }
 #if defined(DEBUG)
       fprintf(stderr, "computed row value: %s = %e\n", layout->column_definition[column].name, value);
@@ -2021,7 +2031,20 @@ long SDDS_ComputeSetOfColumns(SDDS_DATASET *SDDS_dataset, long equ_begin, long e
     }
   }
 
-  return (1);
+  return_value = 1;
+
+cleanup:
+  if (column_list) {
+    for (column_list_ptr = 0; column_list_ptr < column_list_entries; column_list_ptr++) {
+      if (column_list[column_list_ptr].equation) {
+        free(column_list[column_list_ptr].equation);
+        column_list[column_list_ptr].equation = NULL;
+      }
+    }
+    free(column_list);
+  }
+
+  return (return_value);
 }
 
 long SDDS_EvaluateColumn(SDDS_DATASET *SDDS_dataset, EVALUATE_DEFINITION *definition) {
