@@ -196,6 +196,7 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/sddscongen
 %{_bindir}/sddscontour
 %{_bindir}/sddsconvert
+%{_bindir}/sddsconvertalarmlog
 %{_bindir}/sddsconvertlogonchange
 %{_bindir}/sddsconvolve
 %{_bindir}/sddscorrelate
@@ -283,6 +284,5 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/timeconvert
 %{_bindir}/tcomp
 %{_bindir}/wfm2sdds
-
 
 

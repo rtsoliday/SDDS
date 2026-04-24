@@ -1,9 +1,9 @@
 \begin{sddsprog}{sddsconvertalarmlog}
-  \item \textbf{description:} \verb|sddsconvertalarmlog| converts SDDS alarm log files and offers options for format conversion, time filtering, snapshot extraction, and column selection.
+  \item \textbf{description:} \verb|sddsconvertalarmlog| converts \verb|sddsalarmlog| output to an explicit, array-free SDDS file. It dereferences \verb|ControlNameString|, \verb|AlarmStatusString|, and \verb|AlarmSeverityString| into string columns and computes an epoch \verb|Time| column from \verb|TimeOfDay|, \verb|StartTime|, and \verb|StartHour| when needed.
   \item \textbf{examples:}
     \begin{verbatim}
 sddsconvertalarmlog alarmLog.sdds output.sdds -minimumInterval=10
-sddsconvertalarmlog alarmLog.sdds snapshot.sdds -snapshot=1700000000 -retain=Time,Value
+sddsconvertalarmlog alarmLog.sdds snapshot.sdds -snapshot=1700000000 -retain=Time,ControlName,AlarmStatus,AlarmSeverity
     \end{verbatim}
   \item \textbf{synopsis:}
     \begin{verbatim}
@@ -13,13 +13,13 @@ sddsconvertalarmlog [input-file] [output-file] [-pipe[=input][,output]]
   [-time=[start=epochtime][,end=epochtime]]
   [-delete=column-names] [-retain=column-names]
     \end{verbatim}
-  \item \textbf{files:} \verb|input-file| is an SDDS alarm log; \verb|output-file| is the converted result.
+  \item \textbf{files:} \verb|input-file| is an SDDS alarm log; \verb|output-file| is the converted result. The output contains no SDDS arrays.
   \item \textbf{switches:}
     \begin{itemize}
       \item \verb|-binary| or \verb|-ascii| -- set the output file format.
       \item \verb|-minimumInterval=seconds| -- discard records closer than the interval.
-      \item \verb|-snapshot=epochtime| -- output data at the specified epoch time.
-      \item \verb|-time=start,end| -- limit records to the given time range.
+      \item \verb|-snapshot=epochtime| -- output the latest alarm state for each PV at the specified epoch time.
+      \item \verb|-time=start,end| -- limit records to the given epoch time range.
       \item \verb|-delete| or \verb|-retain| -- remove or keep listed columns.
     \end{itemize}
   \item \textbf{see also:} \progref{sddsconvert}, \progref{sddsprocess}.
