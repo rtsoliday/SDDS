@@ -1,8 +1,9 @@
 DD  = ../../
 include ../../../Makefile.rules
 
-PROD = mpl_qt
+PROD = mpl_qt bely_upload
 mpl_qt_SRC = mpl_qt.cc mpl_qt_utils.cc mpl_qt_zoom.cc mpl_qt_print_save.cc mpl_qt_readdata.cc
+bely_upload_SRC = bely_upload.cc
 
 ifeq ($(OS), Linux)
   MOC = $(firstword $(wildcard \
@@ -81,4 +82,3 @@ $(OBJ_DIR)/mpl_qt$(EXEEXT): $(mpl_qt_OBJS) $(LIBRARY) $(PROD_DEPS)
 	cp -f $@ $(BIN_DIR)/
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
-

@@ -31,6 +31,7 @@ install -s -m 755 image2sdds %{buildroot}%{_bindir}/image2sdds
 install -s -m 755 lba2sdds %{buildroot}%{_bindir}/lba2sdds
 install -s -m 755 mcs2sdds %{buildroot}%{_bindir}/mcs2sdds
 install -s -m 755 mpl2sdds %{buildroot}%{_bindir}/mpl2sdds
+install -m 755 bely_upload %{buildroot}%{_bindir}/bely_upload
 install -m 755 mpl_qt %{buildroot}%{_bindir}/mpl_qt
 install -s -m 755 nlpp %{buildroot}%{_bindir}/nlpp
 install -s -m 755 plaindata2sdds %{buildroot}%{_bindir}/plaindata2sdds
@@ -164,6 +165,7 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/lba2sdds
 %{_bindir}/mcs2sdds
 %{_bindir}/mpl2sdds
+%{_bindir}/bely_upload
 %{_bindir}/mpl_qt
 %{_bindir}/nlpp
 %{_bindir}/plaindata2sdds
@@ -284,5 +286,4 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/timeconvert
 %{_bindir}/tcomp
 %{_bindir}/wfm2sdds
-
 
