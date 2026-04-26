@@ -2099,7 +2099,6 @@ static char *modulus_usage = "-modulus=[{x|y}value={value>][,{x|y}parameter=<nam
 long modulus_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
     PLOT_REQUEST *plreq;
-    long i;
     
     plreq = plotspec->plot_request+plotspec->plot_requests-1;
     if (!scanItemList(&plreq->modulus_flags,

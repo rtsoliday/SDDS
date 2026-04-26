@@ -1,4 +1,5 @@
 #include "mpl_qt.h"
+#include <QComboBox>
 #include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -24,14 +25,39 @@
 #include <QImageWriter>
 #include <QTextStream>
 
-static constexpr int LPNG_XMAX = 1093;
-static constexpr int LPNG_YMAX = 842;
+static constexpr int PNG_XMAX = 656;
+static constexpr int PNG_YMAX = 506;
+static constexpr int MPNG_XMAX = PNG_XMAX * 100 / 80;
+static constexpr int MPNG_YMAX = PNG_YMAX * 100 / 80;
+static constexpr int LPNG_XMAX = MPNG_XMAX * 100 / 75;
+static constexpr int LPNG_YMAX = MPNG_YMAX * 100 / 75;
+static constexpr int HPNG_XMAX = LPNG_XMAX * 2;
+static constexpr int HPNG_YMAX = LPNG_YMAX * 2;
+static constexpr int GPNG_XMAX = HPNG_XMAX * 2;
+static constexpr int GPNG_YMAX = HPNG_YMAX * 2;
+static constexpr int SPNG_XMAX = PNG_XMAX * 80 / 100;
+static constexpr int SPNG_YMAX = PNG_YMAX * 80 / 100;
 static constexpr int kMaxMetadataLength = 1012;
 static constexpr int kEpsResolutionDpi = 600;
 static constexpr int kBelyUploadTimeoutMs = 120000;
 static const char *kDefaultBelyUrl = "https://bely.aps.anl.gov/bely";
 static const char *kDefaultBelyEntryText = "Plot uploaded from sddsplot.";
 static const char *kBelySecretToolService = "mpl_qt-bely";
+
+struct BelyUploadSize {
+  const char *key;
+  const char *label;
+  int width;
+  int height;
+};
+
+static constexpr BelyUploadSize kBelyUploadSizes[] = {
+  {"spng", "Small", SPNG_XMAX, SPNG_YMAX},
+  {"mpng", "Medium", MPNG_XMAX, MPNG_YMAX},
+  {"lpng", "Large", LPNG_XMAX, LPNG_YMAX},
+  {"hpng", "Huge", HPNG_XMAX, HPNG_YMAX},
+  {"gpng", "Gigantic", GPNG_XMAX, GPNG_YMAX},
+};
 
 struct BelyUploadOptions {
   QString belyUrl;
@@ -41,6 +67,8 @@ struct BelyUploadOptions {
   QString logEntryId;
   QString logEntryText;
   QString attachmentName;
+  QString uploadSizeKey;
+  QSize uploadSize;
 };
 
 static QString findPythonForBely();
@@ -121,6 +149,29 @@ static QString cwdMetadata() {
 static QString defaultBelyAttachmentName() {
   return QStringLiteral("sddsplot-%1.png")
       .arg(QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss"));
+}
+
+static int belyUploadSizeCount() {
+  return static_cast<int>(sizeof(kBelyUploadSizes) / sizeof(kBelyUploadSizes[0]));
+}
+
+static const BelyUploadSize &defaultBelyUploadSize() {
+  return kBelyUploadSizes[2];
+}
+
+static const BelyUploadSize &belyUploadSizeForKey(const QString &key) {
+  for (int i = 0; i < belyUploadSizeCount(); ++i) {
+    if (key == QString::fromUtf8(kBelyUploadSizes[i].key))
+      return kBelyUploadSizes[i];
+  }
+  return defaultBelyUploadSize();
+}
+
+static QString belyUploadSizeText(const BelyUploadSize &uploadSize) {
+  return QStringLiteral("%1 (%2 x %3)")
+      .arg(QString::fromUtf8(uploadSize.label))
+      .arg(uploadSize.width)
+      .arg(uploadSize.height);
 }
 
 static QString belyLookupPythonScript() {
@@ -963,6 +1014,24 @@ static bool promptForBelyUploadOptions(QWidget *parent,
     lookupWidget->setLayout(lookupLayout);
     form->addRow(QString(), lookupWidget);
 
+  const QString savedUploadSizeKey =
+      settings.value(QStringLiteral("uploadSize"),
+                     QString::fromUtf8(defaultBelyUploadSize().key)).toString();
+  const BelyUploadSize &savedUploadSize =
+      belyUploadSizeForKey(savedUploadSizeKey);
+  QComboBox *uploadSizeCombo = new QComboBox(&dialog);
+  int savedUploadSizeIndex = 0;
+  for (int i = 0; i < belyUploadSizeCount(); ++i) {
+    const BelyUploadSize &uploadSize = kBelyUploadSizes[i];
+    uploadSizeCombo->addItem(belyUploadSizeText(uploadSize),
+                             QString::fromUtf8(uploadSize.key));
+    if (QString::fromUtf8(uploadSize.key) ==
+        QString::fromUtf8(savedUploadSize.key))
+      savedUploadSizeIndex = i;
+  }
+  uploadSizeCombo->setCurrentIndex(savedUploadSizeIndex);
+  form->addRow(QStringLiteral("Image size"), uploadSizeCombo);
+
   QString savedAttachmentName =
       settings.value(QStringLiteral("attachmentName")).toString();
   QLineEdit *attachmentNameEdit = new QLineEdit(
@@ -1065,6 +1134,10 @@ static bool promptForBelyUploadOptions(QWidget *parent,
   options->logEntryId = logEntryIdEdit->text().trimmed();
   options->logEntryText = logEntryTextEdit->text().trimmed();
   options->attachmentName = attachmentNameEdit->text().trimmed();
+  options->uploadSizeKey = uploadSizeCombo->currentData().toString();
+  const BelyUploadSize &uploadSize =
+      belyUploadSizeForKey(options->uploadSizeKey);
+  options->uploadSize = QSize(uploadSize.width, uploadSize.height);
 
   settings.setValue(QStringLiteral("url"), options->belyUrl);
   settings.setValue(QStringLiteral("username"), options->username);
@@ -1072,6 +1145,7 @@ static bool promptForBelyUploadOptions(QWidget *parent,
   settings.setValue(QStringLiteral("logEntryId"), options->logEntryId);
   settings.setValue(QStringLiteral("logEntryText"), options->logEntryText);
   settings.setValue(QStringLiteral("attachmentName"), options->attachmentName);
+  settings.setValue(QStringLiteral("uploadSize"), options->uploadSizeKey);
 
   return true;
 }
@@ -1819,7 +1893,9 @@ void uploadToBely() {
   imageFile.close();
 
   onWhite();
-  QImage plotImage = buildExportImage(QSize(LPNG_XMAX, LPNG_YMAX));
+  QImage plotImage = buildExportImage(options.uploadSize.isValid()
+                                          ? options.uploadSize
+                                          : QSize(LPNG_XMAX, LPNG_YMAX));
   onBlack();
 
   if (plotImage.isNull()) {
