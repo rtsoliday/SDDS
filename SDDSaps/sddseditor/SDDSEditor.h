@@ -113,6 +113,7 @@ private slots:
   void arrayMoved(int logical, int oldVisual, int newVisual);
 
 protected:
+  bool eventFilter(QObject *watched, QEvent *event) override;
   void changeEvent(QEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
 
@@ -139,6 +140,12 @@ private:
   void changeParameterType(int row);
   void changeColumnType(int column);
   void changeArrayType(int column);
+  void deleteParameterSelection(int fallbackRow);
+  void deleteColumnSelection(int fallbackColumn);
+  void deleteArraySelection(int fallbackColumn);
+  void deleteParameterRows(const QVector<int> &rows);
+  void deleteColumnIndexes(const QVector<int> &columns);
+  void deleteArrayIndexes(const QVector<int> &arrays);
   void showParameterMenu(QTableView *view, int row, const QPoint &globalPos);
   void showColumnMenu(QTableView *view, int column, const QPoint &globalPos);
   void showArrayMenu(QTableView *view, int column, const QPoint &globalPos);
@@ -204,6 +211,12 @@ private:
   /* Debounce expensive repaints while the user is interactively resizing the window. */
   QTimer *resizeDebounceTimer;
   bool resizeUpdatesSuspended;
+  QVector<int> lastParameterSelectionRows;
+  QVector<int> lastColumnSelectionColumns;
+  QVector<int> lastArraySelectionColumns;
+  QVector<int> pendingParameterHeaderRows;
+  QVector<int> pendingColumnHeaderColumns;
+  QVector<int> pendingArrayHeaderColumns;
 };
 
 #endif // SDDSEDITOR_H

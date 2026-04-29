@@ -55,6 +55,7 @@
 #include <cstdlib>
 #include <cerrno>
 #include <cctype>
+#include <cstring>
 #include <algorithm>
 #include <limits>
 #include <cmath>
@@ -280,6 +281,16 @@ private:
 
 protected:
   void mousePressEvent(QMouseEvent *event) override {
+    if (event->button() == Qt::RightButton) {
+      const QModelIndex idx = indexAt(event->pos());
+      QItemSelectionModel *selection = selectionModel();
+      if (idx.isValid() && selection && selection->isSelected(idx)) {
+        selection->setCurrentIndex(idx, QItemSelectionModel::NoUpdate);
+        event->accept();
+        return;
+      }
+    }
+
     if (event->button() == Qt::LeftButton) {
       leftButtonDown = true;
       dragSelecting = false;
@@ -618,6 +629,134 @@ static int dimProduct(const QVector<int> &dims) {
   return (int)prod;
 }
 
+static bool validateDefinitionName(QWidget *parent, const QString &name,
+                                   const char *dataClass,
+                                   int selfIndex, int count,
+                                   const std::function<const char *(int)> &nameAt) {
+  QByteArray ba = name.toLocal8Bit();
+  if (!SDDS_IsValidName(ba.constData(), dataClass)) {
+    QMessageBox::warning(parent, QObject::tr("SDDS"),
+                         QObject::tr("Invalid %1 name: %2")
+                             .arg(QString::fromLocal8Bit(dataClass))
+                             .arg(name));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return false;
+  }
+
+  for (int i = 0; i < count; ++i) {
+    if (i == selfIndex)
+      continue;
+    const char *existing = nameAt(i);
+    if (existing && strcmp(existing, ba.constData()) == 0) {
+      QMessageBox::warning(parent, QObject::tr("SDDS"),
+                           QObject::tr("Duplicate %1 name: %2")
+                               .arg(QString::fromLocal8Bit(dataClass))
+                               .arg(name));
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool resyncSortedIndexName(SORTED_INDEX **indexes, int count,
+                                  int definitionIndex, char *name) {
+  if (!indexes || definitionIndex < 0 || definitionIndex >= count)
+    return false;
+
+  for (int i = 0; i < count; ++i) {
+    if (indexes[i] && indexes[i]->index == definitionIndex) {
+      indexes[i]->name = name;
+      qsort((char *)indexes, count, sizeof(*indexes), SDDS_CompareIndexedNamesPtr);
+      return true;
+    }
+  }
+  return false;
+}
+
+static QVector<int> sortedValidIndexesDescending(const QSet<int> &values,
+                                                 int limit) {
+  QVector<int> result;
+  result.reserve(values.size());
+  for (int value : values) {
+    if (value >= 0 && value < limit)
+      result.append(value);
+  }
+  std::sort(result.begin(), result.end(), std::greater<int>());
+  return result;
+}
+
+static void collectSelectedRows(QTableView *view, QSet<int> *rows) {
+  if (!view || !rows)
+    return;
+  QItemSelectionModel *selection = view->selectionModel();
+  if (!selection)
+    return;
+
+  const QModelIndexList selectedRows = selection->selectedRows();
+  for (const QModelIndex &idx : selectedRows)
+    if (idx.isValid())
+      rows->insert(idx.row());
+
+  const QModelIndexList selectedIndexes = selection->selectedIndexes();
+  for (const QModelIndex &idx : selectedIndexes)
+    if (idx.isValid())
+      rows->insert(idx.row());
+}
+
+static void collectSelectedColumns(QTableView *view, QSet<int> *columns) {
+  if (!view || !columns)
+    return;
+  QItemSelectionModel *selection = view->selectionModel();
+  if (!selection)
+    return;
+
+  const QModelIndexList selectedColumns = selection->selectedColumns();
+  for (const QModelIndex &idx : selectedColumns)
+    if (idx.isValid())
+      columns->insert(idx.column());
+
+  const QModelIndexList selectedIndexes = selection->selectedIndexes();
+  for (const QModelIndex &idx : selectedIndexes)
+    if (idx.isValid())
+      columns->insert(idx.column());
+}
+
+static QVector<int> selectedRowsOrFallback(QTableView *view, int maxRows,
+                                           int fallbackRow) {
+  QSet<int> selected;
+  collectSelectedRows(view, &selected);
+  if (fallbackRow >= 0 && fallbackRow < maxRows) {
+    if (selected.contains(fallbackRow))
+      return sortedValidIndexesDescending(selected, maxRows);
+    return QVector<int>(1, fallbackRow);
+  }
+  if (!selected.isEmpty())
+    return sortedValidIndexesDescending(selected, maxRows);
+
+  const QModelIndex current = view ? view->currentIndex() : QModelIndex();
+  if (current.isValid() && current.row() >= 0 && current.row() < maxRows)
+    return QVector<int>(1, current.row());
+  return QVector<int>();
+}
+
+static QVector<int> selectedColumnsOrFallback(QTableView *view, int maxColumns,
+                                              int fallbackColumn) {
+  QSet<int> selected;
+  collectSelectedColumns(view, &selected);
+  if (fallbackColumn >= 0 && fallbackColumn < maxColumns) {
+    if (selected.contains(fallbackColumn))
+      return sortedValidIndexesDescending(selected, maxColumns);
+    return QVector<int>(1, fallbackColumn);
+  }
+  if (!selected.isEmpty())
+    return sortedValidIndexesDescending(selected, maxColumns);
+
+  const QModelIndex current = view ? view->currentIndex() : QModelIndex();
+  if (current.isValid() && current.column() >= 0 && current.column() < maxColumns)
+    return QVector<int>(1, current.column());
+  return QVector<int>();
+}
+
 static void normalizeEmptyNumericsToZero(const SDDS_LAYOUT &layout, QVector<PageStore> &pages) {
   const int pcount = layout.n_parameters;
   const int ccount = layout.n_columns;
@@ -699,7 +838,7 @@ static QString canonicalizeForDisplay(const QString &text, int type) {
     bool ok = true;
     double val = text.toDouble(&ok);
     if (ok)
-      return QLocale::c().toString(val, 'g', std::numeric_limits<double>::max_digits10 - 2);
+      return QLocale::c().toString(val, 'g', std::numeric_limits<double>::max_digits10);
   } else if (type == SDDS_LONGDOUBLE) {
     //long double val = std::stold(text.toStdString());
     //return QString::asprintf("%.*Lg", std::numeric_limits<long double>::max_digits10, val);
@@ -707,7 +846,7 @@ static QString canonicalizeForDisplay(const QString &text, int type) {
     bool ok = true;
     float val = text.toFloat(&ok);
     if (ok)
-      return QLocale::c().toString(val, 'g', std::numeric_limits<float>::max_digits10 - 2);
+      return QLocale::c().toString(val, 'g', std::numeric_limits<float>::max_digits10);
   }
   return text;
 }
@@ -1938,8 +2077,8 @@ public:
   }
 
   void refresh() {
-    recomputeMaxLen();
     beginResetModel();
+    recomputeMaxLen();
     endResetModel();
   }
 
@@ -1994,10 +2133,12 @@ public:
   }
 
   void setEditorData(QWidget *editor, const QModelIndex &index) const override {
-    QStyledItemDelegate::setEditorData(editor, index);
     QLineEdit *line = qobject_cast<QLineEdit *>(editor);
-    if (line)
-      line->setText(canonicalizeForDisplay(line->text(), typeFunc(index)));
+    if (!line) {
+      QStyledItemDelegate::setEditorData(editor, index);
+      return;
+    }
+    line->setText(index.data(Qt::EditRole).toString());
   }
 
   void setModelData(QWidget *editorWidget, QAbstractItemModel *model,
@@ -2008,14 +2149,16 @@ public:
       return;
     }
 
-    if (!validateTextForType(line->text(), typeFunc(index)))
+    const QString oldVal = index.data(Qt::EditRole).toString();
+    const QString editedText = line->text();
+    if (oldVal == editedText)
       return;
-    QString oldVal = index.data(Qt::EditRole).toString();
-    QString newVal = canonicalizeForDisplay(line->text(), typeFunc(index));
-    if (oldVal == newVal) {
-      QStyledItemDelegate::setModelData(editorWidget, model, index);
+
+    if (!validateTextForType(editedText, typeFunc(index)))
       return;
-    }
+    QString newVal = canonicalizeForDisplay(editedText, typeFunc(index));
+    if (oldVal == newVal)
+      return;
     if (undoStack)
       undoStack->push(new SetDataCommand(model, index, oldVal, newVal));
     else
@@ -2120,6 +2263,14 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   paramView = new SingleClickEditTableView(paramBox);
   paramView->setFont(tableFont);
   paramView->setModel(paramModel);
+  paramView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+  connect(paramView->selectionModel(), &QItemSelectionModel::selectionChanged,
+          this, [this](const QItemSelection &, const QItemSelection &) {
+            QSet<int> selected;
+            collectSelectedRows(paramView, &selected);
+            lastParameterSelectionRows = sortedValidIndexesDescending(
+                selected, dataset.layout.n_parameters);
+          });
   connect(paramModel, &QAbstractItemModel::dataChanged, this,
           [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
             if (!updatingModels)
@@ -2142,6 +2293,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   connect(paramView->verticalHeader(), &QHeaderView::sectionMoved, this,
           &SDDSEditor::parameterMoved);
   paramView->verticalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
+  paramView->verticalHeader()->installEventFilter(this);
   connect(paramView->verticalHeader(), &QHeaderView::customContextMenuRequested,
           this, &SDDSEditor::parameterHeaderMenuRequested);
   paramView->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -2163,6 +2315,13 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   columnView->setModel(columnModel);
   columnView->setSelectionBehavior(QAbstractItemView::SelectItems);
   columnView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+  connect(columnView->selectionModel(), &QItemSelectionModel::selectionChanged,
+          this, [this](const QItemSelection &, const QItemSelection &) {
+            QSet<int> selected;
+            collectSelectedColumns(columnView, &selected);
+            lastColumnSelectionColumns = sortedValidIndexesDescending(
+                selected, dataset.layout.n_columns);
+          });
   connect(columnModel, &QAbstractItemModel::dataChanged, this,
           [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
             if (!updatingModels)
@@ -2204,6 +2363,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   connect(columnView->horizontalHeader(), &QHeaderView::sectionMoved, this,
           &SDDSEditor::columnMoved);
   columnView->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
+  columnView->horizontalHeader()->installEventFilter(this);
   connect(columnView->horizontalHeader(), &QHeaderView::customContextMenuRequested,
           this, &SDDSEditor::columnHeaderMenuRequested);
   columnView->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -2223,6 +2383,15 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   arrayView = new SingleClickEditTableView(arrayBox);
   arrayView->setFont(tableFont);
   arrayView->setModel(arrayModel);
+  arrayView->setSelectionBehavior(QAbstractItemView::SelectItems);
+  arrayView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+  connect(arrayView->selectionModel(), &QItemSelectionModel::selectionChanged,
+          this, [this](const QItemSelection &, const QItemSelection &) {
+            QSet<int> selected;
+            collectSelectedColumns(arrayView, &selected);
+            lastArraySelectionColumns = sortedValidIndexesDescending(
+                selected, dataset.layout.n_arrays);
+          });
   connect(arrayModel, &QAbstractItemModel::dataChanged, this,
           [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
             if (!updatingModels)
@@ -2254,6 +2423,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   connect(arrayView->horizontalHeader(), &QHeaderView::sectionMoved, this,
           &SDDSEditor::arrayMoved);
   arrayView->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
+  arrayView->horizontalHeader()->installEventFilter(this);
   connect(arrayView->horizontalHeader(), &QHeaderView::customContextMenuRequested,
           this, &SDDSEditor::arrayHeaderMenuRequested);
   arrayView->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -2440,6 +2610,58 @@ QTableView *SDDSEditor::focusedTable() const {
   if (w && (w == arrayView || arrayView->isAncestorOf(w)))
     return arrayView;
   return nullptr;
+}
+
+bool SDDSEditor::eventFilter(QObject *watched, QEvent *event) {
+  if (event->type() == QEvent::MouseButtonPress) {
+    QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
+    if (mouse->button() == Qt::RightButton) {
+      if (watched == paramView->verticalHeader()) {
+        pendingParameterHeaderRows.clear();
+        int row = paramView->verticalHeader()->logicalIndexAt(mouse->pos());
+        QSet<int> selected;
+        collectSelectedRows(paramView, &selected);
+        QVector<int> rows = sortedValidIndexesDescending(
+            selected, dataset.layout.n_parameters);
+        if (row >= 0) {
+          if (!lastParameterSelectionRows.isEmpty() &&
+              lastParameterSelectionRows.contains(row))
+            rows = lastParameterSelectionRows;
+          if (rows.contains(row))
+            pendingParameterHeaderRows = rows;
+        }
+      } else if (watched == columnView->horizontalHeader()) {
+        pendingColumnHeaderColumns.clear();
+        int column = columnView->horizontalHeader()->logicalIndexAt(mouse->pos());
+        QSet<int> selected;
+        collectSelectedColumns(columnView, &selected);
+        QVector<int> columns = sortedValidIndexesDescending(
+            selected, dataset.layout.n_columns);
+        if (column >= 0) {
+          if (!lastColumnSelectionColumns.isEmpty() &&
+              lastColumnSelectionColumns.contains(column))
+            columns = lastColumnSelectionColumns;
+          if (columns.contains(column))
+            pendingColumnHeaderColumns = columns;
+        }
+      } else if (watched == arrayView->horizontalHeader()) {
+        pendingArrayHeaderColumns.clear();
+        int column = arrayView->horizontalHeader()->logicalIndexAt(mouse->pos());
+        QSet<int> selected;
+        collectSelectedColumns(arrayView, &selected);
+        QVector<int> arrays = sortedValidIndexesDescending(
+            selected, dataset.layout.n_arrays);
+        if (column >= 0) {
+          if (!lastArraySelectionColumns.isEmpty() &&
+              lastArraySelectionColumns.contains(column))
+            arrays = lastArraySelectionColumns;
+          if (arrays.contains(column))
+            pendingArrayHeaderColumns = arrays;
+        }
+      }
+    }
+  }
+  return QMainWindow::eventFilter(watched, event);
 }
 
 void SDDSEditor::parameterMoved(int, int, int) {
@@ -2687,6 +2909,8 @@ void SDDSEditor::paste() {
       bool show = multiPaste ? !warned : true;
       bool valid = validateTextForType(cols[c], type, show);
       if (valid) {
+        if (idx.data(Qt::EditRole).toString() == cols[c])
+          continue;
         if (undoStack && !macroStarted) {
           undoStack->beginMacro(tr("Paste"));
           macroStarted = true;
@@ -2712,19 +2936,23 @@ void SDDSEditor::deleteCells() {
   if (indexes.isEmpty())
     return;
   bool macroStarted = false;
+  bool changed = false;
   QAbstractItemModel *model = view->model();
   for (const QModelIndex &idx : indexes) {
     if (!idx.isValid())
+      continue;
+    if (idx.data(Qt::EditRole).toString().isEmpty())
       continue;
     if (undoStack && !macroStarted) {
       undoStack->beginMacro(tr("Delete Cells"));
       macroStarted = true;
     }
-    applyCellEditWithUndo(undoStack, model, idx, QString());
+    changed = applyCellEditWithUndo(undoStack, model, idx, QString()) || changed;
   }
   if (macroStarted)
     undoStack->endMacro();
-  markDirty();
+  if (changed)
+    markDirty();
 }
 
 void SDDSEditor::openFile() {
@@ -4505,6 +4733,12 @@ void SDDSEditor::editParameterAttributes() {
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted)
     return;
+  if (!validateDefinitionName(this, name.text(), "parameter", row,
+                              dataset.layout.n_parameters,
+                              [this](int i) {
+                                return dataset.layout.parameter_definition[i].name;
+                              }))
+    return;
   auto applyParamInfo = [&](char *fieldName, void *value, int32_t mode) -> bool {
     if (SDDS_ChangeParameterInformation(&dataset, fieldName, value, mode, row))
       return true;
@@ -4517,6 +4751,13 @@ void SDDSEditor::editParameterAttributes() {
   ba = name.text().toLocal8Bit();
   if (!applyParamInfo((char *)"name", ba.data(), SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
     return;
+  if (!resyncSortedIndexName(dataset.layout.parameter_index,
+                             dataset.layout.n_parameters, row,
+                             dataset.layout.parameter_definition[row].name)) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Failed to update parameter name index"));
+    return;
+  }
 
   ba = symbol.text().toLocal8Bit();
   if (!applyParamInfo((char *)"symbol", symbol.text().isEmpty() ? (char *)"" : ba.data(),
@@ -4606,6 +4847,12 @@ void SDDSEditor::editColumnAttributes() {
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted)
     return;
+  if (!validateDefinitionName(this, name.text(), "column", col,
+                              dataset.layout.n_columns,
+                              [this](int i) {
+                                return dataset.layout.column_definition[i].name;
+                              }))
+    return;
   auto applyColumnInfo = [&](char *fieldName, void *value, int32_t mode) -> bool {
     if (SDDS_ChangeColumnInformation(&dataset, fieldName, value, mode, col))
       return true;
@@ -4618,6 +4865,13 @@ void SDDSEditor::editColumnAttributes() {
   ba = name.text().toLocal8Bit();
   if (!applyColumnInfo((char *)"name", ba.data(), SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
     return;
+  if (!resyncSortedIndexName(dataset.layout.column_index,
+                             dataset.layout.n_columns, col,
+                             dataset.layout.column_definition[col].name)) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Failed to update column name index"));
+    return;
+  }
 
   ba = symbol.text().toLocal8Bit();
   if (!applyColumnInfo((char *)"symbol", symbol.text().isEmpty() ? (char *)"" : ba.data(),
@@ -4711,6 +4965,27 @@ void SDDSEditor::editArrayAttributes() {
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted)
     return;
+  if (!validateDefinitionName(this, name.text(), "array", col,
+                              dataset.layout.n_arrays,
+                              [this](int i) {
+                                return dataset.layout.array_definition[i].name;
+                              }))
+    return;
+  int32_t dimCnt = dimsCount.value();
+  for (const PageStore &pd : pages) {
+    if (col >= pd.arrays.size())
+      continue;
+    QVector<int> newDims = pd.arrays[col].dims;
+    int old = newDims.size();
+    newDims.resize(dimCnt);
+    for (int i = old; i < dimCnt; ++i)
+      newDims[i] = 1;
+    if (dimProduct(newDims) < 0) {
+      QMessageBox::warning(this, tr("SDDS"),
+                           tr("Array dimensions are too large."));
+      return;
+    }
+  }
   auto applyArrayInfo = [&](char *fieldName, void *value, int32_t mode) -> bool {
     if (SDDS_ChangeArrayInformation(&dataset, fieldName, value, mode, col))
       return true;
@@ -4723,6 +4998,13 @@ void SDDSEditor::editArrayAttributes() {
   ba = name.text().toLocal8Bit();
   if (!applyArrayInfo((char *)"name", ba.data(), SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
     return;
+  if (!resyncSortedIndexName(dataset.layout.array_index,
+                             dataset.layout.n_arrays, col,
+                             dataset.layout.array_definition[col].name)) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Failed to update array name index"));
+    return;
+  }
 
   ba = symbol.text().toLocal8Bit();
   if (!applyArrayInfo((char *)"symbol", symbol.text().isEmpty() ? (char *)"" : ba.data(),
@@ -4748,23 +5030,8 @@ void SDDSEditor::editArrayAttributes() {
   if (!applyArrayInfo((char *)"group_name", group.text().isEmpty() ? (char *)"" : ba.data(),
                       SDDS_PASS_BY_STRING | SDDS_SET_BY_INDEX))
     return;
-  int32_t dimCnt = dimsCount.value();
   if (!applyArrayInfo((char *)"dimensions", &dimCnt, SDDS_PASS_BY_VALUE | SDDS_SET_BY_INDEX))
     return;
-  for (const PageStore &pd : pages) {
-    if (col >= pd.arrays.size())
-      continue;
-    QVector<int> newDims = pd.arrays[col].dims;
-    int old = newDims.size();
-    newDims.resize(dimCnt);
-    for (int i = old; i < dimCnt; ++i)
-      newDims[i] = 1;
-    if (dimProduct(newDims) < 0) {
-      QMessageBox::warning(this, tr("SDDS"),
-                           tr("Array dimensions are too large."));
-      return;
-    }
-  }
   for (PageStore &pd : pages) {
     if (col >= pd.arrays.size())
       continue;
@@ -4797,7 +5064,6 @@ void SDDSEditor::changeParameterType(int row) {
         << "character";
   if (row < 0 || row >= dataset.layout.n_parameters)
     return;
-  QString name = dataset.layout.parameter_definition[row].name;
   QString current = SDDS_GetTypeName(dataset.layout.parameter_definition[row].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Parameter Type"), tr("Type"), types,
@@ -4811,8 +5077,8 @@ void SDDSEditor::changeParameterType(int row) {
     return;
   }
   if (!SDDS_ChangeParameterInformation(&dataset, (char *)"type", &sddsType,
-                                       SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
-                                       const_cast<char *>(name.toLocal8Bit().constData()))) {
+                                       SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE,
+                                       row)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to change parameter type"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return;
@@ -4826,13 +5092,21 @@ void SDDSEditor::showParameterMenu(QTableView *view, int row,
                                    const QPoint &globalPos) {
   if (row < 0 || row >= dataset.layout.n_parameters)
     return;
+  QVector<int> rowsForDelete = selectedRowsOrFallback(
+      paramView, dataset.layout.n_parameters, row);
+  if (!pendingParameterHeaderRows.isEmpty() &&
+      pendingParameterHeaderRows.contains(row))
+    rowsForDelete = pendingParameterHeaderRows;
+  else if (!lastParameterSelectionRows.isEmpty() &&
+           lastParameterSelectionRows.contains(row))
+    rowsForDelete = lastParameterSelectionRows;
+  pendingParameterHeaderRows.clear();
+
   QMenu menu(view);
   QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
-  if (chosen == delAct) {
-    paramView->setCurrentIndex(paramModel->index(row, 0));
-    deleteParameter();
-  }
+  if (chosen == delAct)
+    deleteParameterRows(rowsForDelete);
 }
 
 void SDDSEditor::parameterHeaderMenuRequested(const QPoint &pos) {
@@ -4845,6 +5119,7 @@ void SDDSEditor::parameterCellMenuRequested(const QPoint &pos) {
   QModelIndex idx = paramView->indexAt(pos);
   if (!idx.isValid())
     return;
+  pendingParameterHeaderRows.clear();
   showParameterMenu(paramView, idx.row(), paramView->viewport()->mapToGlobal(pos));
 }
 
@@ -4858,7 +5133,6 @@ void SDDSEditor::changeColumnType(int column) {
         << "character";
   if (column < 0 || column >= dataset.layout.n_columns)
     return;
-  QString name = dataset.layout.column_definition[column].name;
   QString current = SDDS_GetTypeName(dataset.layout.column_definition[column].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Column Type"), tr("Type"), types,
@@ -4872,8 +5146,8 @@ void SDDSEditor::changeColumnType(int column) {
     return;
   }
   if (!SDDS_ChangeColumnInformation(&dataset, (char *)"type", &sddsType,
-                                    SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
-                                    const_cast<char *>(name.toLocal8Bit().constData()))) {
+                                    SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE,
+                                    column)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to change column type"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return;
@@ -4886,6 +5160,16 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
                                 const QPoint &globalPos) {
   if (column < 0 || column >= dataset.layout.n_columns)
     return;
+  QVector<int> columnsForDelete = selectedColumnsOrFallback(
+      columnView, dataset.layout.n_columns, column);
+  if (!pendingColumnHeaderColumns.isEmpty() &&
+      pendingColumnHeaderColumns.contains(column))
+    columnsForDelete = pendingColumnHeaderColumns;
+  else if (!lastColumnSelectionColumns.isEmpty() &&
+           lastColumnSelectionColumns.contains(column))
+    columnsForDelete = lastColumnSelectionColumns;
+  pendingColumnHeaderColumns.clear();
+
   QMenu menu(view);
   QAction *plotAct = menu.addAction(tr("Plot from file"));
   QAction *ascAct = menu.addAction(tr("Sort ascending"));
@@ -4924,10 +5208,8 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
     applyNumericalExpressionSelection();
   else if (chosen == copyFormulaAct)
     applyTextFormulaSelection();
-  else if (chosen == delAct) {
-    columnView->setCurrentIndex(columnModel->index(0, column));
-    deleteColumn();
-  }
+  else if (chosen == delAct)
+    deleteColumnIndexes(columnsForDelete);
 }
 
 void SDDSEditor::columnHeaderMenuRequested(const QPoint &pos) {
@@ -4940,6 +5222,7 @@ void SDDSEditor::columnCellMenuRequested(const QPoint &pos) {
   QModelIndex idx = columnView->indexAt(pos);
   if (!idx.isValid())
     return;
+  pendingColumnHeaderColumns.clear();
   showColumnMenu(columnView, idx.column(),
                  columnView->viewport()->mapToGlobal(pos));
 }
@@ -4994,6 +5277,16 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
                                const QPoint &globalPos) {
   if (column < 0 || column >= dataset.layout.n_arrays)
     return;
+  QVector<int> arraysForDelete = selectedColumnsOrFallback(
+      arrayView, dataset.layout.n_arrays, column);
+  if (!pendingArrayHeaderColumns.isEmpty() &&
+      pendingArrayHeaderColumns.contains(column))
+    arraysForDelete = pendingArrayHeaderColumns;
+  else if (!lastArraySelectionColumns.isEmpty() &&
+           lastArraySelectionColumns.contains(column))
+    arraysForDelete = lastArraySelectionColumns;
+  pendingArrayHeaderColumns.clear();
+
   QMenu menu(view);
   QAction *searchAct = menu.addAction(tr("Search"));
   QAction *resizeAct = menu.addAction(tr("Resize"));
@@ -5017,10 +5310,8 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
     applyNumericalExpressionSelection();
   else if (chosen == copyFormulaAct)
     applyTextFormulaSelection();
-  else if (chosen == delAct) {
-    arrayView->setCurrentIndex(arrayModel->index(0, column));
-    deleteArray();
-  }
+  else if (chosen == delAct)
+    deleteArrayIndexes(arraysForDelete);
 }
 
 void SDDSEditor::arrayHeaderMenuRequested(const QPoint &pos) {
@@ -5033,6 +5324,7 @@ void SDDSEditor::arrayCellMenuRequested(const QPoint &pos) {
   QModelIndex idx = arrayView->indexAt(pos);
   if (!idx.isValid())
     return;
+  pendingArrayHeaderColumns.clear();
   showArrayMenu(arrayView, idx.column(),
                 arrayView->viewport()->mapToGlobal(pos));
 }
@@ -5477,15 +5769,17 @@ void SDDSEditor::resizeArray(int column) {
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  as.dims.resize(def->dimensions);
+  QVector<int> newDims = as.dims;
+  newDims.resize(def->dimensions);
   for (int i = 0; i < def->dimensions; ++i)
-    as.dims[i] = boxes[i]->value();
-  int newSize = dimProduct(as.dims);
+    newDims[i] = boxes[i]->value();
+  int newSize = dimProduct(newDims);
   if (newSize < 0) {
     QMessageBox::warning(this, tr("SDDS"),
                          tr("Array dimensions are too large."));
     return;
   }
+  as.dims = newDims;
   as.values.resize(newSize);
 
   populateModels();
@@ -5677,7 +5971,6 @@ void SDDSEditor::changeArrayType(int column) {
         << "character";
   if (column < 0 || column >= dataset.layout.n_arrays)
     return;
-  QString name = dataset.layout.array_definition[column].name;
   QString current = SDDS_GetTypeName(dataset.layout.array_definition[column].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Array Type"), tr("Type"), types,
@@ -5691,8 +5984,8 @@ void SDDSEditor::changeArrayType(int column) {
     return;
   }
   if (!SDDS_ChangeArrayInformation(&dataset, (char *)"type", &sddsType,
-                                   SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
-                                   const_cast<char *>(name.toLocal8Bit().constData()))) {
+                                   SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE,
+                                   column)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to change array type"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return;
@@ -6181,93 +6474,156 @@ void SDDSEditor::insertArray() {
 }
 
 void SDDSEditor::deleteParameter() {
+  deleteParameterSelection(-1);
+}
+
+void SDDSEditor::deleteParameterSelection(int fallbackRow) {
   if (!datasetLoaded)
     return;
   commitModels();
+  SDDS_LAYOUT *layout = &dataset.layout;
+  QVector<int> rows = selectedRowsOrFallback(paramView, layout->n_parameters,
+                                             fallbackRow);
+  deleteParameterRows(rows);
+}
+
+void SDDSEditor::deleteParameterRows(const QVector<int> &selectedRows) {
+  if (!datasetLoaded)
+    return;
+  commitModels();
+  QSet<int> selected;
+  for (int row : selectedRows)
+    selected.insert(row);
+  QVector<int> rows = sortedValidIndexesDescending(selected,
+                                                   dataset.layout.n_parameters);
+  if (rows.isEmpty())
+    return;
+
   StructuralSnapshot before;
   if (!captureStructuralSnapshot(this, &before))
     return;
-  QModelIndex idx = paramView->currentIndex();
-  if (!idx.isValid())
-    return;
-  int row = idx.row();
-  SDDS_LAYOUT *layout = &dataset.layout;
-  if (row < 0 || row >= layout->n_parameters)
-    return;
 
-  removeParameterFromLayout(&dataset.layout, row);
+  for (int row : rows)
+    removeParameterFromLayout(&dataset.layout, row);
   if (!SDDS_SaveLayout(&dataset)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to update layout after deleting parameter"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return;
   }
-  for (PageStore &pd : pages)
-    if (row < pd.parameters.size())
-      pd.parameters.remove(row);
+  for (PageStore &pd : pages) {
+    for (int row : rows)
+      if (row < pd.parameters.size())
+        pd.parameters.remove(row);
+  }
 
   populateModels();
   markDirty();
-  pushStructuralUndoCommand(this, std::move(before), tr("Delete Parameter"));
+  pushStructuralUndoCommand(this, std::move(before),
+                            rows.size() == 1
+                                ? tr("Delete Parameter")
+                                : tr("Delete %1 Parameters").arg(rows.size()));
 }
 
 void SDDSEditor::deleteColumn() {
+  deleteColumnSelection(-1);
+}
+
+void SDDSEditor::deleteColumnSelection(int fallbackColumn) {
   if (!datasetLoaded)
     return;
   commitModels();
+  SDDS_LAYOUT *layout = &dataset.layout;
+  QVector<int> columns = selectedColumnsOrFallback(columnView, layout->n_columns,
+                                                   fallbackColumn);
+  deleteColumnIndexes(columns);
+}
+
+void SDDSEditor::deleteColumnIndexes(const QVector<int> &selectedColumns) {
+  if (!datasetLoaded)
+    return;
+  commitModels();
+  QSet<int> selected;
+  for (int column : selectedColumns)
+    selected.insert(column);
+  QVector<int> columns = sortedValidIndexesDescending(selected,
+                                                      dataset.layout.n_columns);
+  if (columns.isEmpty())
+    return;
+
   StructuralSnapshot before;
   if (!captureStructuralSnapshot(this, &before))
     return;
-  QModelIndex idx = columnView->currentIndex();
-  if (!idx.isValid())
-    return;
-  int col = idx.column();
-  SDDS_LAYOUT *layout = &dataset.layout;
-  if (col < 0 || col >= layout->n_columns)
-    return;
 
-  removeColumnFromLayout(&dataset.layout, col);
+  for (int col : columns)
+    removeColumnFromLayout(&dataset.layout, col);
   if (!SDDS_SaveLayout(&dataset)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to update layout after deleting column"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return;
   }
-  for (PageStore &pd : pages)
-    if (col < pd.columns.size())
-      pd.columns.remove(col);
+  for (PageStore &pd : pages) {
+    for (int col : columns)
+      if (col < pd.columns.size())
+        pd.columns.remove(col);
+  }
 
   populateModels();
   markDirty();
-  pushStructuralUndoCommand(this, std::move(before), tr("Delete Column"));
+  pushStructuralUndoCommand(this, std::move(before),
+                            columns.size() == 1
+                                ? tr("Delete Column")
+                                : tr("Delete %1 Columns").arg(columns.size()));
 }
 
 void SDDSEditor::deleteArray() {
+  deleteArraySelection(-1);
+}
+
+void SDDSEditor::deleteArraySelection(int fallbackColumn) {
   if (!datasetLoaded)
     return;
   commitModels();
+  SDDS_LAYOUT *layout = &dataset.layout;
+  QVector<int> arrays = selectedColumnsOrFallback(arrayView, layout->n_arrays,
+                                                  fallbackColumn);
+  deleteArrayIndexes(arrays);
+}
+
+void SDDSEditor::deleteArrayIndexes(const QVector<int> &selectedArrays) {
+  if (!datasetLoaded)
+    return;
+  commitModels();
+  QSet<int> selected;
+  for (int array : selectedArrays)
+    selected.insert(array);
+  QVector<int> arrays = sortedValidIndexesDescending(selected,
+                                                     dataset.layout.n_arrays);
+  if (arrays.isEmpty())
+    return;
+
   StructuralSnapshot before;
   if (!captureStructuralSnapshot(this, &before))
     return;
-  QModelIndex idx = arrayView->currentIndex();
-  if (!idx.isValid())
-    return;
-  int col = idx.column();
-  SDDS_LAYOUT *layout = &dataset.layout;
-  if (col < 0 || col >= layout->n_arrays)
-    return;
 
-  removeArrayFromLayout(&dataset.layout, col);
+  for (int col : arrays)
+    removeArrayFromLayout(&dataset.layout, col);
   if (!SDDS_SaveLayout(&dataset)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to update layout after deleting array"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return;
   }
-  for (PageStore &pd : pages)
-    if (col < pd.arrays.size())
-      pd.arrays.remove(col);
+  for (PageStore &pd : pages) {
+    for (int col : arrays)
+      if (col < pd.arrays.size())
+        pd.arrays.remove(col);
+  }
 
   populateModels();
   markDirty();
-  pushStructuralUndoCommand(this, std::move(before), tr("Delete Array"));
+  pushStructuralUndoCommand(this, std::move(before),
+                            arrays.size() == 1
+                                ? tr("Delete Array")
+                                : tr("Delete %1 Arrays").arg(arrays.size()));
 }
 
 void SDDSEditor::insertColumnRows() {
