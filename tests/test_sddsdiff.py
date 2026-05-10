@@ -20,6 +20,7 @@ option_args = {
   "parameters": ["-parameters=stringParam"],
   "arrays": ["-arrays=shortArray"],
   "tolerance": ["-tolerance=0.1"],
+  "relativeTolerance": ["-relativeTolerance=0.1"],
   "precision": ["-precision=1"],
   "format": ["-format=float=%f,double=%f,string=%s"],
   "exact": ["-exact"],

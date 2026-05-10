@@ -15,8 +15,10 @@
  *          [-columns=<col1>[,<col2>...]]
  *          [-parameters=<par1>[,<par2>...]]
  *          [-arrays=<array1>[,<array2>...]] 
- *          [-tolerance=<value>] 
+  *          [-tolerance=<value>] 
+ *          [-relativeTolerance=<value>]
  *          [-precision=<integer>]
+
  *          [-format=float=<string>|double=<string>|longdouble=<string>|string=<string>] 
  *          [-exact] 
  *          [-absolute] 
@@ -31,7 +33,8 @@
  * | `-columns`                 | Specify columns to compare.                                                |
  * | `-parameters`              | Specify parameters to compare.                                             |
  * | `-arrays`                  | Specify arrays to compare.                                                 |
- * | `-tolerance`               | Set numerical comparison tolerance.                                        |
+ * | `-tolerance`               | Set absolute numerical comparison tolerance.                               |
+ * | `-relativeTolerance`       | Set relative tolerance using `min(abs(value1), abs(value2)) * value`.      |
  * | `-precision`               | Set the precision for numerical comparison.                                |
  * | `-format`                  | Specify the format for printing float, double, long double, or string data.|
  * | `-exact`                   | Compare values exactly (mutually exclusive with tolerance and precision).  |
@@ -69,6 +72,7 @@ enum option_type {
   CLO_PARAMETERS,
   CLO_ARRAYS,
   CLO_TOLERANCE,
+  CLO_RELATIVE_TOLERANCE,
   CLO_PRECISION,
   CLO_FORMAT,
   CLO_EXACT,
@@ -84,6 +88,7 @@ char *option[N_OPTIONS] = {
   "parameters",
   "arrays",
   "tolerance",
+  "relativeTolerance",
   "precision",
   "format",
   "exact",
@@ -97,6 +102,7 @@ char *USAGE1 = "Usage: sddsdiff <file1> <file2>\n\
                [-parameters=<par1][,<par2>...]]\n\
                [-arrays=<array1>[,<array2>...]]\n\
                [-tolerance=<value>]\n\
+               [-relativeTolerance=<value>]\n\
                [-precision=<integer>]\n\
                [-format=float=<string>|double=<string>|longdouble=<string>|string=<string>]\n\
                [-exact]\n\
@@ -108,7 +114,8 @@ Options:\n\
   -columns=<col1>[,<col2>...]             Specify columns to compare.\n\
   -parameters=<par1>[,<par2>...]          Specify parameters to compare.\n\
   -arrays=<array1>[,<array2>...]          Specify arrays to compare.\n\
-  -tolerance=<value>                      Set tolerance for numerical comparisons.\n\
+  -tolerance=<value>                      Set absolute tolerance for numerical comparisons.\n\
+  -relativeTolerance=<value>              Set relative tolerance using min(abs(value1), abs(value2))*value.\n\
   -precision=<integer>                    Set precision for floating-point comparisons.\n\
   -format=float=<string>                  Set print format for float data.\n\
   -format=double=<string>                 Set print format for double data.\n\
@@ -134,9 +141,9 @@ Program by Hairong Shang. (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSIO
 #define SDDS_ARRAY_TYPE 2
 /* type=0,1,2 for Column, Parameter, Array */
 long CompareDefinitions(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, char *file2, int32_t *names, char ***name, int32_t **dataType, long type, long compareCommon, char *rowLabelColumn, long notCompareRowLabel, short ignoreUnits);
-long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, char *file2, long names, char **name, int32_t *dataType, long type, long page, long double tolerance, long double precisionTolerance, char *floatFormat, char *doubleFormat, char *ldoubleFormat, char *stringFormat,
+long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, char *file2, long names, char **name, int32_t *dataType, long type, long page, long double tolerance, long double relativeTolerance, long double precisionTolerance, char *floatFormat, char *doubleFormat, char *ldoubleFormat, char *stringFormat,
                  long absolute, void *rowLabel, long rowLabelType, char *labelName);
-long compare_two_data(void *data1, void *data2, long index, long datatype, long first, long flags, char *name, long page, long double tolerance, long double precisionTolerance, char *floatFormat, char *doubleFormat, char *ldoubleFormat, char *stringFormat, char *longFormat, char *ulongFormat,
+long compare_two_data(void *data1, void *data2, long index, long datatype, long first, long flags, char *name, long page, long double tolerance, long double relativeTolerance, long double precisionTolerance, char *floatFormat, char *doubleFormat, char *ldoubleFormat, char *stringFormat, char *longFormat, char *ulongFormat,
                       char *shortFormat, char *ushortFormat, char *charFormat, long absolute, long parameter, char *labelName);
 void printTitle(long flags, char *name, long page, long absolute, char *labelName);
 
@@ -154,7 +161,7 @@ int main(int argc, char **argv) {
   int64_t rows1, rows2;
   char **columnName, **parameterName, **arrayName, **columnMatch, **parameterMatch, **arrayMatch;
   long column_provided, parameter_provided, array_provided, precision, labelFromSecondFile = 0, rowLabelType = 0, rowLabelIndex = -1, notCompareRowLabel = 0;
-  long double tolerance = 0.0L, precisionTolerance = 0.0L;
+  long double tolerance = 0.0L, relativeTolerance = 0.0L, precisionTolerance = 0.0L;
   unsigned long compareCommonFlags = 0, dummyFlags = 0;
   char *floatFormat, *doubleFormat, *ldoubleFormat, *stringFormat, *rowLabelColumn;
   void *rowLabel;
@@ -201,6 +208,12 @@ int main(int argc, char **argv) {
           SDDS_Bomb("Invalid -tolerance syntax");
         if (!get_longdouble(&tolerance, s_arg[i_arg].list[1]))
           SDDS_Bomb("Invalid -tolerance syntax (not a number given)");
+        break;
+      case CLO_RELATIVE_TOLERANCE:
+        if (s_arg[i_arg].n_items != 2)
+          SDDS_Bomb("Invalid -relativeTolerance syntax");
+        if (!get_longdouble(&relativeTolerance, s_arg[i_arg].list[1]))
+          SDDS_Bomb("Invalid -relativeTolerance syntax (not a number given)");
         break;
       case CLO_PRECISION:
         if (s_arg[i_arg].n_items != 2)
@@ -301,8 +314,11 @@ int main(int argc, char **argv) {
   if (!stringFormat)
     SDDS_CopyString(&stringFormat, "%25s");
 
-  if (tolerance && precision > 0) {
-    SDDS_Bomb("Tolerance and precision options are not compatible. Only one of tolerance, precision, or exact may be given.");
+  if ((tolerance || relativeTolerance) && precision > 0) {
+    SDDS_Bomb("Tolerance, relativeTolerance, and precision options are not compatible. Only one of tolerance, relativeTolerance, precision, or exact may be given.");
+  }
+  if (tolerance && relativeTolerance) {
+    SDDS_Bomb("Tolerance and relativeTolerance options are not compatible. Only one may be given.");
   }
   if (!file1 || !file2) {
     fprintf(stderr, "Error: Two files must be provided for comparison.\n");
@@ -392,7 +408,8 @@ int main(int argc, char **argv) {
             break;
           } else {
             if (parameters)
-              pagediff += CompareData(&table1, &table2, file1, file2, parameters, parameterName, parDataType, SDDS_PARAMETER_TYPE, pages1, tolerance, precisionTolerance, floatFormat, doubleFormat, ldoubleFormat, stringFormat, absolute, NULL, rowLabelType, NULL);
+               pagediff += CompareData(&table1, &table2, file1, file2, parameters, parameterName, parDataType, SDDS_PARAMETER_TYPE, pages1, tolerance, relativeTolerance, precisionTolerance, floatFormat, doubleFormat, ldoubleFormat, stringFormat, absolute, NULL, rowLabelType, NULL);
+
             if (columns && rows1) {
               if (rowLabelColumn) {
                 if (labelFromSecondFile) {
@@ -403,7 +420,7 @@ int main(int argc, char **argv) {
                     SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
                 }
               }
-              pagediff += CompareData(&table1, &table2, file1, file2, columns, columnName, columnDataType, SDDS_COLUMN_TYPE, pages1, tolerance, precisionTolerance, floatFormat, doubleFormat, ldoubleFormat, stringFormat, absolute, rowLabel, rowLabelType, rowLabelColumn);
+              pagediff += CompareData(&table1, &table2, file1, file2, columns, columnName, columnDataType, SDDS_COLUMN_TYPE, pages1, tolerance, relativeTolerance, precisionTolerance, floatFormat, doubleFormat, ldoubleFormat, stringFormat, absolute, rowLabel, rowLabelType, rowLabelColumn);
               if (rowLabelColumn) {
                 if (rowLabelType == SDDS_STRING)
                   SDDS_FreeStringArray((char **)rowLabel, rows1);
@@ -413,7 +430,7 @@ int main(int argc, char **argv) {
               }
             }
             if (arrays)
-              pagediff += CompareData(&table1, &table2, file1, file2, arrays, arrayName, arrayDataType, SDDS_ARRAY_TYPE, pages1, tolerance, precisionTolerance, floatFormat, doubleFormat, ldoubleFormat, stringFormat, absolute, NULL, rowLabelType, NULL);
+              pagediff += CompareData(&table1, &table2, file1, file2, arrays, arrayName, arrayDataType, SDDS_ARRAY_TYPE, pages1, tolerance, relativeTolerance, precisionTolerance, floatFormat, doubleFormat, ldoubleFormat, stringFormat, absolute, NULL, rowLabelType, NULL);
             different += pagediff;
           }
         } else if (pages1 > 0 && pages2 <= 0) {
@@ -754,7 +771,7 @@ long CompareDefinitions(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *fi
 
 long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, char *file2,
                  long names, char **name, int32_t *dataType, long type, long page, long double tolerance,
-                 long double precisionTolerance, char *floatFormat, char *doubleFormat, char *ldoubleFormat,
+                 long double relativeTolerance, long double precisionTolerance, char *floatFormat, char *doubleFormat, char *ldoubleFormat,
                  char *stringFormat, long absolute, void *rowLabel, long rowLabelType, char *rowLabelColumn) {
   long diff = 0, i, first = 1;
   int64_t rows, j;
@@ -837,7 +854,7 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
           snprintf(ushortFormat, sizeof(ushortFormat), "%s%%25hu%%25hu%%25hd\n", labelFormat);
           snprintf(cFormat, sizeof(cFormat), "%s%%25c%%25c%%25d\n", labelFormat);
         }
-        if (compare_two_data(data1, data2, j, dataType[i], first, SDDS_COLUMN_TYPE, name[i], page, tolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 0, rowLabelColumn) != 0) {
+        if (compare_two_data(data1, data2, j, dataType[i], first, SDDS_COLUMN_TYPE, name[i], page, tolerance, relativeTolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 0, rowLabelColumn) != 0) {
           diff++;
           if (first)
             first = 0;
@@ -859,7 +876,7 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
         exit(EXIT_FAILURE);
       }
-      if (compare_two_data(data1, data2, 0, dataType[i], first, SDDS_PARAMETER_TYPE, name[i], page, tolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 1, NULL) != 0) {
+      if (compare_two_data(data1, data2, 0, dataType[i], first, SDDS_PARAMETER_TYPE, name[i], page, tolerance, relativeTolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 1, NULL) != 0) {
         diff++;
         if (first)
           first = 0;
@@ -885,7 +902,7 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
         diff++;
       } else {
         for (j = 0; j < array1->elements; j++) {
-          if (compare_two_data(array1->data, array2->data, j, dataType[i], first, SDDS_ARRAY_TYPE, name[i], page, tolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 0, NULL) != 0) {
+          if (compare_two_data(array1->data, array2->data, j, dataType[i], first, SDDS_ARRAY_TYPE, name[i], page, tolerance, relativeTolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 0, NULL) != 0) {
             diff++;
             if (first)
               first = 0;
@@ -935,7 +952,7 @@ void printTitle(long flags, char *name, long page, long absolute, char *labelNam
 
 long compare_two_data(void *data1, void *data2, long index, long datatype,
                       long first, long flags, char *name, long page,
-                      long double tolerance, long double precisionTolerance,
+                      long double tolerance, long double relativeTolerance, long double precisionTolerance,
                       char *floatFormat, char *doubleFormat, char *ldoubleFormat,
                       char *stringFormat, char *longFormat, char *ulongFormat,
                       char *shortFormat, char *ushortFormat, char *charFormat,
@@ -952,7 +969,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
   unsigned short usval1, usval2;
   char cval1, cval2;
   long returnValue = 0, printIndex;
-  long double tol;
+  long double tol, scale;
 
   printIndex = index + 1;
   if (parameter)
@@ -991,7 +1008,11 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
     if ((isnan(ldval1) && !isnan(ldval2)) || (isinf(ldval1) && !isinf(ldval2)))
       returnValue = 1;
     else if (ldabs1 != ldabs2) {
-      if (tolerance) {
+      if (relativeTolerance) {
+        scale = MIN(fabsl(ldval1), fabsl(ldval2));
+        if (fabsl(lddiff) > scale * relativeTolerance)
+          returnValue = 1;
+      } else if (tolerance) {
         if (fabsl(lddiff) > tol)
           returnValue = 1;
       } else {
@@ -1030,7 +1051,11 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
     if ((isnan(dval1) && !isnan(dval2)) || (isinf(dval1) && !isinf(dval2)))
       returnValue = 1;
     else if (dabs1 != dabs2) {
-      if (tolerance) {
+      if (relativeTolerance) {
+        scale = MIN(fabs(dval1), fabs(dval2));
+        if (fabs(ddiff) > scale * relativeTolerance)
+          returnValue = 1;
+      } else if (tolerance) {
         if (fabs(ddiff) > tol)
           returnValue = 1;
       } else {
@@ -1069,7 +1094,11 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
     if ((isnan(fval1) && !isnan(fval2)) || (isinf(fval1) && !isinf(fval2)))
       returnValue = 1;
     else if (fabs1 != fabs2) {
-      if (tolerance) {
+      if (relativeTolerance) {
+        scale = MIN(fabs(fval1), fabs(fval2));
+        if (fabs(fdiff) > scale * relativeTolerance)
+          returnValue = 1;
+      } else if (tolerance) {
         if (fabs(fdiff) > tol)
           returnValue = 1;
       } else {
