@@ -167,3 +167,50 @@ class TestSDDSSmooth:
     data = self.read_sdds(output)
     expected = self.median_filter(values, 3)
     assert data == pytest.approx(expected)
+
+  def test_new_and_difference_columns(self, tmp_path):
+    values = [1, 2, 3, 4, 5]
+    input_sdds = self.create_sdds(values, tmp_path)
+    output = tmp_path / "newcols.sdds"
+    subprocess.run([
+      str(SDDSSMOOTH),
+      str(input_sdds),
+      str(output),
+      "-columns=col",
+      "-points=3",
+      "-passes=1",
+      "-newColumns",
+      "-differenceColumns",
+      "-majorOrder=column",
+    ], check=True)
+    plain = output.with_suffix(".txt")
+    subprocess.run([
+      str(SDDS2PLAINDATA),
+      str(output),
+      str(plain),
+      "-column=col",
+      "-column=colSmoothed",
+      "-column=colUnsmooth",
+      "-outputMode=ascii",
+      "-separator= ",
+      "-noRowCount",
+    ], check=True)
+    text = plain.read_text()
+    assert "colSmoothed" not in text
+    assert len(text.strip().splitlines()) == 5
+
+  def test_despike_and_pipe_output(self, tmp_path):
+    values = [0, 0, 100, 0, 0]
+    input_sdds = self.create_sdds(values, tmp_path)
+    result = subprocess.run([
+      str(SDDSSMOOTH),
+      str(input_sdds),
+      "-columns=col",
+      "-despike=neighbors=4,passes=1,averageOf=2,threshold=0.1",
+      "-pipe=out",
+      "-nowarnings",
+    ], stdout=subprocess.PIPE, check=True)
+    output = tmp_path / "pipe.sdds"
+    output.write_bytes(result.stdout)
+    data = self.read_sdds(output)
+    assert max(data) < 100

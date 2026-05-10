@@ -65,3 +65,30 @@ def test_commute(tmp_path):
   subprocess.run([str(SDDSMATRIXMULT), "-commute", str(a), str(b), str(out)], check=True)
   result = read_matrix(out, tmp_path, ["a1", "a2"])
   assert result == [[23.0, 34.0], [31.0, 46.0]]
+
+
+@pytest.mark.skipif(not all(p.exists() for p in REQUIRED), reason="sddsmatrixmult not built")
+def test_ascii_verbose_and_major_order(tmp_path):
+  a = create_matrix(tmp_path, "a", [[1, 0], [0, 1]], ["a1", "a2"])
+  b = create_matrix(tmp_path, "b", [[2, 3], [4, 5]], ["b1", "b2"])
+  out = tmp_path / "ascii.sdds"
+  result = subprocess.run(
+    [str(SDDSMATRIXMULT), str(a), str(b), str(out), "-ascii", "-verbose", "-majorOrder=column"],
+    capture_output=True,
+    text=True,
+    check=True,
+  )
+  assert "Using page" in result.stderr
+  assert out.read_text().startswith("SDDS")
+  matrix = read_matrix(out, tmp_path, ["b1", "b2"])
+  assert matrix == [[2.0, 3.0], [4.0, 5.0]]
+
+
+@pytest.mark.skipif(not all(p.exists() for p in REQUIRED), reason="sddsmatrixmult not built")
+def test_reuse_last_page(tmp_path):
+  a = create_matrix(tmp_path, "a", [[1, 2], [3, 4]], ["a1", "a2"])
+  b = create_matrix(tmp_path, "b", [[5, 6], [7, 8]], ["b1", "b2"])
+  out = tmp_path / "reuse.sdds"
+  subprocess.run([str(SDDSMATRIXMULT), "-reuse", str(a), str(b), str(out)], check=True)
+  result = read_matrix(out, tmp_path, ["b1", "b2"])
+  assert result == [[19.0, 22.0], [43.0, 50.0]]

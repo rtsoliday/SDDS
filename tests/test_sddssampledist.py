@@ -6,11 +6,12 @@ import pytest
 BIN_DIR = Path("bin/Linux-x86_64")
 SDDSSAMPLEDIST = BIN_DIR / "sddssampledist"
 SDDS2STREAM = BIN_DIR / "sdds2stream"
+PLAINDATA2SDDS = BIN_DIR / "plaindata2sdds"
 
 
 @pytest.mark.skipif(
-  not SDDSSAMPLEDIST.exists() or not SDDS2STREAM.exists(),
-  reason="sddssampledist or sdds2stream not built",
+  not SDDSSAMPLEDIST.exists() or not SDDS2STREAM.exists() or not PLAINDATA2SDDS.exists(),
+  reason="required tools not built",
 )
 @pytest.mark.parametrize(
   "option,column,expected_mean,expected_sd,mean_tol,sd_tol",
@@ -64,3 +65,26 @@ def test_sddssampledist_distributions(tmp_path, option, column, expected_mean, e
   sd = statistics.pstdev(values)
   assert abs(mean - expected_mean) < mean_tol
   assert abs(sd - expected_sd) < sd_tol
+
+
+@pytest.mark.skipif(
+  not SDDSSAMPLEDIST.exists() or not SDDS2STREAM.exists(),
+  reason="required tools not built",
+)
+def test_pipe_output_and_optimal_halton(tmp_path):
+  result = subprocess.run(
+    [
+      str(SDDSSAMPLEDIST),
+      "-samples=50",
+      "-seed=12345",
+      "-uniform=columnName=u,minimumValue=0,maximumValue=1",
+      "-optimalHalton",
+      "-pipe=out",
+    ],
+    stdout=subprocess.PIPE,
+    check=True,
+  )
+  out = tmp_path / "pipe.sdds"
+  out.write_bytes(result.stdout)
+  values = [float(x) for x in subprocess.run([str(SDDS2STREAM), str(out), "-col=u"], capture_output=True, text=True, check=True).stdout.split()]
+  assert len(values) == 50

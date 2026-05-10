@@ -43,3 +43,19 @@ def test_sddsdiff_options(name):
   assert result.returncode == 0
   expected = f'"{EXAMPLE}" and "{EXAMPLE}" are identical.\n'
   assert result.stdout == expected
+
+
+@pytest.mark.skipif(not SDDSDIFF.exists(), reason="sddsdiff not built")
+def test_sddsdiff_detects_difference(tmp_path):
+  modified = tmp_path / "modified.sdds"
+  text = EXAMPLE.read_text()
+  text = text.replace("100 100 100 100 1.1 10.01 10.01 one a", "101 100 100 100 1.1 10.01 10.01 one a", 1)
+  modified.write_text(text)
+  result = subprocess.run(
+    [str(SDDSDIFF), str(EXAMPLE), str(modified), "-columns=longCol"],
+    capture_output=True,
+    text=True,
+  )
+  assert result.returncode == 0
+  assert "are different" in result.stderr
+  assert "longCol" in result.stdout

@@ -156,3 +156,55 @@ def test_sddsminterp_pipe(tmp_path):
     ys.append(float(p[1]))
   assert xs == pytest.approx([0, 1, 2, 3, 4])
   assert ys == pytest.approx([1, 2.5, 4.5, 7.0, 10.0])
+
+
+@pytest.mark.skipif(
+  not (SDDSMINTERP.exists() and SDDS2STREAM.exists() and SDDSCHECK.exists()),
+  reason="required tools not built",
+)
+def test_sddsminterp_ascii_verbose_major_order(tmp_path):
+  model = tmp_path / "model_ascii.sdds"
+  model.write_text(
+    "SDDS1\n"
+    "&column name=x, type=double &end\n"
+    "&column name=y, type=double &end\n"
+    "&data mode=ascii &end\n"
+    "! page 1\n"
+    "5\n"
+    "0 1\n"
+    "1 2\n"
+    "2 3\n"
+    "3 4\n"
+    "4 5\n"
+  )
+  data = tmp_path / "data_ascii.sdds"
+  data.write_text(
+    "SDDS1\n"
+    "&column name=x, type=double &end\n"
+    "&column name=y, type=double &end\n"
+    "&data mode=ascii &end\n"
+    "! page 1\n"
+    "3\n"
+    "0 1\n"
+    "2 4.5\n"
+    "4 10\n"
+  )
+  out = tmp_path / "ascii_out.sdds"
+  result = subprocess.run(
+    [
+      str(SDDSMINTERP),
+      str(data),
+      str(out),
+      "-columns=x,y",
+      f"-model={model},abscissa=x,ordinate=y,interp=1",
+      "-order=2",
+      "-majorOrder=column",
+      "-verbose",
+      "-ascii",
+    ],
+    capture_output=True,
+    text=True,
+    check=True,
+  )
+  assert out.read_text().startswith("SDDS1")
+  assert result.stderr == ""

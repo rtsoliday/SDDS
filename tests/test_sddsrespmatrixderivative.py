@@ -106,3 +106,34 @@ def test_mode_quad(tmp_path):
   )
   data = run_printout(out, ["Q1", "Q2", "Q3"])
   assert data == [[0, 1, 0], [0, 0, 1]]
+
+
+@pytest.mark.skipif(not all(tool.exists() for tool in TOOLS), reason="tools not built")
+def test_verbose_and_pipe_output(tmp_path):
+  plain = tmp_path / "cor.txt"
+  plain.write_text("B1 1 2\nB2 3 4\n")
+  src = tmp_path / "cor2.sdds"
+  subprocess.run(
+    [
+      str(PLAINDATA2SDDS),
+      str(plain),
+      str(src),
+      "-column=BPMName,string",
+      "-column=C1,double",
+      "-column=C2,double",
+      "-inputMode=ascii",
+      "-outputMode=ascii",
+      "-noRowCount",
+    ],
+    check=True,
+  )
+  result = subprocess.run(
+    [str(RESMDERIV), str(src), "-pipe=out", "-mode=cor", "-verbose"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    check=True,
+  )
+  out = tmp_path / "pipe_cor.sdds"
+  out.write_bytes(result.stdout)
+  data = run_printout(out, ["C1", "C2"])
+  assert data == [[1, 0], [0, 2], [3, 0], [0, 4]]

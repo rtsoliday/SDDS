@@ -189,3 +189,37 @@ def test_column_option():
     "800:8:\n"
   )
   assert result.stdout == expected
+
+
+@pytest.mark.skipif(not SDDS2SPREADSHEET.exists(), reason="sdds2spreadsheet not built")
+def test_all_and_verbose_options(tmp_path):
+  output = tmp_path / "all.txt"
+  result = subprocess.run(
+    [
+      str(SDDS2SPREADSHEET),
+      str(EXAMPLE),
+      str(output),
+      "-all",
+      "-verbose",
+      "-delimiter=:",
+    ],
+    capture_output=True,
+    text=True,
+    check=True,
+  )
+  text = output.read_text()
+  assert "Table 1" in text
+  assert "shortCol" in text
+  assert "columns of data" in result.stderr
+
+
+@pytest.mark.skipif(not SDDS2SPREADSHEET.exists(), reason="sdds2spreadsheet not built")
+def test_pipe_output():
+  result = subprocess.run(
+    [str(SDDS2SPREADSHEET), str(EXAMPLE), "-pipe=out", "-delimiter=:", "-noParameters"],
+    stdout=subprocess.PIPE,
+    check=True,
+  )
+  text = result.stdout.decode()
+  assert "shortCol:ushortCol" in text
+  assert "6:6:600" in text

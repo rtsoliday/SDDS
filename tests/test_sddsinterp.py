@@ -169,3 +169,47 @@ def test_file_values(tmp_path):
   x, y = read_output(output)
   assert x == pytest.approx([0.5, 2.5])
   assert y == pytest.approx([1.0, 5.0])
+
+
+def test_printout_and_force_monotonic(tmp_path):
+  input_sdds = create_input_sdds(tmp_path)
+  output = tmp_path / "printout.sdds"
+  result = subprocess.run(
+    [
+      str(SDDSINTERP),
+      str(input_sdds),
+      str(output),
+      "-columns=x,y",
+      "-sequence=4",
+      "-printout=bare,stdout",
+      "-forceMonotonic=increasing",
+      "-majorOrder=column",
+    ],
+    capture_output=True,
+    text=True,
+    check=True,
+  )
+  assert "0 0" in result.stdout or "0.000000" in result.stdout
+  x, y = read_output(output)
+  assert x == pytest.approx([0, 1, 2, 3])
+  assert y == pytest.approx([0, 2, 4, 6])
+
+
+def test_below_and_above_range_controls(tmp_path):
+  input_sdds = create_input_sdds(tmp_path)
+  output = tmp_path / "range.sdds"
+  subprocess.run(
+    [
+      str(SDDSINTERP),
+      str(input_sdds),
+      str(output),
+      "-columns=x,y",
+      "-atValues=-1,0.5,4",
+      "-belowRange=value=-9,warn",
+      "-aboveRange=value=99,warn",
+    ],
+    check=True,
+  )
+  x, y = read_output(output)
+  assert x == pytest.approx([-1, 0.5, 4])
+  assert y == pytest.approx([-9, 1, 99])

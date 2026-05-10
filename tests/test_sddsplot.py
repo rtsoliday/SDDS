@@ -41,24 +41,36 @@ def run_png_sddsplot(tmp_path, rootname, extra_args=None, device_args=None):
   return png_candidates
 
 
-@pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")
-def test_sddsplot_json_output(tmp_path):
-  out = tmp_path / "plot.json"
+def run_json_sddsplot(tmp_path, output_name, extra_args):
+  out = tmp_path / output_name
   subprocess.run(
-    [
-      str(SDDSPLOT),
-      str(EXAMPLE),
-      "-columnnames=shortCol,doubleCol",
-      "-device=json",
-      f"-output={out}",
-    ],
+    [str(SDDSPLOT), str(EXAMPLE), *extra_args, "-device=json", f"-output={out}"],
     check=True,
   )
   assert out.exists()
-  doc = json.loads(out.read_text())
+  return json.loads(out.read_text())
+
+
+@pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")
+def test_sddsplot_json_output(tmp_path):
+  doc = run_json_sddsplot(tmp_path, "plot.json", ["-columnnames=shortCol,doubleCol"])
   assert doc.get("schemaVersion") == "sddsplot-json-1"
   assert isinstance(doc.get("plots"), list)
   assert len(doc["plots"]) > 0
+
+
+@pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")
+def test_sddsplot_json_parameter_plot(tmp_path):
+  doc = run_json_sddsplot(tmp_path, "params.json", ["-parameterNames=shortParam,doubleParam"])
+  assert doc.get("schemaVersion") == "sddsplot-json-1"
+  assert len(doc["plots"]) >= 1
+
+
+@pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")
+def test_sddsplot_json_array_plot(tmp_path):
+  doc = run_json_sddsplot(tmp_path, "arrays.json", ["-arrayNames=shortArray,ushortArray"])
+  assert doc.get("schemaVersion") == "sddsplot-json-1"
+  assert len(doc["plots"]) >= 1
 
 
 @pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")
@@ -80,3 +92,66 @@ def test_sddsplot_png_common_options(tmp_path):
     ],
     device_args=["onwhite", "dashes"],
   )
+
+
+@pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")
+def test_sddsplot_page_range_options(tmp_path):
+  run_png_sddsplot(
+    tmp_path,
+    "pagefilter",
+    [
+      "-fromPage=2",
+      "-toPage=2",
+    ],
+  )
+
+
+@pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")
+def test_sddsplot_separate_and_mode_options(tmp_path):
+  run_png_sddsplot(
+    tmp_path,
+    "separate",
+    [
+      "-separate=page",
+      "-mode=y=log",
+      "-sameScale=y",
+    ],
+    device_args=["onwhite"],
+  )
+
+
+@pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")
+def test_sddsplot_layout_and_tick_options(tmp_path):
+  pngs = run_png_sddsplot(
+    tmp_path,
+    "layout",
+    [
+      "-columnnames=shortCol,longCol",
+      "-layout=2,1,limitPerPage=2",
+      "-tickSettings=xgrid,ygrid",
+      "-subTickSettings=xdivisions=2,ydivisions=2",
+      "-axes=x,y",
+      "-split=pages",
+      "-separate=page",
+    ],
+    device_args=["onwhite"],
+  )
+  assert len(pngs) >= 1
+
+
+@pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")
+def test_sddsplot_wildcard_exclude_and_scaling_options(tmp_path):
+  pngs = run_png_sddsplot(
+    tmp_path,
+    "exclude",
+    [
+      "-columnnames=shortCol,*Col",
+      "-yExclude=stringCol,charCol",
+      "-factor=xMultiplier=2,yMultiplier=0.5",
+      "-offset=xChange=1,yChange=-1",
+      "-zoom=xFactor=1.1,yFactor=1.1",
+      "-legend=specified=demo",
+    ],
+    device_args=["onwhite", "dashes"],
+  )
+  assert len(pngs) >= 1

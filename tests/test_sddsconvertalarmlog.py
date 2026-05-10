@@ -100,3 +100,46 @@ def test_converts_indexed_alarm_log_to_explicit_columns(tmp_path):
         ["1.000000000000000e+03", "PV1", "NO_ALARM", "NO_ALARM"],
         ["2.800000000000000e+03", "PV2", "WRITE", "MAJOR"],
     ]
+
+
+@pytest.mark.skipif(
+    not (PROGRAM.exists() and SDDSCHECK.exists() and SDDSQUERY.exists() and SDDS2STREAM.exists()),
+    reason="tools not built",
+)
+def test_time_window_and_retain_option(tmp_path):
+    input_file = tmp_path / "alarm.sdds"
+    output_file = tmp_path / "filtered.sdds"
+    input_file.write_text(ALARM_LOG)
+    subprocess.run(
+        [
+            str(PROGRAM),
+            str(input_file),
+            str(output_file),
+            "-ascii",
+            "-time=start=2000,end=3000",
+            "-retain=Time,ControlName,AlarmSeverity",
+        ],
+        check=True,
+    )
+    result = subprocess.run([str(SDDSQUERY), str(output_file), "-columnlist"], capture_output=True, text=True, check=True)
+    assert "ControlName" in result.stdout
+    assert "AlarmSeverity" in result.stdout
+    assert "AlarmStatus" not in result.stdout
+
+
+@pytest.mark.skipif(
+    not (PROGRAM.exists() and SDDSCHECK.exists() and SDDSQUERY.exists() and SDDS2STREAM.exists()),
+    reason="tools not built",
+)
+def test_snapshot_and_pipe_output(tmp_path):
+    input_file = tmp_path / "alarm.sdds"
+    input_file.write_text(ALARM_LOG)
+    result = subprocess.run(
+        [str(PROGRAM), str(input_file), "-snapshot=3000", "-pipe=out", "-double"],
+        stdout=subprocess.PIPE,
+        check=True,
+    )
+    output_file = tmp_path / "snapshot.sdds"
+    output_file.write_bytes(result.stdout)
+    check = subprocess.run([str(SDDSCHECK), str(output_file)], capture_output=True, text=True, check=True)
+    assert check.stdout.strip() == "ok"
