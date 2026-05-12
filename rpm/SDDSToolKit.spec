@@ -6,9 +6,9 @@ URL:		https://www.aps.anl.gov/Accelerator-Operations-Physics
 Packager:	Robert Soliday <soliday@aps.anl.gov>
 Prefix:		%{_bindir}
 Autoreq:	0
-Version:	5.10
+Version:	5.11
 Release:	1
-Source:		SDDSToolKit-5.10.tar.gz
+Source:		SDDSToolKit-5.11.tar.gz
 
 %define debug_package %{nil}
 %undefine __check_files
@@ -49,6 +49,7 @@ install -s -m 755 sdds2plaindata %{buildroot}%{_bindir}/sdds2plaindata
 install -s -m 755 sdds2spreadsheet %{buildroot}%{_bindir}/sdds2spreadsheet
 install -s -m 755 sdds2stream %{buildroot}%{_bindir}/sdds2stream
 install -s -m 755 sdds2tiff %{buildroot}%{_bindir}/sdds2tiff
+install -s -m 755 sddsanalyticsignal %{buildroot}%{_bindir}/sddsanalyticsignal
 install -s -m 755 sddsarray2column %{buildroot}%{_bindir}/sddsarray2column
 install -s -m 755 sddsbaseline %{buildroot}%{_bindir}/sddsbaseline
 install -s -m 755 sddsbinarystring %{buildroot}%{_bindir}/sddsbinarystring
@@ -82,6 +83,7 @@ install -s -m 755 sddsexpand %{buildroot}%{_bindir}/sddsexpand
 install -s -m 755 sddsexpfit %{buildroot}%{_bindir}/sddsexpfit
 install -s -m 755 sddsfdfilter %{buildroot}%{_bindir}/sddsfdfilter
 install -s -m 755 sddsfft %{buildroot}%{_bindir}/sddsfft
+install -s -m 755 sddsfindin2dgrid %{buildroot}%{_bindir}/sddsfindin2dgrid
 install -s -m 755 sddsgenericfit %{buildroot}%{_bindir}/sddsgenericfit
 install -s -m 755 sddsgfit %{buildroot}%{_bindir}/sddsgfit
 install -s -m 755 sddslorentzianfit %{buildroot}%{_bindir}/sddslorentzianfit
@@ -118,6 +120,7 @@ install -s -m 755 sddsprocess %{buildroot}%{_bindir}/sddsprocess
 install -s -m 755 sddspseudoinverse %{buildroot}%{_bindir}/sddspseudoinverse
 install -s -m 755 sddsquery %{buildroot}%{_bindir}/sddsquery
 install -s -m 755 sddsregroup %{buildroot}%{_bindir}/sddsregroup
+install -s -m 755 sddsremoveoffsets %{buildroot}%{_bindir}/sddsremoveoffsets
 install -s -m 755 sddsrespmatrixderivative %{buildroot}%{_bindir}/sddsrespmatrixderivative
 install -s -m 755 sddsrowstats %{buildroot}%{_bindir}/sddsrowstats
 install -s -m 755 sddsrunstats %{buildroot}%{_bindir}/sddsrunstats
@@ -183,6 +186,7 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/sdds2spreadsheet
 %{_bindir}/sdds2stream
 %{_bindir}/sdds2tiff
+%{_bindir}/sddsanalyticsignal
 %{_bindir}/sddsarray2column
 %{_bindir}/sddsbaseline
 %{_bindir}/sddsbinarystring
@@ -216,6 +220,7 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/sddsexpfit
 %{_bindir}/sddsfdfilter
 %{_bindir}/sddsfft
+%{_bindir}/sddsfindin2dgrid
 %{_bindir}/sddsgenericfit
 %{_bindir}/sddsgfit
 %{_bindir}/sddslorentzianfit
@@ -252,6 +257,7 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/sddspseudoinverse
 %{_bindir}/sddsquery
 %{_bindir}/sddsregroup
+%{_bindir}/sddsremoveoffsets
 %{_bindir}/sddsrespmatrixderivative
 %{_bindir}/sddsrowstats
 %{_bindir}/sddsrunstats

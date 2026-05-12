@@ -4,7 +4,7 @@ exec tclsh "$0" "$@"
 
 set dir [pwd]
 
-set version 5.10
+set version 5.11
 set name SDDSToolKit-$version
 puts "Building $name RPM"
 
