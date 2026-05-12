@@ -201,8 +201,8 @@ extern "C" {
     int32_t index;
     char *name;
   } SORTED_INDEX;
-  int SDDS_CompareIndexedNames(const void *s1, const void *s2);
-  int SDDS_CompareIndexedNamesPtr(const void *s1, const void *s2);
+    epicsShareFuncSDDS extern int SDDS_CompareIndexedNames(const void *s1, const void *s2);
+    epicsShareFuncSDDS extern int SDDS_CompareIndexedNamesPtr(const void *s1, const void *s2);
 
   typedef struct {
     int32_t mode, lines_per_row, no_row_counts, fixed_row_count, fixed_row_increment, fsync_data;
