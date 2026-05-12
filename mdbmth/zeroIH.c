@@ -15,6 +15,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include "mdb.h"
 
 #define sign(x) ((x) > 0 ? 1 : ((x) == 0 ? 0 : -1))
 
