@@ -1665,7 +1665,7 @@ bool restoreStructuralSnapshot(SDDSEditor *editor, const StructuralSnapshot &sna
   editor->pages = snapshot.pages;
   if (!editor->pages.isEmpty()) {
     const int lastPageIndex = static_cast<int>(editor->pages.size()) - 1;
-    editor->currentPage = std::clamp(snapshot.currentPage, 0, lastPageIndex);
+    editor->currentPage = std::max(0, std::min(snapshot.currentPage, lastPageIndex));
   } else {
     editor->currentPage = 0;
   }
