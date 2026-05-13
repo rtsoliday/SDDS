@@ -17,7 +17,7 @@ ifeq ($(OS), Linux)
           /usr/lib64/qt6/libexec/moc \
           /usr/lib/qt6/libexec/moc \
           /usr/libexec/qt6-moc \
-          /usr/libexec/moc \
+          /usr/libexec/qt6/moc \
           /bin/moc \
           /usr/bin/moc \
           /bin/moc-qt5 \
