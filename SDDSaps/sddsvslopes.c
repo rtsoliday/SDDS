@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
   double *coef, *coefsigma, *weight, *diff, chi;
   long iCol, iPage;
   int64_t rows, iRow;
-  double *slope, slope2, slopeAve, slopeSigma;
+  double *slope, slope2, slopeAve, slopeSigma, slopeVariance;
   unsigned long pipeFlags, majorOrderFlag;
   long tmpfile_used, noWarnings;
   long generateIndex;
@@ -440,7 +440,10 @@ int main(int argc, char **argv) {
           slopeAve += slope[iPage];
           slope2 += slope[iPage] * slope[iPage];
         }
-        slopeSigma = sqrt(slope2 / copiedPages - (slopeAve / copiedPages) * (slopeAve / copiedPages));
+        slopeVariance = slope2 / copiedPages - (slopeAve / copiedPages) * (slopeAve / copiedPages);
+        if (slopeVariance < 0)
+          slopeVariance = 0;
+        slopeSigma = sqrt(slopeVariance);
         if (!SDDS_SetRowValues(&outputPage, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, iRow, slopeSigmaColumn[iCol], slopeSigma, NULL))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       }

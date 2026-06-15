@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 import pytest
 
-from sdds_test_utils import BIN_DIR, IS_DARWIN_ARM64
+from sdds_test_utils import BIN_DIR
 SDDSVSLOPES = BIN_DIR / "sddsvslopes"
 SDDS2STREAM = BIN_DIR / "sdds2stream"
 
@@ -101,7 +101,6 @@ class TestSddsvslopes:
         text=True,
       )
 
-  @pytest.mark.xfail(IS_DARWIN_ARM64, reason="sddsvslopes -sigma returns NaN for one exact-fit sigma on Darwin-arm64", strict=True)
   def test_sigma(self, tmp_path):
     inp = self.create_input(tmp_path)
     out = tmp_path / "out.sdds"

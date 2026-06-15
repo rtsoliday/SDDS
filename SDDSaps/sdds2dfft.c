@@ -312,7 +312,8 @@ int main(int argc, char **argv) {
       case SET_EXCLUDE:
         if (scanned[iArg].n_items < 2)
           SDDS_Bomb("invalid -exclude syntax");
-        moveToStringArray(&exclude, &excludes, scanned[iArg].list + 1, scanned[iArg].n_items - 1);
+        for (j = 1; j < scanned[iArg].n_items; j++)
+          excludes = appendToStringArray(&exclude, excludes, scanned[iArg].list[j]);
         break;
       case SET_NOWARNINGS:
         noWarnings = 1;
