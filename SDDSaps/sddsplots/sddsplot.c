@@ -126,6 +126,7 @@ char *USAGE5 = "  -offset=[{x|y}change={value>][,{x|y}parameter=<name>][,{x|y}in
   -dither=[{x|y}range=<fraction>]\n\
   -overlay=[{xy}Mode=<mode>][,{xy}Factor=<value>][,{xy}Offset=<value>][,{xy}Center]\n\
   -sample=<fraction>  -sparse=<interval>[,<offset>]  -presparse=<interval>[,<offset>]\n\
+  -sort=<column-name>[,decreasing]\n\
   -clip=<head>,<tail>[,invert] -rowlimit=<integer>\n\
   -match={column|parameter},<match-test>[,<match-test>[,<logic-operation>...]\n\
   -filter={column|parameter},<range-spec>[,<range-spec>[,<logic-operation>...]\n\
@@ -201,6 +202,7 @@ static char *main_keyword[] = {
   "sever",
   "sparse",
   "sample",
+  "sort",
   "clip",
   "keep",
   "filter",
@@ -299,6 +301,7 @@ extern long aspectratio_AP(PLOT_SPEC *plotspec, char **item, long items),
   sever_AP(PLOT_SPEC *plotspec, char **item, long items),
   sparse_AP(PLOT_SPEC *plotspec, char **item, long items),
   sample_AP(PLOT_SPEC *plotspec, char **item, long items),
+  sort_AP(PLOT_SPEC *plotspec, char **item, long items),
   clip_AP(PLOT_SPEC *plotspec, char **item, long items),
   keep_AP(PLOT_SPEC *plotspec, char **item, long items),
   filter_AP(PLOT_SPEC *plotspec, char **item, long items),
@@ -396,6 +399,7 @@ static long (*main_parser[])(PLOT_SPEC *plotspec, char **item, long items) = {
   sever_AP,
   sparse_AP,
   sample_AP,
+  sort_AP,
   clip_AP,
   keep_AP,
   filter_AP,
@@ -768,6 +772,12 @@ int sddsplot_main(int commandlineArgc, char **commandlineArgv)
       sparse_sample_clip(&plot_spec);
 #ifdef DEBUG
       fprintf(stderr, "memory: %10ld  after   sparse_sample_clip(&plot_spec)\n", memory_count());
+#endif
+
+      /* Sorts each dataset by the requested x or y column, if -sort was given for its request. */
+      sort_dataset_points(&plot_spec);
+#ifdef DEBUG
+      fprintf(stderr, "memory: %10ld  after   sort_dataset_points(&plot_spec)\n", memory_count());
 #endif
 
       /* Splits datasets according to any -split requests in the plot requests.
