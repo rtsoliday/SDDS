@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR, IS_DARWIN_ARM64
 SDDS2DFFT = BIN_DIR / "sdds2dfft"
 SDDSCHECK = BIN_DIR / "sddscheck"
 SDDSQUERY = BIN_DIR / "sddsquery"
@@ -161,6 +161,7 @@ def test_psdoutput(tmp_path):
   not (SDDS2DFFT.exists() and SDDSCHECK.exists() and SDDSQUERY.exists()),
   reason="tools not built",
 )
+@pytest.mark.xfail(IS_DARWIN_ARM64, reason="sdds2dfft -exclude traps on Darwin-arm64", strict=True)
 def test_exclude(tmp_path):
   matrix = make_matrix(tmp_path)
   output = tmp_path / "excl.sdds"

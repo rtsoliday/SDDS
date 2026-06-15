@@ -173,7 +173,7 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
 {
   long i, j, npts, dataset;
   PLOT_REQUEST *plreq;
-  double *x, *y, *x1, *y1, *split;
+  double *x, *y, *x1, *y1, *split, *sortKey;
   long random_number_seed;
   char **enumerate, **pointLabel;
   int32_t *graphicType, *graphicSubtype;
@@ -191,12 +191,13 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
     x1 = plspec->dataset[dataset].x1;
     y1 = plspec->dataset[dataset].y1;
     split = plspec->dataset[dataset].split_data;
+    sortKey = plspec->dataset[dataset].sort_key;
     enumerate = plspec->dataset[dataset].enumerate;
     pointLabel = plspec->dataset[dataset].pointLabel;
     graphicType = plspec->dataset[dataset].graphicType;
     graphicSubtype = plspec->dataset[dataset].graphicSubtype;
     
-    plspec->dataset[dataset].points = remove_invalid_data(x, y, x1, y1, split, enumerate, pointLabel,
+    plspec->dataset[dataset].points = remove_invalid_data(x, y, x1, y1, split, sortKey, enumerate, pointLabel,
                                 graphicType, graphicSubtype,
                                                           plspec->dataset[dataset].points);
 
@@ -212,6 +213,8 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
           y1[j] = y1[i];
         if (split)
           split[j] = split[i];
+        if (sortKey)
+          sortKey[j] = sortKey[i];
         if (enumerate)
           enumerate[j] = enumerate[i];
         if (pointLabel)
@@ -236,6 +239,8 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
             y1[j] = y1[i];
           if (split)
             split[j] = split[i];
+          if (sortKey)
+            sortKey[j] = sortKey[i];
           if (enumerate)
             enumerate[j] = enumerate[i];
           if (pointLabel)
@@ -265,6 +270,8 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
           y1[j] = y1[i];
         if (split)
           split[j] = split[i];
+        if (sortKey)
+          sortKey[j] = sortKey[i];
         if (enumerate)
           enumerate[j] = enumerate[i];
         if (pointLabel)
@@ -294,6 +301,8 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
             y1[j] = y1[i];
           if (split)
             split[j] = split[i];
+          if (sortKey)
+            sortKey[j] = sortKey[i];
           if (enumerate)
             enumerate[j] = enumerate[i];
           if (pointLabel)
@@ -316,6 +325,8 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
             y1[j] = y1[i];
           if (split)
             split[j] = split[i];
+          if (sortKey)
+            sortKey[j] = sortKey[i];
           if (enumerate)
             enumerate[j] = enumerate[i];
           if (pointLabel)
@@ -383,12 +394,12 @@ void sort_dataset_points(PLOT_SPEC *plspec)
       plreq->xname[pdata->dataname_index] : NULL;
     yname = (plreq->yname && pdata->dataname_index < plreq->datanames) ?
       plreq->yname[pdata->dataname_index] : NULL;
-    key = NULL;
-    if (xname && strcmp(plreq->sort_name, xname) == 0)
+    key = pdata->sort_key;
+    if (!key && xname && strcmp(plreq->sort_name, xname) == 0)
       key = pdata->x;
-    else if (yname && strcmp(plreq->sort_name, yname) == 0)
+    else if (!key && yname && strcmp(plreq->sort_name, yname) == 0)
       key = pdata->y;
-    else {
+    else if (!key) {
       fprintf(stderr, "warning: -sort column %s does not match x (%s) or y (%s) for dataset\n",
               plreq->sort_name, xname ? xname : "(none)", yname ? yname : "(none)");
       continue;
@@ -423,6 +434,10 @@ void sort_dataset_points(PLOT_SPEC *plspec)
     if (pdata->split_data) {
       for (i = 0; i < npts; i++) dtmp[i] = pdata->split_data[order[i]];
       memcpy(pdata->split_data, dtmp, sizeof(*dtmp) * npts);
+    }
+    if (pdata->sort_key) {
+      for (i = 0; i < npts; i++) dtmp[i] = pdata->sort_key[order[i]];
+      memcpy(pdata->sort_key, dtmp, sizeof(*dtmp) * npts);
     }
     if (pdata->enumerate) {
       stmp = trealloc(stmp, sizeof(*stmp) * npts);
@@ -676,7 +691,7 @@ void perform_dataset_conversions(PLOT_SPEC *plspec)
         if (mode&MODE_X_AUTOLOG)
           plspec->scalesGroupData[0][dataset->scalesGroupIndex[0]].mode |= MODE_X_LOG|MODE_X_SPECIALSCALES;
         pointsLeft = remove_nonpositive_data(dataset->x, dataset->y, dataset->x1, dataset->y1,
-                     dataset->split_data, dataset->enumerate, 
+                     dataset->split_data, dataset->sort_key, dataset->enumerate,
                      dataset->pointLabel, dataset->graphicType, dataset->graphicSubtype,
                      dataset->pointsStored);
         if (pointsLeft!=dataset->pointsStored && dataset->scrollParent) 
@@ -705,7 +720,7 @@ void perform_dataset_conversions(PLOT_SPEC *plspec)
         if (mode&MODE_Y_AUTOLOG)
           plspec->scalesGroupData[1][dataset->scalesGroupIndex[1]].mode |= MODE_Y_LOG|MODE_Y_SPECIALSCALES;
         pointsLeft = remove_nonpositive_data(dataset->y, dataset->x, dataset->x1, dataset->y1, 
-                    dataset->split_data, dataset->enumerate, 
+                    dataset->split_data, dataset->sort_key, dataset->enumerate,
                     dataset->pointLabel, dataset->graphicType, dataset->graphicSubtype,
                     dataset->pointsStored);
 	if (pointsLeft==0 && dataset->pointsStored) 
@@ -1008,6 +1023,7 @@ void perform_dataset_transpositions(PLOT_SPEC *plspec)
         for (i=0; i<points; i++) {
           new_dataset1 = new_dataset+inew*points+i;
           *new_dataset1 = dataset[0];
+          new_dataset1->sort_key = NULL;
           SDDS_CopyString(&new_dataset1->info[0].symbol, "Index");
           new_dataset1->info[0].description = new_dataset1->info[0].units = NULL;
           new_dataset1->x = tmalloc(sizeof(*new_dataset1->x)*plreq->datanames);
@@ -1030,6 +1046,12 @@ void perform_dataset_transpositions(PLOT_SPEC *plspec)
             new_dataset1->y[j] = dataset[j].y[i];
           }
           new_dataset1->subpage = i;
+        }
+      }
+      for (iset=i1fset; iset<i2fset; iset++) {
+        if (plspec->dataset[iset].sort_key) {
+          free(plspec->dataset[iset].sort_key);
+          plspec->dataset[iset].sort_key = NULL;
         }
       }
       j = datapages*points-(i2fset-i1fset);
@@ -1057,7 +1079,7 @@ void perform_dataset_transpositions(PLOT_SPEC *plspec)
   }
 }
 
-long remove_nonpositive_data(double *data1, double *data2, double *data3, double *data4, double *data5, 
+long remove_nonpositive_data(double *data1, double *data2, double *data3, double *data4, double *data5, double *data6,
                              char **enumerate, char **pointLabel, int32_t *graphicType, int32_t *graphicSubtype, long n)
 {
   long i, j;
@@ -1080,6 +1102,8 @@ long remove_nonpositive_data(double *data1, double *data2, double *data3, double
           data4[j] = data4[i];
         if (data5)
           data5[j] = data5[i];
+        if (data6)
+          data6[j] = data6[i];
         if (enumerate)
           enumerate[j] = enumerate[i];
         if (pointLabel)
@@ -1095,7 +1119,7 @@ long remove_nonpositive_data(double *data1, double *data2, double *data3, double
   return j;
 }
 
-long remove_invalid_data(double *data1, double *data2, double *data3, double *data4, double *data5, 
+long remove_invalid_data(double *data1, double *data2, double *data3, double *data4, double *data5, double *data6,
                          char **enumerate, char **pointLabel, int32_t *graphicType, int32_t *graphicSubtype, long n)
 {
   long i, j;
@@ -1105,7 +1129,8 @@ long remove_invalid_data(double *data1, double *data2, double *data3, double *da
     if (isnan(data1[i]) || isinf(data1[i]) ||
         isnan(data2[i]) || isinf(data2[i]) ||
         (data3 && (isnan(data3[i]) || isinf(data3[i]))) ||
-        (data4 && (isnan(data4[i]) || isinf(data4[i]))) )
+        (data4 && (isnan(data4[i]) || isinf(data4[i]))) ||
+        (data6 && (isnan(data6[i]) || isinf(data6[i]))) )
       keep[i] = 0;
     else
       keep[i] = 1;
@@ -1121,6 +1146,8 @@ long remove_invalid_data(double *data1, double *data2, double *data3, double *da
           data4[j] = data4[i];
         if (data5)
           data5[j] = data5[i];
+        if (data6)
+          data6[j] = data6[i];
         if (enumerate)
           enumerate[j] = enumerate[i];
         if (pointLabel)
@@ -1228,6 +1255,10 @@ void columnbin_sddsplot_data(PLOT_SPEC *plspec)
       */
       if ((bins = fabs((max-min)/(width=plreq->split.width)) + 1.0)>1) {
         max = min+bins*width;
+        if (dataset.sort_key) {
+          free(dataset.sort_key);
+          dataset.sort_key = NULL;
+        }
 #if defined(DEBUG)
         fprintf(stderr, "%ld bins will be used\n", bins);
 #endif
@@ -1600,4 +1631,3 @@ void ReplicateDataset(PLOT_DATA *target, PLOT_DATA *source, long offset)
       SDDS_Bomb("memory allocation failure (ReplicateDataset)");
   
 }
-

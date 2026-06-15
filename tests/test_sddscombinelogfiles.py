@@ -1,25 +1,33 @@
 import subprocess
-from pathlib import Path
+
+import pytest
+
+from sdds_test_utils import BIN_DIR
+
+PLAINDATA2SDDS = BIN_DIR / "plaindata2sdds"
+SDDSCOMBINELOGFILES = BIN_DIR / "sddscombinelogfiles"
+SDDSPRINTOUT = BIN_DIR / "sddsprintout"
+
+pytestmark = pytest.mark.skipif(
+    not all(tool.exists() for tool in (PLAINDATA2SDDS, SDDSCOMBINELOGFILES, SDDSPRINTOUT)),
+    reason="sddscombinelogfiles tools not built",
+)
 
 
 def create_input(tmp_path, name, column, rows):
     plain = tmp_path / f"{name}.txt"
     plain.write_text("\n".join(f"{t} {v}" for t, v in rows) + "\n")
     sdds = tmp_path / f"{name}.sdds"
-    bin_dir = Path(__file__).resolve().parents[1] / "bin" / "Linux-x86_64"
     subprocess.run(
-        [bin_dir / "plaindata2sdds", plain, sdds, "-inputMode=ascii",
+        [PLAINDATA2SDDS, plain, sdds, "-inputMode=ascii",
          "-column=Time,double", f"-column={column},double", "-noRowCount"],
         check=True,
     )
     return sdds
 
 
-BIN_DIR = Path(__file__).resolve().parents[1] / "bin" / "Linux-x86_64"
-
-
 def sdds_print(file_path, columns):
-    args = [BIN_DIR / "sddsprintout", file_path]
+    args = [SDDSPRINTOUT, file_path]
     for column in columns:
         args.append(f"-columns={column}")
     args += ["-noTitle", "-noLabels"]
@@ -44,7 +52,7 @@ def test_overwrite_option(tmp_path):
     output = tmp_path / "out.sdds"
     output.write_text("existing")
     subprocess.run(
-        [BIN_DIR / "sddscombinelogfiles", in1, in2, output, "-overwrite"],
+        [SDDSCOMBINELOGFILES, in1, in2, output, "-overwrite"],
         check=True,
     )
     assert sdds_print(output, ["Time", "PV1", "PV2"]) == EXPECTED_OUTPUT
@@ -54,7 +62,7 @@ def test_pipe_option(tmp_path):
     in1 = create_input(tmp_path, "in1", "PV1", [(1, 10), (2, 20), (3, 30)])
     in2 = create_input(tmp_path, "in2", "PV2", [(2, 200), (3, 300), (4, 400)])
     result = subprocess.run(
-        [BIN_DIR / "sddscombinelogfiles", in1, in2, "-pipe=out"],
+        [SDDSCOMBINELOGFILES, in1, in2, "-pipe=out"],
         check=True,
         stdout=subprocess.PIPE,
     )
@@ -67,7 +75,7 @@ def test_single_pv_concatenates_pages(tmp_path):
     in1 = create_input(tmp_path, "single", "PV1", [(1, 10), (2, 20), (3, 30)])
     output = tmp_path / "single-out.sdds"
     subprocess.run(
-        [BIN_DIR / "sddscombinelogfiles", in1, output, "-overwrite"],
+        [SDDSCOMBINELOGFILES, in1, output, "-overwrite"],
         check=True,
     )
     assert sdds_print(output, ["Time", "PV1"]) == (
@@ -83,7 +91,7 @@ def test_three_file_common_timestamps(tmp_path):
     in3 = create_input(tmp_path, "in3", "PV3", [(3, 3000), (4, 4000), (5, 5000)])
     output = tmp_path / "three.sdds"
     subprocess.run(
-        [BIN_DIR / "sddscombinelogfiles", in1, in2, in3, output, "-overwrite"],
+        [SDDSCOMBINELOGFILES, in1, in2, in3, output, "-overwrite"],
         check=True,
     )
     assert sdds_print(output, ["Time", "PV1", "PV2", "PV3"]) == (

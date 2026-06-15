@@ -74,7 +74,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
   long datanames, datanames_absent, inewdata, file, maxFiles;
   SDDS_TABLE table;
   PLOT_REQUEST *plreq = NULL;
-  double *x, *y=NULL, *x1, *y1, *split;
+  double *x, *y=NULL, *x1, *y1, *split, *sortKey;
   double xparam, yparam, x1param, y1param, splitparam;
   short *dataname_absent, mplFile;
   char **enumerate, **pointLabel;
@@ -526,7 +526,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
           for (idata=inewdata=0; idata<plreq->datanames; idata++) {
             if (dataname_absent[idata])
               continue;
-            x1 = y1 = split = NULL;
+            x1 = y1 = split = sortKey = NULL;
             switch (plreq->data_class) {
             case COLUMN_DATA:
               if (points==0)
@@ -550,6 +550,15 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
               if ((ytype[idata]==SDDS_STRING && !(enumerate=SDDS_GetColumn(&table, plreq->yname[idata]))) ||
                   (ytype[idata]!=SDDS_STRING && !(y=SDDS_GetColumnInDoubles(&table, plreq->yname[idata]))))
                 SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+              if ((plreq->sort_flags&SORT_GIVEN) && plreq->sort_name) {
+                if (!SDDS_GetNamedColumnType(&table, plreq->sort_name)) {
+                  fprintf(stderr, "Error: unable to get type for -sort column %s for file %s\n",
+                          plreq->sort_name, plreq->filename[ifile]);
+                  exit(1);
+                }
+                if (!(sortKey=SDDS_GetColumnInDoubles(&table, plreq->sort_name)))
+                  SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+              }
 
               /* add factor here */
               /*
@@ -607,7 +616,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                     split[i] = splitparam;
                   }
                 }
-              append_to_dataset(requestData[ireq].dataset+iset+inewdata, x, enumerate, y, x1, y1, split, 
+              append_to_dataset(requestData[ireq].dataset+iset+inewdata, x, enumerate, y, x1, y1, split, sortKey,
                                 graphicType, graphicSubtype, pointLabel, points);
               				
               if (x)
@@ -621,6 +630,8 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                 free(y1);
               if (split)
                 free(split);
+              if (sortKey)
+                free(sortKey);
               if (pointLabel)
                 free(pointLabel);
               if (graphicType)
@@ -662,7 +673,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
               append_to_dataset(requestData[ireq].dataset+iset+inewdata, &xparam, NULL, &yparam, 
                                 (plreq->x1name[idata]?&x1param:NULL),
                                 (plreq->y1name[idata]?&y1param:NULL), ((plreq->split.flags&SPLIT_PARAMETERCHANGE)?&splitparam:NULL),
-                                NULL, NULL, NULL, 1);
+                                NULL, NULL, NULL, NULL, 1);
               break;
             case ARRAY_DATA:
               
@@ -705,7 +716,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                 }
                 SDDS_Bomb(s);
               }
-              append_to_dataset(requestData[ireq].dataset+iset+inewdata, x, NULL, y, x1, y1, NULL,
+              append_to_dataset(requestData[ireq].dataset+iset+inewdata, x, NULL, y, x1, y1, NULL, NULL,
                                 NULL, NULL, NULL, nx);
               break;
             }

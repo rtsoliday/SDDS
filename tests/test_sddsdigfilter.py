@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSDIGFILTER = BIN_DIR / "sddsdigfilter"
 SDDS2STREAM = BIN_DIR / "sdds2stream"
 SDDSQUERY = BIN_DIR / "sddsquery"
@@ -18,17 +18,22 @@ def extract_options():
 
 OPTIONS = extract_options()
 
+
+def program_error(message):
+  return f"Error ({SDDSDIGFILTER}): {message}\n"
+
+
 EXPECTED = {
-  'lowpass': lambda out: "Error (bin/Linux-x86_64/sddsdigfilter): Invalid -lowpass option.\n",
-  'highpass': lambda out: "Error (bin/Linux-x86_64/sddsdigfilter): Invalid -highpass option.\n",
-  'proportional': lambda out: "Error (bin/Linux-x86_64/sddsdigfilter): Invalid -proportional option.\n",
-  'analogfilter': lambda out: "Error (bin/Linux-x86_64/sddsdigfilter): Invalid -analogfilter option.\n",
-  'digitalfilter': lambda out: "Error (bin/Linux-x86_64/sddsdigfilter): Invalid -digitalfilter option.\n",
+  'lowpass': lambda out: program_error("Invalid -lowpass option."),
+  'highpass': lambda out: program_error("Invalid -highpass option."),
+  'proportional': lambda out: program_error("Invalid -proportional option."),
+  'analogfilter': lambda out: program_error("Invalid -analogfilter option."),
+  'digitalfilter': lambda out: program_error("Invalid -digitalfilter option."),
   'cascade': lambda out: "no filter or no columns supplied.\n",
-  'columns': lambda out: "Error (bin/Linux-x86_64/sddsdigfilter): Invalid -column option.\n",
+  'columns': lambda out: program_error("Invalid -column option."),
   'pipe': lambda out: f"error: too many filenames (sddsdigfilter)\n       offending argument is {out}\n",
   'verbose': lambda out: "no filter or no columns supplied.\n",
-  'majorOrder': lambda out: "unknown keyword/value given: foo\nError (bin/Linux-x86_64/sddsdigfilter): invalid -majorOrder syntax/values\n",
+  'majorOrder': lambda out: "unknown keyword/value given: foo\n" + program_error("invalid -majorOrder syntax/values"),
 }
 
 pytestmark = pytest.mark.skipif(
@@ -119,4 +124,3 @@ def test_major_order_proportional_output(tmp_path):
   )
   lines = stream_columns(output, "longCol,DigFilteredlongCol")
   assert lines[0].startswith("100|")
-

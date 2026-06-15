@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSFDFILTER = BIN_DIR / "sddsfdfilter"
 SDDS2STREAM = BIN_DIR / "sdds2stream"
 SDDSQUERY = BIN_DIR / "sddsquery"
@@ -17,20 +17,25 @@ def extract_options():
 
 OPTIONS = extract_options()
 
+
+def program_error(message):
+  return f"Error ({SDDSFDFILTER}): {message}\n"
+
+
 EXPECTED = {
   'pipe': lambda out: f"error: too many filenames (sddsfdfilter)\n       offending argument is {out}\n",
   'cascade': lambda out: "warning: no filters specified (sddsfdfilter)\n",
-  'clip': lambda out: "Error (bin/Linux-x86_64/sddsfdfilter): supply at least one of high=<number> or low=<number> with -clipFrequencies\n",
-  'columns': lambda out: "Error (bin/Linux-x86_64/sddsfdfilter): invalid -columns syntax\n",
-  'threshold': lambda out: "Error (bin/Linux-x86_64/sddsfdfilter): invalid -threshold syntax\n",
-  'highpass': lambda out: "Error (bin/Linux-x86_64/sddsfdfilter): supply start=<value> and end=<value> qualifiers with -highpass and -lowpass\n",
-  'lowpass': lambda out: "Error (bin/Linux-x86_64/sddsfdfilter): supply start=<value> and end=<value> qualifiers with -highpass and -lowpass\n",
-  'notch': lambda out: "Error (bin/Linux-x86_64/sddsfdfilter): supply center=<value> and flatWidth=<value> qualifiers with -notch and -bandpass\n",
-  'bandpass': lambda out: "Error (bin/Linux-x86_64/sddsfdfilter): supply center=<value> and flatWidth=<value> qualifiers with -notch and -bandpass\n",
-  'filterfile': lambda out: "Error (bin/Linux-x86_64/sddsfdfilter): supply filename=<string> with -filterFile\n",
+  'clip': lambda out: program_error("supply at least one of high=<number> or low=<number> with -clipFrequencies"),
+  'columns': lambda out: program_error("invalid -columns syntax"),
+  'threshold': lambda out: program_error("invalid -threshold syntax"),
+  'highpass': lambda out: program_error("supply start=<value> and end=<value> qualifiers with -highpass and -lowpass"),
+  'lowpass': lambda out: program_error("supply start=<value> and end=<value> qualifiers with -highpass and -lowpass"),
+  'notch': lambda out: program_error("supply center=<value> and flatWidth=<value> qualifiers with -notch and -bandpass"),
+  'bandpass': lambda out: program_error("supply center=<value> and flatWidth=<value> qualifiers with -notch and -bandpass"),
+  'filterfile': lambda out: program_error("supply filename=<string> with -filterFile"),
   'newcolumns': lambda out: "warning: no filters specified (sddsfdfilter)\n",
   'differencecolumns': lambda out: "warning: no filters specified (sddsfdfilter)\n",
-  'exclude': lambda out: "Error (bin/Linux-x86_64/sddsfdfilter): invalid -exclude syntax\n",
+  'exclude': lambda out: program_error("invalid -exclude syntax"),
   'majorOrder': lambda out: "warning: no filters specified (sddsfdfilter)\n",
 }
 
@@ -184,4 +189,3 @@ def test_threshold_only_pipe_and_difference_columns(tmp_path):
   output.write_bytes(result.stdout)
   columns = subprocess.run([str(SDDSQUERY), str(output), "-columnlist"], capture_output=True, text=True, check=True)
   assert "longColDifference" in columns.stdout
-

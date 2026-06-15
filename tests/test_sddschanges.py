@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSCHANGES = BIN_DIR / "sddschanges"
 SDDSPRINTOUT = BIN_DIR / "sddsprintout"
 SDDSCHECK = BIN_DIR / "sddscheck"

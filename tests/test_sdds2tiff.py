@@ -1,9 +1,11 @@
 import subprocess
 from pathlib import Path
 import pytest
-from PIL import Image
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
+
+Image = pytest.importorskip("PIL.Image", reason="Pillow is required for TIFF tests")
+
 SDDS2TIFF = BIN_DIR / "sdds2tiff"
 TIFF2SDDS = BIN_DIR / "tiff2sdds"
 SDDSMAKEDATASET = BIN_DIR / "sddsmakedataset"

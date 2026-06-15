@@ -3,7 +3,8 @@ import subprocess
 from pathlib import Path
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
+
 SDDSTRANSPOSE = BIN_DIR / "sddstranspose"
 PLAINDATA2SDDS = BIN_DIR / "plaindata2sdds"
 SDDS2PLAINDATA = BIN_DIR / "sdds2plaindata"
@@ -11,6 +12,8 @@ SDDSQUERY = BIN_DIR / "sddsquery"
 
 REQUIRED = [SDDSTRANSPOSE, PLAINDATA2SDDS, SDDS2PLAINDATA, SDDSQUERY]
 EXPECTED = [[1.0, 3.0], [2.0, 4.0]]
+
+pytestmark = pytest.mark.skipif(not all(p.exists() for p in REQUIRED), reason="sddstranspose not built")
 
 
 def create_input(tmp_path):
@@ -103,7 +106,6 @@ def header_text(path):
   return Path(path).read_bytes().decode("latin1")
 
 
-@pytest.mark.skipif(not all(p.exists() for p in REQUIRED), reason="sddstranspose not built")
 def test_index_column(tmp_path):
   inp = create_input(tmp_path)
   out = tmp_path / "out.sdds"

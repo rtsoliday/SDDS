@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 PROGRAM = BIN_DIR / "sddsconvertalarmlog"
 SOURCE = Path("SDDSaps/sddsconvertalarmlog.c")
 SDDSCHECK = BIN_DIR / "sddscheck"

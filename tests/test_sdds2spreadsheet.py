@@ -1,19 +1,37 @@
+import re
 import subprocess
 from pathlib import Path
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDS2SPREADSHEET = BIN_DIR / "sdds2spreadsheet"
 EXAMPLE = Path("SDDSlib/demo/example.sdds")
 
-@pytest.mark.skipif(not SDDS2SPREADSHEET.exists(), reason="sdds2spreadsheet not built")
-def test_delimiter_option():
-  result = subprocess.run(
-    [str(SDDS2SPREADSHEET), str(EXAMPLE), "/dev/stdout", "-delimiter=:"],
-    capture_output=True,
-    text=True,
+
+def spreadsheet_text(tmp_path, *options):
+  output = tmp_path / "spreadsheet.txt"
+  subprocess.run(
+    [str(SDDS2SPREADSHEET), str(EXAMPLE), str(output), *options],
     check=True,
   )
+  return output.read_text()
+
+
+def normalize_scientific_numbers(text):
+  return re.sub(
+    r"[-+]?\d+\.\d+e[+-]\d+",
+    lambda match: f"{float(match.group(0)):.12e}",
+    text,
+  )
+
+
+def assert_spreadsheet_text(text, expected):
+  assert normalize_scientific_numbers(text) == normalize_scientific_numbers(expected)
+
+
+@pytest.mark.skipif(not SDDS2SPREADSHEET.exists(), reason="sdds2spreadsheet not built")
+def test_delimiter_option(tmp_path):
+  text = spreadsheet_text(tmp_path, "-delimiter=:")
   expected = (
     "Created from SDDS file: SDDSlib/demo/example.sdds\n"
     "Example SDDS Output:\n"
@@ -55,23 +73,12 @@ def test_delimiter_option():
     "7:7:700:700:700:700:7.7:70.07:7.007000000000000000e+01:seven:g:\n"
     "8:8:800:800:800:800:8.8:80.08:8.008000000000000000e+01:eight:h:\n"
   )
-  assert result.stdout == expected
+  assert_spreadsheet_text(text, expected)
 
 
 @pytest.mark.skipif(not SDDS2SPREADSHEET.exists(), reason="sdds2spreadsheet not built")
-def test_no_parameters_option():
-  result = subprocess.run(
-    [
-      str(SDDS2SPREADSHEET),
-      str(EXAMPLE),
-      "/dev/stdout",
-      "-noParameters",
-      "-delimiter=:",
-    ],
-    capture_output=True,
-    text=True,
-    check=True,
-  )
+def test_no_parameters_option(tmp_path):
+  text = spreadsheet_text(tmp_path, "-noParameters", "-delimiter=:")
   expected = (
     "Created from SDDS file: SDDSlib/demo/example.sdds\n"
     "Example SDDS Output:\n"
@@ -91,24 +98,12 @@ def test_no_parameters_option():
     "7:7:700:700:700:700:7.7:70.07:7.007000000000000000e+01:seven:g:\n"
     "8:8:800:800:800:800:8.8:80.08:8.008000000000000000e+01:eight:h:\n"
   )
-  assert result.stdout == expected
+  assert_spreadsheet_text(text, expected)
 
 
 @pytest.mark.skipif(not SDDS2SPREADSHEET.exists(), reason="sdds2spreadsheet not built")
-def test_units_option():
-  result = subprocess.run(
-    [
-      str(SDDS2SPREADSHEET),
-      str(EXAMPLE),
-      "/dev/stdout",
-      "-units",
-      "-noParameters",
-      "-delimiter=:",
-    ],
-    capture_output=True,
-    text=True,
-    check=True,
-  )
+def test_units_option(tmp_path):
+  text = spreadsheet_text(tmp_path, "-units", "-noParameters", "-delimiter=:")
   expected = (
     "Created from SDDS file: SDDSlib/demo/example.sdds\n"
     "Example SDDS Output:\n"
@@ -130,23 +125,12 @@ def test_units_option():
     "7:7:700:700:700:700:7.7:70.07:7.007000000000000000e+01:seven:g:\n"
     "8:8:800:800:800:800:8.8:80.08:8.008000000000000000e+01:eight:h:\n"
   )
-  assert result.stdout == expected
+  assert_spreadsheet_text(text, expected)
 
 
 @pytest.mark.skipif(not SDDS2SPREADSHEET.exists(), reason="sdds2spreadsheet not built")
-def test_column_option():
-  result = subprocess.run(
-    [
-      str(SDDS2SPREADSHEET),
-      str(EXAMPLE),
-      "/dev/stdout",
-      "-column=longCol,shortCol",
-      "-delimiter=:",
-    ],
-    capture_output=True,
-    text=True,
-    check=True,
-  )
+def test_column_option(tmp_path):
+  text = spreadsheet_text(tmp_path, "-column=longCol,shortCol", "-delimiter=:")
   expected = (
     "Created from SDDS file: SDDSlib/demo/example.sdds\n"
     "Example SDDS Output:\n"
@@ -188,7 +172,7 @@ def test_column_option():
     "700:7:\n"
     "800:8:\n"
   )
-  assert result.stdout == expected
+  assert_spreadsheet_text(text, expected)
 
 
 @pytest.mark.skipif(not SDDS2SPREADSHEET.exists(), reason="sdds2spreadsheet not built")

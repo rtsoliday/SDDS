@@ -3407,7 +3407,7 @@ PLOT_DATA *add_dataset_slots(PLOT_DATA *dataset, long datasets, long datanames)
 
 void append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate,
                        double *y, double *x1, double *y1, double *split_data,
-                       int32_t *graphicType, int32_t *graphicSubtype, char **pointLabel, long points)
+                       double *sortKey, int32_t *graphicType, int32_t *graphicSubtype, char **pointLabel, long points)
 {
   long i;
   dataset->x = trealloc(dataset->x, sizeof(*dataset->x) * (dataset->points + points));
@@ -3440,6 +3440,8 @@ void append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate,
     dataset->y1 = trealloc(dataset->y1, sizeof(*dataset->y1) * (dataset->points + points));
   if (split_data)
     dataset->split_data = trealloc(dataset->split_data, sizeof(*dataset->split_data) * (dataset->points + points));
+  if (sortKey)
+    dataset->sort_key = trealloc(dataset->sort_key, sizeof(*dataset->sort_key) * (dataset->points + points));
   if (graphicType)
     dataset->graphicType = trealloc(dataset->graphicType, sizeof(*dataset->graphicType) * (dataset->points + points));
   if (graphicSubtype)
@@ -3472,6 +3474,8 @@ void append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate,
           if (dataset->split_max < split_data[i])
             dataset->split_max = split_data[i];
         }
+      if (sortKey)
+        dataset->sort_key[i + dataset->points] = sortKey[i];
       if (graphicType)
         dataset->graphicType[i + dataset->points] = graphicType[i];
       if (graphicSubtype)
@@ -3617,6 +3621,9 @@ void add_plot_request(PLOT_SPEC *plspec)
       memcpy((char *)newReq, (char *)firstReq, sizeof(*plspec->plot_request));
       newReq->filename = NULL;
       newReq->filenames = 0;
+      newReq->sort_name = NULL;
+      if (firstReq->sort_name)
+        SDDS_CopyString(&newReq->sort_name, firstReq->sort_name);
       if (firstReq->filenames)
         {
           if (!(newReq->filename = SDDS_Malloc(sizeof(*newReq->filename) * firstReq->filenames)) ||
@@ -4620,6 +4627,7 @@ void EraseDatasetSpecification(PLOT_DATA *dataset)
       freeN(&dataset->y);
       freeN(&dataset->x1);
       freeN(&dataset->y1);
+      freeN(&dataset->sort_key);
       freeN(&dataset->split_data);
       freeN(&dataset->graphicType);
       freeN(&dataset->graphicSubtype);
@@ -4713,6 +4721,7 @@ void ErasePlotRequest(PLOT_REQUEST *plreq)
   freeN(&plreq->yname);
   freeN(&plreq->x1name);
   freeN(&plreq->y1name);
+  freeN(&plreq->sort_name);
   freeN(&plreq->was_wildname);
   for (i = 0; i < 2; i++)
     freeN(&(plreq->scalesGroupSpec[i].ID));

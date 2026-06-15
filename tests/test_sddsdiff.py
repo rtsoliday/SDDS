@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSDIFF = BIN_DIR / "sddsdiff"
 SOURCE = Path("SDDSaps/sddsdiff.c")
 EXAMPLE = Path("SDDSlib/demo/example.sdds")

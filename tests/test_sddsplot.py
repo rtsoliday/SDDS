@@ -1,11 +1,11 @@
 import json
 import subprocess
-from pathlib import Path
 import pytest
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-BIN_DIR = ROOT_DIR / "bin/Linux-x86_64"
+from sdds_test_utils import BIN_DIR, ROOT_DIR
+
 SDDSPLOT = BIN_DIR / "sddsplot"
+SDDSMAKEDATASET = BIN_DIR / "sddsmakedataset"
 EXAMPLE = ROOT_DIR / "SDDSlib/demo/example.sdds"
 
 
@@ -41,10 +41,10 @@ def run_png_sddsplot(tmp_path, rootname, extra_args=None, device_args=None):
   return png_candidates
 
 
-def run_json_sddsplot(tmp_path, output_name, extra_args):
+def run_json_sddsplot(tmp_path, output_name, extra_args, input_file=EXAMPLE):
   out = tmp_path / output_name
   subprocess.run(
-    [str(SDDSPLOT), str(EXAMPLE), *extra_args, "-device=json", f"-output={out}"],
+    [str(SDDSPLOT), str(input_file), *extra_args, "-device=json", f"-output={out}"],
     check=True,
   )
   assert out.exists()
@@ -71,6 +71,59 @@ def test_sddsplot_json_array_plot(tmp_path):
   doc = run_json_sddsplot(tmp_path, "arrays.json", ["-arrayNames=shortArray,ushortArray"])
   assert doc.get("schemaVersion") == "sddsplot-json-1"
   assert len(doc["plots"]) >= 1
+
+
+@pytest.mark.skipif(not all(tool.exists() for tool in (SDDSPLOT, SDDSMAKEDATASET)), reason="sddsplot tools not built")
+def test_sddsplot_sort_by_independent_column(tmp_path):
+  data = tmp_path / "sort_input.sdds"
+  subprocess.run(
+    [
+      str(SDDSMAKEDATASET),
+      str(data),
+      "-ascii",
+      "-column=x,type=double", "-data=30,10,20,40",
+      "-column=y,type=double", "-data=3,1,2,4",
+      "-column=rank,type=double", "-data=3,1,2,0",
+    ],
+    check=True,
+  )
+
+  doc = run_json_sddsplot(tmp_path, "sort.json", ["-columnnames=x,y", "-sort=rank"], input_file=data)
+  trace = doc["plots"][0]["traces"][0]
+  assert trace["x"] == pytest.approx([40, 10, 20, 30])
+  assert trace["y"] == pytest.approx([4, 1, 2, 3])
+
+
+@pytest.mark.skipif(not all(tool.exists() for tool in (SDDSPLOT, SDDSMAKEDATASET)), reason="sddsplot tools not built")
+def test_sddsplot_sort_request_override_does_not_change_previous_request(tmp_path):
+  data = tmp_path / "sort_override_input.sdds"
+  subprocess.run(
+    [
+      str(SDDSMAKEDATASET),
+      str(data),
+      "-ascii",
+      "-column=x,type=double", "-data=30,10,20,40",
+      "-column=y,type=double", "-data=3,1,2,4",
+      "-column=z,type=double", "-data=300,100,200,400",
+      "-column=rank,type=double", "-data=3,1,2,0",
+      "-column=zrank,type=double", "-data=1,3,0,2",
+    ],
+    check=True,
+  )
+
+  doc = run_json_sddsplot(
+    tmp_path,
+    "sort_override.json",
+    ["-sort=rank", "-columnnames=x,y", "-columnnames=x,z", "-sort=zrank"],
+    input_file=data,
+  )
+  first, second = doc["plots"][0]["traces"]
+  assert first["name"] == "y"
+  assert first["x"] == pytest.approx([40, 10, 20, 30])
+  assert first["y"] == pytest.approx([4, 1, 2, 3])
+  assert second["name"] == "z"
+  assert second["x"] == pytest.approx([20, 30, 40, 10])
+  assert second["y"] == pytest.approx([200, 300, 400, 100])
 
 
 @pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")

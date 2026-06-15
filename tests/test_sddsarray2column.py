@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSARRAY2COLUMN = BIN_DIR / "sddsarray2column"
 SDDS2PLAINDATA = BIN_DIR / "sdds2plaindata"
 

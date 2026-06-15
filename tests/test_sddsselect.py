@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSSELECT = BIN_DIR / "sddsselect"
 SDDSMAKE = BIN_DIR / "sddsmakedataset"
 SDDSPRINTOUT = BIN_DIR / "sddsprintout"

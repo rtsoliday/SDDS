@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import math
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSPFIT = BIN_DIR / "sddspfit"
 PLAINDATA2SDDS = BIN_DIR / "plaindata2sdds"
 SDDSPRINTOUT = BIN_DIR / "sddsprintout"

@@ -4,7 +4,7 @@ import re
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-BIN_DIR = ROOT / "bin/Linux-x86_64"
+from sdds_test_utils import BIN_DIR
 SDDSPOLY = BIN_DIR / "sddspoly"
 SDDS2PLAINDATA = BIN_DIR / "sdds2plaindata"
 SDDSCHECK = BIN_DIR / "sddscheck"

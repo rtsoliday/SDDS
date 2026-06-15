@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSDUPLICATE = BIN_DIR / "sddsduplicate"
 SDDSPRINTOUT = BIN_DIR / "sddsprintout"
 SDDSQUERY = BIN_DIR / "sddsquery"

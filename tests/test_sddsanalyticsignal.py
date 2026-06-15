@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSANALYTICSIGNAL = BIN_DIR / "sddsanalyticsignal"
 SDDSCHECK = BIN_DIR / "sddscheck"
 SDDSQUERY = BIN_DIR / "sddsquery"
@@ -26,6 +26,22 @@ def extract_options():
 
 OPTIONS = extract_options()
 EXPECTED_OPTIONS = {"columns", "majorOrder", "pipe", "unwrapLimit"}
+
+
+def plain_column(path, column):
+  result = subprocess.run(
+    [
+      str(SDDS2PLAINDATA),
+      str(path),
+      "-pipe=out",
+      f"-column={column}",
+      "-noRowCount",
+    ],
+    capture_output=True,
+    text=True,
+    check=True,
+  )
+  return result.stdout.split()
 
 
 @pytest.mark.skipif(not (SDDSANALYTICSIGNAL.exists()), reason="tools not built")
@@ -82,16 +98,8 @@ def test_columns_and_output(tmp_path):
   ).stdout
   for name in ["Realx", "Imagx", "Magx", "Argx"]:
     assert name in cols
-  orig = subprocess.run(
-    [str(SDDS2PLAINDATA), str(sdds), "/dev/stdout", "-column=x", "-noRowCount"],
-    capture_output=True,
-    text=True,
-  ).stdout.split()
-  real = subprocess.run(
-    [str(SDDS2PLAINDATA), str(out), "/dev/stdout", "-column=Realx", "-noRowCount"],
-    capture_output=True,
-    text=True,
-  ).stdout.split()
+  orig = plain_column(sdds, "x")
+  real = plain_column(out, "Realx")
   assert pytest.approx([float(v) for v in orig]) == [float(v) for v in real]
 
 
@@ -155,28 +163,8 @@ def test_unwrap_limit(tmp_path):
     ],
     check=True,
   )
-  wrapped = subprocess.run(
-    [
-      str(SDDS2PLAINDATA),
-      str(out_wrap),
-      "/dev/stdout",
-      "-column=UnwrappedArgx",
-      "-noRowCount",
-    ],
-    capture_output=True,
-    text=True,
-  ).stdout.split()
-  unwrapped = subprocess.run(
-    [
-      str(SDDS2PLAINDATA),
-      str(out_unwrap),
-      "/dev/stdout",
-      "-column=UnwrappedArgx",
-      "-noRowCount",
-    ],
-    capture_output=True,
-    text=True,
-  ).stdout.split()
+  wrapped = plain_column(out_wrap, "UnwrappedArgx")
+  unwrapped = plain_column(out_unwrap, "UnwrappedArgx")
   wrapped_vals = [float(v) for v in wrapped]
   unwrapped_vals = [float(v) for v in unwrapped]
   assert max(wrapped_vals) <= 180

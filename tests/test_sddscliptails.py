@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSCLIPTAILS = BIN_DIR / "sddscliptails"
 SDDS2STREAM = BIN_DIR / "sdds2stream"
 SDDSQUERY = BIN_DIR / "sddsquery"

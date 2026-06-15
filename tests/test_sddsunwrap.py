@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSUNWRAP = BIN_DIR / "sddsunwrap"
 SDDSMAKEDATASET = BIN_DIR / "sddsmakedataset"
 SDDS2STREAM = BIN_DIR / "sdds2stream"

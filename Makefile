@@ -26,7 +26,11 @@ endif
 include Makefile.rules
 
 # Command to invoke pytest. Additional options can be supplied by setting PYTEST.
-PYTEST ?= pytest -q
+ifeq ($(OS), Darwin)
+  PYTEST ?= python3 -m pytest -q
+else
+  PYTEST ?= pytest -q
+endif
 
 ifeq ($(OS), Linux)
   GSL_LOCAL = $(wildcard gsl)

@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSGFIT = BIN_DIR / "sddsgfit"
 SDDSMAKEDATASET = BIN_DIR / "sddsmakedataset"
 SDDSQUERY = BIN_DIR / "sddsquery"

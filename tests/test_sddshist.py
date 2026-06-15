@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 SRC_FILE = Path("SDDSaps/sddshist.c")
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSHIST = BIN_DIR / "sddshist"
 SDDSQUERY = BIN_DIR / "sddsquery"
 SDDS2STREAM = BIN_DIR / "sdds2stream"

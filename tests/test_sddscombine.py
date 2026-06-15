@@ -3,7 +3,7 @@ from pathlib import Path
 import textwrap
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSCOMBINE = BIN_DIR / "sddscombine"
 SDDSCHECK = BIN_DIR / "sddscheck"
 SDDS2STREAM = BIN_DIR / "sdds2stream"
@@ -70,6 +70,23 @@ def _stream(path: Path, page=None, columns=COLUMNS) -> str:
   return result.stdout.strip()
 
 
+def _split_rows(text: str):
+  rows = []
+  for line in text.splitlines():
+    values = line.split()
+    rows.append(([float(value) for value in values[:9]], values[9:]))
+  return rows
+
+
+def _assert_stream_matches(actual: str, expected: str):
+  actual_rows = _split_rows(actual)
+  expected_rows = _split_rows(expected)
+  assert len(actual_rows) == len(expected_rows)
+  for (actual_numbers, actual_strings), (expected_numbers, expected_strings) in zip(actual_rows, expected_rows):
+    assert actual_numbers == pytest.approx(expected_numbers)
+    assert actual_strings == expected_strings
+
+
 def _column_list(path: Path):
   result = subprocess.run([str(SDDSQUERY), str(path), "-columnList"], capture_output=True, text=True, check=True)
   return result.stdout.splitlines()
@@ -100,7 +117,7 @@ def test_overwrite(tmp_path):
   )
   assert _sddscheck_ok(output) == "ok"
   for i, expected in enumerate([PAGE1, PAGE2, PAGE1, PAGE2], start=1):
-    assert _stream(output, page=i).splitlines() == expected.splitlines()
+    _assert_stream_matches(_stream(output, page=i), expected)
 
 
 def test_merge(tmp_path):
@@ -117,7 +134,7 @@ def test_merge(tmp_path):
     check=True,
   )
   assert _sddscheck_ok(output) == "ok"
-  assert _stream(output).splitlines() == MERGED_ALL.splitlines()
+  _assert_stream_matches(_stream(output), MERGED_ALL)
 
 
 def test_merge_parameter(tmp_path):
@@ -135,9 +152,9 @@ def test_merge_parameter(tmp_path):
   )
   assert _sddscheck_ok(output) == "ok"
   assert _npages(output) == 3
-  assert _stream(output, page=1).splitlines() == MERGE_PARAM_PAGE1.splitlines()
-  assert _stream(output, page=2).splitlines() == MERGE_PARAM_PAGE2.splitlines()
-  assert _stream(output, page=3).splitlines() == MERGE_PARAM_PAGE3.splitlines()
+  _assert_stream_matches(_stream(output, page=1), MERGE_PARAM_PAGE1)
+  _assert_stream_matches(_stream(output, page=2), MERGE_PARAM_PAGE2)
+  _assert_stream_matches(_stream(output, page=3), MERGE_PARAM_PAGE3)
 
 
 def test_append(tmp_path):
@@ -155,7 +172,7 @@ def test_append(tmp_path):
   assert _sddscheck_ok(base) == "ok"
   assert _npages(base) == 4
   for i, expected in enumerate([PAGE1, PAGE2, PAGE1, PAGE2], start=1):
-    assert _stream(base, page=i).splitlines() == expected.splitlines()
+    _assert_stream_matches(_stream(base, page=i), expected)
 
 
 def test_pipe():

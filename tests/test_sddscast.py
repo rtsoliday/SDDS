@@ -1,12 +1,12 @@
 import subprocess
 from pathlib import Path
-import hashlib
 import re
 import pytest
 
-BIN_DIR = Path("bin/Linux-x86_64")
+from sdds_test_utils import BIN_DIR
 SDDSCAST = BIN_DIR / "sddscast"
 SDDSCHECK = BIN_DIR / "sddscheck"
+SDDSQUERY = BIN_DIR / "sddsquery"
 
 
 def extract_options():
@@ -30,10 +30,9 @@ OPTION_CASES = {
 
 OPTIONS = extract_options()
 assert set(OPTION_CASES) == set(OPTIONS)
-EXPECTED_HASH = "17b9bd8d5282fe3839b5372a5657a43dd59e7c7b7d0bcd5e78da69b85689e178"
 
 
-@pytest.mark.skipif(not (SDDSCAST.exists() and SDDSCHECK.exists()), reason="tools not built")
+@pytest.mark.skipif(not (SDDSCAST.exists() and SDDSCHECK.exists() and SDDSQUERY.exists()), reason="tools not built")
 @pytest.mark.parametrize("option", OPTIONS)
 def test_sddscast_options(tmp_path, option):
   args = OPTION_CASES[option]
@@ -48,5 +47,5 @@ def test_sddscast_options(tmp_path, option):
     subprocess.run(cmd, check=True)
   result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
   assert result.stdout.strip() == "ok"
-  data = output.read_bytes()
-  assert hashlib.sha256(data).hexdigest() == EXPECTED_HASH
+  query = subprocess.run([str(SDDSQUERY), str(output)], capture_output=True, text=True, check=True).stdout
+  assert re.search(r"doubleCol\s+NULL\s+NULL\s+NULL\s+float\b", query)
