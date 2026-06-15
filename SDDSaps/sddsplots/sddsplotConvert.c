@@ -339,6 +339,118 @@ void sparse_sample_clip(PLOT_SPEC *plspec)
 }
 
 
+static double *sortKeyData = NULL;
+static int sortDecreasing = 0;
+
+static int compareSortIndex(const void *a, const void *b)
+{
+  long ia = *(const long *)a;
+  long ib = *(const long *)b;
+  double va = sortKeyData[ia];
+  double vb = sortKeyData[ib];
+  if (va < vb)
+    return sortDecreasing ? 1 : -1;
+  if (va > vb)
+    return sortDecreasing ? -1 : 1;
+  if (ia < ib)
+    return -1;
+  if (ia > ib)
+    return 1;
+  return 0;
+}
+
+void sort_dataset_points(PLOT_SPEC *plspec)
+{
+  long dataset, i, npts;
+  PLOT_REQUEST *plreq;
+  PLOT_DATA *pdata;
+  long *order = NULL;
+  double *dtmp = NULL;
+  char **stmp = NULL;
+  int32_t *itmp = NULL;
+  const char *xname, *yname;
+  double *key;
+
+  for (dataset = 0; dataset < plspec->datasets; dataset++) {
+    pdata = plspec->dataset + dataset;
+    plreq = plspec->plot_request + pdata->request_index;
+    if (!(plreq->sort_flags & SORT_GIVEN) || !plreq->sort_name)
+      continue;
+    npts = pdata->points;
+    if (npts < 2)
+      continue;
+    xname = (plreq->xname && pdata->dataname_index < plreq->datanames) ?
+      plreq->xname[pdata->dataname_index] : NULL;
+    yname = (plreq->yname && pdata->dataname_index < plreq->datanames) ?
+      plreq->yname[pdata->dataname_index] : NULL;
+    key = NULL;
+    if (xname && strcmp(plreq->sort_name, xname) == 0)
+      key = pdata->x;
+    else if (yname && strcmp(plreq->sort_name, yname) == 0)
+      key = pdata->y;
+    else {
+      fprintf(stderr, "warning: -sort column %s does not match x (%s) or y (%s) for dataset\n",
+              plreq->sort_name, xname ? xname : "(none)", yname ? yname : "(none)");
+      continue;
+    }
+    if (!key)
+      continue;
+    order = trealloc(order, sizeof(*order) * npts);
+    for (i = 0; i < npts; i++)
+      order[i] = i;
+    sortKeyData = key;
+    sortDecreasing = (plreq->sort_flags & SORT_DECREASING) ? 1 : 0;
+    qsort(order, npts, sizeof(*order), compareSortIndex);
+    sortKeyData = NULL;
+
+    dtmp = trealloc(dtmp, sizeof(*dtmp) * npts);
+    if (pdata->x) {
+      for (i = 0; i < npts; i++) dtmp[i] = pdata->x[order[i]];
+      memcpy(pdata->x, dtmp, sizeof(*dtmp) * npts);
+    }
+    if (pdata->y) {
+      for (i = 0; i < npts; i++) dtmp[i] = pdata->y[order[i]];
+      memcpy(pdata->y, dtmp, sizeof(*dtmp) * npts);
+    }
+    if (pdata->x1) {
+      for (i = 0; i < npts; i++) dtmp[i] = pdata->x1[order[i]];
+      memcpy(pdata->x1, dtmp, sizeof(*dtmp) * npts);
+    }
+    if (pdata->y1) {
+      for (i = 0; i < npts; i++) dtmp[i] = pdata->y1[order[i]];
+      memcpy(pdata->y1, dtmp, sizeof(*dtmp) * npts);
+    }
+    if (pdata->split_data) {
+      for (i = 0; i < npts; i++) dtmp[i] = pdata->split_data[order[i]];
+      memcpy(pdata->split_data, dtmp, sizeof(*dtmp) * npts);
+    }
+    if (pdata->enumerate) {
+      stmp = trealloc(stmp, sizeof(*stmp) * npts);
+      for (i = 0; i < npts; i++) stmp[i] = pdata->enumerate[order[i]];
+      memcpy(pdata->enumerate, stmp, sizeof(*stmp) * npts);
+    }
+    if (pdata->pointLabel) {
+      stmp = trealloc(stmp, sizeof(*stmp) * npts);
+      for (i = 0; i < npts; i++) stmp[i] = pdata->pointLabel[order[i]];
+      memcpy(pdata->pointLabel, stmp, sizeof(*stmp) * npts);
+    }
+    if (pdata->graphicType) {
+      itmp = trealloc(itmp, sizeof(*itmp) * npts);
+      for (i = 0; i < npts; i++) itmp[i] = pdata->graphicType[order[i]];
+      memcpy(pdata->graphicType, itmp, sizeof(*itmp) * npts);
+    }
+    if (pdata->graphicSubtype) {
+      itmp = trealloc(itmp, sizeof(*itmp) * npts);
+      for (i = 0; i < npts; i++) itmp[i] = pdata->graphicSubtype[order[i]];
+      memcpy(pdata->graphicSubtype, itmp, sizeof(*itmp) * npts);
+    }
+  }
+  if (order) free(order);
+  if (dtmp) free(dtmp);
+  if (stmp) free(stmp);
+  if (itmp) free(itmp);
+}
+
 void perform_dataname_swapping(PLOT_SPEC *plspec)
 {
   long request, dataname;
