@@ -603,7 +603,7 @@ int main(int argc, char **argv) {
 void setupOutputFile(SDDS_DATASET *OutputTable, long *xIndex, long *yIndex, long *syIndex, long *fitIndex,
                      long *residualIndex, long fullOutput, char *output, SDDS_DATASET *InputTable,
                      char *xName, char *yName, char *syName, short columnMajorOrder) {
-  char *name, *yUnits, *description, *xUnits;
+  char *name, *yUnits = NULL, *description, *xUnits = NULL;
   int32_t typeValue = SDDS_DOUBLE;
   static char *residualNamePart = "Residual";
   static char *residualDescriptionPart = "Residual of Gaussian fit to ";

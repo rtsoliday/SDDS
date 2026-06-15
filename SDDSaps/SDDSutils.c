@@ -293,14 +293,14 @@ int64_t greatestProductOfSmallPrimes(int64_t rows)
 
 int64_t greatestProductOfSmallPrimes1(int64_t rows, int64_t *primeList, int64_t nPrimes) {
   int64_t iprime, product, remains, bestFactor = 0;
-  double remainder, smallestRemainder;
+  int64_t remainder, smallestRemainder;
 
   remains = rows;
   product = 1;
   while (remains > 2) {
-    smallestRemainder = LONG_MAX;
+    smallestRemainder = remains;
     for (iprime = 0; iprime < nPrimes; iprime++) {
-      remainder = remains - primeList[iprime] * ((long)(remains / primeList[iprime]));
+      remainder = remains % primeList[iprime];
       if (remainder < smallestRemainder) {
         smallestRemainder = remainder;
         bestFactor = primeList[iprime];
