@@ -264,6 +264,11 @@ typedef struct {
 #define SPLIT_NOCOLORBAR      0x00000100
 #define SPLIT_REVERSE_ORDER   0x00000200
 
+#define SORT_GIVEN       0x00000001U
+#define SORT_DECREASING  0x00000002U
+#define SORT_XCOLUMN     0x00000004U
+#define SORT_YCOLUMN     0x00000008U
+
 typedef struct {
   char *symbol, *units, *description;
 } DATA_INFO;
@@ -549,6 +554,8 @@ typedef struct {
   long filters, matches,time_filters, defines;
   long sparse_interval, sparse_offset, clip_head, clip_tail;
   long presparse_interval, presparse_offset;
+  char *sort_name;
+  unsigned long sort_flags;
   int32_t separate_group_size;
   unsigned long separate_flags;
   /*double user_tag, xgap, ygap;*/
@@ -927,6 +934,7 @@ long extract_name_and_units(DATA_INFO *info, char *label);
 long adjust_sddsplot_overlay_data(double *x, double *u, long n_pts, double range, double min, 
                                   OVERLAY_SPEC *overlay, long shift);
 void sparse_sample_clip(PLOT_SPEC *plspec);
+void sort_dataset_points(PLOT_SPEC *plspec);
 long check_for_split(SDDS_TABLE *table, SPLIT_SPEC *split, long datapage,long dataclass);
 void make_enumerated_xscale(ENUMERATE_SETTINGS *enum_settings);
 void make_enumerated_yscale(ENUMERATE_SETTINGS *enum_settings);
