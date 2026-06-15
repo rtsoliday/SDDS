@@ -2191,6 +2191,32 @@ long sample_AP(PLOT_SPEC *plotspec, char **item, long items)
     return 1;
     }
 
+static char *sort_usage = "-sort=<column-name>[,decreasing]";
+
+long sort_AP(PLOT_SPEC *plotspec, char **item, long items)
+{
+    PLOT_REQUEST *plreq;
+    long i;
+    if (items<1 || items>2)
+        return bombre("invalid -sort syntax", sort_usage, 0);
+    plreq = plotspec->plot_request + plotspec->plot_requests - 1;
+    if (plreq->sort_name)
+        free(plreq->sort_name);
+    plreq->sort_name = NULL;
+    plreq->sort_flags = 0;
+    if (!item[0] || !*item[0])
+        return bombre("invalid -sort syntax", sort_usage, 0);
+    SDDS_CopyString(&plreq->sort_name, item[0]);
+    plreq->sort_flags = SORT_GIVEN;
+    for (i=1; i<items; i++) {
+        if (strncmp(item[i], "decreasing", strlen(item[i]))==0)
+            plreq->sort_flags |= SORT_DECREASING;
+        else
+            return bombre("invalid -sort keyword", sort_usage, 0);
+    }
+    return 1;
+}
+
 static char *clip_usage = "-clip=<head>,<tail>[,invert]";
 
 long clip_AP(PLOT_SPEC *plotspec, char **item, long items)
