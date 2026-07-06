@@ -1,0 +1,60 @@
+\begin{sddsprog}{sddsgroupedenvelope}
+  \item \textbf{description:} {\tt sddsgroupedenvelope} processes pages from SDDS files in a directory, groups the pages by a parameter value, and writes an output file with one page for each group. Each output page contains the requested row-by-row quantities across pages for selected columns. It is intended for cases where separate envelope files would otherwise be made for many groups; it avoids temporary SDDS files and reads only one input file at a time.
+  \item \textbf{examples:} Make grouped PSD envelopes for selected files:
+  \begin{verbatim}
+sddsgroupedenvelope -inputDir 2024/09/10 -pattern "PSD-00:0*" \
+  -groupBy=PSName -copy=f -maximum=SqrtIntegPsdCurrent \
+  -minimum=SqrtIntegPsdCurrent -mean=SqrtIntegPsdCurrent \
+  -output 2024/09/10/PSD-envelope.final
+  \end{verbatim}
+  \item \textbf{synopsis:}
+  \begin{verbatim}
+sddsgroupedenvelope [-inputDir directory] [-pattern pattern]
+                    [-groupBy parameter] [-groupValue value]
+                    [-output file] [-copy=columnNames]
+                    [-maximum=columnNames] [-minimum=columnNames]
+                    [-mean=columnNames] [-largest=columnNames]
+                    [-signedLargest=columnNames]
+                    [-sum=power,columnNames] [-rms=columnNames]
+                    [-standardDeviations=columnNames] [-sigma=columnNames]
+                    [-wmean=weightColumn,columnNames]
+                    [-wstandardDeviations=weightColumn,columnNames]
+                    [-wrms=weightColumn,columnNames]
+                    [-wsigma=weightColumn,columnNames]
+                    [-cmaximum=independentColumn,columnNames]
+                    [-cminimum=independentColumn,columnNames]
+                    [-pmaximum=independentParameter,columnNames]
+                    [-pminimum=independentParameter,columnNames]
+                    [-slope=independentParameter,columnNames]
+                    [-intercept=independentParameter,columnNames]
+                    [-exmmMean=columnNames]
+                    [-majorOrder={row|column}] [-noOverwrite]
+                    [-nowarnings] [-verbose]
+  \end{verbatim}
+  \item \textbf{switches:}
+  \begin{itemize}
+    \item \verb|-inputDir \emph{directory}| --- Specifies the directory containing input files. The default is the current working directory.
+    \item \verb|-pattern \emph{pattern}| --- Specifies an input glob pattern relative to \verb|-inputDir|. This option may be repeated. The default patterns are \verb|PSD-*.xz| and \verb|PSD-*.gz|.
+    \item \verb|-groupBy \emph{parameter}| --- Specifies the parameter used to group pages. The default is \verb|PSName|.
+    \item \verb|-groupValue \emph{value}| --- Specifies a group value to include. This option may be repeated. If omitted, all group values found in the input files are included.
+    \item \verb|-output \emph{file}| --- Specifies the output file. Relative paths are resolved against the current working directory, not \verb|-inputDir|. The default is \verb|PSD-envelope.sdds|.
+    \item \verb|-copy=\emph{columnNames}| --- Copies the named columns from the first accepted page of each group.
+    \item \verb|-maximum=\emph{columnNames}|, \verb|-minimum=\emph{columnNames}|, \verb|-mean=\emph{columnNames}|, \verb|-largest=\emph{columnNames}|, \verb|-signedLargest=\emph{columnNames}|, \verb|-rms=\emph{columnNames}|, \verb|-standardDeviations=\emph{columnNames}|, \verb|-sigma=\emph{columnNames}|, \verb|-exmmMean=\emph{columnNames}| --- Specifies row-by-row statistics to compute across pages for the named columns.
+    \item \verb|-sum=\emph{power},\emph{columnNames}| --- Computes the row-by-row sum of the named column values raised to the indicated integer power.
+    \item \verb|-wmean=\emph{weightColumn},\emph{columnNames}|, \verb|-wstandardDeviations=\emph{weightColumn},\emph{columnNames}|, \verb|-wrms=\emph{weightColumn},\emph{columnNames}|, \verb|-wsigma=\emph{weightColumn},\emph{columnNames}| --- Computes weighted row-by-row statistics using the named weight column.
+    \item \verb|-cmaximum=\emph{independentColumn},\emph{columnNames}|, \verb|-cminimum=\emph{independentColumn},\emph{columnNames}| --- For each named column and row, records the independent column value from the page containing the maximum or minimum value.
+    \item \verb|-pmaximum=\emph{independentParameter},\emph{columnNames}|, \verb|-pminimum=\emph{independentParameter},\emph{columnNames}| --- For each named column and row, records the independent parameter value from the page containing the maximum or minimum value.
+    \item \verb|-slope=\emph{independentParameter},\emph{columnNames}|, \verb|-intercept=\emph{independentParameter},\emph{columnNames}| --- Computes a row-by-row linear fit of the named columns against the independent parameter.
+    \item \verb|-majorOrder={row|column}| --- Specifies the output data order. The default is column-major order.
+    \item \verb|-noOverwrite| --- Refuses to replace an existing output file.
+    \item \verb|-nowarnings| --- Suppresses warnings about degenerate weighted statistics.
+    \item \verb|-verbose| --- Prints details about input files and row-count selection.
+  \end{itemize}
+  \item \textbf{files:} Input files are selected by applying each \verb|-pattern| in \verb|-inputDir|. Each input file may contain pages for multiple group values, but a group value may not appear more than once in the same input file. The output contains one page per group value and is written as a binary SDDS file. At least one statistic option must be supplied; no statistics are computed by default. Exact median, percentile, and decile-range statistics are not implemented because they require retaining page histories.
+  \item \textbf{see also:}
+  \begin{itemize}
+    \item \progref{sddsenvelope}
+    \item \progref{sddscombine}
+  \end{itemize}
+  \item \textbf{author:} R. Soliday, ANL/APS.
+\end{sddsprog}
