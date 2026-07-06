@@ -117,6 +117,7 @@ PROD = agilentArb2sdds \
 ifneq ($(OS), Windows)
   PROD += sddslogserver sddslogclient
   PROD += sddskde sddskde2d sddslocaldensity
+  PROD += sddsgroupedenvelope
   #PROD += agilentwaveform2sdds agilentcomm 
 endif
 
@@ -352,4 +353,3 @@ $(OBJ_DIR)/sddsselect$(EXEEXT): $(sddsselect_OBJS) $(PROD_DEPS)
 	cp -f $@ $(BIN_DIR)/
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
-
