@@ -71,6 +71,12 @@ void assign_crowding_distance (population *pop, long *dist, long **obj_array, lo
 epicsShareFuncMDBLIB int64_t *non_dominated_sort (population *pop);
   epicsShareFuncMDBLIB void fill_population(population *pop, long rows, long columns, double **columnValue, long *maximize, double *const_violation);
 epicsShareFuncMDBLIB void free_pop_mem(population *pop);
+/* Hypervolume of the feasible rank-1 front. obj[] are stored in minimization
+ * sense (fill_population negates maximized objectives), so 'reference' must be
+ * supplied in that same internal sense (one value per objective). Returns the
+ * Lebesgue measure of the union of boxes [obj, reference] over feasible,
+ * rank-1 individuals that dominate the reference. Works for any dimensionality. */
+epicsShareFuncMDBLIB double compute_hypervolume(population *pop, double *reference);
 
 #ifdef __cplusplus
 }

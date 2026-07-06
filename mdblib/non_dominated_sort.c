@@ -430,3 +430,100 @@ void free_pop_mem(population *pop) {
   if (pop->nbits)
     free(pop->nbits);
 }
+
+/* ---------------------------------------------------------------------------
+ * Hypervolume indicator.
+ *
+ * Computes the Lebesgue measure of the union of the boxes [p, reference] over a
+ * set of points p (minimization sense, p <= reference componentwise). This is
+ * the dominated hypervolume of the front relative to the reference point.
+ *
+ * Algorithm: the standard "Hypervolume by Slicing Objectives" (HSO) recursion.
+ * The last objective is swept; between consecutive distinct values the cross
+ * section is the (d-1)-dimensional hypervolume of the points active so far, which
+ * is computed recursively. The Lebesgue measure of a union of boxes is correct
+ * even when some points are mutually dominated, so no extra filtering is needed.
+ * Works for any number of objectives. Cost ~O(n^(nobj-1) log n), fine for the
+ * modest front sizes produced by non-dominated sorting.
+ *
+ * Written by Claude Code.
+ * ------------------------------------------------------------------------- */
+
+static long hv_sort_dim; /* objective index used by hv_compare (single-threaded use) */
+
+static int hv_compare(const void *a, const void *b) {
+  double x = (*(double *const *)a)[hv_sort_dim];
+  double y = (*(double *const *)b)[hv_sort_dim];
+  if (x < y)
+    return -1;
+  if (x > y)
+    return 1;
+  return 0;
+}
+
+static double hv_slice(double **pts, long n, long d, double *reference) {
+  long i, k, m;
+  double total, level, upper, width, mn;
+  double **buf;
+
+  if (n <= 0)
+    return 0.0;
+  if (d == 1) {
+    /* union of intervals [p[0], reference[0]] = [min p[0], reference[0]] */
+    mn = pts[0][0];
+    for (i = 1; i < n; i++)
+      if (pts[i][0] < mn)
+        mn = pts[i][0];
+    width = reference[0] - mn;
+    return width > 0 ? width : 0.0;
+  }
+  /* Work on a private copy of the pointer array so the recursive calls (which
+   * re-sort by a lower dimension) do not disturb our ordering. */
+  buf = (double **)malloc(sizeof(*buf) * n);
+  memcpy(buf, pts, sizeof(*buf) * n);
+  hv_sort_dim = d - 1;
+  qsort(buf, n, sizeof(*buf), hv_compare); /* ascending in objective d-1 */
+
+  total = 0.0;
+  k = 0;
+  while (k < n) {
+    level = buf[k][d - 1];
+    m = k;
+    while (m < n && buf[m][d - 1] == level)
+      m++;
+    /* the slab from this level up to the next (or the reference) is covered by
+     * all points seen so far (buf[0..m-1]) projected onto the first d-1 objectives */
+    upper = (m < n) ? buf[m][d - 1] : reference[d - 1];
+    width = upper - level;
+    if (width > 0)
+      total += width * hv_slice(buf, m, d - 1, reference);
+    k = m;
+  }
+  free(buf);
+  return total;
+}
+
+double compute_hypervolume(population *pop, double *reference) {
+  long i, j, n = 0, nobj;
+  double **pts, hv;
+
+  if (!pop || pop->nobj < 1)
+    return 0.0;
+  nobj = pop->nobj;
+  pts = (double **)malloc(sizeof(*pts) * pop->popsize);
+  for (i = 0; i < pop->popsize; i++) {
+    if (pop->ind[i].rank != 1)
+      continue;                                 /* only the first (Pareto) front */
+    if (pop->ind[i].constr_violation < 0)
+      continue;                                 /* skip infeasible individuals */
+    for (j = 0; j < nobj; j++)
+      if (pop->ind[i].obj[j] >= reference[j])
+        break;                                  /* does not dominate reference */
+    if (j < nobj)
+      continue;
+    pts[n++] = pop->ind[i].obj;
+  }
+  hv = (n > 0) ? hv_slice(pts, n, nobj, reference) : 0.0;
+  free(pts);
+  return hv;
+}

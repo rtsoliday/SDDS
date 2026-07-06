@@ -74,6 +74,7 @@ enum option_type {
   SET_NUMERICHIGH,
   SET_NON_DOMINATE_SORT,
   SET_MAJOR_ORDER,
+  SET_HYPERVOLUME,
   N_OPTIONS
 };
 
@@ -86,6 +87,7 @@ char *option[N_OPTIONS] = {
   "numerichigh",
   "nonDominateSort",
   "majorOrder",
+  "hypervolume",
 };
 
 /* Improved Usage Message */
@@ -98,6 +100,7 @@ char *USAGE =
   "         [-parameter=<name>[,{increasing|decreasing}]...]\n"
   "         [-numericHigh] \n"
   "         [-nonDominateSort] \n"
+  "         [-hypervolume=<ref1>,<ref2>,...] \n"
   "         [-majorOrder=row|column]\n"
   "Options:\n"
   "  -pipe=[input][,output]\n"
@@ -120,6 +123,13 @@ char *USAGE =
   "  -nonDominateSort\n"
   "      Perform non-dominated sorting when multiple sort columns are provided.\n"
   "      Note: Non-dominated sorting only works for numeric columns.\n\n"
+  "  -hypervolume=<ref1>,<ref2>,...\n"
+  "      Requires -nonDominateSort. Computes the hypervolume of the feasible\n"
+  "      first (Pareto) front relative to the given reference point and stores it\n"
+  "      in the 'Hypervolume' parameter (one value per page). Give one reference\n"
+  "      value per -column objective, in the same order; each should be a worst-\n"
+  "      case (dominated) value for that objective. Works for any number of\n"
+  "      objectives.\n\n"
   "  -majorOrder=row|column\n"
   "      Set the major order for data storage, either row-major or column-major.\n\n"
   "Program by Michael Borland. (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
@@ -150,6 +160,10 @@ long SDDS_SortAll(SDDS_DATASET *SDDS_input, SDDS_DATASET *SDDS_output, SORT_REQU
 double *read_constr_violation(SDDS_DATASET *SDDS_dataset);
 
 long numericHigh = 0, constDefined = 0;
+/* Hypervolume request (off by default; when off, output is unchanged). */
+static long hypervolume_flag = 0;
+static long hv_nref = 0;
+static double *hv_reference = NULL;
 
 int main(int argc, char **argv) {
   SDDS_DATASET SDDS_input, SDDS_output, SDDS_tmp;
@@ -192,6 +206,19 @@ int main(int argc, char **argv) {
         break;
       case SET_NON_DOMINATE_SORT:
         non_dominate_sort = 1;
+        break;
+      case SET_HYPERVOLUME:
+        if (s_arg[i_arg].n_items < 2)
+          SDDS_Bomb("invalid -hypervolume syntax; give a reference point: -hypervolume=<ref1>,<ref2>,...");
+        hypervolume_flag = 1;
+        hv_nref = s_arg[i_arg].n_items - 1;
+        hv_reference = trealloc(hv_reference, sizeof(*hv_reference) * hv_nref);
+        {
+          long jref;
+          for (jref = 0; jref < hv_nref; jref++)
+            if (sscanf(s_arg[i_arg].list[jref + 1], "%lf", &hv_reference[jref]) != 1)
+              SDDS_Bomb("invalid -hypervolume reference value");
+        }
         break;
       case SET_COLUMN:
         if (s_arg[i_arg].n_items < 2 || s_arg[i_arg].n_items > 4)
@@ -284,6 +311,13 @@ int main(int argc, char **argv) {
   if (sort_requests <= 1)
     non_dominate_sort = 0;
 
+  if (hypervolume_flag) {
+    if (!non_dominate_sort)
+      SDDS_Bomb("-hypervolume requires -nonDominateSort with two or more -column objectives");
+    if (hv_nref != sort_requests)
+      SDDS_Bomb("-hypervolume reference point must have one value per -column objective");
+  }
+
   if (SDDS_input.layout.popenUsed) {
     /* SDDS library has opened the file using a command on a pipe, usually for
      * decompression in the absence of the zlib library.
@@ -357,6 +391,9 @@ int main(int argc, char **argv) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       constDefined = 1;
     }
+    if (hypervolume_flag &&
+        !SDDS_DefineSimpleParameter(&SDDS_output, "Hypervolume", NULL, SDDS_DOUBLE))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
   if (!SDDS_WriteLayout(&SDDS_output))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -614,6 +651,7 @@ long SDDS_SortRows(SDDS_DATASET *SDDS_dataset, SORT_REQUEST *xsort_request, long
   int32_t *rank = NULL;
   population pop;
   long *maximize = NULL;
+  double hv_value = 0;
 
   SDDS_sort = SDDS_dataset;
   sort_request = xsort_request;
@@ -656,6 +694,15 @@ long SDDS_SortRows(SDDS_DATASET *SDDS_dataset, SORT_REQUEST *xsort_request, long
       rank[i] = pop.ind[sort_row_index[i]].rank;
       dist[i] = pop.ind[sort_row_index[i]].crowd_dist;
       const_violation[i] = pop.ind[sort_row_index[i]].constr_violation;
+    }
+    if (hypervolume_flag) {
+      /* reference is given in user (column) units; convert to the internal
+       * minimization sense used by pop.ind[].obj (maximized objectives negated) */
+      double *ref_internal = (double *)malloc(sizeof(*ref_internal) * sort_requests);
+      for (i = 0; i < sort_requests; i++)
+        ref_internal[i] = maximize[i] ? -hv_reference[i] : hv_reference[i];
+      hv_value = compute_hypervolume(&pop, ref_internal);
+      free(ref_internal);
     }
     free_pop_mem(&pop);
     for (i = 0; i < sort_requests; i++)
@@ -716,6 +763,12 @@ long SDDS_SortRows(SDDS_DATASET *SDDS_dataset, SORT_REQUEST *xsort_request, long
     free(rank);
     free(dist);
     free(const_violation);
+    if (hypervolume_flag &&
+        !SDDS_SetParameters(SDDS_sort, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, "Hypervolume", hv_value, NULL)) {
+      SDDS_SetError("Problem setting Hypervolume parameter");
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      exit(EXIT_FAILURE);
+    }
   }
   free(sort_row_index);
   free(row_location);
