@@ -21,6 +21,7 @@
  *                  [-interpolate]
  *                  [-mode={onePairPerPage|reuseFirstPage|all}]
  *                  [-inverse]
+ *                  [-verbose]
  * ```
  *
  * @section Options
@@ -73,6 +74,7 @@ enum option_type {
   CLO_MODE,
   CLO_PRESORTED,
   CLO_INVERSE,
+  CLO_VERBOSE,
   N_OPTIONS
 };
 
@@ -85,7 +87,8 @@ char *option[N_OPTIONS] = {
   "interpolate",
   "mode",
   "presorted",
-  "inverse"
+  "inverse",
+  "verbose"
 };
 
 /* Improved usage message for better readability */
@@ -113,7 +116,8 @@ char *USAGE =
   "                      onePairPerPage   - One pair per input page (default).\n"
   "                      reuseFirstPage   - Use all pairs with the first input page.\n"
   "                      all              - Use all pairs with all input pages.\n"
-  "  -inverse          Performs the inverse operation, interpolating to find values from grid locations.\n\n"
+  "  -inverse          Performs the inverse operation, interpolating to find values from grid locations.\n"
+  "  -verbose          Prints possibly useful information while running\n\n"
   "Program Information:\n"
   "  Program by Michael Borland. (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
 
@@ -137,7 +141,7 @@ int main(int argc, char **argv) {
   char *input = NULL, *output = NULL, *fileForValues = NULL;
   char *findLocationOf[2] = {NULL, NULL}, *gridVariable[2] = {NULL, NULL};
   double *atValue[2] = {NULL, NULL}, value[2] = {0.0, 0.0};
-  short interpolate = 0, restarted = 0, needPage = 0, presorted = 0, inverse = 0;
+  short interpolate = 0, restarted = 0, needPage = 0, presorted = 0, inverse = 0, verbose = 0;
   unsigned long mode = MODE_ALL;
 
   SDDS_RegisterProgramName(argv[0]);
@@ -220,6 +224,9 @@ int main(int argc, char **argv) {
       case CLO_INVERSE:
         inverse = 1;
         break;
+      case CLO_VERBOSE:
+        verbose = 1;
+        break;
       default:
         fprintf(stderr, "Invalid option: %s\n", scanned[iArg].list[0]);
         fprintf(stderr, "%s", USAGE);
@@ -256,6 +263,8 @@ int main(int argc, char **argv) {
       SDDS_Bomb("Unable to read values file.\n");
     }
     if ((atValues = SDDS_RowCount(&SDDSvalues)) > 0) {
+      if (verbose)
+	fprintf(stderr, "%ld values in values file\n", atValues);
       if (inverse) {
         if (!(atValue[0] = SDDS_GetColumnInDoubles(&SDDSvalues, gridVariable[0]))) {
           SDDS_Bomb("Unable to retrieve values of first grid variable in values file.\n");
@@ -400,12 +409,16 @@ int main(int argc, char **argv) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       }
     } else {
+      if (verbose)
+	fprintf(stderr, "Finding location for values (%le, %le)\n", atValue[0][iv], atValue[1][iv]);
       if (!findLocationInGrid(atValue[0][iv], atValue[1][iv], &location[0], &value[0], interpolate)) {
         fprintf(stderr, "Couldn't find location for %s=%.6le, %s=%.6le\n",
                 findLocationOf[0], atValue[0][iv],
                 findLocationOf[1], atValue[1][iv]);
         exit(EXIT_FAILURE);
       }
+      if (verbose)
+	fprintf(stderr, "Location is (%le, %le) with values (%le, %le)\n", location[0], location[1], value[0], value[1]);
       if (!SDDS_SetRowValues(&SDDSout, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE, irow++,
                              0, location[0], 1, location[1], 2, value[0], 3, value[1],
                              -1)) {
