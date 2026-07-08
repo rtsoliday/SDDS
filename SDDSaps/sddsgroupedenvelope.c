@@ -910,8 +910,9 @@ static int compile_stat_definitions(OPTIONS *opts, SDDS_DATASET *input) {
         int32_t iName;
         SDDS_SetColumnFlags(input, 0);
         if (!SDDS_SetColumnsOfInterest(input, SDDS_MATCH_STRING, columnPattern, SDDS_OR) ||
-            !(columnName = SDDS_GetColumnNames(input, &columnNames))) {
+            !(columnName = SDDS_GetColumnNames(input, &columnNames)) || columnNames <= 0) {
           fprintf(stderr, "error: no columns selected for wildcard %s\n", columnPattern);
+          free(columnName);
           return 0;
         }
         for (iName = 0; iName < columnNames; iName++) {

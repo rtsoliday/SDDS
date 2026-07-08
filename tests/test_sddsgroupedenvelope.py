@@ -308,6 +308,35 @@ def test_requires_at_least_one_statistic_option(tmp_path):
   not SDDSGROUPEDENVELOPE.exists(),
   reason="sddsgroupedenvelope not built",
 )
+def test_unmatched_wildcard_statistic_is_an_error(tmp_path):
+  input_dir = tmp_path / "input"
+  write_grouped_inputs(input_dir)
+
+  result = subprocess.run(
+    [
+      str(SDDSGROUPEDENVELOPE),
+      "-inputDir",
+      str(input_dir),
+      "-pattern",
+      "test-*.sdds",
+      "-groupBy=Group",
+      "-copy=x",
+      "-mean=missing*",
+      "-output",
+      str(tmp_path / "out"),
+    ],
+    capture_output=True,
+    text=True,
+  )
+
+  assert result.returncode != 0
+  assert "no columns selected for wildcard missing*" in result.stderr
+
+
+@pytest.mark.skipif(
+  not SDDSGROUPEDENVELOPE.exists(),
+  reason="sddsgroupedenvelope not built",
+)
 def test_threads_must_be_positive():
   result = subprocess.run(
     [
