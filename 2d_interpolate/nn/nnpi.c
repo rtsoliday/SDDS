@@ -62,17 +62,18 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <limits.h>
 #include <float.h>
 #include <string.h>
 #include <assert.h>
 #include <math.h>
+#include "mdb.h"
 #include "nan.h"
 #include "hash.h"
 #include "nn.h"
 #include "nncommon.h"
 #include "istack_internal.h"
 #include "delaunay_internal.h"
+#include "nn_thread.h"
 
 struct nnpi {
     dsearch* ds;
@@ -537,7 +538,7 @@ static void nnpi_normalize_weights(nnpi* nn)
         nn->weights[i] /= sum;
 }
 
-#define RANDOM (double) rand() / ((double) RAND_MAX + 1.0)
+#define RANDOM mdbmth_locked_rand_fraction()
 
 void nnpi_calculate_weights(nnpi* nn, point* p)
 {

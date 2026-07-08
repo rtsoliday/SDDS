@@ -17,12 +17,12 @@
 #include "scan.h"
 
 #define UNPACK_TYPES 3
-static char *unpackSuffix[UNPACK_TYPES] = {
+static const char *const unpackSuffix[UNPACK_TYPES] = {
   "gz",
   "F",
   "Z",
 };
-static char *unpackCommand[UNPACK_TYPES] = {
+static const char *const unpackCommand[UNPACK_TYPES] = {
   "gzip -dcn %s 2> /dev/null ",
   "freeze -dc %s ",
   "uncompress -c %s ",
@@ -87,7 +87,8 @@ long PackSuffixType(char *filename, char **unpackedName, unsigned long mode) {
  * @return A FILE pointer to the opened file, or NULL if the file could not be opened or an error occurred.
  */
 FILE *UnpackFopen(char *filename, unsigned long mode, short *popenUsed, char **tmpFileUsed) {
-  static char *command = NULL;
+  char *command = NULL;
+  FILE *fp;
   long type;
   char *tmpName;
 
@@ -111,7 +112,9 @@ FILE *UnpackFopen(char *filename, unsigned long mode, short *popenUsed, char **t
     exit(1);
     return NULL;
 #else
-    return popen(command, FOPEN_READ_MODE);
+    fp = popen(command, FOPEN_READ_MODE);
+    free(command);
+    return fp;
 #endif
   } else {
     sprintf(command, unpackCommand[type], filename);
@@ -125,6 +128,9 @@ FILE *UnpackFopen(char *filename, unsigned long mode, short *popenUsed, char **t
     if (tmpFileUsed)
       cp_str(tmpFileUsed, command);
 
-    return fopen(command, FOPEN_READ_MODE);
+    fp = fopen(command, FOPEN_READ_MODE);
+    free(tmpName);
+    free(command);
+    return fp;
   }
 }

@@ -36,8 +36,8 @@ double qromb(double (*func)(double x), /* pointer to function*/
              double a, double b, /* upper, lower limits of integeration*/
              double eps /*error */) {
   double T, R, BB, S, H, S1, S0, err, result;
-  static long MAXE = 0;
-  static double *RM = NULL;
+  static MDB_THREAD_LOCAL long MAXE = 0;
+  static MDB_THREAD_LOCAL double *RM = NULL;
   long K, K1, N, N0, N1, KK, KKK, K0, J, L, K2;
 
   T = (b - a) * (func(a) + func(b)) * .5; /* initial trapzoid rule */

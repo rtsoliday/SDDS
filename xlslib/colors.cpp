@@ -38,7 +38,7 @@ using namespace xlslib_core;
 
 #define NUM_PALETTE		56
 
-static color_entry_t default_palette[NUM_PALETTE] =
+static const color_entry_t default_palette[NUM_PALETTE] =
 {
 	{0x00, 0x00, 0x00, 0x00}, {0xff, 0xff, 0xff, 0x00}, { 0xff, 0x00, 0x00, 0x00}, {0x00, 0xff, 0x00, 0x00},
 	{0x00, 0x00, 0xff, 0x00}, {0xff, 0xff, 0x00, 0x00}, { 0xff, 0x00, 0xff, 0x00}, {0x00, 0xff, 0xff, 0x00},
@@ -108,7 +108,7 @@ CPalette::CPalette(CDataStorage &datastore, const color_entry_t *colors) :
 	SetRecordType(RECTYPE_PALETTE);
 
 	AddValue16(NUM_PALETTE);
-	AddDataArray((unsigned8_t *)colors, NUM_PALETTE*sizeof(color_entry_t));
+	AddDataArray((const unsigned8_t *)colors, NUM_PALETTE*sizeof(color_entry_t));
 
 	SetRecordLength(GetDataSize()-RECORD_HEADER_SIZE);
 }

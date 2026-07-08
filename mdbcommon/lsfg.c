@@ -39,7 +39,8 @@ long lsfg(double *xd, double *yd, double *sy, /* data */
 ) {
   long i, j, unweighted;
   double xp, *x_i, x0;
-  static MATRIX *X, *Y, *Yp, *C, *C_1, *Xt, *A, *Ca, *XtC, *XtCX, *T, *Tt, *TC;
+  MATRIX *X = NULL, *Y = NULL, *Yp = NULL, *C = NULL, *C_1 = NULL, *Xt = NULL, *A = NULL, *Ca = NULL, *XtC = NULL, *XtCX = NULL, *T = NULL, *Tt = NULL, *TC = NULL;
+  long status = 0;
 
   if (n_pts < n_terms) {
     printf("error: insufficient data for requested order of fit\n");
@@ -99,44 +100,44 @@ long lsfg(double *xd, double *yd, double *sy, /* data */
        * if there are many data points.
        */
     if (!m_trans(Xt, X))
-      return (p_merror("transposing X"));
+      { status = p_merror("transposing X"); goto cleanup; }
     if (!m_mult(XtCX, Xt, X))
-      return (p_merror("multiplying Xt.X"));
+      { status = p_merror("multiplying Xt.X"); goto cleanup; }
     if (!m_invert(XtCX, XtCX))
-      return (p_merror("inverting XtCX"));
+      { status = p_merror("inverting XtCX"); goto cleanup; }
     if (!m_mult(T, XtCX, Xt))
-      return (p_merror("multiplying XtX.Xt"));
+      { status = p_merror("multiplying XtX.Xt"); goto cleanup; }
     if (!m_mult(A, T, Y))
-      return (p_merror("multiplying T.Y"));
+      { status = p_merror("multiplying T.Y"); goto cleanup; }
 
     /* Compute covariance matrix of A, Ca = (T.Tt)*C[0][0] */
     if (!m_trans(Tt, T))
-      return (p_merror("computing transpose of T"));
+      { status = p_merror("computing transpose of T"); goto cleanup; }
     if (!m_mult(Ca, T, Tt))
-      return (p_merror("multiplying T.Tt"));
+      { status = p_merror("multiplying T.Tt"); goto cleanup; }
     if (!m_scmul(Ca, Ca, sy ? sqr(sy[0]) : 1))
-      return (p_merror("multiplying T.Tt by scalar"));
+      { status = p_merror("multiplying T.Tt by scalar"); goto cleanup; }
   } else {
     if (!m_trans(Xt, X))
-      return (p_merror("transposing X"));
+      { status = p_merror("transposing X"); goto cleanup; }
     if (!m_mult(XtC, Xt, C_1))
-      return (p_merror("multiplying Xt.C_1"));
+      { status = p_merror("multiplying Xt.C_1"); goto cleanup; }
     if (!m_mult(XtCX, XtC, X))
-      return (p_merror("multiplying XtC.X"));
+      { status = p_merror("multiplying XtC.X"); goto cleanup; }
     if (!m_invert(XtCX, XtCX))
-      return (p_merror("inverting XtCX"));
+      { status = p_merror("inverting XtCX"); goto cleanup; }
     if (!m_mult(T, XtCX, XtC))
-      return (p_merror("multiplying XtCX.XtC"));
+      { status = p_merror("multiplying XtCX.XtC"); goto cleanup; }
     if (!m_mult(A, T, Y))
-      return (p_merror("multiplying T.Y"));
+      { status = p_merror("multiplying T.Y"); goto cleanup; }
 
     /* Compute covariance matrix of A, Ca = T.C.Tt */
     if (!m_mult(TC, T, C))
-      return (p_merror("multiplying T.C"));
+      { status = p_merror("multiplying T.C"); goto cleanup; }
     if (!m_trans(Tt, T))
-      return (p_merror("computing transpose of T"));
+      { status = p_merror("computing transpose of T"); goto cleanup; }
     if (!m_mult(Ca, TC, Tt))
-      return (p_merror("multiplying TC.Tt"));
+      { status = p_merror("multiplying TC.Tt"); goto cleanup; }
   }
 
   for (i = 0; i < n_terms; i++) {
@@ -146,7 +147,7 @@ long lsfg(double *xd, double *yd, double *sy, /* data */
 
   /* Compute Yp = X.A, use to compute chi-squared */
   if (!m_mult(Yp, X, A))
-    return (p_merror("multiplying X.A"));
+    { status = p_merror("multiplying X.A"); goto cleanup; }
   *chi = 0;
   for (i = 0; i < n_pts; i++) {
     xp = (Yp->a[i][0] - yd[i]);
@@ -158,6 +159,9 @@ long lsfg(double *xd, double *yd, double *sy, /* data */
   if (n_pts != n_terms)
     *chi /= (n_pts - n_terms);
 
+  status = 1;
+
+cleanup:
   /* de-allocate matrices */
   m_free(&X);
   m_free(&Y);
@@ -175,5 +179,5 @@ long lsfg(double *xd, double *yd, double *sy, /* data */
   m_free(&Tt);
   m_free(&TC);
 
-  return (1);
+  return (status);
 }

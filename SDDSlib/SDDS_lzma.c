@@ -43,6 +43,8 @@
 #include <string.h>
 #include <stdarg.h>
 #include <lzma.h>
+#include "mdb.h"
+#include "mdb_thread.h"
 #if defined(_WIN32)
   #define LZMA_BUF_SIZE 40960
   #include "SDDS.h"
@@ -67,15 +69,27 @@ struct lzmafile {
   unsigned char rdbuf[BUF_SIZE]; /* read buffer used by lzmaRead */
 };
 
+static MDB_THREAD_LOCK lzmaCompressionLevelLock = MDB_THREAD_LOCK_INITIALIZER;
 static int lzmaCompressionLevel = 2;
 
+static int SDDS_GetLockedLZMACompressionLevel(void) {
+  int level;
+  mdb_thread_lock(&lzmaCompressionLevelLock);
+  level = lzmaCompressionLevel;
+  mdb_thread_unlock(&lzmaCompressionLevelLock);
+  return level;
+}
+
 void SDDS_SetLZMACompressionLevel(int32_t level) {
-  if (level >= 0 && level <= 9)
+  if (level >= 0 && level <= 9) {
+    mdb_thread_lock(&lzmaCompressionLevelLock);
     lzmaCompressionLevel = level;
+    mdb_thread_unlock(&lzmaCompressionLevelLock);
+  }
 }
 
 int32_t SDDS_GetLZMACompressionLevel(void) {
-  return lzmaCompressionLevel;
+  return SDDS_GetLockedLZMACompressionLevel();
 }
 
 /* lzma_open opens the file whose name is the string pointed to
@@ -87,7 +101,13 @@ void *lzma_open(const char *path, const char *mode) {
 
   /* initialize LZMA stream */
   struct lzmafile *lf = malloc(sizeof(struct lzmafile));
+  if (!lf)
+    return NULL;
   lf->fp = fopen(path, mode);
+  if (!lf->fp) {
+    free(lf);
+    return NULL;
+  }
   lf->str = lzma_stream_init;
   lf->mode = mode[0];
   if (mode[0] == 'r') {
@@ -98,10 +118,13 @@ void *lzma_open(const char *path, const char *mode) {
 #endif
     lf->str.avail_in = 0;
   } else {
-    ret = LZMA_EASY_ENCODER(&lf->str, lzmaCompressionLevel);
+    ret = LZMA_EASY_ENCODER(&lf->str, SDDS_GetLockedLZMACompressionLevel());
   }
   if (ret != LZMA_OK) {
     fprintf(stderr, "lzma_open error: %d\n", ret);
+    lzma_end(&lf->str);
+    fclose(lf->fp);
+    free(lf);
     return NULL;
   }
   return (void *)lf;

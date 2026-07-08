@@ -44,7 +44,7 @@ ZMAT	*zHfactor(A, diag)
 ZMAT	*A;
 ZVEC	*diag;
 {
-	static	ZVEC	*tmp1 = ZVNULL;
+	static MESCHACH_THREAD_LOCAL	ZVEC	*tmp1 = ZVNULL;
 	Real	beta;
 	int	k, limit;
 
@@ -87,7 +87,7 @@ ZVEC	*diag;
 {
 	int	i, j, limit;
 	Real	beta, r_ii, tmp_val;
-	static	ZVEC	*tmp1 = ZVNULL, *tmp2 = ZVNULL;
+	static MESCHACH_THREAD_LOCAL	ZVEC	*tmp1 = ZVNULL, *tmp2 = ZVNULL;
 
 	if ( HQ==ZMNULL || diag==ZVNULL )
 		error(E_NULL,"zHQunpack");

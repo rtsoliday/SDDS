@@ -25,8 +25,8 @@
 
 void rpn_draw()
 {
-    static char s[1024];
-    static FILE *fp = NULL;
+    static RPN_THREAD_LOCAL char s[1024];
+    static RPN_THREAD_LOCAL FILE *fp = NULL;
     long n_numbers, n_strings, i;
 #if defined(vxWorks)
     struct timespec rqtp;
@@ -85,4 +85,3 @@ void rpn_draw()
     fprintf(fp, "%s\n", s);
     fflush(fp);
     }
-

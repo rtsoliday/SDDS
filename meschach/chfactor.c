@@ -109,7 +109,7 @@ MAT	*A;
 	unsigned int	i, k, n, p;
 	Real	**A_ent;
 	Real d, sum;
-	static VEC	*r = VNULL;
+	static MESCHACH_THREAD_LOCAL VEC	*r = VNULL;
 
 	if ( ! A )
 		error(E_NULL,"LDLfactor");

@@ -266,6 +266,22 @@ def test_numeric_definition_evaluation_conversion_and_casting(tmp_path):
   assert b"units=cm" in output.read_bytes()
 
 
+def test_evaluate_column_after_row_filter_uses_selected_rows(tmp_path):
+  input_file = write_rich_input(tmp_path / "input.sdds")
+  output = tmp_path / "filtered-evaluate.sdds"
+
+  run_process(
+    input_file,
+    output,
+    "-filter=column,x,2,4",
+    "-evaluate=column,evaluated,expr,type=double",
+  )
+
+  check_sdds(output)
+  assert stream_column(output, "x") == pytest.approx([2, 3, 4])
+  assert stream_column(output, "evaluated") == pytest.approx([7, 6, 36])
+
+
 def test_string_scan_edit_print_format_reprint_and_system(tmp_path):
   input_file = write_rich_input(tmp_path / "input.sdds")
   output = tmp_path / "strings.sdds"

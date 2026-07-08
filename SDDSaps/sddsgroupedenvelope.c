@@ -4,8 +4,9 @@
  *
  * This program reads multipage SDDS files, groups pages by a selected
  * parameter, and writes one output page per group containing requested row-wise
- * statistics.  Accumulators are streaming: only one input file is open at a
- * time and only running statistic arrays are kept in memory.
+ * statistics.  Accumulators are streaming: by default one input file is open
+ * at a time, while -threads uses per-file accumulators that are merged in
+ * deterministic input-file order.
  */
 
 #include "mdb.h"
@@ -24,6 +25,13 @@
 #include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#if defined(linux) || (defined(_WIN32) && !defined(_MINGW))
+#  include <omp.h>
+#  define SDDSGROUPEDENVELOPE_USE_OPENMP 1
+#else
+#  define SDDSGROUPEDENVELOPE_USE_OPENMP 0
+#endif
 
 #ifndef PATH_MAX
 #  define PATH_MAX 4096
@@ -87,6 +95,7 @@ typedef struct {
   int overwrite;
   int verbose;
   int noWarnings;
+  int threads;
   short columnMajorOrder;
   RAW_STAT_REQUEST *request;
   long requests;
@@ -127,6 +136,11 @@ typedef struct {
   long groupsAllocated;
 } GROUP_LIST;
 
+typedef struct {
+  GROUP_LIST groups;
+  int ok;
+} FILE_READ_RESULT;
+
 enum {
   PROCESS_ERROR = -1,
   PROCESS_NO_INPUT = 0,
@@ -149,6 +163,7 @@ static char *USAGE =
   "  -output <file>           Output file, relative to current directory (default: PSD-envelope.sdds).\n"
   "  -noOverwrite             Refuse to replace an existing output file.\n"
   "  -majorOrder={row|column} Output data order (default: column).\n"
+  "  -threads <number>       Number of input files to read concurrently (default: 1).\n"
   "  -nowarnings              Suppress warnings about degenerate statistics.\n"
   "  -verbose                 Print per-directory and row-count details.\n"
   "  -help                    Show this message.\n"
@@ -489,6 +504,7 @@ static void init_options(OPTIONS *opts) {
   opts->inputDir = current_directory();
   opts->output = xstrdup("PSD-envelope.sdds");
   opts->overwrite = 1;
+  opts->threads = 1;
   opts->columnMajorOrder = 1;
 }
 
@@ -644,6 +660,17 @@ static void parse_options(OPTIONS *opts, int argc, char **argv) {
         fprintf(stderr, "error: -majorOrder must be row or column\n");
         exit(EXIT_FAILURE);
       }
+    } else if ((value = option_value(&iArg, argc, argv, arg, "threads"))) {
+      long threads = parse_long_option("threads", value);
+      if (threads < 1) {
+        fprintf(stderr, "error: -threads must be >= 1\n");
+        exit(EXIT_FAILURE);
+      }
+      if (threads > INT_MAX) {
+        fprintf(stderr, "error: -threads value is too large\n");
+        exit(EXIT_FAILURE);
+      }
+      opts->threads = (int)threads;
     } else if ((value = option_value(&iArg, argc, argv, arg, "copy"))) {
       add_simple_stat_request(opts, STAT_COPY, value);
     } else if ((value = option_value(&iArg, argc, argv, arg, "maximum"))) {
@@ -936,6 +963,28 @@ static void free_group_value(void *value, int32_t type) {
   free(value);
 }
 
+static void *duplicate_group_value(const void *value, int32_t type) {
+  void *copy;
+  int32_t size;
+
+  if (!value)
+    return NULL;
+  if (type == SDDS_STRING) {
+    char **stringCopy = xmalloc(sizeof(*stringCopy));
+    char *const *stringValue = (char *const *)value;
+    *stringCopy = xstrdup(*stringValue ? *stringValue : "");
+    return stringCopy;
+  }
+  size = SDDS_GetTypeSize(type);
+  if (size <= 0) {
+    fprintf(stderr, "error: invalid grouping parameter type %d\n", type);
+    exit(EXIT_FAILURE);
+  }
+  copy = xmalloc((size_t)size);
+  memcpy(copy, value, (size_t)size);
+  return copy;
+}
+
 static void free_group_list(GROUP_LIST *groups, const OPTIONS *opts) {
   long i, j, iStat;
   for (i = 0; i < groups->groups; i++) {
@@ -953,6 +1002,10 @@ static void free_group_list(GROUP_LIST *groups, const OPTIONS *opts) {
   free(groups->group);
   groups->group = NULL;
   groups->groups = groups->groupsAllocated = 0;
+}
+
+static void copy_double_array(double *target, const double *source, int64_t rows) {
+  memcpy(target, source, sizeof(*target) * (size_t)rows);
 }
 
 static ENVELOPE_GROUP *find_group(GROUP_LIST *groups, const char *groupName) {
@@ -1299,6 +1352,157 @@ static int accumulate_stat(SDDS_DATASET *input, ROW_ACCUMULATOR *rowData, const 
   return 1;
 }
 
+static void merge_stat_accumulator(STAT_ACCUMULATOR *target, STAT_ACCUMULATOR *source,
+                                   const STAT_DEFINITION *stat, int64_t rows) {
+  int64_t i;
+
+  if (!source->initialized)
+    return;
+
+  if (stat->code == STAT_COPY) {
+    if (!target->initialized) {
+      target->copyData = source->copyData;
+      source->copyData = NULL;
+      target->initialized = 1;
+    }
+    return;
+  }
+
+  if (!target->initialized) {
+    if (source->value1)
+      copy_double_array(target->value1, source->value1, rows);
+    if (source->value2)
+      copy_double_array(target->value2, source->value2, rows);
+    if (source->value3)
+      copy_double_array(target->value3, source->value3, rows);
+    if (source->value4)
+      copy_double_array(target->value4, source->value4, rows);
+    if (source->sumWeight)
+      copy_double_array(target->sumWeight, source->sumWeight, rows);
+    target->initialized = 1;
+    return;
+  }
+
+  switch (stat->code) {
+  case STAT_MAXIMUM:
+  case STAT_LARGEST:
+    for (i = 0; i < rows; i++)
+      if (target->value1[i] < source->value1[i])
+        target->value1[i] = source->value1[i];
+    break;
+  case STAT_MINIMUM:
+    for (i = 0; i < rows; i++)
+      if (target->value1[i] > source->value1[i])
+        target->value1[i] = source->value1[i];
+    break;
+  case STAT_SIGNED_LARGEST:
+    for (i = 0; i < rows; i++)
+      if (fabs(target->value1[i]) < fabs(source->value1[i]))
+        target->value1[i] = source->value1[i];
+    break;
+  case STAT_CMAXIMUM:
+  case STAT_PMAXIMUM:
+    for (i = 0; i < rows; i++) {
+      if (target->value2[i] < source->value2[i]) {
+        target->value1[i] = source->value1[i];
+        target->value2[i] = source->value2[i];
+      }
+    }
+    break;
+  case STAT_CMINIMUM:
+  case STAT_PMINIMUM:
+    for (i = 0; i < rows; i++) {
+      if (target->value2[i] > source->value2[i]) {
+        target->value1[i] = source->value1[i];
+        target->value2[i] = source->value2[i];
+      }
+    }
+    break;
+  case STAT_MEAN:
+  case STAT_SUM:
+  case STAT_RMS:
+    for (i = 0; i < rows; i++)
+      target->value1[i] += source->value1[i];
+    break;
+  case STAT_STANDARD_DEVIATION:
+  case STAT_SIGMA:
+    for (i = 0; i < rows; i++) {
+      target->value1[i] += source->value1[i];
+      target->value2[i] += source->value2[i];
+    }
+    break;
+  case STAT_WMEAN:
+  case STAT_WRMS:
+    for (i = 0; i < rows; i++) {
+      target->value1[i] += source->value1[i];
+      target->sumWeight[i] += source->sumWeight[i];
+    }
+    break;
+  case STAT_WSTANDARD_DEVIATION:
+  case STAT_WSIGMA:
+    for (i = 0; i < rows; i++) {
+      target->value1[i] += source->value1[i];
+      target->value2[i] += source->value2[i];
+      target->sumWeight[i] += source->sumWeight[i];
+    }
+    break;
+  case STAT_SLOPE:
+  case STAT_INTERCEPT:
+    for (i = 0; i < rows; i++) {
+      target->value1[i] += source->value1[i];
+      target->value2[i] += source->value2[i];
+      target->value3[i] += source->value3[i];
+      target->value4[i] += source->value4[i];
+    }
+    break;
+  case STAT_EXMM_MEAN:
+    for (i = 0; i < rows; i++) {
+      target->value1[i] += source->value1[i];
+      if (source->value2[i] < target->value2[i]) {
+        target->value2[i] = source->value2[i];
+        target->value4[i] = source->value4[i];
+      } else if (source->value2[i] == target->value2[i]) {
+        target->value4[i] += source->value4[i];
+      }
+      if (source->value3[i] > target->value3[i]) {
+        target->value3[i] = source->value3[i];
+        target->sumWeight[i] = source->sumWeight[i];
+      } else if (source->value3[i] == target->value3[i]) {
+        target->sumWeight[i] += source->sumWeight[i];
+      }
+    }
+    break;
+  case STAT_COPY:
+    break;
+  }
+}
+
+static void merge_row_accumulator(ROW_ACCUMULATOR *target, ROW_ACCUMULATOR *source, const OPTIONS *opts) {
+  long iStat;
+
+  for (iStat = 0; iStat < opts->stats; iStat++)
+    merge_stat_accumulator(target->stat + iStat, source->stat + iStat, opts->stat + iStat, source->rows);
+  target->pages += source->pages;
+}
+
+static void merge_group_list(GROUP_LIST *target, GROUP_LIST *source, const OPTIONS *opts) {
+  long iGroup, iRowData;
+
+  for (iGroup = 0; iGroup < source->groups; iGroup++) {
+    ENVELOPE_GROUP *sourceGroup = source->group + iGroup;
+    ENVELOPE_GROUP *targetGroup = find_group(target, sourceGroup->name);
+    if (!targetGroup) {
+      targetGroup = add_group(target, sourceGroup->name, duplicate_group_value(sourceGroup->value, opts->groupByType));
+    }
+    targetGroup->zeroRowPages += sourceGroup->zeroRowPages;
+    for (iRowData = 0; iRowData < sourceGroup->rowDatas; iRowData++) {
+      ROW_ACCUMULATOR *sourceRowData = sourceGroup->rowData + iRowData;
+      ROW_ACCUMULATOR *targetRowData = get_row_accumulator(targetGroup, opts, sourceRowData->rows);
+      merge_row_accumulator(targetRowData, sourceRowData, opts);
+    }
+  }
+}
+
 static int define_stat_column(SDDS_DATASET *output, SDDS_DATASET *input, const STAT_DEFINITION *stat) {
   char *symbol = NULL;
   char *newSymbol;
@@ -1372,102 +1576,150 @@ static int setup_output_file(SDDS_DATASET *output, const char *outputFile, SDDS_
   return 1;
 }
 
-static int read_input_files(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups) {
-  long iFile;
+static int read_input_file(const char *filename, const OPTIONS *opts, GROUP_LIST *groups) {
+  SDDS_DATASET input;
+  int pageCode;
+  STRING_LIST seen;
 
-  for (iFile = 0; iFile < files->items; iFile++) {
-    SDDS_DATASET input;
-    int pageCode;
-    STRING_LIST seen;
+  memset(&seen, 0, sizeof(seen));
+  if (opts->verbose)
+    fprintf(stderr, "Reading %s\n", filename);
+  if (!SDDS_InitializeInput(&input, (char *)filename)) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    string_list_clear(&seen);
+    return 0;
+  }
 
-    memset(&seen, 0, sizeof(seen));
-    if (opts->verbose)
-      fprintf(stderr, "Reading %s\n", files->item[iFile]);
-    if (!SDDS_InitializeInput(&input, files->item[iFile])) {
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-      string_list_clear(&seen);
-      return 0;
-    }
+  while ((pageCode = SDDS_ReadPage(&input)) > 0) {
+    char *groupName = NULL;
+    ENVELOPE_GROUP *group;
+    ROW_ACCUMULATOR *rowData;
+    int64_t rows;
+    int wantPage;
+    long iStat;
 
-    while ((pageCode = SDDS_ReadPage(&input)) > 0) {
-      char *groupName = NULL;
-      ENVELOPE_GROUP *group;
-      ROW_ACCUMULATOR *rowData;
-      int64_t rows;
-      int wantPage;
-      long iStat;
-
-      groupName = SDDS_GetParameterAsString(&input, opts->groupBy, NULL);
-      if (!groupName || !strlen(groupName)) {
-        fprintf(stderr, "error: blank or missing %s in %s page %d\n", opts->groupBy, files->item[iFile], pageCode);
-        free(groupName);
-        SDDS_Terminate(&input);
-        string_list_clear(&seen);
-        return 0;
-      }
-      if (string_list_contains(&seen, groupName)) {
-        fprintf(stderr, "error: duplicate %s %s in %s\n", opts->groupBy, groupName, files->item[iFile]);
-        free(groupName);
-        SDDS_Terminate(&input);
-        string_list_clear(&seen);
-        return 0;
-      }
-      string_list_append(&seen, groupName);
-
-      wantPage = opts->groupValue.items == 0 || string_list_contains(&opts->groupValue, groupName);
-      if (!wantPage) {
-        free(groupName);
-        continue;
-      }
-
-      if (!(group = find_group(groups, groupName))) {
-        void *groupValue = SDDS_GetParameter(&input, opts->groupBy, NULL);
-        if (!groupValue) {
-          fprintf(stderr, "error: unable to read grouping parameter %s\n", opts->groupBy);
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-          free(groupName);
-          SDDS_Terminate(&input);
-          string_list_clear(&seen);
-          return 0;
-        }
-        group = add_group(groups, groupName, groupValue);
-      }
-      rows = SDDS_CountRowsOfInterest(&input);
-      if (rows <= 0) {
-        group->zeroRowPages++;
-        free(groupName);
-        continue;
-      }
-
-      rowData = get_row_accumulator(group, opts, rows);
-      for (iStat = 0; iStat < opts->stats; iStat++) {
-        if (!accumulate_stat(&input, rowData, opts, iStat)) {
-          free(groupName);
-          SDDS_Terminate(&input);
-          string_list_clear(&seen);
-          return 0;
-        }
-      }
-      rowData->pages++;
+    groupName = SDDS_GetParameterAsString(&input, opts->groupBy, NULL);
+    if (!groupName || !strlen(groupName)) {
+      fprintf(stderr, "error: blank or missing %s in %s page %d\n", opts->groupBy, filename, pageCode);
       free(groupName);
-    }
-
-    if (pageCode == 0) {
-      fprintf(stderr, "error: failed while reading pages from %s\n", files->item[iFile]);
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
       SDDS_Terminate(&input);
       string_list_clear(&seen);
       return 0;
     }
-    if (!SDDS_Terminate(&input)) {
-      fprintf(stderr, "error: failed to terminate input file %s\n", files->item[iFile]);
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    if (string_list_contains(&seen, groupName)) {
+      fprintf(stderr, "error: duplicate %s %s in %s\n", opts->groupBy, groupName, filename);
+      free(groupName);
+      SDDS_Terminate(&input);
       string_list_clear(&seen);
       return 0;
     }
+    string_list_append(&seen, groupName);
+
+    wantPage = opts->groupValue.items == 0 || string_list_contains(&opts->groupValue, groupName);
+    if (!wantPage) {
+      free(groupName);
+      continue;
+    }
+
+    if (!(group = find_group(groups, groupName))) {
+      void *groupValue = SDDS_GetParameter(&input, opts->groupBy, NULL);
+      if (!groupValue) {
+        fprintf(stderr, "error: unable to read grouping parameter %s\n", opts->groupBy);
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+        free(groupName);
+        SDDS_Terminate(&input);
+        string_list_clear(&seen);
+        return 0;
+      }
+      group = add_group(groups, groupName, groupValue);
+    }
+    rows = SDDS_CountRowsOfInterest(&input);
+    if (rows <= 0) {
+      group->zeroRowPages++;
+      free(groupName);
+      continue;
+    }
+
+    rowData = get_row_accumulator(group, opts, rows);
+    for (iStat = 0; iStat < opts->stats; iStat++) {
+      if (!accumulate_stat(&input, rowData, opts, iStat)) {
+        free(groupName);
+        SDDS_Terminate(&input);
+        string_list_clear(&seen);
+        return 0;
+      }
+    }
+    rowData->pages++;
+    free(groupName);
+  }
+
+  if (pageCode == 0) {
+    fprintf(stderr, "error: failed while reading pages from %s\n", filename);
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Terminate(&input);
     string_list_clear(&seen);
+    return 0;
+  }
+  if (!SDDS_Terminate(&input)) {
+    fprintf(stderr, "error: failed to terminate input file %s\n", filename);
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    string_list_clear(&seen);
+    return 0;
+  }
+  string_list_clear(&seen);
+  return 1;
+}
+
+static int read_input_files_serial(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups) {
+  long iFile;
+
+  for (iFile = 0; iFile < files->items; iFile++) {
+    if (!read_input_file(files->item[iFile], opts, groups))
+      return 0;
   }
   return 1;
+}
+
+static int read_input_files_threaded(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups) {
+#if SDDSGROUPEDENVELOPE_USE_OPENMP
+  FILE_READ_RESULT *result;
+  long iFile;
+  int ok = 1;
+  int threads = opts->threads;
+
+  if (threads > files->items)
+    threads = (int)files->items;
+  if (threads <= 1)
+    return read_input_files_serial(files, opts, groups);
+
+  result = xcalloc((size_t)files->items, sizeof(*result));
+  omp_set_num_threads(threads);
+
+#pragma omp parallel for schedule(dynamic)
+  for (iFile = 0; iFile < files->items; iFile++)
+    result[iFile].ok = read_input_file(files->item[iFile], opts, &result[iFile].groups);
+
+  for (iFile = 0; iFile < files->items; iFile++) {
+    if (!result[iFile].ok)
+      ok = 0;
+  }
+  if (ok) {
+    for (iFile = 0; iFile < files->items; iFile++)
+      merge_group_list(groups, &result[iFile].groups, opts);
+  }
+  for (iFile = 0; iFile < files->items; iFile++)
+    free_group_list(&result[iFile].groups, opts);
+  free(result);
+  return ok;
+#else
+  return read_input_files_serial(files, opts, groups);
+#endif
+}
+
+static int read_input_files(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups) {
+  if (opts->threads <= 1)
+    return read_input_files_serial(files, opts, groups);
+  return read_input_files_threaded(files, opts, groups);
 }
 
 static void warn_zero_weight(const OPTIONS *opts, const STAT_DEFINITION *stat, int64_t row) {

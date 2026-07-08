@@ -30,6 +30,7 @@
 #include "nan.h"
 #include "nn.h"
 #include "nncommon.h"
+#include "nn_tokenize.h"
 #include "preader.h"
 
 #define BUFSIZE 1024
@@ -160,6 +161,7 @@ static point* reader_getpoint(reader* r)
     char buf[BUFSIZE];
     char seps[] = " ,;\t";
     char* token;
+    char* token_state;
     point* p = &r->p;
 
     if (r->f == NULL)
@@ -177,11 +179,12 @@ static point* reader_getpoint(reader* r)
 
         if (buf[0] == '#')
             continue;
-        if ((token = strtok(buf, seps)) == NULL)
+        token_state = NULL;
+        if ((token = nn_tokenize(buf, seps, &token_state)) == NULL)
             continue;
         if (!str2double(token, &p->x))
             continue;
-        if ((token = strtok(NULL, seps)) == NULL)
+        if ((token = nn_tokenize(NULL, seps, &token_state)) == NULL)
             continue;
         if (!str2double(token, &p->y))
             continue;

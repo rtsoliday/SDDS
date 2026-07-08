@@ -24,7 +24,23 @@
 #include "mdb.h"
 
 #define OPTIM_ABORT 0x0001UL
+static MDB_THREAD_LOCK optimFlagsLock = MDB_THREAD_LOCK_INITIALIZER;
 static unsigned long optimFlags = 0;
+
+static void clearOptimAbort(void) {
+  mdb_thread_lock(&optimFlagsLock);
+  optimFlags &= ~OPTIM_ABORT;
+  mdb_thread_unlock(&optimFlagsLock);
+}
+
+static long optimAbortRequested(void) {
+  long requested;
+
+  mdb_thread_lock(&optimFlagsLock);
+  requested = (optimFlags & OPTIM_ABORT) ? 1 : 0;
+  mdb_thread_unlock(&optimFlagsLock);
+  return requested;
+}
 
 /**
  * @brief Set or query the abort condition for optimization routines.
@@ -37,11 +53,16 @@ static unsigned long optimFlags = 0;
  * @return Returns 1 if the abort flag is set, otherwise 0.
  */
 long optimAbort(long abort) {
+  long requested;
+
+  mdb_thread_lock(&optimFlagsLock);
   if (abort) {
     /* if zero, then operation is a query */
     optimFlags |= OPTIM_ABORT;
   }
-  return optimFlags & OPTIM_ABORT ? 1 : 0;
+  requested = (optimFlags & OPTIM_ABORT) ? 1 : 0;
+  mdb_thread_unlock(&optimFlagsLock);
+  return requested;
 }
 
 /**
@@ -70,17 +91,19 @@ long grid_search_min(
   long n_dimen,
   double target,
   double (*func)(double *x, long *invalid)) {
-  static double *x = NULL, *best_x = NULL;
-  static long last_n_dimen = 0;
-  static long *index, *counter, *maxcount;
+  static MDB_THREAD_LOCAL double *x = NULL, *best_x = NULL;
+  static MDB_THREAD_LOCAL long last_n_dimen = 0;
+  static MDB_THREAD_LOCAL long *index = NULL, *counter = NULL, *maxcount = NULL;
   double result;
   long flag, i, best_found;
 
-  optimFlags = 0;
+  clearOptimAbort();
 
   if (last_n_dimen < n_dimen) {
     if (x)
       tfree(x);
+    if (best_x)
+      tfree(best_x);
     if (index)
       tfree(index);
     if (counter)
@@ -121,7 +144,7 @@ long grid_search_min(
       if (result < target)
         break;
     }
-    if (optimFlags & OPTIM_ABORT)
+    if (optimAbortRequested())
       break;
   } while (advance_values(x, index, lower, step, n_dimen, counter, maxcount, n_dimen) >= 0);
 
@@ -162,13 +185,13 @@ long grid_sample_min(
   double (*func)(double *x, long *invalid),
   double sample_fraction,
   double (*random_f)(long iseed)) {
-  static double *x = NULL, *best_x = NULL;
-  static long last_n_dimen = 0;
-  static long *index, *counter, *maxcount;
+  static MDB_THREAD_LOCAL double *x = NULL, *best_x = NULL;
+  static MDB_THREAD_LOCAL long last_n_dimen = 0;
+  static MDB_THREAD_LOCAL long *index = NULL, *counter = NULL, *maxcount = NULL;
   double result;
   long flag, i, best_found;
 
-  optimFlags = 0;
+  clearOptimAbort();
 
   if (random_f == NULL)
     random_f = random_1;
@@ -176,6 +199,8 @@ long grid_sample_min(
   if (last_n_dimen < n_dimen) {
     if (x)
       tfree(x);
+    if (best_x)
+      tfree(best_x);
     if (index)
       tfree(index);
     if (counter)
@@ -225,7 +250,7 @@ long grid_sample_min(
       if (result < target)
         break;
     }
-    if (optimFlags & OPTIM_ABORT)
+    if (optimAbortRequested())
       break;
   } while (advance_values(x, index, lower, step, n_dimen, counter, maxcount, n_dimen) >= 0);
 
@@ -267,7 +292,7 @@ long randomSampleMin(
   double result;
   long flag, i, best_found = 0;
 
-  optimFlags = 0;
+  clearOptimAbort();
   if (random_f == NULL)
     random_f = random_1;
 
@@ -287,7 +312,7 @@ long randomSampleMin(
       if (result < target)
         break;
     }
-    if (optimFlags & OPTIM_ABORT)
+    if (optimAbortRequested())
       break;
   }
   if (best_found) {
@@ -333,7 +358,7 @@ long randomWalkMin(
   double result;
   long flag, i, best_found = 0;
 
-  optimFlags = 0;
+  clearOptimAbort();
 
   if (random_f == NULL)
     random_f = random_1;
@@ -360,7 +385,7 @@ long randomWalkMin(
       if (result < target)
         break;
     }
-    if (optimFlags & OPTIM_ABORT)
+    if (optimAbortRequested())
       break;
   }
   if (best_found) {

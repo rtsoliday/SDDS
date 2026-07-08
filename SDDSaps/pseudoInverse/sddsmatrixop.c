@@ -137,8 +137,7 @@ int main(int argc, char **argv) {
   A = B = temp = NULL;
   pipeFlags = 0;
   tmpfile_used = 0;
-  dstackptr = 0;
-  sstackptr = 0;
+  rpn_clear_stacks();
   keepDefinition = 1;
   matrixA = matrixB = NULL;
   columnNameFile = NULL;
@@ -165,7 +164,7 @@ int main(int argc, char **argv) {
       currentOption = match_string(s_arg[i_arg].list[0], option, N_OPTIONS, 0);
       if (match_string(s_arg[i_arg].list[0], binaryOption, BINARYOPTIONS, 0) >= 0) {
         isBinary = 1;
-        if (sstackptr < 2) {
+        if (rpn_string_stack_size() < 2) {
           fprintf(stderr, "Too few values on string stack.\n");
           exit(1);
         }
@@ -177,7 +176,7 @@ int main(int argc, char **argv) {
         }
       } else if (match_string(s_arg[i_arg].list[0], unaryOption, UNARYOPTIONS, 0) >= 0) {
         isUnary = 1;
-        if (sstackptr < 1) {
+        if (rpn_string_stack_size() < 1) {
           fprintf(stderr, "Too few values on string stack.\n");
           exit(1);
         }

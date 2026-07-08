@@ -19,7 +19,14 @@
 #if !defined(_SVD_H)
 #define _SVD_H
 
+#include "csa_thread.h"
+
+int* svd_verbose_ptr(void);
+#ifdef CSA_NO_GLOBAL_COMPAT_MACROS
 extern int svd_verbose;
+#else
+#define svd_verbose (*svd_verbose_ptr())
+#endif
 
 /** Performs singular value decomposition for a dense matrix.
  * Borrowed from EISPACK (1972-1973).

@@ -149,7 +149,7 @@ double	beta;
 {
 	/* Real	ip, scale; */
 	int	i /*, k */;
-	static	VEC	*w = VNULL;
+	static MESCHACH_THREAD_LOCAL	VEC	*w = VNULL;
 
 	if ( M==(MAT *)NULL || hh==(VEC *)NULL )
 		error(E_NULL,"hhtrcols");

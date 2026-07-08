@@ -32,7 +32,7 @@
 
 
 /* local variables */
-static char line[MAXLINE];
+static MESCHACH_THREAD_LOCAL char line[MAXLINE];
 
 ZMAT     *izm_finput(FILE *fp, ZMAT *mat);
 ZMAT     *bzm_finput(FILE *fp, ZMAT *mat);
@@ -287,7 +287,7 @@ ZVEC    *vec;
 /**************************************************************************
   Output routines
   **************************************************************************/
-static char    *zformat = " (%14.9g, %14.9g) ";
+static MESCHACH_THREAD_LOCAL char    *zformat = " (%14.9g, %14.9g) ";
 
 char	*setzformat(f_string)
 char    *f_string;
@@ -399,4 +399,3 @@ ZVEC     *x;
      }
      if ( tmp % 2 != 0 )        putc('\n',fp);
 }
-

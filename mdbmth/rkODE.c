@@ -18,6 +18,7 @@
  */
 
 #include "mdb.h"
+#include "mdb_thread.h"
 #include <float.h>
 
 #define MAX_EXIT_ITERATIONS 400
@@ -148,8 +149,8 @@ void rk4_step(
   void (*derivs)(double *dydx, double *y, double x)
   /* function to return dy/dx at x for given y */
 ) {
-  static long last_n_eq = 0;
-  static double *k1, *k2, *k3, *yTemp, *dydxTemp;
+  static MDB_THREAD_LOCAL long last_n_eq = 0;
+  static MDB_THREAD_LOCAL double *k1 = NULL, *k2 = NULL, *k3 = NULL, *yTemp = NULL, *dydxTemp = NULL;
   double x1;
   long i;
 
@@ -160,7 +161,7 @@ void rk4_step(
       free(k2);
       free(k3);
       free(yTemp);
-      free(dydx);
+      free(dydxTemp);
     }
     last_n_eq = n_eq;
     k1 = tmalloc(sizeof(*k1) * n_eq);
@@ -216,9 +217,11 @@ static double safetyMargin = 0.9;
 static double increasePower = 0.2;
 static double decreasePower = 0.25;
 static double maxIncreaseFactor = 4.0;
+static MDB_THREAD_LOCK rk_qctune_lock = MDB_THREAD_LOCK_INITIALIZER;
 
 void rk4_qctune(double newSafetyMargin, double newIncreasePower,
                 double newDecreasePower, double newMaxIncreaseFactor) {
+  mdb_thread_lock(&rk_qctune_lock);
   if (newSafetyMargin > 0 && newSafetyMargin < 1)
     safetyMargin = newSafetyMargin;
   if (newIncreasePower > 0)
@@ -227,6 +230,7 @@ void rk4_qctune(double newSafetyMargin, double newIncreasePower,
     decreasePower = newDecreasePower;
   if (newMaxIncreaseFactor > 1)
     maxIncreaseFactor = newMaxIncreaseFactor;
+  mdb_thread_unlock(&rk_qctune_lock);
 }
 
 long rk_qcstep(
@@ -245,11 +249,19 @@ long rk_qcstep(
                              step size.  Accumulates between calls if not zeroed 
                              externally */
 ) {
-  static long last_equations = 0;
-  static double *dydxTemp, *yTemp;
+  static MDB_THREAD_LOCAL long last_equations = 0;
+  static MDB_THREAD_LOCAL double *dydxTemp = NULL, *yTemp = NULL;
   double hOver2, h, xTemp;
   double error, maxError, hFactor;
+  double localSafetyMargin, localIncreasePower, localDecreasePower, localMaxIncreaseFactor;
   long i, iWorst = 0, minStepped = 0, noAdaptation = 0;
+
+  mdb_thread_lock(&rk_qctune_lock);
+  localSafetyMargin = safetyMargin;
+  localIncreasePower = increasePower;
+  localDecreasePower = decreasePower;
+  localMaxIncreaseFactor = maxIncreaseFactor;
+  mdb_thread_unlock(&rk_qctune_lock);
 
   /* for speed, I avoid reallocating the arrays unless it is necessary */
   if (last_equations < equations) {
@@ -331,15 +343,15 @@ long rk_qcstep(
                    the theoretical optimum factor.
                    */
         if (maxError)
-          hFactor = safetyMargin * pow(maxError, -increasePower);
+          hFactor = localSafetyMargin * pow(maxError, -localIncreasePower);
         else
           /* error is zero, so go for broke */
-          hFactor = maxIncreaseFactor;
+          hFactor = localMaxIncreaseFactor;
 #if DEBUG
         printf("maxError = %e, hFactor = %e\n", maxError, hFactor);
 #endif
-        if (hFactor > maxIncreaseFactor)
-          hFactor = maxIncreaseFactor;
+        if (hFactor > localMaxIncreaseFactor)
+          hFactor = localMaxIncreaseFactor;
         else if (hFactor < 1)
           hFactor = 1;
       } else
@@ -364,7 +376,7 @@ long rk_qcstep(
     /* compute a new, smaller step-size.  It will be tested for underflow at the
            top of the loop.
            */
-    hOver2 = (h = safetyMargin * h * pow(maxError, -decreasePower)) / 2;
+    hOver2 = (h = localSafetyMargin * h * pow(maxError, -localDecreasePower)) / 2;
   } while (1);
 }
 
@@ -1166,9 +1178,9 @@ long rk_odeint3(
   /* function that is to be zeroed */
   double exit_accuracy /* how close to zero to get */
 ) {
-  static double *y0, *yscale;
-  static double *dydx0, *y1, *dydx1, *dydx2, *y2, *accur;
-  static long last_neq = 0;
+  static MDB_THREAD_LOCAL double *y0 = NULL, *yscale = NULL;
+  static MDB_THREAD_LOCAL double *dydx0 = NULL, *y1 = NULL, *dydx1 = NULL, *dydx2 = NULL, *y2 = NULL, *accur = NULL;
+  static MDB_THREAD_LOCAL long last_neq = 0;
   double ex0, ex1, ex2, x1, x2;
   double h_used, h_next, xdiff;
   long i, n_exit_iterations, n_step_ups = 0;
@@ -1628,9 +1640,9 @@ long rk_odeint3_na(
   double exit_accuracy, /* how close to zero to get */
   /* function for adding stochastic processes */
   void (*stochastic)(double *y, double x, double h)) {
-  static double *y0, *yscale;
-  static double *dydx0, *y1, *dydx1, *dydx2, *y2, *accur;
-  static long last_neq = 0;
+  static MDB_THREAD_LOCAL double *y0 = NULL, *yscale = NULL;
+  static MDB_THREAD_LOCAL double *dydx0 = NULL, *y1 = NULL, *dydx1 = NULL, *dydx2 = NULL, *y2 = NULL, *accur = NULL;
+  static MDB_THREAD_LOCAL long last_neq = 0;
   double ex0, ex1, ex2, x1, x2;
   double xdiff;
   long i, n_exit_iterations;
@@ -1752,6 +1764,4 @@ long rk_odeint3_na(
   } while (n_exit_iterations--);
   return (DIFFEQ_EXIT_COND_FAILED);
 }
-
-
 

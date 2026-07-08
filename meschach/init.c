@@ -136,9 +136,9 @@ PERM	*px;
 #endif
 #define MZ	0L
 
-static long mrand_list[56];
-static int  started = FALSE;
-static int  inext = 0, inextp = 31;
+static MESCHACH_THREAD_LOCAL long mrand_list[56];
+static MESCHACH_THREAD_LOCAL int  started = FALSE;
+static MESCHACH_THREAD_LOCAL int  inext = 0, inextp = 31;
 
 
 /* mrand -- pseudo-random number generator */

@@ -583,11 +583,11 @@ SPMAT	*spBKPfactor(SPMAT *A, PERM *pivot, PERM *blocks, double tol)
     row_elt	*e, *e1;
     Real	aii, aip1, aip1i;
     Real	det, max_j, max_l, s, t;
-    static IVEC	*scan_row = IVNULL, *scan_idx = IVNULL, *col_list = IVNULL,
+    static MESCHACH_THREAD_LOCAL IVEC	*scan_row = IVNULL, *scan_idx = IVNULL, *col_list = IVNULL,
 		*tmp_iv = IVNULL;
-    static IVEC *deg_list = IVNULL;
-    static IVEC	*orig_idx = IVNULL, *orig1_idx = IVNULL;
-    static PERM	*order = PNULL;
+    static MESCHACH_THREAD_LOCAL IVEC *deg_list = IVNULL;
+    static MESCHACH_THREAD_LOCAL IVEC	*orig_idx = IVNULL, *orig1_idx = IVNULL;
+    static MESCHACH_THREAD_LOCAL PERM	*order = PNULL;
 
     if ( ! A || ! pivot || ! blocks )
 	error(E_NULL,"spBKPfactor");
@@ -1263,7 +1263,7 @@ SPMAT	*A;
 PERM	*pivot, *block;
 VEC	*b, *x;
 {
-    static VEC	*tmp=VNULL;	/* dummy storage needed */
+    static MESCHACH_THREAD_LOCAL VEC	*tmp=VNULL;	/* dummy storage needed */
     int		i /* , j */, n, onebyone;
     int		row_num, idx;
     Real	a11, a12, a22, b1, b2, det, sum, *tmp_ve, tmp_diag;

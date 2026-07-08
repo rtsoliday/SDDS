@@ -220,10 +220,10 @@ int scanargsg(SCANNED_ARG **scanned, int argc, char **argv) {
 #define ITEMS_BUFSIZE 10
 
 int parseList(char ***list, char *string) {
-  static char **items = NULL;
+  static MDB_THREAD_LOCAL char **items = NULL;
   char *ptr, *ptr1, *ptr2, last_char;
   int i, n_items, depth;
-  static int items_max = 0;
+  static MDB_THREAD_LOCAL int items_max = 0;
 
   n_items = 0;
 

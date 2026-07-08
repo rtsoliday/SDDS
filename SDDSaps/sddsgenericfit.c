@@ -688,11 +688,16 @@ void setupOutputFile(SDDS_DATASET *OutputTable, long *fitIndex, long *residualIn
 
 double fitFunction(double *a, long *invalid) {
   double sum, tmp;
+  double fitValue = 0;
   int64_t i;
   long j;
 
+  rpn_lock();
   rpn_clear();
   *invalid = 0;
+
+  if (!SDDS_StoreParametersInRpnMemories(&InputTable))
+    SDDS_Bomb("Problem storing parameters in RPN memories");
 
   for (i = 0; i < nVariables; i++)
     rpn_store(a[i], NULL, variableMem[i]);
@@ -712,7 +717,7 @@ double fitFunction(double *a, long *invalid) {
       yFit[i] = rpn(equation);
       if (rpn_check_error()) {
         *invalid = 1;
-        return 0;
+        goto cleanup;
       }
       yResidual[i] = tmp = (yFit[i] - yData[i]);
       if (verbosity > 10) {
@@ -733,7 +738,7 @@ double fitFunction(double *a, long *invalid) {
       yFit[i] = rpn(equation);
       if (rpn_check_error()) {
         *invalid = 1;
-        return 0;
+        goto cleanup;
       }
       yResidual[i] = tmp = (yFit[i] - yData[i]);
       sum += sqr(tmp / syData[i]);
@@ -754,7 +759,11 @@ double fitFunction(double *a, long *invalid) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
   }
-  return (sum / nData);
+  fitValue = sum / nData;
+
+cleanup:
+  rpn_unlock();
+  return fitValue;
 }
 
 void report(double y, double *x, long pass, long n_eval, long n_dimen) {

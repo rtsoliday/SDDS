@@ -67,17 +67,19 @@
 #include <limits.h>
 #include <float.h>
 #include <errno.h>
+#include "mdb.h"
 #include "config.h"
 #include "nan.h"
 #include "minell.h"
+#include "csa_thread.h"
 
 #define BIGNUMBER 1.0e+100
 #define SECANT_COUNT_MAX 30
 #define SECANT_EPS 5.0e-11
 
-static int me_seed = 1;
-static int me_classic = 0;
-static int me_verbose = 0;
+static CSA_THREAD_LOCAL int me_seed = 1;
+static CSA_THREAD_LOCAL int me_classic = 0;
+static CSA_THREAD_LOCAL int me_verbose = 0;
 
 struct minell {
     /*
@@ -265,15 +267,16 @@ static point** points_shuffle(int n, point* p)
     for (i = 0; i < n; ++i)
         numbers[i] = i;
 
-    srand(me_seed);
-
+    mdbmth_lock_rand();
+    mdbmth_srand_unlocked((unsigned int) me_seed);
     for (i = 0; i < n; ++i) {
-        int nn = (int) ((double) n * (double) rand() / ((double) RAND_MAX + 1.0));
+        int nn = (int) ((double) n * mdbmth_rand_fraction_unlocked());
         int tmp = numbers[i];
 
         numbers[i] = numbers[nn];
         numbers[nn] = tmp;
     }
+    mdbmth_unlock_rand();
 
     for (i = 0; i < n; ++i)
         pp[i] = &p[numbers[i]];
@@ -1134,6 +1137,33 @@ static int str2double(char* token, double* value)
 #define NALLOCATED_START 1024
 #define BUFSIZE 10240
 
+static char* minell_tokenize(char* text, const char* separators, char** state)
+{
+    char* token;
+
+    if (text == NULL)
+        text = *state;
+    if (text == NULL)
+        return NULL;
+
+    text += strspn(text, separators);
+    if (*text == 0) {
+        *state = NULL;
+        return NULL;
+    }
+
+    token = text;
+    text += strcspn(text, separators);
+    if (*text == 0)
+        *state = NULL;
+    else {
+        *text = 0;
+        *state = text + 1;
+    }
+
+    return token;
+}
+
 /* Reads array of points from a columnar file.
  *
  * @param fname File name (can be "stdin" or "-" for standard input)
@@ -1148,6 +1178,7 @@ static void points_read(char* fname, int dim, int* n, point** points)
     char buf[BUFSIZE];
     char seps[] = " ,;\t";
     char* token;
+    char* token_state;
 
     if (dim < 2 || dim > 3) {
         *n = 0;
@@ -1181,18 +1212,19 @@ static void points_read(char* fname, int dim, int* n, point** points)
 
         if (buf[0] == '#')
             continue;
-        if ((token = strtok(buf, seps)) == NULL)
+        token_state = NULL;
+        if ((token = minell_tokenize(buf, seps, &token_state)) == NULL)
             continue;
         if (!str2double(token, &p->x))
             continue;
-        if ((token = strtok(NULL, seps)) == NULL)
+        if ((token = minell_tokenize(NULL, seps, &token_state)) == NULL)
             continue;
         if (!str2double(token, &p->y))
             continue;
         if (dim == 2)
             p->z = NaN;
         else {
-            if ((token = strtok(NULL, seps)) == NULL)
+            if ((token = minell_tokenize(NULL, seps, &token_state)) == NULL)
                 continue;
             if (!str2double(token, &p->z))
                 continue;

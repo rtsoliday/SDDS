@@ -128,6 +128,19 @@ The SDDS API provides functions for defining and manipulating SDDS datasets. Som
 
 For more details, refer to the **[SDDS API documentation](https://ops.aps.anl.gov/manuals/SDDSlib/html/files.html)**.
 
+## Thread Safety
+The SDDS libraries support concurrent use by multiple threads when each thread
+uses its own `SDDS_DATASET` objects and caller-owned data. Internal error stacks
+and many former static scratch buffers are thread-local, and process-global
+settings are guarded by internal locks.
+
+Shared dataset handles, shared RPN arrays, file streams, and caller-owned
+objects are not automatically serialized. Callers must lock around those shared
+objects when using them from multiple threads. Process-global settings remain
+process-global even though updates are protected against data races.
+
+For details, see [SDDSlib/doc/thread-safety.md](SDDSlib/doc/thread-safety.md).
+
 ## Tests
 Simple regression tests are provided for many of the SDDS command line tools. After building the project run:
 ```bash
@@ -163,4 +176,3 @@ This library is distributed under the **Software License Agreement** found in th
 This project is developed and maintained by **[Accelerator Operations & Physics](https://www.aps.anl.gov/Accelerator-Operations-Physics)** at the **Advanced Photon Source** at **Argonne National Laboratory**.
 
 For more details, visit the official **[SDDS documentation](https://www.aps.anl.gov/Accelerator-Operations-Physics/Documentation)**.
-

@@ -21,6 +21,7 @@
 #include "match_string.h"
 #include "SDDS.h"
 #include "SDDS_internal.h"
+#include "mdb_thread.h"
 #include "namelist.h"
 #include "scan.h"
 
@@ -1222,7 +1223,17 @@ int32_t SDDS_ReadPageLastRows(SDDS_DATASET *SDDS_dataset, int64_t last_rows) {
  *
  * The default value is `INT64_MAX`, indicating no limit.
  */
+static MDB_THREAD_LOCK SDDS_RowLimitLock = MDB_THREAD_LOCK_INITIALIZER;
 static int64_t SDDS_RowLimit = INT64_MAX;
+
+static int64_t SDDS_GetLockedRowLimit(void) {
+  int64_t limit;
+  mdb_thread_lock(&SDDS_RowLimitLock);
+  limit = SDDS_RowLimit;
+  mdb_thread_unlock(&SDDS_RowLimitLock);
+  return limit;
+}
+
 /**
  * Sets the row limit for the SDDS dataset.
  *
@@ -1231,11 +1242,12 @@ static int64_t SDDS_RowLimit = INT64_MAX;
  */
 int64_t SDDS_SetRowLimit(int64_t limit) {
   int64_t previous;
-  previous = SDDS_RowLimit;
   if (limit <= 0)
-    SDDS_RowLimit = INT64_MAX;
-  else
-    SDDS_RowLimit = limit;
+    limit = INT64_MAX;
+  mdb_thread_lock(&SDDS_RowLimitLock);
+  previous = SDDS_RowLimit;
+  SDDS_RowLimit = limit;
+  mdb_thread_unlock(&SDDS_RowLimitLock);
   return previous;
 }
 
@@ -1245,7 +1257,7 @@ int64_t SDDS_SetRowLimit(int64_t limit) {
  * @return The current row limit.
  */
 int64_t SDDS_GetRowLimit() {
-  return SDDS_RowLimit;
+  return SDDS_GetLockedRowLimit();
 }
 
 /**
@@ -1328,7 +1340,16 @@ int32_t SDDS_GotoPage(SDDS_DATASET *SDDS_dataset, int32_t page_number) {
  *
  * Default value is 0.
  */
+static MDB_THREAD_LOCK terminateModeLock = MDB_THREAD_LOCK_INITIALIZER;
 static int32_t terminateMode = 0;
+
+int32_t SDDS_GetTerminateMode(void) {
+  int32_t mode;
+  mdb_thread_lock(&terminateModeLock);
+  mode = terminateMode;
+  mdb_thread_unlock(&terminateModeLock);
+  return mode;
+}
 
 /**
  * Sets the terminate mode for the SDDS dataset.
@@ -1336,7 +1357,9 @@ static int32_t terminateMode = 0;
  * @param mode The terminate mode to set.
  */
 void SDDS_SetTerminateMode(uint32_t mode) {
+  mdb_thread_lock(&terminateModeLock);
   terminateMode = mode;
+  mdb_thread_unlock(&terminateModeLock);
 }
 
 /**
@@ -1451,6 +1474,7 @@ int32_t SDDS_Terminate(SDDS_DATASET *SDDS_dataset) {
   int64_t i, j;
   FILE *fp;
   char termBuffer[16384];
+  int32_t terminateMode;
 #if SDDS_MPI_IO
   if (SDDS_dataset->parallel_io)
     return SDDS_MPI_Terminate(SDDS_dataset);
@@ -1458,6 +1482,7 @@ int32_t SDDS_Terminate(SDDS_DATASET *SDDS_dataset) {
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_Terminate"))
     return (0);
   layout = &SDDS_dataset->original_layout;
+  terminateMode = SDDS_GetTerminateMode();
 
   fp = SDDS_dataset->layout.fp;
 #if defined(zLib)
@@ -1541,7 +1566,7 @@ int32_t SDDS_Terminate(SDDS_DATASET *SDDS_dataset) {
       }
       /*
             if (SDDS_dataset->array[i].definition->type==SDDS_STRING &&
-            !(terminateMode&TERMINATE_DONT_FREE_ARRAY_STRINGS)) {
+            !(SDDS_GetTerminateMode()&TERMINATE_DONT_FREE_ARRAY_STRINGS)) {
             for (j=0; j<SDDS_dataset->array[i].elements; j++)
             if (((char**)SDDS_dataset->array[i].data)[j])
             free(((char**)SDDS_dataset->array[i].data)[j]);

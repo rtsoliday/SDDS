@@ -69,7 +69,7 @@ void pop(void)
     stackptr--;
     }
 
-void rpn_clear(void)
+static void rpn_clear_unlocked(void)
 {
   register long i;
   stackptr = 0;
@@ -82,6 +82,58 @@ void rpn_clear(void)
   dstackptr = 0;
   stackptr = 0;
   lstackptr = 0;
+}
+
+void rpn_clear(void)
+{
+  rpn_lock();
+  rpn_clear_unlocked();
+  rpn_unlock();
+}
+
+void rpn_clear_stacks(void)
+{
+  rpn_clear();
+}
+
+long rpn_numeric_stack_size(void)
+{
+  long size;
+
+  rpn_lock();
+  size = stackptr;
+  rpn_unlock();
+  return size;
+}
+
+long rpn_long_stack_size(void)
+{
+  long size;
+
+  rpn_lock();
+  size = dstackptr;
+  rpn_unlock();
+  return size;
+}
+
+long rpn_string_stack_size(void)
+{
+  long size;
+
+  rpn_lock();
+  size = sstackptr;
+  rpn_unlock();
+  return size;
+}
+
+long rpn_logical_stack_size(void)
+{
+  long size;
+
+  rpn_lock();
+  size = lstackptr;
+  rpn_unlock();
+  return size;
 }
 
 void pops(void)
@@ -129,5 +181,3 @@ void exe_str(void)
         return;
     push_code(code, VOLATILE);
     }
-
-

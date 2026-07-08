@@ -55,8 +55,8 @@ VEC	*iter_cgs(ip,r0)
 ITER *ip;
 VEC *r0;
 {
-   static VEC  *p = VNULL, *q = VNULL, *r = VNULL, *u = VNULL;
-   static VEC  *v = VNULL, *z = VNULL;
+   static MESCHACH_THREAD_LOCAL VEC  *p = VNULL, *q = VNULL, *r = VNULL, *u = VNULL;
+   static MESCHACH_THREAD_LOCAL VEC  *v = VNULL, *z = VNULL;
    VEC  *tmp;
    Real	alpha, beta, nres, rho, old_rho, sigma, inner;
 
@@ -214,7 +214,7 @@ int     *steps,limit;
 VEC	*iter_lsqr(ip)
 ITER *ip;
 {
-   static VEC	*u = VNULL, *v = VNULL, *w = VNULL, *tmp = VNULL;
+   static MESCHACH_THREAD_LOCAL VEC	*u = VNULL, *v = VNULL, *w = VNULL, *tmp = VNULL;
    Real	alpha, beta, phi, phi_bar;
    Real rho, rho_bar, rho_max, theta, nres;
    Real	s, c;	/* for Givens' rotations */
@@ -347,7 +347,7 @@ ITER  *ip;
 Real  *h_rem;
 MAT   *Q, *H;
 {
-   static VEC *u=VNULL, *r=VNULL, *s=VNULL, *tmp=VNULL;
+   static MESCHACH_THREAD_LOCAL VEC *u=VNULL, *r=VNULL, *s=VNULL, *tmp=VNULL;
    VEC v;     /* auxiliary vector */
    int	i,j;
    Real	h_val, c;
@@ -444,7 +444,7 @@ ITER  *ip;
 Real  *h_rem;
 MAT   *Q, *H;
 {
-   static VEC *u=VNULL, *r=VNULL;
+   static MESCHACH_THREAD_LOCAL VEC *u=VNULL, *r=VNULL;
    VEC v;     /* auxiliary vector */
    int	i,j;
    Real	h_val, c;
@@ -543,7 +543,7 @@ VEC *givc, *givs;
 double h_val;
 {
    VEC vt, vt1;
-   static MAT *Q1, *R1;
+   static MESCHACH_THREAD_LOCAL MAT *Q1, *R1;
    int j;
    
    /* test Q*A*Q^T = R  */
@@ -596,9 +596,9 @@ double h_val;
 VEC	*iter_gmres(ip)
 ITER *ip;
 {
-   static VEC *u=VNULL, *r=VNULL, *rhs = VNULL;
-   static VEC *givs=VNULL, *givc=VNULL, *z = VNULL;
-   static MAT *Q = MNULL, *R = MNULL;
+   static MESCHACH_THREAD_LOCAL VEC *u=VNULL, *r=VNULL, *rhs = VNULL;
+   static MESCHACH_THREAD_LOCAL VEC *givs=VNULL, *givc=VNULL, *z = VNULL;
+   static MESCHACH_THREAD_LOCAL MAT *Q = MNULL, *R = MNULL;
    VEC *rr, v, v1;   /* additional pointers (not real vectors) */
    int	i,j, done;
    Real	nres;
@@ -826,8 +826,8 @@ int i;
 MAT *Q, *R;
 {
    VEC vt, vt1;
-   static MAT *R1;
-   static VEC *r, *r1;
+   static MESCHACH_THREAD_LOCAL MAT *R1;
+   static MESCHACH_THREAD_LOCAL VEC *r, *r1;
    VEC *rr;
    int k,j;
    Real sm;
@@ -888,8 +888,8 @@ MAT *Q, *R;
 VEC *iter_mgcr(ip)
 ITER *ip;
 {
-   static VEC *As, *beta, *alpha, *z;
-   static MAT *N, *H;
+   static MESCHACH_THREAD_LOCAL VEC *As, *beta, *alpha, *z;
+   static MESCHACH_THREAD_LOCAL MAT *N, *H;
    
    VEC *rr, v, s;  /* additional pointer and structures */
    Real nres;      /* norm of a residual */
@@ -1147,7 +1147,7 @@ int *steps,k,limit;
 VEC  *iter_cgne(ip)
 ITER *ip;
 {
-   static VEC *r = VNULL, *p = VNULL, *q = VNULL, *z = VNULL;
+   static MESCHACH_THREAD_LOCAL VEC *r = VNULL, *p = VNULL, *q = VNULL, *z = VNULL;
    Real	alpha, beta, inner, old_inner, nres;
    VEC *rr1;   /* pointer only */
    

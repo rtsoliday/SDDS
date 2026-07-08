@@ -29,7 +29,7 @@
  */
 FILE *fopen_e(char *file, char *open_mode, long mode) {
   FILE *fp;
-  static char buffer[1024];
+  char buffer[1024];
 
   if ((mode & FOPEN_SAVE_IF_EXISTS) && fexists(file)) {
     sprintf(buffer, "%s~", file);

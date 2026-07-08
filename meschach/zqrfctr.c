@@ -66,7 +66,7 @@ ZVEC	*diag;
 {
     unsigned int	k,limit;
     Real	beta;
-    static	ZVEC	*tmp1=ZVNULL;
+    static MESCHACH_THREAD_LOCAL	ZVEC	*tmp1=ZVNULL;
     
     if ( ! A || ! diag )
 	error(E_NULL,"zQRfactor");
@@ -102,8 +102,8 @@ ZVEC	*diag;
 PERM	*px;
 {
     unsigned int	i, i_max, j, k, limit;
-    static	ZVEC	*tmp1=ZVNULL, *tmp2=ZVNULL;
-    static	VEC	*gamma=VNULL;
+    static MESCHACH_THREAD_LOCAL	ZVEC	*tmp1=ZVNULL, *tmp2=ZVNULL;
+    static MESCHACH_THREAD_LOCAL	VEC	*gamma=VNULL;
     Real 	beta;
     Real	maxgamma, sum, tmp;
     complex	ztmp;
@@ -226,7 +226,7 @@ ZMAT	*zmakeQ(QR,diag,Qout)
 ZMAT	*QR,*Qout;
 ZVEC	*diag;
 {
-    static	ZVEC	*tmp1=ZVNULL,*tmp2=ZVNULL;
+    static MESCHACH_THREAD_LOCAL	ZVEC	*tmp1=ZVNULL,*tmp2=ZVNULL;
     unsigned int	i, limit;
     Real	beta, r_ii, tmp_val;
     int	j;
@@ -294,7 +294,7 @@ ZMAT	*QR;
 ZVEC	*diag, *b, *x;
 {
     int	limit;
-    static	ZVEC	*tmp = ZVNULL;
+    static MESCHACH_THREAD_LOCAL	ZVEC	*tmp = ZVNULL;
     
     if ( ! QR || ! diag || ! b )
 	error(E_NULL,"zQRsolve");
@@ -321,7 +321,7 @@ ZVEC	*diag, *b, *x;
 {
     int		j, limit;
     Real	beta, r_ii, tmp_val;
-    static	ZVEC	*tmp = ZVNULL;
+    static MESCHACH_THREAD_LOCAL	ZVEC	*tmp = ZVNULL;
     
     if ( ! QR || ! diag || ! b )
 	error(E_NULL,"zQRAsolve");
@@ -430,7 +430,7 @@ ZVEC	*x, *out;
 double	zQRcondest(QR)
 ZMAT	*QR;
 {
-    static	ZVEC	*y=ZVNULL;
+    static MESCHACH_THREAD_LOCAL	ZVEC	*y=ZVNULL;
     Real	norm, norm1, norm2, tmp1, tmp2;
     complex	sum, tmp;
     int		i, j, limit;

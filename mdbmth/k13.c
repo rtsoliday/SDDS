@@ -41,8 +41,7 @@
  * @return The computed value of the Modified Bessel Function K_{1/3}(z).
  */
 double k13(double z) {
-  double c1, c2, zs, ny_fac, neg_ny_fac, zm, zp, pm, pp, term, sum, ze, za, mu, pa;
-  static double e2;
+  double c1, c2, zs, ny_fac, neg_ny_fac, zm, zp, pm, pp, term, sum, ze, za, mu, pa, e2;
   long k;
 
   if (z < A_LIM) {

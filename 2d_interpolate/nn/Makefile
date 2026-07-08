@@ -21,8 +21,11 @@ LIBRARY_SRC = delaunay.c \
 CFLAGS += -I../../include -DTRILIBRARY -DANSI_DECLARATORS
 
 ifeq ($(OS), Windows)
+  LIBRARY_LIBS += mdbmth.lib
   CFLAGS += -wd4311 -wd4312
   NO_DLL = 1
+else
+  LIBRARY_LIBS += -lmdbmth
 endif
 
 include ../../Makefile.build

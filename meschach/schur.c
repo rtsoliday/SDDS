@@ -157,7 +157,7 @@ MAT	*A, *Q;
     Real	beta2, c, discrim, dummy, nu1, s, tmp, x, y, z;
     Real	**A_me;
     Real	sqrt_macheps;
-    static	VEC	*diag=VNULL, *beta=VNULL;
+    static MESCHACH_THREAD_LOCAL	VEC	*diag=VNULL, *beta=VNULL;
     
     if ( ! A )
 	error(E_NULL,"schur");
@@ -492,7 +492,7 @@ MAT	*T, *Q, *X_re, *X_im;
 		val1_re, val1_im, val2_re, val2_im,
 		tmp_val1_re, tmp_val1_im, tmp_val2_re, tmp_val2_im, **T_me;
 	Real	sum, diff, discrim, magdet, norm, scale;
-	static VEC	*tmp1_re=VNULL, *tmp1_im=VNULL,
+	static MESCHACH_THREAD_LOCAL VEC	*tmp1_re=VNULL, *tmp1_im=VNULL,
 			*tmp2_re=VNULL, *tmp2_im=VNULL;
 
 	if ( ! T || ! X_re )

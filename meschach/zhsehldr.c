@@ -173,7 +173,7 @@ double	beta;
 	/* Real	ip, scale; */
 	complex	scale;
 	int	i /*, k */;
-	static	ZVEC	*w = ZVNULL;
+	static MESCHACH_THREAD_LOCAL	ZVEC	*w = ZVNULL;
 
 	if ( M==ZMNULL || hh==ZVNULL )
 		error(E_NULL,"zhhtrcols");

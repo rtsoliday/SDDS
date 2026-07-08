@@ -33,9 +33,9 @@
 long make_histogram(
   double *hist, long n_bins, double lo, double hi, double *data,
   int64_t n_pts, long new_start) {
-  static long bin;
-  static int64_t i;
-  static double bin_size, dbin;
+  static MDB_THREAD_LOCAL long bin;
+  static MDB_THREAD_LOCAL int64_t i;
+  static MDB_THREAD_LOCAL double bin_size, dbin;
 
   if (new_start) {
     bin_size = (hi - lo) / n_bins;
@@ -74,8 +74,8 @@ long make_histogram(
 long make_histogram_weighted(
   double *hist, long n_bins, double lo, double hi, double *data,
   long n_pts, long new_start, double *weight) {
-  static long bin, i, count;
-  static double bin_size, dbin;
+  static MDB_THREAD_LOCAL long bin, i, count;
+  static MDB_THREAD_LOCAL double bin_size, dbin;
 
   if (new_start) {
     count = 0;

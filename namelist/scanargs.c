@@ -217,10 +217,10 @@ int scanargsg(SCANNED_ARG **scanned, int argc, char **argv)
 
 int parseList(char ***list, char *string)
 {
-    static char **items = NULL;
+    char **items = NULL;
     char *ptr, *ptr1, *ptr2, last_char;
     int i, n_items, depth;
-    static int items_max = 0;
+    int items_max = 0;
 
     n_items = 0;
 
@@ -273,8 +273,11 @@ int parseList(char ***list, char *string)
         if (last_char)
             ptr = ptr1+1;
         } while (*ptr && last_char);
-    if (last_char==',') 
+    if (last_char==',') {
+        if (n_items>=items_max)
+            items = trealloc(items, sizeof(*items)*(items_max+=ITEMS_BUFSIZE));
         items[n_items++] = ptr;
+        }
 
     *list = tmalloc((unsigned)sizeof(ptr)*n_items);
     for (i=0; i<n_items; i++) {
@@ -287,6 +290,7 @@ int parseList(char ***list, char *string)
         *(*list+i) = tmalloc((unsigned)strlen(items[i])+1);
         strcpy(*(*list+i), items[i]);
         }
+    free(items);
     return(n_items);
     }
 
@@ -427,4 +431,3 @@ int parse_string(char ***list, char *string)
   if (buffer) free(buffer);
   return(n_items);
 }
-

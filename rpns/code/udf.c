@@ -25,11 +25,11 @@ int compare_udf_names(const void *u1, const void *u2)
     return strcmp( ((struct UDF *)u1)->udf_name, ((struct UDF *)u2)->udf_name );
     }
 
-long find_udf(char *udf_name)
+long find_udf_unlocked(char *udf_name)
 /* returns udf number---i.e., position in udf_index array that gives index in udf_list array */
 {
   register long i;
-  static struct UDF udf0;
+  struct UDF udf0;
   
   if (num_udfs==0)
     return -1;
@@ -40,11 +40,21 @@ long find_udf(char *udf_name)
   return udf_list[i]->udf_num;
 }
 
-long find_udf_mod(char *udf_name)
+long find_udf(char *udf_name)
+{
+  long number;
+
+  rpn_lock();
+  number = find_udf_unlocked(udf_name);
+  rpn_unlock();
+  return number;
+}
+
+long find_udf_mod_unlocked(char *udf_name)
 /* returns udf number---i.e., position in udf_index array that gives index in udf_list array */
 {
   register long i;
-  static struct UDF udf0;
+  struct UDF udf0;
   
   if (num_udfs==0)
     return -1;
@@ -55,7 +65,17 @@ long find_udf_mod(char *udf_name)
   return i;
 }
 
-long get_udf(long number)
+long find_udf_mod(char *udf_name)
+{
+  long number;
+
+  rpn_lock();
+  number = find_udf_mod_unlocked(udf_name);
+  rpn_unlock();
+  return number;
+}
+
+long get_udf_unlocked(long number)
 /* returns udf string from udf number */
 {
   register long i;
@@ -67,11 +87,21 @@ long get_udf(long number)
   if (i<0 || i>=num_udfs) 
     bomb("invalid udf_list index", NULL);
   udfptr = udf_list[i];
-  udf_id_createarray(udfptr->start_index, udfptr->end_index);
+  udf_id_createarray_unlocked(udfptr->start_index, udfptr->end_index);
   return(1);
 }
 
-void get_udf_indexes(long number)
+long get_udf(long number)
+{
+  long status;
+
+  rpn_lock();
+  status = get_udf_unlocked(number);
+  rpn_unlock();
+  return status;
+}
+
+void get_udf_indexes_unlocked(long number)
 /* returns udf string from udf number */
 {
   register long i;
@@ -79,21 +109,38 @@ void get_udf_indexes(long number)
   
   i = udf_index[number];  /* translate into index in sorted list */
   udfptr = udf_list[i];
-  udf_id_createarray(udfptr->start_index, udfptr->end_index);
+  udf_id_createarray_unlocked(udfptr->start_index, udfptr->end_index);
+}
+
+void get_udf_indexes(long number)
+{
+  rpn_lock();
+  get_udf_indexes_unlocked(number);
+  rpn_unlock();
+}
+
+long is_udf_unlocked(char *string)
+{
+  long i;
+  if ((i=find_udf_unlocked(string))<0)
+    return(0);
+  return get_udf_unlocked(i);
 }
 
 long is_udf(char *string)
 {
-  long i;
-  if ((i=find_udf(string))<0)
-    return(0);
-  return get_udf(i);
+  long status;
+
+  rpn_lock();
+  status = is_udf_unlocked(string);
+  rpn_unlock();
+  return status;
 }
 
-void make_udf(void)
+static void make_udf_unlocked(void)
 {
-  static char name[20];
-  static char function[2048];
+  char name[20];
+  char function[2048];
   char *ptr, *dummy1=NULL;
   long is_string=0;
   double dummy;
@@ -140,12 +187,19 @@ void make_udf(void)
   create_udf(name, function);
 }
 
-void create_udf(char *name, char *function)
+void make_udf(void)
+{
+  rpn_lock();
+  make_udf_unlocked();
+  rpn_unlock();
+}
+
+static void create_udf_unlocked(char *name, char *function)
 {
   char *ptr;
   long i_udf, i;
   int32_t duplicate;
-  static struct UDF udf0;
+  struct UDF udf0;
   
   if (num_udfs>=max_udfs) {
     udf_list = trealloc(udf_list, sizeof(*udf_list)*(max_udfs=num_udfs+100));
@@ -166,13 +220,20 @@ void create_udf(char *name, char *function)
     cp_str(&udf_list[i_udf]->udf_string, function);
   }
   cp_str(&ptr, function);
-  gen_pcode(ptr, i_udf);
+  gen_pcode_unlocked(ptr, i_udf);
   for (i=0; i<num_udfs; i++)
     udf_index[udf_list[i]->udf_num] = i;
   free(ptr);
 }
 
-void rpn_mudf(void)
+void create_udf(char *name, char *function)
+{
+  rpn_lock();
+  create_udf_unlocked(name, function);
+  rpn_unlock();
+}
+
+static void rpn_mudf_unlocked(void)
 {
   char *name, *string;
   if ((string=pop_string())==NULL) {
@@ -191,10 +252,17 @@ void rpn_mudf(void)
   link_udfs();
 }
 
+void rpn_mudf(void)
+{
+  rpn_lock();
+  rpn_mudf_unlocked();
+  rpn_unlock();
+}
+
 
 #define SBUFLEN 16384
 
-void link_udfs(void)
+static void link_udfs_unlocked(void)
 {
   register long i;
   long num;
@@ -203,23 +271,30 @@ void link_udfs(void)
   double dummy;
   i = 0;
   while (i<=udf_unknownptr) {
-    if ((num=find_udf(udf_unknown[i].keyword))!=-1) {
+    if ((num=find_udf_unlocked(udf_unknown[i].keyword))!=-1) {
       /* This token is a udf name. */
-      udf_modarray(2,num,0.0,udf_unknown[i].index); 
+      udf_modarray_unlocked(2,num,0.0,udf_unknown[i].index);
       udf_unknown[i] = udf_unknown[udf_unknownptr--];
     }
     else if ((num=is_memory(&dummy, &dummy1, &is_string, udf_unknown[i].keyword))!=-1) {
       /* This token is a memory recall operation. */
       if (is_string)
-        udf_modarray(9,num,0.0,udf_unknown[i].index); 
+        udf_modarray_unlocked(9,num,0.0,udf_unknown[i].index);
       else
-        udf_modarray(4,num,0.0,udf_unknown[i].index); 
+        udf_modarray_unlocked(4,num,0.0,udf_unknown[i].index);
       udf_unknown[i] = udf_unknown[udf_unknownptr--];
     }
     else {
       i++;
     }
   }
+}
+
+void link_udfs(void)
+{
+  rpn_lock();
+  link_udfs_unlocked();
+  rpn_unlock();
 }
 
 /*********************
@@ -251,7 +326,7 @@ void insert_udf(char *instr, char *udf_string)
     }
 ****************/
 
-void revudf(void)
+void revudf_unlocked(void)
 {
     struct UDF *udfptr;
     long i_udf;
@@ -264,5 +339,9 @@ void revudf(void)
         }
     }
 
-
-
+void revudf(void)
+{
+    rpn_lock();
+    revudf_unlocked();
+    rpn_unlock();
+    }

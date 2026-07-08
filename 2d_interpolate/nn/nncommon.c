@@ -35,14 +35,60 @@
 #include "nan.h"
 #include "nn.h"
 #include "nncommon.h"
+#include "nn_tokenize.h"
 
 #define BUFSIZE 1024
 #define EPS 1.0e-15
 #define NALLOCATED_START 1024
 
+#ifdef nn_verbose
+#undef nn_verbose
+#endif
+#ifdef nn_test_vertice
+#undef nn_test_vertice
+#endif
+#ifdef nn_rule
+#undef nn_rule
+#endif
 int nn_verbose = 0;
 int nn_test_vertice = -1;
 NN_RULE nn_rule = SIBSON;
+static NN_THREAD_LOCAL int nn_verbose_data = 0;
+static NN_THREAD_LOCAL int nn_test_vertice_data = -1;
+static NN_THREAD_LOCAL NN_RULE nn_rule_data = SIBSON;
+static NN_THREAD_LOCAL int nn_state_initialized = 0;
+
+static void nn_init_thread_state(void)
+{
+    if (!nn_state_initialized) {
+        nn_verbose_data = nn_verbose;
+        nn_test_vertice_data = nn_test_vertice;
+        nn_rule_data = nn_rule;
+        nn_state_initialized = 1;
+    }
+}
+
+int* nn_verbose_ptr(void)
+{
+    nn_init_thread_state();
+    return &nn_verbose_data;
+}
+
+int* nn_test_vertice_ptr(void)
+{
+    nn_init_thread_state();
+    return &nn_test_vertice_data;
+}
+
+NN_RULE* nn_rule_ptr(void)
+{
+    nn_init_thread_state();
+    return &nn_rule_data;
+}
+
+#define nn_verbose (*nn_verbose_ptr())
+#define nn_test_vertice (*nn_test_vertice_ptr())
+#define nn_rule (*nn_rule_ptr())
 
 void nn_quit(char* format, ...)
 {
@@ -444,6 +490,7 @@ void points_read(char* fname, int dim, int* n, point** points)
     char buf[BUFSIZE];
     char seps[] = " ,;\t";
     char* token;
+    char* token_state;
 
     if (dim < 2 || dim > 3) {
         *n = 0;
@@ -474,21 +521,22 @@ void points_read(char* fname, int dim, int* n, point** points)
         }
 
         p = &(*points)[*n];
+        token_state = NULL;
 
         if (buf[0] == '#')
             continue;
-        if ((token = strtok(buf, seps)) == NULL)
+        if ((token = nn_tokenize(buf, seps, &token_state)) == NULL)
             continue;
         if (!str2double(token, &p->x))
             continue;
-        if ((token = strtok(NULL, seps)) == NULL)
+        if ((token = nn_tokenize(NULL, seps, &token_state)) == NULL)
             continue;
         if (!str2double(token, &p->y))
             continue;
         if (dim == 2)
             p->z = NaN;
         else {
-            if ((token = strtok(NULL, seps)) == NULL)
+            if ((token = nn_tokenize(NULL, seps, &token_state)) == NULL)
                 continue;
             if (!str2double(token, &p->z))
                 continue;

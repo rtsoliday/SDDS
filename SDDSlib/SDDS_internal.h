@@ -114,6 +114,7 @@ extern int32_t SDDS_ReadNonNativePageLastRows(SDDS_DATASET *SDDS_dataset, int64_
 extern int32_t SDDS_ReadNonNativeBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_interval, int64_t sparse_offset, int64_t last_rows);
 extern int32_t SDDS_ReadNonNativePageDetailed(SDDS_DATASET *SDDS_dataset, uint32_t mode, int64_t sparse_interval, int64_t sparse_offset, int64_t last_rows);
 extern int32_t SDDS_ReadNonNativeBinaryPageLastRows(SDDS_DATASET *SDDS_dataset, int64_t last_rows);
+extern int32_t SDDS_GetTerminateMode(void);
 
 extern int32_t SDDS_AllocateColumnFlags(SDDS_DATASET *SDDS_target);
 

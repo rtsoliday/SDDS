@@ -52,9 +52,9 @@ double	alpha;
 {
 	int	i, best_i, k, idx, len, best_len, m, n;
 	SPROW	*r, *r_piv, tmp_row;
-	static	SPROW	*merge = (SPROW *)NULL;
+	static MESCHACH_THREAD_LOCAL	SPROW	*merge = (SPROW *)NULL;
 	Real	max_val, tmp;
-	static VEC	*col_vals=VNULL;
+	static MESCHACH_THREAD_LOCAL VEC	*col_vals=VNULL;
 
 	if ( ! A || ! px )
 		error(E_NULL,"spLUfctr");
@@ -224,7 +224,7 @@ VEC	*b, *x;
 	Real	sum, *tmp_ve;
 	/* SPROW	*r; */
 	row_elt	*elt;
-	static VEC	*tmp=VNULL;
+	static MESCHACH_THREAD_LOCAL VEC	*tmp=VNULL;
 
 	if ( ! A || ! b )
 	    error(E_NULL,"spLUTsolve");

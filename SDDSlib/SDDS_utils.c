@@ -23,6 +23,7 @@
 #include "SDDS.h"
 #include "SDDS_internal.h"
 #include "mdb.h"
+#include "mdb_thread.h"
 #include <ctype.h>
 #if !defined(_WIN32)
 #  include <unistd.h>
@@ -277,10 +278,30 @@ int32_t SDDS_SprintTypedValueFactor(void *data, int64_t index, int32_t type, con
   return (1);
 }
 
-static int32_t n_errors = 0;
-static int32_t n_errors_max = 0;
-static char **error_description = NULL;
+static MDB_THREAD_LOCAL int32_t n_errors = 0;
+static MDB_THREAD_LOCAL int32_t n_errors_max = 0;
+static MDB_THREAD_LOCAL char **error_description = NULL;
+static MDB_THREAD_LOCK registeredProgramNameLock = MDB_THREAD_LOCK_INITIALIZER;
 static char *registeredProgramName = NULL;
+
+static char *SDDS_DuplicateProgramName(const char *name) {
+  char *copy;
+  if (!name)
+    return NULL;
+  if (!(copy = malloc(strlen(name) + 1)))
+    return NULL;
+  strcpy(copy, name);
+  return copy;
+}
+
+static char *SDDS_GetRegisteredProgramNameCopy(void) {
+  char *copy = NULL;
+  mdb_thread_lock(&registeredProgramNameLock);
+  if (registeredProgramName)
+    copy = SDDS_DuplicateProgramName(registeredProgramName);
+  mdb_thread_unlock(&registeredProgramNameLock);
+  return copy;
+}
 
 /**
  * @brief Registers the executable program name for use in error messages.
@@ -295,10 +316,16 @@ static char *registeredProgramName = NULL;
  * @see SDDS_Warning
  */
 void SDDS_RegisterProgramName(const char *name) {
-  if (name)
-    SDDS_CopyString(&registeredProgramName, (char *)name);
-  else
-    registeredProgramName = NULL;
+  char *newProgramName = NULL;
+
+  if (name) {
+    if (!(newProgramName = SDDS_DuplicateProgramName(name)))
+      return;
+  }
+  mdb_thread_lock(&registeredProgramNameLock);
+  free(registeredProgramName);
+  registeredProgramName = newProgramName;
+  mdb_thread_unlock(&registeredProgramNameLock);
 }
 
 /**
@@ -326,9 +353,11 @@ int32_t SDDS_NumberOfErrors() {
  */
 void SDDS_ClearErrors() {
   int32_t i;
-  for (i=0; i<n_errors; i++) {
-    free(error_description[i]);
-    error_description[i] = NULL;
+  if (error_description) {
+    for (i=0; i<n_errors; i++) {
+      free(error_description[i]);
+      error_description[i] = NULL;
+    }
   }
   free(error_description);
   error_description = NULL;
@@ -349,10 +378,12 @@ void SDDS_ClearErrors() {
  * @see SDDS_SetError
  */
 void SDDS_Bomb(char *message) {
-  if (registeredProgramName)
-    fprintf(stderr, "Error (%s): %s\n", registeredProgramName, message ? message : "?");
+  char *programName = SDDS_GetRegisteredProgramNameCopy();
+  if (programName)
+    fprintf(stderr, "Error (%s): %s\n", programName, message ? message : "?");
   else
     fprintf(stderr, "Error: %s\n", message ? message : "?");
+  free(programName);
   SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
   exit(1);
 }
@@ -369,10 +400,12 @@ void SDDS_Bomb(char *message) {
  * @see SDDS_RegisterProgramName
  */
 void SDDS_Warning(char *message) {
-  if (registeredProgramName)
-    fprintf(stderr, "Warning (%s): %s\n", registeredProgramName, message ? message : "?");
+  char *programName = SDDS_GetRegisteredProgramNameCopy();
+  if (programName)
+    fprintf(stderr, "Warning (%s): %s\n", programName, message ? message : "?");
   else
     fprintf(stderr, "Warning: %s\n", message ? message : "?");
+  free(programName);
 }
 
 /**
@@ -440,31 +473,35 @@ void SDDS_SetError0(char *error_text) {
  */
 void SDDS_PrintErrors(FILE *fp, int32_t mode) {
   int32_t i, depth;
+  char *programName;
 
   if (!n_errors)
     return;
   if (!fp) {
-    n_errors = 0;
+    SDDS_ClearErrors();
     return;
   }
   if (mode & SDDS_VERBOSE_PrintErrors)
     depth = n_errors;
   else
     depth = 1;
-  if (registeredProgramName)
-    fprintf(fp, "Error for %s:\n", registeredProgramName);
+  programName = SDDS_GetRegisteredProgramNameCopy();
+  if (programName)
+    fprintf(fp, "Error for %s:\n", programName);
   else
     fputs("Error:\n", fp);
+  free(programName);
   if (!error_description)
     fprintf(stderr, "warning: internal error: error_description pointer is unexpectedly NULL\n");
   else
     for (i = 0; i < depth; i++) {
       if (!error_description[i])
         fprintf(stderr, "warning: internal error: error_description[%" PRId32 "] is unexpectedly NULL\n", i);
-      fprintf(fp, "%s", error_description[i]);
+      else
+        fprintf(fp, "%s", error_description[i]);
     }
   fflush(fp);
-  n_errors = 0;
+  SDDS_ClearErrors();
   if (mode & SDDS_EXIT_PrintErrors)
     exit(1);
 }
@@ -487,7 +524,7 @@ void SDDS_PrintErrors(FILE *fp, int32_t mode) {
  * @see SDDS_ClearErrors
  */
 char **SDDS_GetErrorMessages(int32_t *number, int32_t mode) {
-  int32_t i, depth;
+  int32_t i, j, depth;
   char **message;
 
   if (!number)
@@ -503,17 +540,26 @@ char **SDDS_GetErrorMessages(int32_t *number, int32_t mode) {
     depth = 1;
   if (!(message = (char **)SDDS_Malloc(sizeof(*message) * depth)))
     return NULL;
+  for (i = 0; i < depth; i++)
+    message[i] = NULL;
   if (!error_description) {
     fprintf(stderr, "warning: internal error: error_description pointer is unexpectedly NULL (SDDS_GetErrorMessages)\n");
+    free(message);
     return NULL;
   } else {
     for (i = depth - 1; i >= 0; i--) {
       if (!error_description[i]) {
         fprintf(stderr, "internal error: error_description[%" PRId32 "] is unexpectedly NULL (SDDS_GetErrorMessages)\n", i);
+        for (j = 0; j < depth; j++)
+          free(message[j]);
+        free(message);
         return NULL;
       }
       if (!SDDS_CopyString(message + i, error_description[i])) {
         fprintf(stderr, "unable to copy error message text (SDDS_GetErrorMessages)\n");
+        for (j = 0; j < depth; j++)
+          free(message[j]);
+        free(message);
         return NULL;
       }
     }
@@ -523,7 +569,16 @@ char **SDDS_GetErrorMessages(int32_t *number, int32_t mode) {
 }
 
 /*static uint32_t AutoCheckMode = TABULAR_DATA_CHECKS ;*/
+static MDB_THREAD_LOCK AutoCheckModeLock = MDB_THREAD_LOCK_INITIALIZER;
 static uint32_t AutoCheckMode = 0x0000UL;
+
+static uint32_t SDDS_GetLockedAutoCheckMode(void) {
+  uint32_t mode;
+  mdb_thread_lock(&AutoCheckModeLock);
+  mode = AutoCheckMode;
+  mdb_thread_unlock(&AutoCheckModeLock);
+  return mode;
+}
 
 /**
  * @brief Sets the automatic check mode for SDDS dataset validation.
@@ -541,8 +596,10 @@ static uint32_t AutoCheckMode = 0x0000UL;
  */
 uint32_t SDDS_SetAutoCheckMode(uint32_t newMode) {
   uint32_t oldMode;
+  mdb_thread_lock(&AutoCheckModeLock);
   oldMode = AutoCheckMode;
   AutoCheckMode = newMode;
+  mdb_thread_unlock(&AutoCheckModeLock);
   return oldMode;
 }
 
@@ -586,7 +643,7 @@ int32_t SDDS_CheckDataset(SDDS_DATASET *SDDS_dataset, const char *caller) {
 int32_t SDDS_CheckTabularData(SDDS_DATASET *SDDS_dataset, const char *caller) {
   int64_t i;
   char buffer[100];
-  if (!(AutoCheckMode & TABULAR_DATA_CHECKS))
+  if (!(SDDS_GetLockedAutoCheckMode() & TABULAR_DATA_CHECKS))
     return 1;
   if (SDDS_dataset->layout.n_columns && (!SDDS_dataset->row_flag || !SDDS_dataset->data)) {
     sprintf(buffer, "tabular data is invalid in %s (columns but no row flags or data array)", caller);
@@ -2909,23 +2966,27 @@ int32_t SDDS_FreeStringArray(char **string, int64_t strings) {
 void *SDDS_MakePointerArrayRecursively(void *data, int32_t size, int32_t dimensions, int32_t *dimension) {
   void **pointer;
   int32_t i, elements;
-  static int32_t depth = 0;
-  static char s[200];
+  static MDB_THREAD_LOCAL int32_t depth = 0;
+  char s[200];
+  void *result;
 
   depth += 1;
   if (!data) {
     sprintf(s, "Unable to make pointer array--NULL data array (SDDS_MakePointerArrayRecursively, recursion %" PRId32 ")", depth);
     SDDS_SetError(s);
+    depth -= 1;
     return (NULL);
   }
   if (!dimension || !dimensions) {
     sprintf(s, "Unable to make pointer array--NULL or zero-length dimension array (SDDS_MakePointerArrayRecursively, recursion %" PRId32 ")", depth);
     SDDS_SetError(s);
+    depth -= 1;
     return (NULL);
   }
   if (size <= 0) {
     sprintf(s, "Unable to make pointer array--invalid data size (SDDS_MakePointerArrayRecursively, recursion %" PRId32 ")", depth);
     SDDS_SetError(s);
+    depth -= 1;
     return (NULL);
   }
   if (dimensions == 1) {
@@ -2938,11 +2999,16 @@ void *SDDS_MakePointerArrayRecursively(void *data, int32_t size, int32_t dimensi
   if (!(pointer = (void **)SDDS_Malloc(sizeof(void *) * elements))) {
     sprintf(s, "Unable to make pointer array--allocation failure (SDDS_MakePointerArrayRecursively, recursion %" PRId32 ")", depth);
     SDDS_SetError(s);
+    depth -= 1;
     return (NULL);
   }
   for (i = 0; i < elements; i++)
     pointer[i] = (char *)data + i * size * dimension[dimensions - 1];
-  return (SDDS_MakePointerArrayRecursively(pointer, sizeof(*pointer), dimensions - 1, dimension));
+  result = SDDS_MakePointerArrayRecursively(pointer, sizeof(*pointer), dimensions - 1, dimension);
+  if (!result)
+    free(pointer);
+  depth -= 1;
+  return result;
 }
 
 /**
@@ -3499,8 +3565,8 @@ int32_t SDDS_MatchColumns(SDDS_DATASET *SDDS_dataset, char ***nameReturn, int32_
  * SDDS_MatchColumns(&SDDS_dataset, &matchName, SDDS_MATCH_EXCLUDE_STRING, int32_t typeMode [,int32_t type], char *name, char *exclude, int32_t logic_mode)
  */
 {
-  static int32_t flags = 0;
-  static int32_t *flag = NULL;
+  static MDB_THREAD_LOCAL int32_t flags = 0;
+  static MDB_THREAD_LOCAL int32_t *flag = NULL;
   char **name, *string, *match_string, *ptr, *exclude_string;
   va_list argptr;
   int32_t retval, requiredType;
@@ -3606,18 +3672,21 @@ int32_t SDDS_MatchColumns(SDDS_DATASET *SDDS_dataset, char ***nameReturn, int32_
     flags = SDDS_dataset->layout.n_columns;
     if (flag)
       free(flag);
-    if (!(flag = (int32_t *)calloc(flags, sizeof(*flag)))) {
-      SDDS_SetError("Memory allocation failure (SDDS_MatchColumns)");
-      return -1;
+    flag = NULL;
+    if (flags) {
+      if (!(flag = (int32_t *)calloc(flags, sizeof(*flag)))) {
+        SDDS_SetError("Memory allocation failure (SDDS_MatchColumns)");
+        return -1;
+      }
     }
   }
+  if (flags && (matchMode != SDDS_MATCH_STRING) && (matchMode != SDDS_MATCH_EXCLUDE_STRING))
+    memset(flag, 0, sizeof(*flag) * flags);
 
   if ((matchMode != SDDS_MATCH_STRING) && (matchMode != SDDS_MATCH_EXCLUDE_STRING)) {
     for (i = 0; i < n_names; i++) {
       if ((index = SDDS_GetColumnIndex(SDDS_dataset, name[i])) >= 0)
         flag[index] = 1;
-      else
-        flag[index] = 0;
     }
   } else {
     for (i = 0; i < SDDS_dataset->layout.n_columns; i++) {
@@ -3777,7 +3846,7 @@ int32_t SDDS_MatchParameters(SDDS_DATASET *SDDS_dataset, char ***nameReturn, int
  * SDDS_MatchParameters(&SDDS_dataset, &matchName, SDDS_MATCH_EXCLUDE_STRING, int32_t typeMode [,long type], char *name, char *exclude, int32_t logic_mode)
  */
 {
-  static int32_t flags = 0, *flag = NULL;
+  static MDB_THREAD_LOCAL int32_t flags = 0, *flag = NULL;
   char **name, *string, *match_string, *ptr, *exclude_string;
   va_list argptr;
   int32_t i, j, index, n_names, retval, requiredType, matches;
@@ -3883,18 +3952,21 @@ int32_t SDDS_MatchParameters(SDDS_DATASET *SDDS_dataset, char ***nameReturn, int
     flags = SDDS_dataset->layout.n_parameters;
     if (flag)
       free(flag);
-    if (!(flag = (int32_t *)calloc(flags, sizeof(*flag)))) {
-      SDDS_SetError("Memory allocation failure (SDDS_MatchParameters)");
-      return -1;
+    flag = NULL;
+    if (flags) {
+      if (!(flag = (int32_t *)calloc(flags, sizeof(*flag)))) {
+        SDDS_SetError("Memory allocation failure (SDDS_MatchParameters)");
+        return -1;
+      }
     }
   }
+  if (flags && (matchMode != SDDS_MATCH_STRING) && (matchMode != SDDS_MATCH_EXCLUDE_STRING))
+    memset(flag, 0, sizeof(*flag) * flags);
 
   if ((matchMode != SDDS_MATCH_STRING) && (matchMode != SDDS_MATCH_EXCLUDE_STRING)) {
     for (i = 0; i < n_names; i++) {
       if ((index = SDDS_GetParameterIndex(SDDS_dataset, name[i])) >= 0)
         flag[index] = 1;
-      else
-        flag[index] = 0;
     }
   } else {
     for (i = 0; i < SDDS_dataset->layout.n_parameters; i++) {
@@ -4055,7 +4127,7 @@ int32_t SDDS_MatchArrays(SDDS_DATASET *SDDS_dataset, char ***nameReturn, int32_t
  * SDDS_MatchArrays(&SDDS_dataset, &matchName, SDDS_MATCH_EXCLUDE_STRING, int32_t typeMode [,long type], char *name, char *exclude, int32_t logic_mode)
  */
 {
-  static int32_t flags = 0, *flag = NULL;
+  static MDB_THREAD_LOCAL int32_t flags = 0, *flag = NULL;
   char **name, *string, *match_string, *ptr, *exclude_string;
   va_list argptr;
   int32_t i, j, index, n_names, retval, requiredType, matches;
@@ -4161,18 +4233,21 @@ int32_t SDDS_MatchArrays(SDDS_DATASET *SDDS_dataset, char ***nameReturn, int32_t
     flags = SDDS_dataset->layout.n_arrays;
     if (flag)
       free(flag);
-    if (!(flag = (int32_t *)calloc(flags, sizeof(*flag)))) {
-      SDDS_SetError("Memory allocation failure (SDDS_MatchArrays)");
-      return -1;
+    flag = NULL;
+    if (flags) {
+      if (!(flag = (int32_t *)calloc(flags, sizeof(*flag)))) {
+        SDDS_SetError("Memory allocation failure (SDDS_MatchArrays)");
+        return -1;
+      }
     }
   }
+  if (flags && (matchMode != SDDS_MATCH_STRING) && (matchMode != SDDS_MATCH_EXCLUDE_STRING))
+    memset(flag, 0, sizeof(*flag) * flags);
 
   if ((matchMode != SDDS_MATCH_STRING) && (matchMode != SDDS_MATCH_EXCLUDE_STRING)) {
     for (i = 0; i < n_names; i++) {
       if ((index = SDDS_GetArrayIndex(SDDS_dataset, name[i])) >= 0)
         flag[index] = 1;
-      else
-        flag[index] = 0;
     }
   } else {
     for (i = 0; i < SDDS_dataset->layout.n_arrays; i++) {
@@ -4837,33 +4912,40 @@ int32_t SDDS_CheckArray(SDDS_DATASET *SDDS_dataset, char *name, char *units, int
  * @sa SDDS_CheckColumn, SDDS_CheckParameter, SDDS_CheckArray
  */
 int32_t SDDS_PrintCheckText(FILE *fp, char *name, char *units, int32_t type, char *class_name, int32_t error_code) {
+  char *programName;
+  const char *programNameText;
+
   if (!fp || !name || !class_name)
     return (error_code);
+  programName = SDDS_GetRegisteredProgramNameCopy();
+  programNameText = programName ? programName : "?";
   switch (error_code) {
   case SDDS_CHECK_OKAY:
     break;
   case SDDS_CHECK_NONEXISTENT:
-    fprintf(fp, "Problem with %s %s: nonexistent (%s)\n", class_name, name, registeredProgramName ? registeredProgramName : "?");
+    fprintf(fp, "Problem with %s %s: nonexistent (%s)\n", class_name, name, programNameText);
     break;
   case SDDS_CHECK_WRONGTYPE:
     if (SDDS_VALID_TYPE(type))
-      fprintf(fp, "Problem with %s %s: wrong data type--expected %s (%s)\n", class_name, name, SDDS_type_name[type - 1], registeredProgramName ? registeredProgramName : "?");
+      fprintf(fp, "Problem with %s %s: wrong data type--expected %s (%s)\n", class_name, name, SDDS_type_name[type - 1], programNameText);
     else if (type == SDDS_ANY_NUMERIC_TYPE)
-      fprintf(fp, "Problem with %s %s: wrong data type--expected numeric data (%s)\n", class_name, name, registeredProgramName ? registeredProgramName : "?");
+      fprintf(fp, "Problem with %s %s: wrong data type--expected numeric data (%s)\n", class_name, name, programNameText);
     else if (type == SDDS_ANY_FLOATING_TYPE)
-      fprintf(fp, "Problem with %s %s: wrong data type--expected floating point data (%s)\n", class_name, name, registeredProgramName ? registeredProgramName : "?");
+      fprintf(fp, "Problem with %s %s: wrong data type--expected floating point data (%s)\n", class_name, name, programNameText);
     else if (type == SDDS_ANY_INTEGER_TYPE)
-      fprintf(fp, "Problem with %s %s: wrong data type--expected integer data (%s)\n", class_name, name, registeredProgramName ? registeredProgramName : "?");
+      fprintf(fp, "Problem with %s %s: wrong data type--expected integer data (%s)\n", class_name, name, programNameText);
     else if (type)
-      fprintf(fp, "Problem with %s %s: invalid data type code seen---may be a programming error (%s)\n", class_name, name, registeredProgramName ? registeredProgramName : "?");
+      fprintf(fp, "Problem with %s %s: invalid data type code seen---may be a programming error (%s)\n", class_name, name, programNameText);
     break;
   case SDDS_CHECK_WRONGUNITS:
-    fprintf(fp, "Problem with %s %s: wrong units--expected %s (%s)\n", class_name, name, units ? units : "none", registeredProgramName ? registeredProgramName : "?");
+    fprintf(fp, "Problem with %s %s: wrong units--expected %s (%s)\n", class_name, name, units ? units : "none", programNameText);
     break;
   default:
-    fprintf(stderr, "Problem with call to SDDS_PrintCheckText--invalid error code (%s)\n", registeredProgramName ? registeredProgramName : "?");
+    fprintf(stderr, "Problem with call to SDDS_PrintCheckText--invalid error code (%s)\n", programNameText);
+    free(programName);
     return (SDDS_CHECK_OKAY);
   }
+  free(programName);
   return (error_code);
 }
 
@@ -5175,13 +5257,13 @@ void SDDS_InterpretEscapes(char *s)
 }
 
 #define COMMENT_COMMANDS 3
-static char *commentCommandName[COMMENT_COMMANDS] = {
+static const char *const commentCommandName[COMMENT_COMMANDS] = {
   "big-endian",
   "little-endian",
   "fixed-rowcount",
 };
 
-static uint32_t commentCommandFlag[COMMENT_COMMANDS] = {
+static const uint32_t commentCommandFlag[COMMENT_COMMANDS] = {
   SDDS_BIGENDIAN_SEEN,
   SDDS_LITTLEENDIAN_SEEN,
   SDDS_FIXED_ROWCOUNT_SEEN,

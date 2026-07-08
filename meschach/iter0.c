@@ -40,6 +40,17 @@
 #include        "iter.h"
 
 
+static int iter_mrand_index(limit)
+int limit;
+{
+   int value;
+
+   if (limit <= 1)
+     return 0;
+   value = (int)((double)limit*mrand());
+   return value >= limit ? limit - 1 : value;
+}
+
 
 
 /* standard functions */
@@ -275,10 +286,10 @@ int	n, nrow;
    v_zero(u);
    for ( i = 0; i < A->m; i++ )
    {
-      k_max = ((rand() >> 8) % (nrow/2));
+      k_max = iter_mrand_index(nrow/2);
       for ( k = 0; k <= k_max; k++ )
       {
-	 j = (rand() >> 8) % A->n;
+	 j = iter_mrand_index(A->n);
 	 s1 = mrand();
 	 sp_set_val(A,i,j,s1);
 	 sp_set_val(A,j,i,s1);
@@ -315,10 +326,10 @@ double diag;
    px = px_get(n);
    for ( i = 0; i < A->m; i++ )
    {
-      k_max = (rand() >> 8) % (nrow-1);
+      k_max = iter_mrand_index(nrow-1);
       for ( k = 0; k <= k_max; k++ )
       {
-	 j = (rand() >> 8) % A->n;
+	 j = iter_mrand_index(A->n);
 	 s1 = mrand();
 	 sp_set_val(A,i,j,-s1);
       }
@@ -326,8 +337,8 @@ double diag;
    /* to make it likely that A is nonsingular, use pivot... */
    for ( i = 0; i < 2*A->n; i++ )
    {
-      j = (rand() >> 8) % A->n;
-      k = (rand() >> 8) % A->n;
+      j = iter_mrand_index(A->n);
+      k = iter_mrand_index(A->n);
       px_transp(px,j,k);
    }
    for ( i = 0; i < A->n; i++ )
@@ -358,10 +369,10 @@ int	n, nrow;
    v_zero(u);
    for ( i = 0; i < A->m; i++ )
    {
-      k_max = (rand() >> 8) % (nrow-1);
+      k_max = iter_mrand_index(nrow-1);
       for ( k = 0; k <= k_max; k++ )
       {
-	 j = (rand() >> 8) % A->n;
+	 j = iter_mrand_index(A->n);
 	 s1 = mrand();
 	 sp_set_val(A,i,j,-s1);
 	 u->ve[i] += fabs(s1);
@@ -375,6 +386,5 @@ int	n, nrow;
    V_FREE(u);
    return A;
 }
-
 
 

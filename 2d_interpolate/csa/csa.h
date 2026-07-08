@@ -17,6 +17,8 @@
 #if !defined(_CSA_H)
 #define _CSA_H
 
+#include "csa_thread.h"
+
 #if !defined(_STRUCT_POINT)
 #define _STRUCT_POINT
 typedef struct {
@@ -36,7 +38,12 @@ typedef struct {
 } specs;
 #endif
 
+int* csa_verbose_ptr(void);
+#ifdef CSA_NO_GLOBAL_COMPAT_MACROS
 extern int csa_verbose;
+#else
+#define csa_verbose (*csa_verbose_ptr())
+#endif
 extern char* csa_version;
 
 struct csa;
@@ -49,6 +56,7 @@ void csa_addstd(csa* a, int n, double variance[]);
 void csa_calculatespline(csa* a);
 void csa_approximatepoint(csa* a, point* p);
 void csa_approximatepoints(csa* a, int n, point* points);
+double* csa_approximatepoints2(int nin, double xin[], double yin[], double zin[], double sigma[], int nout, double xout[], double yout[], int npmin, int npmax, int k, int nppc);
 
 void csa_setnpmin(csa* a, int npmin);
 void csa_setnpmax(csa* a, int npmax);

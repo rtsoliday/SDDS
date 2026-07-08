@@ -35,7 +35,7 @@
 void smoothData(double *data, long rows, long smoothPoints, long smoothPasses) {
   long lower, upper, row, pass, smoothPoints2, terms;
   double sum;
-  static double *smoothedData = NULL;
+  static MDB_THREAD_LOCAL double *smoothedData = NULL;
 
   smoothedData = trealloc(smoothedData, rows * sizeof(*smoothedData));
 

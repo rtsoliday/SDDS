@@ -36,10 +36,10 @@
 
 
 /* scratch area -- enough for a single line */
-static	char	scratch[MAXLINE+1];
+static	MESCHACH_THREAD_LOCAL char	scratch[MAXLINE+1];
 
 /* default value for fy_or_n */
-static	int	y_n_dflt = TRUE;
+static	MESCHACH_THREAD_LOCAL int	y_n_dflt = TRUE;
 
 /* fy_or_n -- yes-or-no to question is string s
 	-- question written to stderr, input from fp 

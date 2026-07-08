@@ -317,7 +317,7 @@ char *usageArray[] = {
 /*
   static char *colpar_choice[2] = {"column", "parameter"};
 */
-static long table_number_mem = -1, i_page_mem = -1, n_rows_mem = -1, i_row_mem = -1;
+static RPN_THREAD_LOCAL long table_number_mem = -1, i_page_mem = -1, n_rows_mem = -1, i_row_mem = -1;
 
 typedef char *STRING_PAIR[2];
 
@@ -1642,34 +1642,43 @@ int main(int argc, char **argv) {
         break;
       case IS_RPNTEST_DEFINITION:
         rpntest_ptr = (RPNTEST_DEFINITION *)definition[i].structure;
+        rpn_lock();
         SDDS_StoreParametersInRpnMemories(&SDDS_output);
         if (rpntest_ptr->is_parameter) {
           rpn_clear();
           rpn(rpntest_ptr->expression);
-          if (rpn_check_error())
+          if (rpn_check_error()) {
+            rpn_unlock();
             exit(EXIT_FAILURE);
-          if (!pop_log(&test_result))
+          }
+          if (!pop_log(&test_result)) {
+            rpn_unlock();
             SDDS_Bomb("aborted due to rpn logical stack/result error for parameter-based test");
+          }
           rpn_clear();
           if (!test_result) {
             if (!rpntest_ptr->autostop) {
               if (verbose)
                 fputs("    * page failed rpn test--continuing to next page", stderr);
               skip_page = 1;
+              rpn_unlock();
               continue;
             } else {
               if (verbose)
                 fputs("    * page failed rpn test--ignore remainder of file", stderr);
+              rpn_unlock();
               exit(EXIT_FAILURE);
             }
           }
         } else if (n_rows) {
           if (!SDDS_FilterRowsWithRpnTest(&SDDS_output, rpntest_ptr->expression)) {
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+            rpn_unlock();
             exit(EXIT_FAILURE);
           }
           row_deletion = 1;
         }
+        rpn_unlock();
         if (verbose)
           fprintf(stderr, "applied %s-based rpn test:\n    %s\n", rpntest_ptr->is_parameter ? "parameter" : "column", rpntest_ptr->expression);
         break;
@@ -1707,12 +1716,16 @@ int main(int argc, char **argv) {
         rpnexpression_ptr = (RPNEXPRESSION_DEFINITION *)definition[i].structure;
         if (rpnexpression_ptr->repeat == -1)
           continue;
+        rpn_lock();
         SDDS_StoreParametersInRpnMemories(&SDDS_output);
         SDDS_StoreColumnsInRpnArrays(&SDDS_output);
         rpn(rpnexpression_ptr->expression);
-        if (rpn_check_error())
+        if (rpn_check_error()) {
+          rpn_unlock();
           exit(EXIT_FAILURE);
+        }
         rpn_clear();
+        rpn_unlock();
         if (verbose)
           fprintf(stderr, "executed rpn expression:\n    %s\n", rpnexpression_ptr->expression);
         if (!rpnexpression_ptr->repeat)
@@ -1917,6 +1930,7 @@ long SDDS_ComputeSetOfColumns(SDDS_DATASET *SDDS_dataset, long equ_begin, long e
   return_value = 0;
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_ComputeColumn"))
     return (0);
+  rpn_lock();
   layout = &SDDS_dataset->layout;
   column_list = NULL;
   column_list_ptr = -1;
@@ -1936,7 +1950,10 @@ long SDDS_ComputeSetOfColumns(SDDS_DATASET *SDDS_dataset, long equ_begin, long e
         ptr = addOuterParentheses(*equation);
         if2pf(pfix, ptr, sizeof pfix);
         free(ptr);
+        free(*equation);
+        *equation = NULL;
         if (!SDDS_CopyString(equation, pfix)) {
+          free(equation);
           fprintf(stderr, "error: problem copying argument string\n");
           goto cleanup;
         }
@@ -1947,11 +1964,12 @@ long SDDS_ComputeSetOfColumns(SDDS_DATASET *SDDS_dataset, long equ_begin, long e
 
       create_udf(equation_ptr->udf_name, *equation);
       free(*equation);
+      free(equation);
     }
     cp_str(&column_list[column_list_ptr].equation, equation_ptr->udf_name);
+    column_list_entries++;
     if (column_list[column_list_ptr].column < 0 || column_list[column_list_ptr].column >= layout->n_columns)
       goto cleanup;
-    column_list_entries++;
   }
 
   if (table_number_mem == -1) {
@@ -2044,6 +2062,7 @@ cleanup:
     free(column_list);
   }
 
+  rpn_unlock();
   return (return_value);
 }
 
@@ -2051,14 +2070,19 @@ long SDDS_EvaluateColumn(SDDS_DATASET *SDDS_dataset, EVALUATE_DEFINITION *defini
   double value;
   char **equation;
   long type, column;
-  int64_t j;
+  int64_t j, equationIndex, equationRows;
+  long return_value = 0;
 
+  equation = NULL;
+  equationIndex = 0;
+  equationRows = 0;
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_ComputeColumn"))
     return (0);
+  rpn_lock();
   if (!SDDS_StoreParametersInRpnMemories(SDDS_dataset))
-    return (0);
+    goto cleanup;
   if (!SDDS_StoreColumnsInRpnArrays(SDDS_dataset))
-    return 0;
+    goto cleanup;
 
   if (table_number_mem == -1) {
     table_number_mem = rpn_create_mem("table_number", 0);
@@ -2072,19 +2096,26 @@ long SDDS_EvaluateColumn(SDDS_DATASET *SDDS_dataset, EVALUATE_DEFINITION *defini
   rpn_store((double)SDDS_dataset->n_rows, NULL, n_rows_mem);
 
   if (!(equation = (char **)SDDS_GetColumn(SDDS_dataset, definition->source)))
-    return 0;
+    goto cleanup;
+  equationRows = SDDS_CountRowsOfInterest(SDDS_dataset);
 
   type = SDDS_GetColumnType(SDDS_dataset, column = SDDS_GetColumnIndex(SDDS_dataset, definition->name));
 
   for (j = 0; j < SDDS_dataset->n_rows; j++) {
+    if (!SDDS_dataset->row_flag[j])
+      continue;
+    if (equationIndex >= equationRows) {
+      SDDS_SetError("Unable to compute rpn expression--row count mismatch (SDDS_EvaluateColumn)");
+      goto cleanup;
+    }
     if (!SDDS_StoreRowInRpnMemories(SDDS_dataset, j))
-      return (0);
+      goto cleanup;
     rpn_clear();
     rpn_store((double)j, NULL, i_row_mem);
-    value = rpn(equation[j]);
+    value = rpn(equation[equationIndex++]);
     if (rpn_check_error()) {
       SDDS_SetError("Unable to compute rpn expression--rpn error (SDDS_EvaluateColumn)");
-      return (0);
+      goto cleanup;
     }
     switch (type) {
     case SDDS_CHARACTER:
@@ -2119,17 +2150,33 @@ long SDDS_EvaluateColumn(SDDS_DATASET *SDDS_dataset, EVALUATE_DEFINITION *defini
       break;
     }
   }
+  if (equationIndex != equationRows) {
+    SDDS_SetError("Unable to compute rpn expression--row count mismatch (SDDS_EvaluateColumn)");
+    goto cleanup;
+  }
 
-  return (1);
+  return_value = 1;
+
+cleanup:
+  if (equation) {
+    for (j = 0; j < equationRows; j++)
+      free(equation[j]);
+    free(equation);
+  }
+  rpn_unlock();
+  return return_value;
 }
 
 long SDDS_EvaluateParameter(SDDS_DATASET *SDDS_dataset, EVALUATE_DEFINITION *definition) {
   double value;
   char **equation;
   long parameter;
+  long return_value = 0;
 
+  equation = NULL;
+  rpn_lock();
   if (!SDDS_StoreParametersInRpnMemories(SDDS_dataset))
-    return (0);
+    goto cleanup;
 
   if (table_number_mem == -1) {
     table_number_mem = rpn_create_mem("table_number", 0);
@@ -2143,15 +2190,16 @@ long SDDS_EvaluateParameter(SDDS_DATASET *SDDS_dataset, EVALUATE_DEFINITION *def
   rpn_store((double)SDDS_dataset->n_rows, NULL, n_rows_mem);
 
   if (!(equation = (char **)SDDS_GetParameter(SDDS_dataset, definition->source, NULL)))
-    return 0;
+    goto cleanup;
 
   rpn_clear();
   value = rpn(*equation);
   fprintf(stderr, "value = %e\n", value);
   free(*equation);
+  *equation = NULL;
   if (rpn_check_error()) {
     SDDS_SetError("Unable to compute rpn expression--rpn error (SDDS_EvaluateParameter)");
-    return (0);
+    goto cleanup;
   }
   switch (SDDS_GetParameterType(SDDS_dataset, parameter = SDDS_GetParameterIndex(SDDS_dataset, definition->name))) {
   case SDDS_CHARACTER:
@@ -2186,7 +2234,15 @@ long SDDS_EvaluateParameter(SDDS_DATASET *SDDS_dataset, EVALUATE_DEFINITION *def
     break;
   }
 
-  return (1);
+  return_value = 1;
+
+cleanup:
+  if (equation) {
+    free(*equation);
+    free(equation);
+  }
+  rpn_unlock();
+  return return_value;
 }
 
 char **process_name_options(char **orig_name, long **orig_flag, long orig_names, char **delete, long deletes, char **retain,

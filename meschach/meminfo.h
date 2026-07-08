@@ -151,5 +151,17 @@ typedef struct {
 /* max number of lists of types */
 #define MEM_CONNECT_MAX_LISTS    5
 
+#ifdef ANSI_C
+MEM_CONNECT *meschach_mem_connect(void);
+#else
+MEM_CONNECT *meschach_mem_connect();
+#endif
+
+#ifdef MESCHACH_NO_MEM_CONNECT_COMPAT_MACRO
+extern MEM_CONNECT mem_connect[MEM_CONNECT_MAX_LISTS];
+#else
+#define mem_connect (meschach_mem_connect())
+#endif
+
 
 #endif

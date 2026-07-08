@@ -44,7 +44,7 @@ MAT	*Hfactor(A, diag, beta)
 MAT	*A;
 VEC	*diag, *beta;
 {
-	static	VEC	*tmp1 = VNULL;
+	static MESCHACH_THREAD_LOCAL	VEC	*tmp1 = VNULL;
 	int	k, limit;
 
 	if ( ! A || ! diag || ! beta )
@@ -86,7 +86,7 @@ MAT	*H, *Qout;
 VEC	*diag, *beta;
 {
 	int	i, j, limit;
-	static	VEC	*tmp1 = VNULL, *tmp2 = VNULL;
+	static MESCHACH_THREAD_LOCAL	VEC	*tmp1 = VNULL, *tmp2 = VNULL;
 
 	if ( H==(MAT *)NULL || diag==(VEC *)NULL || beta==(VEC *)NULL )
 		error(E_NULL,"makeHQ");

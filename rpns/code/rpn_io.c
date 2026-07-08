@@ -387,7 +387,7 @@ void rpn_puts(void)
 void sprf(void)
 {
     char *format;
-    static char buffer[1024];
+    char buffer[1024];
 
     format = pop_string();
     if (format==NULL)
@@ -416,8 +416,8 @@ void sprf(void)
 /*
 static char *formats[2] = {"%c %.15le%c", "%c %.15lf%c"};
 */
-static char user_format[100] = "%c %.15le%c";
-static char user_format0[100] = "%.15le";
+static RPN_THREAD_LOCAL char user_format[100] = "%c %.15le%c";
+static RPN_THREAD_LOCAL char user_format0[100] = "%.15le";
 
 void format(void)
 {
@@ -453,5 +453,4 @@ char *choose_format(long flag, double x)
         return(formats[0]);
     return(formats[1]);
     }
-
 

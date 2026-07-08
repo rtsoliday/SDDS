@@ -16,6 +16,7 @@ LIBRARY_SRC = array.c \
         pcode.c \
         pop_push.c \
         prompt.c \
+        rpn_lock.c \
         rpn_csh.c \
         rpn_data.c \
         rpn_draw.c \

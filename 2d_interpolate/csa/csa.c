@@ -42,7 +42,23 @@
 #include "csa.h"
 #include "minell_csa.h"
 
+#ifdef csa_verbose
+#undef csa_verbose
+#endif
 int csa_verbose = 0;
+static CSA_THREAD_LOCAL int csa_verbose_data = 0;
+static CSA_THREAD_LOCAL int csa_verbose_initialized = 0;
+
+int* csa_verbose_ptr(void)
+{
+    if (!csa_verbose_initialized) {
+        csa_verbose_data = csa_verbose;
+        csa_verbose_initialized = 1;
+    }
+    return &csa_verbose_data;
+}
+
+#define csa_verbose (*csa_verbose_ptr())
 
 #define NPASTART_S 10           /* Number of Points Allocated at Start for a
                                  * square */
@@ -1262,18 +1278,18 @@ static void csa_findsecondarycoeffs(csa* a)
     }
 }
 
-static int i300[] = { 12, 12, 12, 12 };
-static int i030[] = { 3, 24, 21, 0 };
-static int i003[] = { 0, 3, 24, 21 };
-static int i210[] = { 9, 16, 15, 8 };
-static int i021[] = { 2, 17, 22, 7 };
-static int i102[] = { 4, 6, 20, 18 };
-static int i120[] = { 6, 20, 18, 4 };
-static int i012[] = { 1, 10, 23, 14 };
-static int i201[] = { 8, 9, 16, 15 };
-static int i111[] = { 5, 13, 19, 11 };
+static const int i300[] = { 12, 12, 12, 12 };
+static const int i030[] = { 3, 24, 21, 0 };
+static const int i003[] = { 0, 3, 24, 21 };
+static const int i210[] = { 9, 16, 15, 8 };
+static const int i021[] = { 2, 17, 22, 7 };
+static const int i102[] = { 4, 6, 20, 18 };
+static const int i120[] = { 6, 20, 18, 4 };
+static const int i012[] = { 1, 10, 23, 14 };
+static const int i201[] = { 8, 9, 16, 15 };
+static const int i111[] = { 5, 13, 19, 11 };
 
-static int* iall[] = { i300, i030, i003, i210, i021, i102, i120, i012, i201, i111 };
+static const int* const iall[] = { i300, i030, i003, i210, i021, i102, i120, i012, i201, i111 };
 
 static void csa_sethascoeffsflag(csa* a)
 {
@@ -1803,4 +1819,3 @@ int do_csa_2d_interpolate(specs *spec, int nin, point *pin, int *nout, point **p
   return 1;
 }
    
-

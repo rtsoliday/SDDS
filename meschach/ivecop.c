@@ -30,7 +30,7 @@
 #include 	"matrix.h"
 
 
-static char    line[MAXLINE];
+static MESCHACH_THREAD_LOCAL char    line[MAXLINE];
 
 IVEC	*iiv_finput(FILE *fp, IVEC *iv);
 IVEC	*biv_finput(FILE *fp, IVEC *iv);

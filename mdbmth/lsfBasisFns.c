@@ -18,9 +18,18 @@
  */
 
 #include "mdb.h"
+#include "mdb_thread.h"
 
 static double x_offset = 0;
 static double x_scale = 1;
+static MDB_THREAD_LOCK argument_transform_lock = MDB_THREAD_LOCK_INITIALIZER;
+
+static void get_argument_transform(double *offset, double *scale) {
+  mdb_thread_lock(&argument_transform_lock);
+  *offset = x_offset;
+  *scale = x_scale;
+  mdb_thread_unlock(&argument_transform_lock);
+}
 
 /**
  * @brief Set the offset applied to the input argument of basis functions.
@@ -30,7 +39,11 @@ static double x_scale = 1;
  *
  * @param offset The new offset to apply to the argument.
  */
-void set_argument_offset(double offset) { x_offset = offset; }
+void set_argument_offset(double offset) {
+  mdb_thread_lock(&argument_transform_lock);
+  x_offset = offset;
+  mdb_thread_unlock(&argument_transform_lock);
+}
 
 /**
  * @brief Set the scale factor applied to the input argument of basis functions.
@@ -41,8 +54,11 @@ void set_argument_offset(double offset) { x_offset = offset; }
  * @param scale The new scale factor for the argument.
  */
 void set_argument_scale(double scale) {
-  if (!(x_scale = scale))
+  if (!scale)
     bomb("argument scale factor is zero", NULL);
+  mdb_thread_lock(&argument_transform_lock);
+  x_scale = scale;
+  mdb_thread_unlock(&argument_transform_lock);
 }
 
 /**
@@ -50,14 +66,26 @@ void set_argument_scale(double scale) {
  *
  * @return The current argument offset.
  */
-double get_argument_offset() { return x_offset; }
+double get_argument_offset() {
+  double offset;
+  mdb_thread_lock(&argument_transform_lock);
+  offset = x_offset;
+  mdb_thread_unlock(&argument_transform_lock);
+  return offset;
+}
 
 /**
  * @brief Get the current argument scale factor used before function evaluations.
  *
  * @return The current argument scale factor.
  */
-double get_argument_scale() { return x_scale; }
+double get_argument_scale() {
+  double scale;
+  mdb_thread_lock(&argument_transform_lock);
+  scale = x_scale;
+  mdb_thread_unlock(&argument_transform_lock);
+  return scale;
+}
 
 /**
  * @brief Evaluate the Chebyshev polynomial of the first kind T_n(x).
@@ -70,7 +98,9 @@ double get_argument_scale() { return x_scale; }
  * @return The value of T_n(x).
  */
 double tcheby(double x, long n) {
-  x = (x - x_offset) / x_scale;
+  double offset, scale;
+  get_argument_transform(&offset, &scale);
+  x = (x - offset) / scale;
   if (x > 1 || x < -1) {
     /*  fprintf(stderr, "warning: argument %e is out of range for tcheby()\n",
      * x); */
@@ -90,7 +120,9 @@ double tcheby(double x, long n) {
  * @return The derivative dT_n/dx at the given x.
  */
 double dtcheby(double x, long n) {
-  x = (x - x_offset) / x_scale;
+  double offset, scale;
+  get_argument_transform(&offset, &scale);
+  x = (x - offset) / scale;
   if (x > 1 || x < -1) {
     /* fprintf(stderr, "warning: argument %e is out of range for tcheby()\n",
      * x); */
@@ -111,7 +143,9 @@ double dtcheby(double x, long n) {
  * @return The value of ((x - x_offset)/x_scale)^n.
  */
 double ipower(double x, long n) {
-  x = (x - x_offset) / x_scale;
+  double offset, scale;
+  get_argument_transform(&offset, &scale);
+  x = (x - offset) / scale;
   return (ipow(x, n));
 }
 
@@ -125,7 +159,9 @@ double ipower(double x, long n) {
  * @return The derivative of the power function at the given x.
  */
 double dipower(double x, long n) {
-  x = (x - x_offset) / x_scale;
+  double offset, scale;
+  get_argument_transform(&offset, &scale);
+  x = (x - offset) / scale;
   return (n * ipow(x, n - 1));
 }
 

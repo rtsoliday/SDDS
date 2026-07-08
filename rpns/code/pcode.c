@@ -28,7 +28,7 @@ char pc_buf[PC_BUFLEN];
  *          much faster than text.
  */
 
-void gen_pcode(char *s0, long i_udf)
+void gen_pcode_unlocked(char *s0, long i_udf)
 {
   register long i, store, sstore, mem_num;
   register char *ptr;
@@ -70,7 +70,7 @@ void gen_pcode(char *s0, long i_udf)
         if (strcmp(ptr, funcRPN[i].keyword)==0) {
           /* token is a built-in function */
           if (funcRPN[i].keyword[0]=='?') {
-            udf_createarray(5,0,0.0,ptr,i_udf);
+            udf_createarray_unlocked(5,0,0.0,ptr,i_udf);
             break;
           }
           if (i==store) {
@@ -85,7 +85,7 @@ void gen_pcode(char *s0, long i_udf)
             }
             if ((mem_num=is_memory(&dummy2, &dummy3, &is_string, ptr))==-1)
               mem_num = rpn_create_mem(ptr, 0);
-            udf_createarray(3,mem_num,0.0,ptr,0);
+            udf_createarray_unlocked(3,mem_num,0.0,ptr,0);
             break;
           }
           if (i==sstore) {
@@ -100,11 +100,11 @@ void gen_pcode(char *s0, long i_udf)
             }
             if ((mem_num=is_memory(&dummy2, &dummy3, &is_string, ptr))==-1)
               mem_num = rpn_create_mem(ptr, 1);
-            udf_createarray(8,mem_num,0.0,ptr,0);
+            udf_createarray_unlocked(8,mem_num,0.0,ptr,0);
             break;
           }
           /* start or continue pcode by adding code for this function */
-          udf_createarray(1,i,0.0,ptr,0);
+          udf_createarray_unlocked(1,i,0.0,ptr,0);
           break;
         }
       }
@@ -117,41 +117,41 @@ void gen_pcode(char *s0, long i_udf)
            4 - recall for num; 9 - recall for string
            */
           if (is_string)
-            udf_createarray(9,mem_num,0.0,ptr,0);	
+            udf_createarray_unlocked(9,mem_num,0.0,ptr,0);
           else
-            udf_createarray(4,mem_num,0.0,ptr,0);		
+            udf_createarray_unlocked(4,mem_num,0.0,ptr,0);
         }
-        else if ((num=find_udf(ptr))!=-1) {
+        else if ((num=find_udf_unlocked(ptr))!=-1) {
           /* ptr is a user defined function */
-          udf_createarray(2,num,0.0,ptr,0);
+          udf_createarray_unlocked(2,num,0.0,ptr,0);
         }
         else {
           switch (*ptr) {
           case '"':
             /* token is a string */
-            udf_createarray(-1,0,0.0,ptr,0);
+            udf_createarray_unlocked(-1,0,0.0,ptr,0);
             break;
           case ':':
             /* token is colon in condition */
-            udf_createarray(6,0,0.0,ptr,i_udf);
+            udf_createarray_unlocked(6,0,0.0,ptr,i_udf);
             break;
           case '$':
             /* token is end of conditional statment */
-            udf_createarray(7,0,0.0,ptr,i_udf);
+            udf_createarray_unlocked(7,0,0.0,ptr,i_udf);
             break;
           default:
             if (!isdigit(*ptr) && *ptr!='-' && *ptr!='+' && *ptr!='.') {
               /* token is unknown */
-              udf_createarray(-2,0,0.0,ptr,0);
+              udf_createarray_unlocked(-2,0,0.0,ptr,0);
             }
             else {
               if (get_double(&x, ptr)) {
                 /* token is a number */
-                udf_createarray(0,0,x,ptr,0);
+                udf_createarray_unlocked(0,0,x,ptr,0);
               }
               else {
                 /* token is unknown */
-                udf_createarray(-2,0,0.0,ptr,0);
+                udf_createarray_unlocked(-2,0,0.0,ptr,0);
               }
             }
           }
@@ -167,4 +167,9 @@ void gen_pcode(char *s0, long i_udf)
   
 }
 
-
+void gen_pcode(char *s0, long i_udf)
+{
+  rpn_lock();
+  gen_pcode_unlocked(s0, i_udf);
+  rpn_unlock();
+}

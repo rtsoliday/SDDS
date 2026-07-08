@@ -30,11 +30,28 @@
 #include <limits.h>
 #include <errno.h>
 #include "config.h"
+#include "svd.h"
 
 #define SVD_NMAX 40
 #define SVD_EPS 4.0e-15
 
+#ifdef svd_verbose
+#undef svd_verbose
+#endif
 int svd_verbose = 0;
+static CSA_THREAD_LOCAL int svd_verbose_data = 0;
+static CSA_THREAD_LOCAL int svd_verbose_initialized = 0;
+
+int* svd_verbose_ptr(void)
+{
+    if (!svd_verbose_initialized) {
+        svd_verbose_data = svd_verbose;
+        svd_verbose_initialized = 1;
+    }
+    return &svd_verbose_data;
+}
+
+#define svd_verbose (*svd_verbose_ptr())
 
 typedef struct {
     double* v;

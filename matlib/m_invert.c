@@ -23,11 +23,14 @@
 int mat_invert(MATRIX *A, MATRIX *B)         /* A=inv(B) */
 {
     register long i, j, k, l, m, n;
-    static long *ipivot=NULL, **index=NULL, *ind_l;
-    static double *pivot=NULL, piv;
-    static double t, swap, amax, *tmp, abs_amax; 
-    static long row, col, max_n=0;
-    static double *a_j, *a_col, *a_m;
+    static MDB_THREAD_LOCAL long *ipivot=NULL, **index=NULL;
+    long *ind_l;
+    static MDB_THREAD_LOCAL double *pivot=NULL;
+    double piv;
+    double t, swap, amax, *tmp, abs_amax;
+    long row=0, col=0;
+    static MDB_THREAD_LOCAL long max_n=0;
+    double *a_j, *a_col, *a_m;
     long log10_t, log10_piv;
 
     if (!A)
@@ -153,5 +156,4 @@ int mat_invert(MATRIX *A, MATRIX *B)         /* A=inv(B) */
 	}
     return(1);
     }
-
 

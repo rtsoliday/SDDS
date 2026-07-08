@@ -327,15 +327,22 @@ long accumulateMoments(double *mean, double *rms, double *standDev,
 long accumulateMomentsThreaded(double *mean, double *rms, double *standDev,
                                double *x, long n, long reset, long numThreads) {
   long i;
-  static double sum = 0, sumSqr = 0, value;
-  static long nTotal;
+  static MDB_THREAD_LOCAL double savedSum = 0, savedSumSqr = 0;
+  static MDB_THREAD_LOCAL long savedNTotal;
+  double sum = savedSum, sumSqr = savedSumSqr;
+  long nTotal = savedNTotal;
+  double value;
 
   if (reset)
     nTotal = sum = sumSqr = 0;
 
   nTotal += n;
-  if (nTotal < 1)
+  if (nTotal < 1) {
+    savedSum = sum;
+    savedSumSqr = sumSqr;
+    savedNTotal = nTotal;
     return (0);
+  }
 
   omp_set_num_threads(numThreads);
 #pragma omp parallel private(value) shared(sum, sumSqr)
@@ -363,6 +370,9 @@ long accumulateMomentsThreaded(double *mean, double *rms, double *standDev,
   *mean = sum / nTotal;
   *rms = sqrt(sumSqr / nTotal);
   *standDev = sqrt((sumSqr / nTotal - sqr(*mean)) * nTotal / (nTotal - 1.0));
+  savedSum = sum;
+  savedSumSqr = sumSqr;
+  savedNTotal = nTotal;
 
   return (1);
 }
@@ -375,15 +385,22 @@ long accumulateWeightedMoments(double *mean, double *rms, double *standDev,
 long accumulateWeightedMomentsThreaded(double *mean, double *rms, double *standDev,
                                        double *x, double *w, long n, long reset, long numThreads) {
   long i;
-  static double sumW = 0, sumWx = 0, sumSqrWx = 0;
-  static long nTotal;
-
-  nTotal += n;
-  if (nTotal < 1)
-    return (0);
+  static MDB_THREAD_LOCAL double savedSumW = 0, savedSumWx = 0, savedSumSqrWx = 0;
+  static MDB_THREAD_LOCAL long savedNTotal;
+  double sumW = savedSumW, sumWx = savedSumWx, sumSqrWx = savedSumSqrWx;
+  long nTotal = savedNTotal;
 
   if (reset)
     sumW = sumWx = sumSqrWx = nTotal = 0;
+
+  nTotal += n;
+  if (nTotal < 1) {
+    savedSumW = sumW;
+    savedSumWx = sumWx;
+    savedSumSqrWx = sumSqrWx;
+    savedNTotal = nTotal;
+    return (0);
+  }
 
   omp_set_num_threads(numThreads);
 #pragma omp parallel shared(sumW, sumWx, sumSqrWx)
@@ -415,8 +432,16 @@ long accumulateWeightedMomentsThreaded(double *mean, double *rms, double *standD
     *mean = sumWx / sumW;
     *rms = sqrt(sumSqrWx / sumW);
     *standDev = sqrt((sumSqrWx / sumW - sqr(*mean)) * (nTotal / (nTotal - 1.0)));
+    savedSumW = sumW;
+    savedSumWx = sumWx;
+    savedSumSqrWx = sumSqrWx;
+    savedNTotal = nTotal;
     return (1);
   }
+  savedSumW = sumW;
+  savedSumWx = sumWx;
+  savedSumSqrWx = sumSqrWx;
+  savedNTotal = nTotal;
   return (0);
 }
 

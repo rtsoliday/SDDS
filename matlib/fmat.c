@@ -284,11 +284,14 @@ void fmat_identity(FMATRIX *A)
 int fmat_invert(FMATRIX *A, FMATRIX *B)         /* A=inv(B) */
 {
     register long i, j, k, l, m, n;
-    static long *ipivot=NULL, **index=NULL, *ind_l;
-    static float *pivot=NULL, piv;
-    static float t, swap, amax, *tmp, abs_amax; 
-    static long row, col, max_n=0;
-    static float *a_j, *a_col, *a_m;
+    static MDB_THREAD_LOCAL long *ipivot=NULL, **index=NULL;
+    long *ind_l;
+    static MDB_THREAD_LOCAL float *pivot=NULL;
+    float piv;
+    float t, swap, amax, *tmp, abs_amax;
+    long row=0, col=0;
+    static MDB_THREAD_LOCAL long max_n=0;
+    float *a_j, *a_col, *a_m;
     long log10_t, log10_piv;
 
     if (!A)
@@ -559,4 +562,3 @@ void fmat_zero(FMATRIX *A)
             a_i[j] = 0;
         }
     }
-

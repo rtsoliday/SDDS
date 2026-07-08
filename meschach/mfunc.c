@@ -98,7 +98,7 @@ MAT	*m_pow(A, p, out)
 MAT	*A, *out;
 int	p;
 {
-   static MAT	*wkspace, *tmp;
+   static MESCHACH_THREAD_LOCAL MAT	*wkspace, *tmp;
    
    if ( ! A )
      error(E_NULL,"m_pow");
@@ -134,10 +134,10 @@ MAT *A,*out;
 double eps;
 int *q_out, *j_out;
 {
-   static MAT *D = MNULL, *Apow = MNULL, *N = MNULL, *Y = MNULL;
-   static VEC *c1 = VNULL, *tmp = VNULL;
+   static MESCHACH_THREAD_LOCAL MAT *D = MNULL, *Apow = MNULL, *N = MNULL, *Y = MNULL;
+   static MESCHACH_THREAD_LOCAL VEC *c1 = VNULL, *tmp = VNULL;
    VEC y0, y1;  /* additional structures */
-   static PERM *pivot = PNULL;
+   static MESCHACH_THREAD_LOCAL PERM *pivot = PNULL;
    int j, k, l, q, r, s, j2max, t;
    double inf_norm, eqq, power2, c, sign;
    
@@ -310,8 +310,8 @@ MAT *m_poly(A,a,out)
 MAT *A,*out;
 VEC *a;
 {
-   static MAT	*Apow = MNULL, *Y = MNULL;
-   static VEC   *tmp;
+   static MESCHACH_THREAD_LOCAL MAT	*Apow = MNULL, *Y = MNULL;
+   static MESCHACH_THREAD_LOCAL VEC   *tmp;
    VEC y0, y1;  /* additional vectors */
    int j, k, l, q, r, s, t;
    

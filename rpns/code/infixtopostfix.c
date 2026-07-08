@@ -280,10 +280,10 @@ int ifpf_oporder(char *op) {
 
 /* get the next token (number or operator) from string */
 char *ifpf_get_token(const char *ifix) {
-  static const char *expr = NULL;
-  static char token[IFPF_TOKEN_SIZE];
+  static RPN_THREAD_LOCAL const char *expr = NULL;
+  static RPN_THREAD_LOCAL char token[IFPF_TOKEN_SIZE];
   int i, exponent=0;
-  static int first=0;
+  static RPN_THREAD_LOCAL int first=0;
   
   if (ifix) {
     expr = ifix;

@@ -420,7 +420,7 @@ void rpn_int(void)
   }
 }
 
-static long rn_seeded=0;
+static RPN_THREAD_LOCAL long rn_seeded=0;
 
 #define MAXRAND 2147483647
 
@@ -1156,4 +1156,3 @@ void rpn_bitor(void)
   n2 = pop_num();
   push_num((double)(n1&n2));
 }
-

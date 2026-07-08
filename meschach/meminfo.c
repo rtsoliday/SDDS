@@ -42,11 +42,6 @@
 #include  "iter.h"
 #endif
 
-
-/* this array is defined further in this file */
-extern MEM_CONNECT mem_connect[MEM_CONNECT_MAX_LISTS];
-
-
 /* names of types */
 static char *mem_type_names[] = {
    "MAT",
@@ -70,7 +65,7 @@ static char *mem_type_names[] = {
 
 
 /* local array for keeping track of memory */
-static MEM_ARRAY   mem_info_sum[MEM_NUM_STD_TYPES];  
+static MESCHACH_THREAD_LOCAL MEM_ARRAY   mem_info_sum[MEM_NUM_STD_TYPES];
 
 
 /* for freeing various types */
@@ -91,14 +86,41 @@ static int (*mem_free_funcs[MEM_NUM_STD_TYPES])(void *) = {
 #endif
       };
 
-
-
-/* it is a global variable for passing 
-   pointers to local arrays defined here */
+/*
+ * Keep the historical data symbol available for already-built clients that
+ * reference mem_connect directly. New code reaches the per-thread table via
+ * the macro in meminfo.h.
+ */
+#ifdef mem_connect
+#undef mem_connect
+#endif
+static MEM_ARRAY legacy_mem_info_sum[MEM_NUM_STD_TYPES];
 MEM_CONNECT mem_connect[MEM_CONNECT_MAX_LISTS] = {
- { mem_type_names, mem_free_funcs, MEM_NUM_STD_TYPES, 
-     mem_info_sum } 
+ { mem_type_names, mem_free_funcs, MEM_NUM_STD_TYPES,
+     legacy_mem_info_sum }
 };
+#define mem_connect (meschach_mem_connect())
+
+static MESCHACH_THREAD_LOCAL MEM_CONNECT mem_connect_data[MEM_CONNECT_MAX_LISTS];
+static MESCHACH_THREAD_LOCAL int mem_connect_initialized = FALSE;
+
+#ifdef ANSI_C
+MEM_CONNECT *meschach_mem_connect(void)
+#else
+MEM_CONNECT *meschach_mem_connect()
+#endif
+{
+   if (!mem_connect_initialized) {
+      MEM_ZERO(mem_connect_data, sizeof(mem_connect_data));
+      MEM_ZERO(mem_info_sum, sizeof(mem_info_sum));
+      mem_connect_data[0].type_names = mem_type_names;
+      mem_connect_data[0].free_funcs = mem_free_funcs;
+      mem_connect_data[0].ntypes = MEM_NUM_STD_TYPES;
+      mem_connect_data[0].info_sum = mem_info_sum;
+      mem_connect_initialized = TRUE;
+   }
+   return mem_connect_data;
+}
 
 
 /* attach a new list of types */
@@ -201,7 +223,7 @@ int list;
 
 /* local variables */
 
-static int	mem_switched_on = MEM_SWITCH_ON_DEF;  /* on/off */
+static MESCHACH_THREAD_LOCAL int	mem_switched_on = MEM_SWITCH_ON_DEF;  /* on/off */
 
 
 /* switch on/off memory info */
@@ -388,4 +410,3 @@ int type,list,num;
       }
    }
 }
-

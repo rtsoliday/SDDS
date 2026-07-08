@@ -20,9 +20,9 @@
 
 #define N_DIFFEQ_RETURNS 8
 
-static struct {
+static const struct {
   long code;
-  char *description;
+  const char *description;
 } diffeq_return[N_DIFFEQ_RETURNS] = {
   {-4, "exit condition failure"},
   {-3, "zero stepsize"},
@@ -32,7 +32,7 @@ static struct {
   {1, "differential equations solved already"},
   {2, "zero of exit-function found"},
   {3, "end of integration interval reached"}};
-static char *unknown = "unknown error";
+static const char *const unknown = "unknown error";
 
 /**
  * @brief Return a descriptive string for a given differential equation result code.
@@ -48,7 +48,7 @@ char *diffeq_result_description(long result_code) {
   int i;
   for (i = 0; i < N_DIFFEQ_RETURNS; i++) {
     if (result_code == diffeq_return[i].code)
-      return (diffeq_return[i].description);
+      return ((char *)diffeq_return[i].description);
   }
-  return unknown;
+  return (char *)unknown;
 }

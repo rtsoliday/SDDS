@@ -34,12 +34,129 @@
 #endif
 #include "distribute.h"
 
+#ifdef my_number_of_iterations
+#undef my_number_of_iterations
+#endif
+#ifdef my_first_iteration
+#undef my_first_iteration
+#endif
+#ifdef my_last_iteration
+#undef my_last_iteration
+#endif
+#ifdef number_of_iterations
+#undef number_of_iterations
+#endif
+#ifdef first_iteration
+#undef first_iteration
+#endif
+#ifdef last_iteration
+#undef last_iteration
+#endif
 int my_number_of_iterations = -1;
 int my_first_iteration = -1;
 int my_last_iteration = -1;
 int* number_of_iterations = NULL;
 int* first_iteration = NULL;
 int* last_iteration = NULL;
+static NN_THREAD_LOCAL int my_number_of_iterations_data = -1;
+static NN_THREAD_LOCAL int my_first_iteration_data = -1;
+static NN_THREAD_LOCAL int my_last_iteration_data = -1;
+static NN_THREAD_LOCAL int* number_of_iterations_data = NULL;
+static NN_THREAD_LOCAL int* first_iteration_data = NULL;
+static NN_THREAD_LOCAL int* last_iteration_data = NULL;
+static NN_THREAD_LOCAL int distribute_state_initialized = 0;
+static MDB_THREAD_LOCK distribute_legacy_lock = MDB_THREAD_LOCK_INITIALIZER;
+static int published_my_number_of_iterations = -1;
+static int published_my_first_iteration = -1;
+static int published_my_last_iteration = -1;
+static int* published_number_of_iterations = NULL;
+static int* published_first_iteration = NULL;
+static int* published_last_iteration = NULL;
+
+static void distribute_init_thread_state(void)
+{
+    if (!distribute_state_initialized) {
+        mdb_thread_lock(&distribute_legacy_lock);
+        if (my_number_of_iterations != published_my_number_of_iterations ||
+            my_first_iteration != published_my_first_iteration ||
+            my_last_iteration != published_my_last_iteration) {
+            my_number_of_iterations_data = my_number_of_iterations;
+            my_first_iteration_data = my_first_iteration;
+            my_last_iteration_data = my_last_iteration;
+        }
+        if (number_of_iterations != published_number_of_iterations ||
+            first_iteration != published_first_iteration ||
+            last_iteration != published_last_iteration) {
+            number_of_iterations_data = number_of_iterations;
+            first_iteration_data = first_iteration;
+            last_iteration_data = last_iteration;
+        }
+        mdb_thread_unlock(&distribute_legacy_lock);
+        distribute_state_initialized = 1;
+    }
+}
+
+static void distribute_publish_legacy_state(void)
+{
+    distribute_init_thread_state();
+    mdb_thread_lock(&distribute_legacy_lock);
+    my_number_of_iterations = my_number_of_iterations_data;
+    my_first_iteration = my_first_iteration_data;
+    my_last_iteration = my_last_iteration_data;
+    number_of_iterations = number_of_iterations_data;
+    first_iteration = first_iteration_data;
+    last_iteration = last_iteration_data;
+    published_my_number_of_iterations = my_number_of_iterations_data;
+    published_my_first_iteration = my_first_iteration_data;
+    published_my_last_iteration = my_last_iteration_data;
+    published_number_of_iterations = number_of_iterations_data;
+    published_first_iteration = first_iteration_data;
+    published_last_iteration = last_iteration_data;
+    mdb_thread_unlock(&distribute_legacy_lock);
+}
+
+int* my_number_of_iterations_ptr(void)
+{
+    distribute_init_thread_state();
+    return &my_number_of_iterations_data;
+}
+
+int* my_first_iteration_ptr(void)
+{
+    distribute_init_thread_state();
+    return &my_first_iteration_data;
+}
+
+int* my_last_iteration_ptr(void)
+{
+    distribute_init_thread_state();
+    return &my_last_iteration_data;
+}
+
+int** number_of_iterations_ptr(void)
+{
+    distribute_init_thread_state();
+    return &number_of_iterations_data;
+}
+
+int** first_iteration_ptr(void)
+{
+    distribute_init_thread_state();
+    return &first_iteration_data;
+}
+
+int** last_iteration_ptr(void)
+{
+    distribute_init_thread_state();
+    return &last_iteration_data;
+}
+
+#define my_number_of_iterations (*my_number_of_iterations_ptr())
+#define my_first_iteration (*my_first_iteration_ptr())
+#define my_last_iteration (*my_last_iteration_ptr())
+#define number_of_iterations (*number_of_iterations_ptr())
+#define first_iteration (*first_iteration_ptr())
+#define last_iteration (*last_iteration_ptr())
 
 /** Distributes indices in the interval [i1, i2] between `nproc' processes.
  * @param i1 Start of the interval
@@ -104,21 +221,27 @@ void distribute_iterations(int i1, int i2, int nproc, int myrank)
     my_first_iteration = first_iteration[myrank];
     my_last_iteration = last_iteration[myrank];
     my_number_of_iterations = number_of_iterations[myrank];
+    distribute_publish_legacy_state();
 }
 
 /**
  */
 void distribute_free(void)
 {
-    if (number_of_iterations == NULL)
+    int* old_number_of_iterations = number_of_iterations;
+    int* old_first_iteration = first_iteration;
+    int* old_last_iteration = last_iteration;
+
+    if (old_number_of_iterations == NULL)
         return;
-    free(number_of_iterations);
     number_of_iterations = NULL;
-    free(first_iteration);
     first_iteration = NULL;
-    free(last_iteration);
     last_iteration = NULL;
     my_number_of_iterations = -1;
     my_first_iteration = -1;
     my_last_iteration = -1;
+    distribute_publish_legacy_state();
+    free(old_number_of_iterations);
+    free(old_first_iteration);
+    free(old_last_iteration);
 }

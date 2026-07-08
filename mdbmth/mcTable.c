@@ -23,8 +23,8 @@
 
 #define DEBUG 0
 
-static char buffer[1024];
-static char buffer1[1024];
+static MDB_THREAD_LOCAL char buffer[1024];
+static MDB_THREAD_LOCAL char buffer1[1024];
 char *fgets_mc_skip(char *s, long slen, FILE *fp, char skip_char);
 void get_name_unit_descrip_format(char **name, char **unit, char **descrip, char **format, char *_buffer);
 
@@ -309,4 +309,3 @@ void get_name_unit_descrip_format(char **name, char **unit, char **descrip, char
   } else
     *format = NULL;
 }
-

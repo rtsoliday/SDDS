@@ -314,6 +314,46 @@ data for each column is stored in a single stream and not intermixed.
 
 \section{Overview of Library Routines}
 This section gives a brief description of the library routines grouped by functions. The reader should refer to the manual pages for more detailed information. 
+\subsection{Thread Safety}
+The SDDS libraries support concurrent use by multiple threads when each thread
+uses separate library objects and caller-owned buffers. In particular,
+independent {\tt SDDS\_DATASET} structures may be read, written, queried, and
+terminated concurrently. A single {\tt SDDS\_DATASET} structure is not locked as
+one object; callers must serialize operations if more than one thread accesses
+the same dataset handle.
+
+The SDDS error stack is thread-local. Calls such as {\tt SDDS\_SetError},
+{\tt SDDS\_SetError0}, {\tt SDDS\_NumberOfErrors},
+{\tt SDDS\_GetErrorMessages}, {\tt SDDS\_PrintErrors}, and
+{\tt SDDS\_ClearErrors} operate on the calling thread's error history.
+
+Several process-global settings are protected by internal locks, including
+{\tt SDDS\_SetDefaultIOBufferSize}, {\tt SDDS\_SetRowLimit},
+{\tt SDDS\_SetTerminateMode}, {\tt SDDS\_SetNameValidityFlags},
+{\tt SDDS\_SetAutoCheckMode}, and {\tt SDDS\_RegisterProgramName}. These calls
+are protected against data races, but the settings remain process-global. For
+deterministic behavior, applications should set them before creating worker
+threads or provide their own synchronization around changes.
+
+The RPN library has per-thread execution stacks, so ordinary {\tt rpn} calls do
+not share numeric, logical, string, or integer stack contents between threads.
+RPN definitions, memories, and arrays remain process-global and are serialized
+by the recursive {\tt rpn\_lock}/{\tt rpn\_unlock} API. Callers that retain a
+pointer returned by {\tt rpn\_getarraypointer} while other threads may mutate
+RPN arrays should hold {\tt rpn\_lock} until the pointer is no longer in use.
+
+The supporting utility and math libraries use thread-local storage or internal
+locks for formerly shared scratch buffers, flags, random-number state, error
+state, and work arrays. This includes mdblib, mdbcommon, mdbmth, namelist,
+matlib, fftpack, meschach, CSA, natural-neighbor interpolation, and xlslib.
+These protections do not make concurrent mutation of the same caller-owned
+matrix, interpolation object, file stream, or output buffer safe without caller
+synchronization.
+
+Normal builds require compiler support for thread-local storage and an atomic or
+platform lock primitive. Defining {\tt SDDS\_UNSAFE\_NO\_THREADS} disables these
+protections and should be used only for explicit single-thread builds.
+
 \subsection{Input Routines}
 \subsubsection{Setup}
 

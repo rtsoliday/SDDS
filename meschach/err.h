@@ -37,7 +37,17 @@
 
 /* Error recovery */
 
+#ifdef ANSI_C
+jmp_buf *meschach_restart_ptr(void);
+#else
+jmp_buf *meschach_restart_ptr();
+#endif
+
+#ifdef MESCHACH_NO_RESTART_COMPAT_MACRO
 extern	jmp_buf	restart;
+#else
+#define restart (*meschach_restart_ptr())
+#endif
 
 
 /* max. # of error lists */

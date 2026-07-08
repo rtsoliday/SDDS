@@ -15,6 +15,7 @@
 
 #include "mdb.h"
 
+static MDB_THREAD_LOCK search_path_lock = MDB_THREAD_LOCK_INITIALIZER;
 static char *search_path = NULL;
 /**
  * @brief Sets the search path for file lookup.
@@ -26,12 +27,19 @@ static char *search_path = NULL;
  * @param input The new search path to set. If `NULL`, the search path is cleared.
  */
 void setSearchPath(char *input) {
-  if (search_path)
-    free(search_path);
+  char *new_search_path = NULL;
+  char *old_search_path;
+
   if (input)
-    cp_str(&search_path, input);
-  else
-    search_path = NULL;
+    cp_str(&new_search_path, input);
+
+  mdb_thread_lock(&search_path_lock);
+  old_search_path = search_path;
+  search_path = new_search_path;
+  mdb_thread_unlock(&search_path_lock);
+
+  if (old_search_path)
+    free(old_search_path);
 }
 
 /**
@@ -47,6 +55,8 @@ void setSearchPath(char *input) {
  *         or `NULL` if the file is not found.
  */
 char *findFileInSearchPath(const char *filename) {
+    char *pathList = NULL;
+
     if (!filename || !strlen(filename))
         return NULL;
 
@@ -63,9 +73,12 @@ char *findFileInSearchPath(const char *filename) {
     }
 
     char *result = NULL;
-    if (search_path && strlen(search_path)) {
-        char *pathList;
+    mdb_thread_lock(&search_path_lock);
+    if (search_path && strlen(search_path))
         cp_str(&pathList, search_path);
+    mdb_thread_unlock(&search_path_lock);
+
+    if (pathList) {
         char *path;
         while ((path = get_token(pathList))) {
             size_t needed = strlen(localFilename) + strlen(path) + 2 +

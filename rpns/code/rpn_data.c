@@ -11,7 +11,9 @@
  * purpose: contains allocations of space for global arrays
  * Michael Borland, 1988
  */
+#define RPN_NO_STACKPTR_COMPAT_MACROS
 #include "rpn_internal.h"
+#undef RPN_NO_STACKPTR_COMPAT_MACROS
 
 /* first node for user-defined function linked-list */
 struct UDF **udf_list = NULL;
@@ -26,21 +28,68 @@ long memory_added;
 */
 
 /* stack for computations */
-double stack[STACKSIZE];
-long stackptr=0;
+RPN_THREAD_LOCAL double stack[STACKSIZE];
+RPN_THREAD_LOCAL long stackptr=0;
 
 /*stack for long numbers */
-long dstack[STACKSIZE];
-long dstackptr=0;
+RPN_THREAD_LOCAL long dstack[STACKSIZE];
+
+#ifdef dstackptr
+#undef dstackptr
+#endif
+#ifdef sstackptr
+#undef sstackptr
+#endif
+
+/* Keep historical data symbols for already-built clients that reference them
+ * directly. New code uses the accessor macros in rpn.h for per-thread values.
+ */
+long dstackptr = 0;
+long sstackptr = 0;
+
+static RPN_THREAD_LOCAL long rpn_dstackptr_data = 0;
+static RPN_THREAD_LOCAL long rpn_sstackptr_data = 0;
+static RPN_THREAD_LOCAL long rpn_stackptr_data_initialized = 0;
+
+static void rpn_init_stackptr_data(void)
+{
+  if (!rpn_stackptr_data_initialized) {
+    rpn_dstackptr_data = 0;
+    rpn_sstackptr_data = 0;
+    rpn_stackptr_data_initialized = 1;
+  }
+}
+
+long *rpn_dstackptr_ptr(void)
+{
+  rpn_init_stackptr_data();
+  return &rpn_dstackptr_data;
+}
+
+long *rpn_sstackptr_ptr(void)
+{
+  rpn_init_stackptr_data();
+  return &rpn_sstackptr_data;
+}
+
+void rpn_update_legacy_stackptrs(void)
+{
+  rpn_init_stackptr_data();
+  dstackptr = rpn_dstackptr_data;
+  sstackptr = rpn_sstackptr_data;
+}
+
+#define dstackptr (*rpn_dstackptr_ptr())
+#define sstackptr (*rpn_sstackptr_ptr())
 
 /* stack for udf code */
 UDF_CODE *udf_stack=NULL;
 long udf_stackptr=0, max_udf_stackptr=0;
 
 /* stack to replace recursion in execute.c */
-UDF_INDEX *udf_id=NULL;
-long cycle_counter=0, max_cycle_counter=0;
-long cycle_counter_stop=0;
+RPN_THREAD_LOCAL UDF_INDEX *udf_id=NULL;
+RPN_THREAD_LOCAL long cycle_counter=0, max_cycle_counter=0;
+RPN_THREAD_LOCAL long cycle_counter_stop=0;
 
 /* stack for udf condtional breakpoints */
 UDF_CONDITIONAL *udf_cond_stack=NULL;
@@ -56,33 +105,32 @@ RPN_ARRAY *astack=NULL;
 long astackptr=0, max_astackptr=0;
 
 /* stack for strings */
-char *sstack[STACKSIZE];
-long sstackptr=0;
+RPN_THREAD_LOCAL char *sstack[STACKSIZE];
 
 /* stack for logical operations */
-long logicstack[LOGICSTACKSIZE];
-long lstackptr=0;
+RPN_THREAD_LOCAL long logicstack[LOGICSTACKSIZE];
+RPN_THREAD_LOCAL long lstackptr=0;
 
 /* stack for command input files */
-struct INPUT_FILE input_stack[FILESTACKSIZE];
-long fstackptr=0;
+RPN_THREAD_LOCAL struct INPUT_FILE input_stack[FILESTACKSIZE];
+RPN_THREAD_LOCAL long fstackptr=0;
 
 /* array for regular input/output files (not a stack) */
-struct IO_FILE output_file[FILESTACKSIZE];
-struct IO_FILE input_file[FILESTACKSIZE];
+RPN_THREAD_LOCAL struct IO_FILE output_file[FILESTACKSIZE];
+RPN_THREAD_LOCAL struct IO_FILE input_file[FILESTACKSIZE];
 
-struct IO_FILE io_file[FILESTACKSIZE];
-long istackptr;
+RPN_THREAD_LOCAL struct IO_FILE io_file[FILESTACKSIZE];
+RPN_THREAD_LOCAL long istackptr;
 
 /* root structure for code sequences, pointer to current sequence  */
-struct CODE code, *code_ptr;
-long code_lev;
+RPN_THREAD_LOCAL struct CODE code, *code_ptr;
+RPN_THREAD_LOCAL long code_lev;
 
 /* flag to indicate scientific notation or non-scientific notation output */
-long format_flag = NO_SCIENTIFIC;
+RPN_THREAD_LOCAL long format_flag = NO_SCIENTIFIC;
 
 /* flag to indicate trace/notrace mode */
-long do_trace;
+RPN_THREAD_LOCAL long do_trace;
 
 /* array of function structures */
 struct FUNCTION funcRPN[NFUNCS] = {

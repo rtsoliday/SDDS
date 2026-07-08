@@ -66,7 +66,7 @@ VEC	*diag /* ,*beta */;
 {
     unsigned int	k,limit;
     Real	beta;
-    static	VEC	*tmp1=VNULL;
+    static MESCHACH_THREAD_LOCAL	VEC	*tmp1=VNULL;
     
     if ( ! A || ! diag )
 	error(E_NULL,"QRfactor");
@@ -103,7 +103,7 @@ VEC	*diag /* , *beta */;
 PERM	*px;
 {
     unsigned int	i, i_max, j, k, limit;
-    static	VEC	*gamma=VNULL, *tmp1=VNULL, *tmp2=VNULL;
+    static MESCHACH_THREAD_LOCAL	VEC	*gamma=VNULL, *tmp1=VNULL, *tmp2=VNULL;
     Real	beta, maxgamma, sum, tmp;
     
     if ( ! A || ! diag || ! px )
@@ -225,7 +225,7 @@ MAT	*makeQ(QR,diag,Qout)
 MAT	*QR,*Qout;
 VEC	*diag /* , *beta */;
 {
-    static	VEC	*tmp1=VNULL,*tmp2=VNULL;
+    static MESCHACH_THREAD_LOCAL	VEC	*tmp1=VNULL,*tmp2=VNULL;
     unsigned int	i, limit;
     Real	beta, r_ii, tmp_val;
     int	j;
@@ -295,7 +295,7 @@ MAT	*QR;
 VEC	*diag /* , *beta */ , *b, *x;
 {
     int	limit;
-    static	VEC	*tmp = VNULL;
+    static MESCHACH_THREAD_LOCAL	VEC	*tmp = VNULL;
     
     if ( ! QR || ! diag || ! b )
 	error(E_NULL,"QRsolve");
@@ -322,7 +322,7 @@ VEC	*diag /* , *beta */;
 PERM	*pivot;
 VEC	*b, *x;
 {
-    static	VEC	*tmp=VNULL;
+    static MESCHACH_THREAD_LOCAL	VEC	*tmp=VNULL;
     
     if ( ! QR || ! diag || ! pivot || ! b )
 	error(E_NULL,"QRCPsolve");
@@ -449,7 +449,7 @@ VEC *diag, *c, *sc;
 double	QRcondest(QR)
 MAT	*QR;
 {
-    static	VEC	*y=VNULL;
+    static MESCHACH_THREAD_LOCAL	VEC	*y=VNULL;
     Real	norm1, norm2, sum, tmp1, tmp2;
     int		i, j, limit;
 

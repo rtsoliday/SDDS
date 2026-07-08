@@ -36,7 +36,7 @@
 
 
 /* local variables */
-static char line[MAXLINE];
+static MESCHACH_THREAD_LOCAL char line[MAXLINE];
 
 /* sp_foutput -- output sparse matrix A to file/stream fp */
 void    sp_foutput(fp,A)
@@ -314,4 +314,3 @@ FILE    *fp;
 
 	return A;
 }
-

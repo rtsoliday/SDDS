@@ -61,8 +61,8 @@ long OneDScanOptimize(
   long maxDivisions,
   long maxRepeats,
   unsigned long flags) {
-  static double *dxLocal = NULL;
-  static long lastDimensions = 0;
+  static MDB_THREAD_LOCAL double *dxLocal = NULL;
+  static MDB_THREAD_LOCAL long lastDimensions = 0;
   double yLast, dVector = 1, yNew, xLocal;
   long point, totalEvaluations = 0, isInvalid, repeats = 0, divisions;
   long activeDimensions, direction, found = 0, stepsTaken, decreaseSeen;

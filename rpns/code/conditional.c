@@ -155,7 +155,7 @@ long dissect_conditional(char **branch, long is_true)
     return(1);
     }
 
-void conditional_udf(long udf_current_step)
+void conditional_udf_unlocked(long udf_current_step)
 {
   long is_true;
   if (!stack_test(lstackptr, 1, "logical", "conditional_udf")) {
@@ -166,13 +166,17 @@ void conditional_udf(long udf_current_step)
   is_true = logicstack[lstackptr-1];
   lstackptr--;
   if (is_true) {
-    udf_id_createarray(udf_current_step + 1, udf_cond_stack[udf_stack[udf_current_step].index].cond_colon);
+    udf_id_createarray_unlocked(udf_current_step + 1, udf_cond_stack[udf_stack[udf_current_step].index].cond_colon);
   }
   else {
-    udf_id_createarray(udf_cond_stack[udf_stack[udf_current_step].index].cond_colon + 1, udf_cond_stack[udf_stack[udf_current_step].index].cond_dollar);
+    udf_id_createarray_unlocked(udf_cond_stack[udf_stack[udf_current_step].index].cond_colon + 1, udf_cond_stack[udf_stack[udf_current_step].index].cond_dollar);
   }
   return;
 }
-  
 
-
+void conditional_udf(long udf_current_step)
+{
+  rpn_lock();
+  conditional_udf_unlocked(udf_current_step);
+  rpn_unlock();
+}

@@ -30,8 +30,8 @@
  * @return The double value entered by the user or the default value.
  */
 double query_double(char *prompt, double def) {
-  static char s[100];
-  static double val;
+  char s[100];
+  double val;
 
   printf("%s [%g]: ", prompt, def);
   if (!fgets(s, sizeof(s), stdin))
@@ -53,8 +53,8 @@ double query_double(char *prompt, double def) {
  * @return The float value entered by the user or the default value.
  */
 float query_float(char *prompt, float def) {
-  static char s[100];
-  static float val;
+  char s[100];
+  float val;
 
   printf("%s [%g]: ", prompt, def);
   if (!fgets(s, sizeof(s), stdin))
@@ -76,8 +76,8 @@ float query_float(char *prompt, float def) {
  * @return The long integer entered by the user or the default value.
  */
 long query_long(char *prompt, long def) {
-  static char s[100];
-  static long val;
+  char s[100];
+  long val;
 
   printf("%s [%ld]: ", prompt, def);
   if (!fgets(s, sizeof(s), stdin))
@@ -99,8 +99,8 @@ long query_long(char *prompt, long def) {
  * @return The integer entered by the user or the default value.
  */
 int query_int(char *prompt, int def) {
-  static char s[100];
-  static int val;
+  char s[100];
+  int val;
 
   printf("%s [%d]: ", prompt, def);
   if (!fgets(s, sizeof(s), stdin))
@@ -122,8 +122,8 @@ int query_int(char *prompt, int def) {
  * @return The short integer entered by the user or the default value.
  */
 short query_short(char *prompt, short def) {
-  static char s[100];
-  static short val;
+  char s[100];
+  short val;
 
   printf("%s [%d]: ", prompt, def);
   if (!fgets(s, sizeof(s), stdin))

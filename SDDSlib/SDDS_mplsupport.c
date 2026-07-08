@@ -29,7 +29,7 @@
 #define COLUMN_BASED 0
 #define PARAMETER_BASED 1
 #define DATA_CLASS_KEYWORDS 2
-static char *data_class_keyword[DATA_CLASS_KEYWORDS] = {
+static const char *const data_class_keyword[DATA_CLASS_KEYWORDS] = {
   "column", "parameter"};
 
 #define is_logic_character(c) ((c) == '|' || (c) == '&' || (c) == '!')
@@ -135,7 +135,7 @@ int32_t process_match_requests(MATCH_TERM **column_match, MATCH_TERM **parameter
     }
     match = NULL;
     matches = 0;
-    switch (data_class = match_string(argument[0], data_class_keyword, DATA_CLASS_KEYWORDS, UNIQUE_MATCH)) {
+    switch (data_class = match_string(argument[0], (char **)data_class_keyword, DATA_CLASS_KEYWORDS, UNIQUE_MATCH)) {
     case COLUMN_BASED:
       if (*column_match) {
         SDDS_SetError("Only one column-based match request is allowed (process_match_request)");
@@ -887,6 +887,5 @@ int32_t SDDS_WriteMplTable(TABLE *mpl_data, char *file) {
   }
   return 1;
 }
-
 
 

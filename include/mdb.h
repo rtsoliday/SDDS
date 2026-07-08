@@ -20,6 +20,7 @@
 #include <limits.h>
 #include <time.h>
 #include <stdint.h>
+#include "mdb_thread.h"
 #if defined(_WIN32) && !defined(_MINGW)
 typedef __int16 int16_t;
 typedef unsigned __int16 uint16_t;
@@ -197,7 +198,7 @@ epicsShareFuncMDBMTH double dbesk1(double x);
 epicsShareFuncMDBMTH double dbesy0(double x);
 epicsShareFuncMDBMTH double dbesy1(double x);
 /*modified bessel function dbeskv */
-epicsShareFuncMDBMTH double chebev(double a, double b, double c[], int m, double x);
+epicsShareFuncMDBMTH double chebev(double a, double b, const double c[], int m, double x);
 epicsShareFuncMDBMTH void beschb(double x, double *gam1, double *gam2, double *gampl, double *gammi);
 
 
@@ -537,6 +538,14 @@ epicsShareFuncMDBMTH extern double K_cei(double k);
 epicsShareFuncMDBMTH extern double E_cei(double k);
 epicsShareFuncMDBMTH extern double dK_cei(double k);
 epicsShareFuncMDBMTH extern double dE_cei(double k);
+epicsShareFuncMDBMTH extern void mdbmth_lock_rand(void);
+epicsShareFuncMDBMTH extern void mdbmth_unlock_rand(void);
+epicsShareFuncMDBMTH extern int mdbmth_rand_unlocked(void);
+epicsShareFuncMDBMTH extern void mdbmth_srand_unlocked(unsigned int seed);
+epicsShareFuncMDBMTH extern double mdbmth_rand_fraction_unlocked(void);
+epicsShareFuncMDBMTH extern int mdbmth_locked_rand(void);
+epicsShareFuncMDBMTH extern void mdbmth_locked_srand(unsigned int seed);
+epicsShareFuncMDBMTH extern double mdbmth_locked_rand_fraction(void);
 epicsShareFuncMDBMTH extern float drand(long dummy);
 epicsShareFuncMDBMTH extern double rdrand(double lower_limit, double upper_limit);
 epicsShareFuncMDBMTH extern void r_theta_rand(double *r, double *theta, double r_min,
@@ -1099,4 +1108,3 @@ epicsShareFuncMDBMTH std::complex <double> cipowr(std::complex <double> a, int n
 #endif 
 
 #endif /* _MDB_ */
-

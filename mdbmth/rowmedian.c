@@ -30,8 +30,8 @@
  * @return Returns the index of the median element on success, -1 on failure.
  */
 long find_median(double *value, double *x, long n) {
-  static double **data = NULL;
-  static long last_n = 0;
+  static MDB_THREAD_LOCAL double **data = NULL;
+  static MDB_THREAD_LOCAL long last_n = 0;
   long i;
 
   if (n <= 0)
@@ -66,8 +66,8 @@ long find_median(double *value, double *x, long n) {
  * @return Returns the index of the percentile element on success, -1 on failure.
  */
 long find_percentile(double *value, double *x, long n, double percentile) {
-  static double **data = NULL;
-  static long last_n = 0;
+  static MDB_THREAD_LOCAL double **data = NULL;
+  static MDB_THREAD_LOCAL long last_n = 0;
   long i;
 
   if (n <= 0)
@@ -104,8 +104,8 @@ long find_percentile(double *value, double *x, long n, double percentile) {
  * @return Returns the index of the median element in the specified row on success, -1 on failure.
  */
 long find_median_of_row(double *value, double **x, long index, long n) {
-  static double **data = NULL;
-  static long last_n = 0;
+  static MDB_THREAD_LOCAL double **data = NULL;
+  static MDB_THREAD_LOCAL long last_n = 0;
   long i;
 
   if (index < 0 && n <= 0)

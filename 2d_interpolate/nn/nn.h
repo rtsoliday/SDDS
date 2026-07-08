@@ -18,6 +18,8 @@
 #if !defined(_NN_H)
 #define _NN_H
 
+#include "nn_thread.h"
+
 /* Contains version string for the nn package.
  */
 extern char* nn_version;
@@ -27,7 +29,12 @@ extern char* nn_version;
  * 1 - verbose
  * 2 - very verbose
  */
+int* nn_verbose_ptr(void);
+#ifdef NN_NO_GLOBAL_COMPAT_MACROS
 extern int nn_verbose;
+#else
+#define nn_verbose (*nn_verbose_ptr())
+#endif
 
 /* Switches between different formulations for NN weights.
  * SIBSON -- classic formulation by Sibson
@@ -35,12 +42,22 @@ extern int nn_verbose;
  *                  
  */
 typedef enum { SIBSON, NON_SIBSONIAN } NN_RULE;
+NN_RULE* nn_rule_ptr(void);
+#ifdef NN_NO_GLOBAL_COMPAT_MACROS
 extern NN_RULE nn_rule;
+#else
+#define nn_rule (*nn_rule_ptr())
+#endif
 
 /* Limits verbose information to a particular vertex (used mainly for
  * debugging purposes).
  */
+int* nn_test_vertice_ptr(void);
+#ifdef NN_NO_GLOBAL_COMPAT_MACROS
 extern int nn_test_vertice;
+#else
+#define nn_test_vertice (*nn_test_vertice_ptr())
+#endif
 
 /* "point" is a basic data structure in this package.
  */

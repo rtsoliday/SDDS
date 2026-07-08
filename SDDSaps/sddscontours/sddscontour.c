@@ -2756,6 +2756,7 @@ void sddscontour_main(char *input_line)
       if (topline[0] == '@')
         topline = getParameterLabel(&SDDS_table, topline + 1, topline_editcommand, topline_formatcommand);
       if (rpn_equation) {
+        rpn_lock();
         if (!swap_xy) {
           mem1 = rpn_create_mem(variable1 ? variable1 : "row", 0);
           mem2 = rpn_create_mem(variable2 ? variable2 : "column", 0);
@@ -2765,6 +2766,7 @@ void sddscontour_main(char *input_line)
         }
         if (!SDDS_StoreParametersInRpnMemories(&SDDS_table)) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+          rpn_unlock();
           return (1);
         }
         if (xyzArray[0]) {
@@ -2776,17 +2778,22 @@ void sddscontour_main(char *input_line)
             rpn_store(j * dy + ymin, NULL, mem2);
             if (!SDDS_StoreRowInRpnMemories(&SDDS_table, swap_xy ? i + j * nx : i * ny + j)) {
               SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+              rpn_unlock();
               return (1);
             }
             data_value[i][j] = rpn(equdf_name);
-            if (rpn_check_error())
+            if (rpn_check_error()) {
+              rpn_unlock();
               return (1);
+            }
             rpn_clear();
           }
         }
+        rpn_unlock();
       }
 
       if (rpn_transform) {
+        rpn_lock();
         if (!swap_xy) {
           mem1 = rpn_create_mem(variable1 ? variable1 : "row", 0);
           mem2 = rpn_create_mem(variable2 ? variable2 : "column", 0);
@@ -2796,6 +2803,7 @@ void sddscontour_main(char *input_line)
         }
         if (!SDDS_StoreParametersInRpnMemories(&SDDS_table)) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+          rpn_unlock();
           return (1);
         }
         if (xyzArray[0]) {
@@ -2807,15 +2815,19 @@ void sddscontour_main(char *input_line)
             rpn_store(j * dy + ymin, NULL, mem2);
             if (!SDDS_StoreRowInRpnMemories(&SDDS_table, swap_xy ? i + j * nx : i * ny + j)) {
               SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+              rpn_unlock();
               return (1);
             }
             /*push_num(data_value[i][j]);*/
             data_value[i][j] = rpn(trudf_name);
-            if (rpn_check_error())
+            if (rpn_check_error()) {
+              rpn_unlock();
               return (1);
+            }
             rpn_clear();
           }
         }
+        rpn_unlock();
       }
       xmin0 = xmin;
       xmax0 = xmax;

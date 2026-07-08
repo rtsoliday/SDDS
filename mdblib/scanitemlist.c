@@ -44,10 +44,10 @@ long scanItemList(unsigned long *flags, char **item, long *items, unsigned long 
   long i, j, type, flag, retval, length, number, match;
   char *keyword;
   void *data;
-  static char **valueptr = NULL;
-  static long *keylength = NULL;
-  static short *item_matched = NULL, *has_equals = NULL;
-  static long maxitems = 0;
+  static MDB_THREAD_LOCAL char **valueptr = NULL;
+  static MDB_THREAD_LOCAL long *keylength = NULL;
+  static MDB_THREAD_LOCAL short *item_matched = NULL, *has_equals = NULL;
+  static MDB_THREAD_LOCAL long maxitems = 0;
 
   if (!flags)
     return bombre("null flags pointer seen (scanItemList)", NULL, 0);
@@ -230,10 +230,10 @@ long scanItemListLong(unsigned long long *flags, char **item, long *items, unsig
   long long flag;
   char *keyword;
   void *data;
-  static char **valueptr = NULL;
-  static long *keylength = NULL;
-  static short *item_matched = NULL, *has_equals = NULL;
-  static long maxitems = 0;
+  static MDB_THREAD_LOCAL char **valueptr = NULL;
+  static MDB_THREAD_LOCAL long *keylength = NULL;
+  static MDB_THREAD_LOCAL short *item_matched = NULL, *has_equals = NULL;
+  static MDB_THREAD_LOCAL long maxitems = 0;
 
   if (!flags)
     return bombre("null flags pointer seen (scanItemList)", NULL, 0);
@@ -404,9 +404,9 @@ long scan_item_list(unsigned long *flags, char **item, long *items, ...)
   //long number;
   char *keyword;
   void *data;
-  static char **valueptr = NULL;
-  static long *keylength = NULL, *item_matched = NULL;
-  static long maxitems = 0;
+  static MDB_THREAD_LOCAL char **valueptr = NULL;
+  static MDB_THREAD_LOCAL long *keylength = NULL, *item_matched = NULL;
+  static MDB_THREAD_LOCAL long maxitems = 0;
 
   if (!flags)
     return bombre("null flags pointer seen (scan_item_list)", NULL, 0);

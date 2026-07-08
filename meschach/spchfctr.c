@@ -143,9 +143,9 @@ int	lim;
 	return sum;
 }
 
-static	int	*scan_row = (int *)NULL, *scan_idx = (int *)NULL,
+static	MESCHACH_THREAD_LOCAL int	*scan_row = (int *)NULL, *scan_idx = (int *)NULL,
 			*col_list = (int *)NULL;
-static	int	scan_len = 0;
+static	MESCHACH_THREAD_LOCAL int	scan_len = 0;
 
 int	set_scan(int new_len);
 /* set_scan -- expand scan_row and scan_idx arrays
@@ -626,4 +626,3 @@ SPMAT	*A;
 
 	return AAT;
 }
-

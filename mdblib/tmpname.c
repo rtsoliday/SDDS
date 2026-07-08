@@ -14,12 +14,15 @@
  */
 
 #include "mdb.h"
+#include "mdb_thread.h"
 #include <time.h>
 #if defined(_WIN32)
 #  include <process.h>
 #else
 #  include <unistd.h>
 #endif
+
+static MDB_THREAD_LOCK tmpname_lock = MDB_THREAD_LOCK_INITIALIZER;
 
 /**
  * @brief Supplies a unique temporary filename.
@@ -37,6 +40,7 @@ char *tmpname(s) char *s;
   static long pid = -1;
   if (s == NULL)
     s = tmalloc((unsigned)(40 * sizeof(*s)));
+  mdb_thread_lock(&tmpname_lock);
   if (pid < 0)
 #if !defined(vxWorks)
     pid = getpid();
@@ -48,8 +52,10 @@ char *tmpname(s) char *s;
       sprintf(s, "tmp%ld.%ld", pid, i);
 #endif
     i += 1;
-    if (!fexists(s))
+    if (!fexists(s)) {
+      mdb_thread_unlock(&tmpname_lock);
       break;
+    }
   } while (1);
   return (s);
 }
@@ -114,6 +120,7 @@ char *mktempOAG(char *template) {
   random_time_bits = time(NULL);
 
   pid = __getpid();
+  mdb_thread_lock(&tmpname_lock);
   value += random_time_bits ^ (pid * pid);
   for (count = 0; count < attempts; value += 7777, ++count) {
     uint64_t v = value;
@@ -133,16 +140,19 @@ char *mktempOAG(char *template) {
 
 #if defined(vxWorks)
     if (!fexists(template) < 0) {
+      mdb_thread_unlock(&tmpname_lock);
       return (template);
     }
 #else
     if (__lxstat64(_STAT_VER, template, &st) < 0) {
       if (errno == ENOENT) {
         __set_errno(save_errno);
+        mdb_thread_unlock(&tmpname_lock);
         return (template);
       } else {
         /* Give up now. */
         template[0] = '\0';
+        mdb_thread_unlock(&tmpname_lock);
         return (template);
       }
     }
@@ -151,5 +161,6 @@ char *mktempOAG(char *template) {
 
   /* We got out of the loop because we ran out of combinations to try.  */
   template[0] = '\0';
+  mdb_thread_unlock(&tmpname_lock);
   return (template);
 }

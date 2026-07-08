@@ -468,7 +468,7 @@ SPMAT *A, *B, *C;
 {
    int i, in_situ;
    SPROW *rc;
-   static SPROW *tmp;
+   static MESCHACH_THREAD_LOCAL SPROW *tmp;
 
    if ( ! A || ! B )
      error(E_NULL,"sp_add");
@@ -515,7 +515,7 @@ SPMAT *A, *B, *C;
 {
    int i, in_situ;
    SPROW *rc;
-   static SPROW *tmp;
+   static MESCHACH_THREAD_LOCAL SPROW *tmp;
    
    if ( ! A || ! B )
      error(E_NULL,"sp_sub");
@@ -563,7 +563,7 @@ double alpha;
 {
    int i, in_situ;
    SPROW *rc;
-   static SPROW *tmp;
+   static MESCHACH_THREAD_LOCAL SPROW *tmp;
 
    if ( ! A || ! B )
      error(E_NULL,"sp_mltadd");
@@ -658,7 +658,7 @@ SPMAT	*A, *OUT;
 {
    int	i /* , idx, len1, len2 */;
    SPROW	*r1, *r2;
-   static SPROW	*scratch = (SPROW *)NULL;
+   static MESCHACH_THREAD_LOCAL SPROW	*scratch = (SPROW *)NULL;
    /* row_elt	*e1, *e2; */
    
    if ( ! A )

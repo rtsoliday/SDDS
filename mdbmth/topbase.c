@@ -36,8 +36,8 @@
 long findTopBaseLevels(double *top, double *base, double *data, int64_t points,
                        long bins, double sigmasRequired) {
   long binned, iMaximum, i;
-  static long maxBins = 0;
-  static double *histogram = NULL;
+  static MDB_THREAD_LOCAL long maxBins = 0;
+  static MDB_THREAD_LOCAL double *histogram = NULL;
   double min, max, midpoint, maxHistogram, meanBinned;
   double lower, upper, delta;
 

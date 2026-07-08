@@ -15,6 +15,7 @@
  */
 
 #include "mdb.h"
+#include "mdb_thread.h"
 #include <time.h>
 #include <stdlib.h>
 
@@ -30,6 +31,50 @@ extern double dlaran_oag(integer *seed, long increment);
 
 #define MAX_RAND_INT (1.0 * RAND_MAX)
 
+static MDB_THREAD_LOCK rand_lock = MDB_THREAD_LOCK_INITIALIZER;
+
+void mdbmth_lock_rand(void) {
+  mdb_thread_lock(&rand_lock);
+}
+
+void mdbmth_unlock_rand(void) {
+  mdb_thread_unlock(&rand_lock);
+}
+
+int mdbmth_rand_unlocked(void) {
+  return rand();
+}
+
+void mdbmth_srand_unlocked(unsigned int seed) {
+  srand(seed);
+}
+
+double mdbmth_rand_fraction_unlocked(void) {
+  return (double)mdbmth_rand_unlocked() / ((double)RAND_MAX + 1.0);
+}
+
+int mdbmth_locked_rand(void) {
+  int value;
+  mdbmth_lock_rand();
+  value = mdbmth_rand_unlocked();
+  mdbmth_unlock_rand();
+  return value;
+}
+
+void mdbmth_locked_srand(unsigned int seed) {
+  mdbmth_lock_rand();
+  mdbmth_srand_unlocked(seed);
+  mdbmth_unlock_rand();
+}
+
+double mdbmth_locked_rand_fraction(void) {
+  double value;
+  mdbmth_lock_rand();
+  value = mdbmth_rand_fraction_unlocked();
+  mdbmth_unlock_rand();
+  return value;
+}
+
 /**
  * @brief Generate a uniform random float in [0,1].
  *
@@ -39,7 +84,7 @@ extern double dlaran_oag(integer *seed, long increment);
  * @return A random float in [0,1].
  */
 float drand(long dummy) {
-  return ((float)(1.0 * rand() / MAX_RAND_INT));
+  return (float)(mdbmth_locked_rand() / MAX_RAND_INT);
 }
 
 /**
@@ -51,7 +96,7 @@ float drand(long dummy) {
  */
 double rdrand(lo, hi) double lo, hi;
 {
-  return (lo + ((hi - lo) * rand()) / MAX_RAND_INT);
+  return (lo + ((hi - lo) * mdbmth_locked_rand()) / MAX_RAND_INT);
 }
 
 /* routine: tseed()
@@ -59,7 +104,7 @@ double rdrand(lo, hi) double lo, hi;
  */
 
 void tseed() {
-  srand((int)time(NULL));
+  mdbmth_locked_srand((unsigned int)time(NULL));
 }
 
 /**
@@ -82,6 +127,7 @@ void r_theta_rand(double *r, double *theta, double r_min, double r_max) {
 }
 
 static short inhibitPermute = 0;
+static MDB_THREAD_LOCK inhibitPermuteLock = MDB_THREAD_LOCK_INITIALIZER;
 /**
  * @brief Enable or disable permutation of seed bits for random number generators.
  *
@@ -91,10 +137,14 @@ static short inhibitPermute = 0;
  * @return The current state of the inhibitPermute flag.
  */
 short inhibitRandomSeedPermutation(short state) {
-  if (state < 0)
-    return inhibitPermute;
-  inhibitPermute = state;
-  return state;
+  short currentState;
+
+  mdb_thread_lock(&inhibitPermuteLock);
+  if (state >= 0)
+    inhibitPermute = state;
+  currentState = inhibitPermute;
+  mdb_thread_unlock(&inhibitPermuteLock);
+  return currentState;
 }
 
 /**
@@ -110,6 +160,7 @@ long permuteSeedBitOrder(long input0) {
   long offset = input0 % 1000;
   long newValue;
   long i;
+  short inhibit;
   unsigned long input;
   unsigned long bitMask[32] = {
     0x00000001UL,
@@ -145,7 +196,11 @@ long permuteSeedBitOrder(long input0) {
     0x40000000UL,
     0x08000000UL,
   };
-  if (inhibitPermute)
+
+  mdb_thread_lock(&inhibitPermuteLock);
+  inhibit = inhibitPermute;
+  mdb_thread_unlock(&inhibitPermuteLock);
+  if (inhibit)
     return input0;
 
   input = input0;
@@ -173,8 +228,8 @@ long permuteSeedBitOrder(long input0) {
  * @return A random double in [0,1].
  */
 double random_1(long iseed) {
-  static short initialized = 0;
-  static integer seed[4] = {0, 0, 0, 0};
+  static MDB_THREAD_LOCAL short initialized = 0;
+  static MDB_THREAD_LOCAL integer seed[4] = {0, 0, 0, 0};
 
   if (!initialized || iseed < 0) {
     if (iseed < 0)
@@ -205,8 +260,8 @@ double random_1(long iseed) {
  * @return A random double in [0,1].
  */
 double random_2(long iseed) {
-  static short initialized = 0;
-  static integer seed[4] = {0, 0, 0, 0};
+  static MDB_THREAD_LOCAL short initialized = 0;
+  static MDB_THREAD_LOCAL integer seed[4] = {0, 0, 0, 0};
 
   if (!initialized || iseed < 0) {
     if (iseed < 0)
@@ -231,8 +286,8 @@ double random_2(long iseed) {
  * @return A random double in [0,1].
  */
 double random_3(long iseed) {
-  static short initialized = 0;
-  static integer seed[4] = {0, 0, 0, 0};
+  static MDB_THREAD_LOCAL short initialized = 0;
+  static MDB_THREAD_LOCAL integer seed[4] = {0, 0, 0, 0};
 
   if (!initialized || iseed < 0) {
     if (iseed < 0)
@@ -257,8 +312,8 @@ double random_3(long iseed) {
  * @return A random double in [0,1].
  */
 double random_4(long iseed) {
-  static short initialized = 0;
-  static integer seed[4] = {0, 0, 0, 0};
+  static MDB_THREAD_LOCAL short initialized = 0;
+  static MDB_THREAD_LOCAL integer seed[4] = {0, 0, 0, 0};
 
   if (!initialized || iseed < 0) {
     if (iseed < 0)
@@ -283,8 +338,8 @@ double random_4(long iseed) {
  * @return A random double in [0,1].
  */
 double random_5(long iseed) {
-  static short initialized = 0;
-  static integer seed[4] = {0, 0, 0, 0};
+  static MDB_THREAD_LOCAL short initialized = 0;
+  static MDB_THREAD_LOCAL integer seed[4] = {0, 0, 0, 0};
 
   if (!initialized || iseed < 0) {
     if (iseed < 0)
@@ -309,8 +364,8 @@ double random_5(long iseed) {
  * @return A random double in [0,1].
  */
 double random_6(long iseed) {
-  static short initialized = 0;
-  static integer seed[4] = {0, 0, 0, 0};
+  static MDB_THREAD_LOCAL short initialized = 0;
+  static MDB_THREAD_LOCAL integer seed[4] = {0, 0, 0, 0};
 
   if (!initialized || iseed < 0) {
     if (iseed < 0)
@@ -339,8 +394,8 @@ double random_6(long iseed) {
  * @return A Gaussian random deviate with mean 0 and sigma 1.
  */
 double gauss_rn(long iseed, double (*urandom)(long iseed1)) {
-  static long valueSaved = 0;
-  static double savedValue;
+  static MDB_THREAD_LOCAL long valueSaved = 0;
+  static MDB_THREAD_LOCAL double savedValue;
   double urn1, urn2, sine, cosine, factor;
 
   if (iseed < 0)
@@ -471,13 +526,21 @@ long randomizeOrder(char *ptr, long size, long length, long iseed, double (*uran
     return 0;
   if (!(rh = malloc(sizeof(*rh) * length)))
     return 0;
-  if (!urandom)
+  if (!urandom) {
+    free(rh);
     return 0;
+  }
+  for (i = 0; i < length; i++)
+    rh[i].buffer = NULL;
   if (iseed < 0)
     (*urandom)(iseed);
   for (i = 0; i < length; i++) {
-    if (!(rh[i].buffer = malloc(size)))
+    if (!(rh[i].buffer = malloc(size))) {
+      while (i-- > 0)
+        free(rh[i].buffer);
+      free(rh);
       return 0;
+    }
     memcpy(rh[i].buffer, ptr + i * size, size);
     rh[i].randomValue = (*urandom)(0);
   }
@@ -501,8 +564,8 @@ long randomizeOrder(char *ptr, long size, long length, long iseed, double (*uran
  * @return A random double in [0,1].
  */
 double random_oag(long iseed, long increment) {
-  static short initialized = 0;
-  static integer seed[4] = {0, 0, 0, 0};
+  static MDB_THREAD_LOCAL short initialized = 0;
+  static MDB_THREAD_LOCAL integer seed[4] = {0, 0, 0, 0};
 
   if (!initialized || iseed < 0) {
     if (iseed < 0)

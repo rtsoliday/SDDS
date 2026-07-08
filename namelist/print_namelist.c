@@ -11,16 +11,29 @@
 #include "namelist.h"
 #include <ctype.h>
 
-void print_namelist_output(char *buffer, long *column, FILE *fp);
+void print_namelist_output(char *buffer, long *column, FILE *fp, long flags);
 void print_namelist_tags(long *end_required, long *first_item, long *first_value, long *column,
-                         char *nlname, ITEM *item, FILE *fp);
+                         char *nlname, ITEM *item, FILE *fp, long flags);
 long containsWhitespace(char *string);
 
+static MDB_THREAD_LOCK pn_flags_lock = MDB_THREAD_LOCK_INITIALIZER;
 static long pn_flags = 0;
 
 void set_print_namelist_flags(long flags)
 {
+    mdb_thread_lock(&pn_flags_lock);
     pn_flags = flags;
+    mdb_thread_unlock(&pn_flags_lock);
+    }
+
+static long get_print_namelist_flags(void)
+{
+    long flags;
+
+    mdb_thread_lock(&pn_flags_lock);
+    flags = pn_flags;
+    mdb_thread_unlock(&pn_flags_lock);
+    return flags;
     }
 
 /* routine: print_namelist()
@@ -41,11 +54,12 @@ void print_namelist(FILE *fp, NAMELIST *nl)
     float a_float;
     double a_double;
     char a_char;
-    long column, first_item, first_value, end_required, bufsize;
+    long column, first_item, first_value, end_required, bufsize, flags;
     char *buffer, *buffer2;
 
     buffer = tmalloc(sizeof(*buffer)*(bufsize=get_namelist_buffer_size()));
     buffer2 = tmalloc(sizeof(*buffer2)*bufsize);
+    flags = get_print_namelist_flags();
 
 #if defined(DEBUG)
     printf("working on namelist %s\n", nl->name);
@@ -71,10 +85,10 @@ void print_namelist(FILE *fp, NAMELIST *nl)
         switch (item->type) {
           case TYPE_SHORT:
             for (j=0; j<n_values; j++) {
-                if (!(pn_flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((short*)ptr)!=*((short*)dptr)) {
-                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp);
-                    sprintf(buffer, "%hd,%c", *((short*)ptr), (j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
-                    print_namelist_output(buffer, &column, fp);
+                if (!(flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((short*)ptr)!=*((short*)dptr)) {
+                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp, flags);
+                    sprintf(buffer, "%hd,%c", *((short*)ptr), (j==n_values-1?(flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
+                    print_namelist_output(buffer, &column, fp, flags);
                     }
                 ptr  += sizeof(a_short);
                 dptr += sizeof(a_short);
@@ -82,10 +96,10 @@ void print_namelist(FILE *fp, NAMELIST *nl)
             break;
           case TYPE_INT:
             for (j=0; j<n_values; j++) {
-                if (!(pn_flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((int*)ptr)!=*((int*)dptr)) {
-                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp);
-                    sprintf(buffer, "%d,%c", *((int*)ptr), (j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
-                    print_namelist_output(buffer, &column, fp);
+                if (!(flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((int*)ptr)!=*((int*)dptr)) {
+                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp, flags);
+                    sprintf(buffer, "%d,%c", *((int*)ptr), (j==n_values-1?(flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
+                    print_namelist_output(buffer, &column, fp, flags);
                     }
                 ptr  += sizeof(a_int);
                 dptr += sizeof(a_int);
@@ -93,10 +107,10 @@ void print_namelist(FILE *fp, NAMELIST *nl)
             break;
           case TYPE_INT32_T:
             for (j=0; j<n_values; j++) {
-                if (!(pn_flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((int32_t*)ptr)!=*((int32_t*)dptr)) {
-                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp);
-                    sprintf(buffer, "%" PRId32 ",%c", *((int32_t*)ptr), (j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
-                    print_namelist_output(buffer, &column, fp);
+                if (!(flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((int32_t*)ptr)!=*((int32_t*)dptr)) {
+                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp, flags);
+                    sprintf(buffer, "%" PRId32 ",%c", *((int32_t*)ptr), (j==n_values-1?(flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
+                    print_namelist_output(buffer, &column, fp, flags);
                     }
                 ptr  += sizeof(a_int32);
                 dptr += sizeof(a_int32);
@@ -104,10 +118,10 @@ void print_namelist(FILE *fp, NAMELIST *nl)
             break;
           case TYPE_LONG:
             for (j=0; j<n_values; j++) {
-                if (!(pn_flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((long*)ptr)!=*((long*)dptr)) {
-                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp);
-                    sprintf(buffer, "%ld,%c", *((long*)ptr), (j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
-                    print_namelist_output(buffer, &column, fp);
+                if (!(flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((long*)ptr)!=*((long*)dptr)) {
+                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp, flags);
+                    sprintf(buffer, "%ld,%c", *((long*)ptr), (j==n_values-1?(flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
+                    print_namelist_output(buffer, &column, fp, flags);
                     }
                 ptr  += sizeof(a_long);
                 dptr += sizeof(a_long);
@@ -115,10 +129,10 @@ void print_namelist(FILE *fp, NAMELIST *nl)
             break;
           case TYPE_FLOAT:
             for (j=0; j<n_values; j++) {
-                if (!(pn_flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((float*)ptr)!=*((float*)dptr)) {
-                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp);
-                    sprintf(buffer, "%.8e,%c", *((float*)ptr), (j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
-                    print_namelist_output(buffer, &column, fp);
+                if (!(flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((float*)ptr)!=*((float*)dptr)) {
+                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp, flags);
+                    sprintf(buffer, "%.8e,%c", *((float*)ptr), (j==n_values-1?(flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
+                    print_namelist_output(buffer, &column, fp, flags);
                     }
                 ptr  += sizeof(a_float);
                 dptr += sizeof(a_float);
@@ -126,10 +140,10 @@ void print_namelist(FILE *fp, NAMELIST *nl)
             break;
           case TYPE_DOUBLE:
             for (j=0; j<n_values; j++) {
-                if (!(pn_flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((double*)ptr)!=*((double*)dptr)) {
-                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp);
-                    sprintf(buffer, "%.15e,%c", *((double*)ptr), (j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
-                    print_namelist_output(buffer, &column, fp);
+                if (!(flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((double*)ptr)!=*((double*)dptr)) {
+                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp, flags);
+                    sprintf(buffer, "%.15e,%c", *((double*)ptr), (j==n_values-1?(flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
+                    print_namelist_output(buffer, &column, fp, flags);
                     }
                 ptr  += sizeof(a_double);
                 dptr += sizeof(a_double);
@@ -149,21 +163,21 @@ void print_namelist(FILE *fp, NAMELIST *nl)
                 else 
                     printf("*dptr = >%s<\n", *((STRING*)dptr));
 #endif
-                if (!(pn_flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 ||
+                if (!(flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 ||
                     (!(*((STRING*)ptr)==NULL && *((STRING*)dptr)==NULL) &&
                         ( (*((STRING*)dptr)==NULL && *((STRING*)ptr)!=NULL) ||
                          (*((STRING*)dptr)!=NULL && *((STRING*)ptr)==NULL) ||
                          strcmp(*((STRING*)ptr), *((STRING*)dptr))!=0))) {
-                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp);
+                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp, flags);
                     strcpy_ss(buffer2, *((STRING*)ptr)?*((STRING*)ptr):"{NULL}");
                     escape_quotes(buffer2);
                     if (containsWhitespace(buffer2) || strlen(buffer2)==0 || strpbrk(buffer2, "$\",&"))
                       snprintf(buffer, bufsize, "\"%.*s\",%c", 
-                               (int)(bufsize - 5), buffer2, j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' ');
+                               (int)(bufsize - 5), buffer2, j==n_values-1?(flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' ');
                     else
                       snprintf(buffer, bufsize, "%.*s,%c", 
-                               (int)(bufsize - 3), buffer2, j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' ');
-                    print_namelist_output(buffer, &column, fp);
+                               (int)(bufsize - 3), buffer2, j==n_values-1?(flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' ');
+                    print_namelist_output(buffer, &column, fp, flags);
                     }
                 ptr  += sizeof(ptr);
                 dptr += sizeof(ptr);
@@ -171,10 +185,10 @@ void print_namelist(FILE *fp, NAMELIST *nl)
             break;
           case TYPE_CHAR:
             for (j=0; j<n_values; j++) {
-                if (!(pn_flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((char*)ptr)!=*((char*)dptr)) {
-                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp);
-                    sprintf(buffer, "\"%c\",%c", *((char*)ptr), (j==n_values-1?(pn_flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
-                    print_namelist_output(buffer, &column, fp);
+                if (!(flags&PRINT_NAMELIST_NODEFAULTS) || n_values!=1 || *((char*)ptr)!=*((char*)dptr)) {
+                    print_namelist_tags(&end_required, &first_item, &first_value, &column, nl->name, item, fp, flags);
+                    sprintf(buffer, "\"%c\",%c", *((char*)ptr), (j==n_values-1?(flags&PRINT_NAMELIST_COMPACT?' ':'\n'):' '));
+                    print_namelist_output(buffer, &column, fp, flags);
                     }
                 ptr  += sizeof(a_char);
                 dptr += sizeof(a_char);
@@ -195,12 +209,12 @@ void print_namelist(FILE *fp, NAMELIST *nl)
     free(buffer2);
     }
 
-void print_namelist_output(char *buffer, long *column, FILE *fp)
+void print_namelist_output(char *buffer, long *column, FILE *fp, long flags)
 {
     long length;
     
     if (((length = strlen(buffer))+ *column)>120) {
-        if (pn_flags&PRINT_NAMELIST_COMPACT) {
+        if (flags&PRINT_NAMELIST_COMPACT) {
             fputs("\n ", fp);
             *column = 2;
             }
@@ -214,7 +228,7 @@ void print_namelist_output(char *buffer, long *column, FILE *fp)
     }
 
 void print_namelist_tags(long *end_required, long *first_item, long *first_value, long *column,
-                         char *nlname, ITEM *item, FILE *fp)
+                         char *nlname, ITEM *item, FILE *fp, long flags)
 {
     char *buffer;
     long i;
@@ -226,7 +240,7 @@ void print_namelist_tags(long *end_required, long *first_item, long *first_value
         *first_item = 0;
         }
     if (*first_value) {
-        if (pn_flags&PRINT_NAMELIST_COMPACT) {
+        if (flags&PRINT_NAMELIST_COMPACT) {
             if ((long)(strlen(item->name)+3+*column)>120) {
                 fputs("\n ", fp);
                 *column = 2;

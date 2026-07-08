@@ -93,7 +93,7 @@ int *steps, limit;
 VEC  *iter_cg(ip)
 ITER *ip;
 {
-   static VEC *r = VNULL, *p = VNULL, *q = VNULL, *z = VNULL;
+   static MESCHACH_THREAD_LOCAL VEC *r = VNULL, *p = VNULL, *q = VNULL, *z = VNULL;
    Real	alpha, beta, inner, old_inner, nres;
    VEC *rr;   /* rr == r or rr == z */
    
@@ -185,7 +185,7 @@ Real	*beta2;
 MAT	*Q;
 {
    int	j;
-   static VEC	*v = VNULL, *w = VNULL, *tmp = VNULL;
+   static MESCHACH_THREAD_LOCAL VEC	*v = VNULL, *w = VNULL, *tmp = VNULL;
    Real	alpha, beta, c;
    
    if ( ! ip )
@@ -385,7 +385,7 @@ static	int	dbl_cmp(Real *x, Real *y)
 VEC	*iter_lanczos2(ITER *ip,VEC *evals,VEC *err_est)
 {
    VEC		*a;
-   static	VEC	*b=VNULL, *a2=VNULL, *b2=VNULL;
+   static MESCHACH_THREAD_LOCAL	VEC	*b=VNULL, *a2=VNULL, *b2=VNULL;
    Real	beta, pb_mant, det_mant, det_mant1, det_mant2;
    int	i, pb_expt, det_expt, det_expt1, det_expt2;
    
@@ -506,7 +506,7 @@ VEC	*err_est;	/* error estimates of eigenvalues */
 VEC  *iter_cg1(ip)
 ITER *ip;
 {
-   static VEC *r = VNULL, *p = VNULL, *q = VNULL, *z = VNULL;
+   static MESCHACH_THREAD_LOCAL VEC *r = VNULL, *p = VNULL, *q = VNULL, *z = VNULL;
    Real	alpha;
    double inner,nres;
    VEC *rr;   /* rr == r or rr == z */

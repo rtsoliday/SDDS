@@ -449,7 +449,7 @@ void free_pop_mem(population *pop) {
  * Written by Claude Code.
  * ------------------------------------------------------------------------- */
 
-static long hv_sort_dim; /* objective index used by hv_compare (single-threaded use) */
+static MDB_THREAD_LOCAL long hv_sort_dim; /* objective index used by hv_compare */
 
 static int hv_compare(const void *a, const void *b) {
   double x = (*(double *const *)a)[hv_sort_dim];

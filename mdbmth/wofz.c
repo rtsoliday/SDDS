@@ -91,16 +91,16 @@ logical *flag__;
     double exp(), cos(), sin(), pow_di();
     */
   /* Local variables */
-  static integer kapn;
-  static doublereal xabs, yabs, daux, qrho, xaux, xsum, ysum;
-  static logical a, b;
-  static doublereal c__, h__;
-  static integer i__, j, n;
-  static doublereal x, y, xabsq, xquad, yquad, h2, u1, v1, u2, v2, w1;
-  static integer nu;
-  static doublereal rx, ry, sx, sy, tx, ty;
-  static integer np1;
-  static doublereal qlambda;
+  integer kapn = 0;
+  doublereal xabs = 0, yabs = 0, daux = 0, qrho = 0, xaux = 0, xsum = 0, ysum = 0;
+  logical a = 0, b = 0;
+  doublereal c__ = 0, h__ = 0;
+  integer i__ = 0, j = 0, n = 0;
+  doublereal x = 0, y = 0, xabsq = 0, xquad = 0, yquad = 0, h2 = 0, u1 = 0, v1 = 0, u2 = 0, v2 = 0, w1 = 0;
+  integer nu = 0;
+  doublereal rx = 0, ry = 0, sx = 0, sy = 0, tx = 0, ty = 0;
+  integer np1 = 0;
+  doublereal qlambda = 0;
 
   /*  GIVEN A COMPLEX NUMBER Z = (XI,YI), THIS SUBROUTINE COMPUTES */
   /*  THE VALUE OF THE FADDEEVA-FUNCTION W(Z) = EXP(-Z**2)*ERFC(-I*Z), */

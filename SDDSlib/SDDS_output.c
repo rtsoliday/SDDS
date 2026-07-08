@@ -21,6 +21,7 @@
 #include "SDDS.h"
 #include "SDDS_internal.h"
 #include "mdb.h"
+#include "mdb_thread.h"
 #include <ctype.h>
 
 #if defined(_WIN32)
@@ -2017,7 +2018,17 @@ int32_t SDDS_DefineSimpleParameters(SDDS_DATASET *SDDS_dataset, int32_t number, 
   return (1);
 }
 
+static MDB_THREAD_LOCK nameValidityFlagsLock = MDB_THREAD_LOCK_INITIALIZER;
 static uint32_t nameValidityFlags = 0;
+
+static uint32_t SDDS_GetLockedNameValidityFlags(void) {
+  uint32_t flags;
+  mdb_thread_lock(&nameValidityFlagsLock);
+  flags = nameValidityFlags;
+  mdb_thread_unlock(&nameValidityFlagsLock);
+  return flags;
+}
+
 /**
  * @brief Sets the validity flags for parameter and column names in the SDDS dataset.
  *
@@ -2048,8 +2059,10 @@ static uint32_t nameValidityFlags = 0;
  */
 int32_t SDDS_SetNameValidityFlags(uint32_t flags) {
   uint32_t oldFlags;
+  mdb_thread_lock(&nameValidityFlagsLock);
   oldFlags = nameValidityFlags;
   nameValidityFlags = flags;
+  mdb_thread_unlock(&nameValidityFlagsLock);
   return oldFlags;
 }
 
@@ -2087,15 +2100,16 @@ int32_t SDDS_IsValidName(const char *name, const char *class) {
   char *ptr;
   int32_t isValid = 1;
   char s[SDDS_MAXLINE];
-  static char *validChars = "@:#+%-._$&/[]";
-  static char *startChars = ".:";
+  static const char *const validChars = "@:#+%-._$&/[]";
+  static const char *const startChars = ".:";
+  uint32_t flags = SDDS_GetLockedNameValidityFlags();
 
-  if (nameValidityFlags & SDDS_ALLOW_ANY_NAME)
+  if (flags & SDDS_ALLOW_ANY_NAME)
     return 1;
   ptr = (char *)name;
   if (strlen(name) == 0)
     isValid = 0;
-  else if (!(nameValidityFlags & SDDS_ALLOW_V15_NAME)) {
+  else if (!(flags & SDDS_ALLOW_V15_NAME)) {
     /* post V1.5 allows only alpha and startChars members as first character */
     /* V1.5 allows alpha, digits, and any validChars members */
     if (!(isalpha(*ptr) || strchr(startChars, *ptr)))

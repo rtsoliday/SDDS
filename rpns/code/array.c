@@ -22,7 +22,7 @@
 /* routine: rpn_createarray 
  * purpose: create a new array
  */
-long rpn_createarray(long size)
+static long rpn_createarray_unlocked(long size)
 {
     if (astackptr>=max_astackptr || !astack) 
         astack = trealloc(astack, sizeof(*astack)*(max_astackptr+=10));
@@ -32,23 +32,43 @@ long rpn_createarray(long size)
     return astackptr-1;
     }
 
+long rpn_createarray(long size)
+{
+    long index;
+
+    rpn_lock();
+    index = rpn_createarray_unlocked(size);
+    rpn_unlock();
+    return index;
+    }
+
 /* routine: rpn_resizearray 
  * purpose: resize an array
  */
-long rpn_resizearray(long arraynum, long size)
+static long rpn_resizearray_unlocked(long arraynum, long size)
 {
-    if (arraynum>astackptr || (arraynum<0 && !astack))
+    if (arraynum<0 || arraynum>=astackptr || !astack)
         return 0;
     astack[arraynum].data = (double*)trealloc(astack[arraynum].data, size*sizeof(double));
     astack[arraynum].rows = size;
     return 1;
     }
 
+long rpn_resizearray(long arraynum, long size)
+{
+    long status;
+
+    rpn_lock();
+    status = rpn_resizearray_unlocked(arraynum, size);
+    rpn_unlock();
+    return status;
+    }
+
 /* routine: rpn_alloc
  * purpose: handle user's requests for array allocation
  */
 
-void rpn_alloc(void)
+static void rpn_alloc_unlocked(void)
 {
     if (stackptr<1) {
         fputs("too few items on stack (_alloc)\n", stderr);
@@ -59,12 +79,19 @@ void rpn_alloc(void)
     stack[stackptr-1] = rpn_createarray(stack[stackptr-1]);
     }
 
+void rpn_alloc(void)
+{
+    rpn_lock();
+    rpn_alloc_unlocked();
+    rpn_unlock();
+    }
+
 /* routine: rref()
  * purpose: handle user's requests to Read by REFerence, i.e., to get
  *          an element from an array
  */
 
-void rref(void)
+static void rref_unlocked(void)
 {
     long anum, ind;
 
@@ -79,7 +106,7 @@ void rref(void)
 
     anum = stack[stackptr-1];
     ind = stack[stackptr-2];
-    if (anum>astackptr) {
+    if (anum<0 || anum>=astackptr || !astack) {
         fprintf(stderr, "array pointer %ld is invalid (rref)\n", anum);
         stop();
         rpn_set_error();
@@ -96,13 +123,20 @@ void rref(void)
     stackptr -= 1;
     }
 
+void rref(void)
+{
+    rpn_lock();
+    rref_unlocked();
+    rpn_unlock();
+    }
+
 
 /* routine: sref()
  * purpose: handle user's requests to Store by REFerrence, i.e., to place
  *          a number in an array element.
  */
 
-void sref(void)
+static void sref_unlocked(void)
 {
     long anum, ind;
 
@@ -117,7 +151,7 @@ void sref(void)
 
     anum = stack[stackptr-1];
     ind = stack[stackptr-2];
-    if (anum>astackptr || ind<0 || ind>=astack[anum].rows) {
+    if (anum<0 || anum>=astackptr || !astack || ind<0 || ind>=astack[anum].rows) {
         fputs("access violation (sref)\n", stderr);
         stop();
         rpn_set_error();
@@ -127,25 +161,45 @@ void sref(void)
     stackptr -= 3;
     }
 
+void sref(void)
+{
+    rpn_lock();
+    sref_unlocked();
+    rpn_unlock();
+    }
+
 /* routine: rpn_getarraypointer()
  * purpose: get the internal pointer used for array data.
  *
  */
 
-double *rpn_getarraypointer(long memory_number, int32_t *length)
+static double *rpn_getarraypointer_unlocked(long memory_number, int32_t *length)
 {
     long anum;
 
-    if ((anum = rpn_recall(memory_number))<0 || anum>astackptr)
+    if (length)
+        *length = 0;
+    if ((anum = rpn_recall(memory_number))<0 || anum>=astackptr || !astack)
         return NULL;
-    *length = astack[anum].rows;
+    if (length)
+        *length = astack[anum].rows;
     return astack[anum].data;
+    }
+
+double *rpn_getarraypointer(long memory_number, int32_t *length)
+{
+    double *ptr;
+
+    rpn_lock();
+    ptr = rpn_getarraypointer_unlocked(memory_number, length);
+    rpn_unlock();
+    return ptr;
     }
 
 /* routine: udf_createarray 
  * purpose: create a new array
  */
-void udf_createarray(long type, long index, double data, char *ptr, long i_udf)
+void udf_createarray_unlocked(long type, long index, double data, char *ptr, long i_udf)
 {
     register long i, cond_temp, colon=0;
     if (udf_stackptr>=max_udf_stackptr || !udf_stack) 
@@ -155,7 +209,7 @@ void udf_createarray(long type, long index, double data, char *ptr, long i_udf)
     udf_stack[udf_stackptr].data = data;
     cp_str(&udf_stack[udf_stackptr].keyword,ptr);
     if (type==-2) {
-        udf_create_unknown_array(ptr,udf_stackptr);
+        udf_create_unknown_array_unlocked(ptr,udf_stackptr);
         } 
     else if (type==7) {  
         cond_temp = 0;
@@ -163,7 +217,7 @@ void udf_createarray(long type, long index, double data, char *ptr, long i_udf)
 	    switch (udf_stack[i].type) {
 	    case 5:
 	      if (cond_temp==0) {
-		  udf_cond_createarray(colon,i);
+		  udf_cond_createarray_unlocked(colon,i);
 		  i = udf_list[i_udf]->start_index;
 		  break;
 	          }
@@ -180,14 +234,21 @@ void udf_createarray(long type, long index, double data, char *ptr, long i_udf)
 	      break;
 	    }
 	    }
-        }
+    }
     udf_stackptr++;
+    }
+
+void udf_createarray(long type, long index, double data, char *ptr, long i_udf)
+{
+    rpn_lock();
+    udf_createarray_unlocked(type, index, data, ptr, i_udf);
+    rpn_unlock();
     }
 
 /* routine: udf_cond_createarray 
  * purpose: create a new array
  */
-void udf_cond_createarray(long colon, long i)
+void udf_cond_createarray_unlocked(long colon, long i)
 {
     if (udf_cond_stackptr>=max_udf_cond_stackptr || !udf_cond_stack) 
         udf_cond_stack = trealloc(udf_cond_stack, sizeof(*udf_cond_stack)*(max_udf_cond_stackptr+=4));
@@ -197,20 +258,34 @@ void udf_cond_createarray(long colon, long i)
     udf_cond_stackptr++;
     }
 
+void udf_cond_createarray(long colon, long i)
+{
+    rpn_lock();
+    udf_cond_createarray_unlocked(colon, i);
+    rpn_unlock();
+    }
+
 /* routine: udf_modarray 
  * purpose: modify an existing udf array
  */
-void udf_modarray(long type, long index, double data, long i)
+void udf_modarray_unlocked(long type, long index, double data, long i)
 {
     udf_stack[i].type = type;
     udf_stack[i].index = index;
     udf_stack[i].data = data;
     }
 
+void udf_modarray(long type, long index, double data, long i)
+{
+    rpn_lock();
+    udf_modarray_unlocked(type, index, data, i);
+    rpn_unlock();
+    }
+
 /* routine: udf_id_createarray 
  * purpose: create a new array
  */
-void udf_id_createarray(long start_index_value, long end_index_value)
+void udf_id_createarray_unlocked(long start_index_value, long end_index_value)
 {
     if (++cycle_counter>=max_cycle_counter || !udf_id) 
         udf_id = trealloc(udf_id, sizeof(*udf_id)*(max_cycle_counter+=100));
@@ -218,14 +293,28 @@ void udf_id_createarray(long start_index_value, long end_index_value)
     udf_id[cycle_counter].udf_end_index = end_index_value;
     }
 
+void udf_id_createarray(long start_index_value, long end_index_value)
+{
+    rpn_lock();
+    udf_id_createarray_unlocked(start_index_value, end_index_value);
+    rpn_unlock();
+    }
+
 /* routine: udf_create_unknown_array
  * purpose: create an array containing the index and keyword of an unknown
  * unit in a udf
  */
-void udf_create_unknown_array(char *ptr, long index)
+void udf_create_unknown_array_unlocked(char *ptr, long index)
 {
     if (++udf_unknownptr>=max_udf_unknown_counter || !udf_unknown)
         udf_unknown = trealloc(udf_unknown, sizeof(*udf_unknown)*(max_udf_unknown_counter+=4));
     udf_unknown[udf_unknownptr].index = index;
     cp_str(&udf_unknown[udf_unknownptr].keyword,ptr);
     }  
+
+void udf_create_unknown_array(char *ptr, long index)
+{
+    rpn_lock();
+    udf_create_unknown_array_unlocked(ptr, index);
+    rpn_unlock();
+    }

@@ -20,6 +20,7 @@
 #include "SDDS.h"
 #include "SDDS_internal.h"
 #include "mdb.h"
+#include "mdb_thread.h"
 #include <string.h>
 #include <errno.h>
 
@@ -41,7 +42,16 @@
 
 double makeFloat64FromFloat80(unsigned char x[16], int32_t byteOrder);
 
+static MDB_THREAD_LOCK defaultIOBufferSizeLock = MDB_THREAD_LOCK_INITIALIZER;
 static int32_t defaultIOBufferSize = SDDS_FILEBUFFER_SIZE;
+
+static int32_t SDDS_GetLockedDefaultIOBufferSize(void) {
+  int32_t size;
+  mdb_thread_lock(&defaultIOBufferSizeLock);
+  size = defaultIOBufferSize;
+  mdb_thread_unlock(&defaultIOBufferSizeLock);
+  return size;
+}
 
 /**
  * @brief Obsolete routine retained for backward compatibility.
@@ -72,11 +82,13 @@ int32_t SDDS_SetBufferedRead(int32_t dummy) {
 int32_t SDDS_SetDefaultIOBufferSize(int32_t newValue) {
   int32_t previous;
   if (newValue < 0)
-    return defaultIOBufferSize;
+    return SDDS_GetLockedDefaultIOBufferSize();
   if (newValue < 128) /* arbitrary limit */
     newValue = 0;
+  mdb_thread_lock(&defaultIOBufferSizeLock);
   previous = defaultIOBufferSize;
   defaultIOBufferSize = newValue;
+  mdb_thread_unlock(&defaultIOBufferSizeLock);
   return previous;
 }
 
@@ -781,12 +793,13 @@ int32_t SDDS_WriteBinaryPage(SDDS_DATASET *SDDS_dataset) {
     fBuffer = &SDDS_dataset->fBuffer;
 
     if (!fBuffer->buffer) {
-      if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (defaultIOBufferSize + 1)))) {
+      int32_t bufferSize = SDDS_GetLockedDefaultIOBufferSize();
+      if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (bufferSize + 1)))) {
         SDDS_SetError("Unable to do buffered read--allocation failure (SDDS_WriteBinaryPage)");
         return 0;
       }
-      fBuffer->bufferSize = defaultIOBufferSize;
-      fBuffer->bytesLeft = defaultIOBufferSize;
+      fBuffer->bufferSize = bufferSize;
+      fBuffer->bytesLeft = bufferSize;
     }
 
     rows = SDDS_CountRowsOfInterest(SDDS_dataset);
@@ -867,12 +880,13 @@ int32_t SDDS_WriteBinaryPage(SDDS_DATASET *SDDS_dataset) {
       fBuffer = &SDDS_dataset->fBuffer;
 
       if (!fBuffer->buffer) {
-        if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (defaultIOBufferSize + 1)))) {
+        int32_t bufferSize = SDDS_GetLockedDefaultIOBufferSize();
+        if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (bufferSize + 1)))) {
           SDDS_SetError("Unable to do buffered read--allocation failure (SDDS_WriteBinaryPage)");
           return 0;
         }
-        fBuffer->bufferSize = defaultIOBufferSize;
-        fBuffer->bytesLeft = defaultIOBufferSize;
+        fBuffer->bufferSize = bufferSize;
+        fBuffer->bytesLeft = bufferSize;
       }
       rows = SDDS_CountRowsOfInterest(SDDS_dataset);
       SDDS_dataset->rowcount_offset = lzma_tell(lzmafp);
@@ -950,12 +964,13 @@ int32_t SDDS_WriteBinaryPage(SDDS_DATASET *SDDS_dataset) {
       fBuffer = &SDDS_dataset->fBuffer;
 
       if (!fBuffer->buffer) {
-        if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (defaultIOBufferSize + 1)))) {
+        int32_t bufferSize = SDDS_GetLockedDefaultIOBufferSize();
+        if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (bufferSize + 1)))) {
           SDDS_SetError("Unable to do buffered read--allocation failure (SDDS_WriteBinaryPage)");
           return 0;
         }
-        fBuffer->bufferSize = defaultIOBufferSize;
-        fBuffer->bytesLeft = defaultIOBufferSize;
+        fBuffer->bufferSize = bufferSize;
+        fBuffer->bytesLeft = bufferSize;
       }
 
       /* Flush any existing data in the output buffer so we can determine the
@@ -2243,15 +2258,16 @@ int32_t SDDS_ReadBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_i
 #endif
   fBuffer = &SDDS_dataset->fBuffer;
   if (!fBuffer->buffer) {
-    if (defaultIOBufferSize == 0 && (SDDS_dataset->layout.popenUsed || !SDDS_dataset->layout.filename) && (sparse_interval > 1 || sparse_offset > 0 || last_rows > 0)) {
+    int32_t bufferSize = SDDS_GetLockedDefaultIOBufferSize();
+    if (bufferSize == 0 && (SDDS_dataset->layout.popenUsed || !SDDS_dataset->layout.filename) && (sparse_interval > 1 || sparse_offset > 0 || last_rows > 0)) {
       SDDS_SetError("The IO buffer size is 0 for data being read from a pipe with sparsing.  This is not supported.");
       return 0;
     }
-    if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (defaultIOBufferSize + 1)))) {
+    if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (bufferSize + 1)))) {
       SDDS_SetError("Unable to do buffered read--allocation failure");
       return 0;
     }
-    fBuffer->bufferSize = defaultIOBufferSize;
+    fBuffer->bufferSize = bufferSize;
     fBuffer->bytesLeft = 0;
   }
   SDDS_dataset->rowcount_offset = -1;
@@ -2625,9 +2641,9 @@ int32_t SDDS_ReadBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_i
  */
 int32_t SDDS_WriteBinaryString(char *string, FILE *fp, SDDS_FILEBUFFER *fBuffer) {
   int32_t length;
-  static char *dummy_string = "";
+  static const char dummy_string[] = "";
   if (!string)
-    string = dummy_string;
+    string = (char *)dummy_string;
   length = strlen(string);
   if (!SDDS_BufferedWrite(&length, sizeof(length), fp, fBuffer)) {
     SDDS_SetError("Unable to write string--error writing length");
@@ -2657,9 +2673,9 @@ int32_t SDDS_WriteBinaryString(char *string, FILE *fp, SDDS_FILEBUFFER *fBuffer)
  */
 int32_t SDDS_LZMAWriteBinaryString(char *string, struct lzmafile *lzmafp, SDDS_FILEBUFFER *fBuffer) {
   int32_t length;
-  static char *dummy_string = "";
+  static const char dummy_string[] = "";
   if (!string)
-    string = dummy_string;
+    string = (char *)dummy_string;
   length = strlen(string);
   if (!SDDS_LZMABufferedWrite(&length, sizeof(length), lzmafp, fBuffer)) {
     SDDS_SetError("Unable to write string--error writing length");
@@ -2690,9 +2706,9 @@ int32_t SDDS_LZMAWriteBinaryString(char *string, struct lzmafile *lzmafp, SDDS_F
  */
 int32_t SDDS_GZipWriteBinaryString(char *string, gzFile gzfp, SDDS_FILEBUFFER *fBuffer) {
   int32_t length;
-  static char *dummy_string = "";
+  static const char dummy_string[] = "";
   if (!string)
-    string = dummy_string;
+    string = (char *)dummy_string;
   length = strlen(string);
   if (!SDDS_GZipBufferedWrite(&length, sizeof(length), gzfp, fBuffer)) {
     SDDS_SetError("Unable to write string--error writing length");
@@ -4371,11 +4387,12 @@ int32_t SDDS_ReadNonNativeBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t
 #endif
   fBuffer = &SDDS_dataset->fBuffer;
   if (!fBuffer->buffer) {
-    if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * defaultIOBufferSize))) {
+    int32_t bufferSize = SDDS_GetLockedDefaultIOBufferSize();
+    if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * bufferSize))) {
       SDDS_SetError("Unable to do buffered read--allocation failure");
       return 0;
     }
-    fBuffer->bufferSize = defaultIOBufferSize;
+    fBuffer->bufferSize = bufferSize;
     fBuffer->bytesLeft = 0;
   }
   SDDS_dataset->rowcount_offset = -1;
@@ -5115,12 +5132,13 @@ int32_t SDDS_WriteNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset)
   fBuffer = &SDDS_dataset->fBuffer;
 
   if (!fBuffer->buffer) {
-    if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * defaultIOBufferSize))) {
+    int32_t bufferSize = SDDS_GetLockedDefaultIOBufferSize();
+    if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * bufferSize))) {
       SDDS_SetError("Unable to do buffered read--allocation failure (SDDS_WriteNonNativeBinaryPage)");
       return 0;
     }
-    fBuffer->bufferSize = defaultIOBufferSize;
-    fBuffer->bytesLeft = defaultIOBufferSize;
+    fBuffer->bufferSize = bufferSize;
+    fBuffer->bytesLeft = bufferSize;
   }
   SDDS_SwapLong(&min32);
 
@@ -5705,9 +5723,9 @@ int32_t SDDS_WriteNonNativeBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row) {
  */
 int32_t SDDS_WriteNonNativeBinaryString(char *string, FILE *fp, SDDS_FILEBUFFER *fBuffer) {
   int32_t length;
-  static char *dummy_string = "";
+  static const char dummy_string[] = "";
   if (!string)
-    string = dummy_string;
+    string = (char *)dummy_string;
   length = strlen(string);
   SDDS_SwapLong(&length);
   if (!SDDS_BufferedWrite(&length, sizeof(length), fp, fBuffer)) {
@@ -5744,9 +5762,9 @@ int32_t SDDS_WriteNonNativeBinaryString(char *string, FILE *fp, SDDS_FILEBUFFER 
  */
 int32_t SDDS_LZMAWriteNonNativeBinaryString(char *string, struct lzmafile *lzmafp, SDDS_FILEBUFFER *fBuffer) {
   int32_t length;
-  static char *dummy_string = "";
+  static const char dummy_string[] = "";
   if (!string)
-    string = dummy_string;
+    string = (char *)dummy_string;
   length = strlen(string);
   SDDS_SwapLong(&length);
   if (!SDDS_LZMABufferedWrite(&length, sizeof(length), lzmafp, fBuffer)) {
@@ -5784,9 +5802,9 @@ int32_t SDDS_LZMAWriteNonNativeBinaryString(char *string, struct lzmafile *lzmaf
  */
 int32_t SDDS_GZipWriteNonNativeBinaryString(char *string, gzFile gzfp, SDDS_FILEBUFFER *fBuffer) {
   int32_t length;
-  static char *dummy_string = "";
+  static const char dummy_string[] = "";
   if (!string)
-    string = dummy_string;
+    string = (char *)dummy_string;
   length = strlen(string);
   SDDS_SwapLong(&length);
   if (!SDDS_GZipBufferedWrite(&length, sizeof(length), gzfp, fBuffer)) {

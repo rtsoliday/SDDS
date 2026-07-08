@@ -20,7 +20,7 @@
 char *escape_quotes(char *s)
 {
     char *ptr, *bptr;
-    static char *buffer=NULL;
+    static MDB_THREAD_LOCAL char *buffer=NULL;
     
     if (!s)
         return(s);
@@ -39,4 +39,3 @@ char *escape_quotes(char *s)
     }
 
         
-

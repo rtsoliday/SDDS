@@ -76,7 +76,7 @@ long edit_string(char *text, char *edit0) {
   short count, new_kill;
   char *ptr, *text_start, delimiter, *ptr1, *ptr2, *ptr3;
   char *delimLoc, *editNext, *charList;
-  static char kill[4096], buffer[4096];
+  char kill[4096], buffer[4096];
   char *orig, *repl;
   int global, conditional, conditionalReturn, here, i;
   char *edit, cSave;

@@ -174,8 +174,8 @@ MAT	*A, *Q;
 VEC	*out;
 {
 	int	i;
-	static MAT	*tmp = MNULL;
-	static VEC	*b   = VNULL, *diag = VNULL, *beta = VNULL;
+	static MESCHACH_THREAD_LOCAL MAT	*tmp = MNULL;
+	static MESCHACH_THREAD_LOCAL VEC	*b   = VNULL, *diag = VNULL, *beta = VNULL;
 
 	if ( ! A )
 		error(E_NULL,"symmeig");

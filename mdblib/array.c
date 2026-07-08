@@ -17,10 +17,14 @@
  */
 
 #include "mdb.h"
+#include "mdb_thread.h"
 
 static FILE *fp_tmalloc = NULL;
 static FILE *fp_trealloc = NULL;
 static FILE *fp_tfree = NULL;
+static uint64_t tmalloc_total_bytes = 0;
+static uint64_t trealloc_total_bytes = 0;
+static MDB_THREAD_LOCK alloc_record_lock = MDB_THREAD_LOCK_INITIALIZER;
 
 /**
  * @brief Keeps a record of memory allocations by opening tracking files.
@@ -33,18 +37,20 @@ static FILE *fp_tfree = NULL;
 void keep_alloc_record(char *filename) {
   char s[100];
 
+  mdb_thread_lock(&alloc_record_lock);
   if (fp_tmalloc)
-    free(fp_tmalloc);
+    fclose(fp_tmalloc);
   if (fp_trealloc)
-    free(fp_trealloc);
+    fclose(fp_trealloc);
   if (fp_tfree)
-    free(fp_tfree);
+    fclose(fp_tfree);
   sprintf(s, "%s.tmalloc", filename);
   fp_tmalloc = fopen_e(s, "w", 0);
   sprintf(s, "%s.trealloc", filename);
   fp_trealloc = fopen_e(s, "w", 0);
   sprintf(s, "%s.tfree", filename);
   fp_tfree = fopen_e(s, "w", 0);
+  mdb_thread_unlock(&alloc_record_lock);
 }
 
 /**
@@ -58,7 +64,6 @@ void keep_alloc_record(char *filename) {
  */
 void *tmalloc(uint64_t size_of_block) {
   void *ptr;
-  static uint64_t total_bytes = 0;
 
   if (size_of_block <= 0)
     size_of_block = 4;
@@ -69,14 +74,18 @@ void *tmalloc(uint64_t size_of_block) {
   if (!(ptr = calloc(size_of_block, 1))) {
     printf("error: memory allocation failure--%"PRIu64" Bytes requested.\n",
            size_of_block);
-    printf("tmalloc() has allocated %"PRIu64" bytes previously\n", total_bytes);
+    mdb_thread_lock(&alloc_record_lock);
+    printf("tmalloc() has allocated %"PRIu64" bytes previously\n", tmalloc_total_bytes);
+    mdb_thread_unlock(&alloc_record_lock);
     abort();
   }
+  mdb_thread_lock(&alloc_record_lock);
   if (fp_tmalloc) {
     fprintf(fp_tmalloc, "%"PRIx64"  %"PRIu64"\n", (uint64_t)ptr, size_of_block);
     fflush(fp_tmalloc);
   }
-  total_bytes += size_of_block;
+  tmalloc_total_bytes += size_of_block;
+  mdb_thread_unlock(&alloc_record_lock);
   return (ptr);
 }
 
@@ -180,7 +189,6 @@ int free_zarray_2d(void **array, uint64_t n1, uint64_t n2) {
  */
 void *trealloc(void *old_ptr, uint64_t size_of_block) {
   void *ptr;
-  static uint64_t total_bytes = 0;
 
   if (size_of_block <= 0)
     size_of_block = 4;
@@ -191,15 +199,19 @@ void *trealloc(void *old_ptr, uint64_t size_of_block) {
   if (!(ptr = realloc(old_ptr, (uint64_t)(size_of_block)))) {
     printf("error: memory reallocation failure--%"PRIu64" bytes requested.\n",
            size_of_block);
-    printf("trealloc() has reallocated %"PRIu64" bytes previously\n", total_bytes);
+    mdb_thread_lock(&alloc_record_lock);
+    printf("trealloc() has reallocated %"PRIu64" bytes previously\n", trealloc_total_bytes);
+    mdb_thread_unlock(&alloc_record_lock);
     abort();
   }
+  mdb_thread_lock(&alloc_record_lock);
   if (fp_trealloc) {
     fprintf(fp_trealloc, "d:%"PRIx64"\na:%"PRIx64"  %"PRIu64"\n", oldaddr,
             (uint64_t)ptr, size_of_block);
     fflush(fp_trealloc);
   }
-  total_bytes += size_of_block;
+  trealloc_total_bytes += size_of_block;
+  mdb_thread_unlock(&alloc_record_lock);
   return (ptr);
 }
 
@@ -229,10 +241,12 @@ void zero_memory(void *mem, uint64_t n_bytes) {
  * @return Status of the free operation (1 if successful, 0 otherwise).
  */
 int tfree(void *ptr) {
+  mdb_thread_lock(&alloc_record_lock);
   if (fp_tfree) {
     fprintf(fp_tfree, "%"PRIx64"\n", (uint64_t)ptr);
     fflush(fp_tfree);
   }
+  mdb_thread_unlock(&alloc_record_lock);
   if (ptr) {
     free(ptr);
     return (1);

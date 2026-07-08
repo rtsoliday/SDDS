@@ -8,6 +8,8 @@
 \*************************************************************************/
 
 #include "SDDStypes.h"
+#include "mdb_thread.h"
+#include <stddef.h>
 #if defined(_WIN32) && !defined(_MINGW)
 typedef __int32 int32_t;
 typedef unsigned __int32 uint32_t;
@@ -52,6 +54,12 @@ extern "C" {
 #define epicsShareExtern extern
 #endif
 
+/* RPN execution stacks are per-thread so callers don't have to serialize
+ * multi-call stack operations themselves. RPN definitions, memories, and
+ * arrays are process-global and serialized by the RPN lock.
+ */
+#define RPN_THREAD_LOCAL MDB_THREAD_LOCAL
+
 /* function call for programs that use rpn: */
 epicsShareFuncRPNLIB double rpn(char *expression);
 
@@ -60,6 +68,10 @@ void rpn_alloc(void);
 void rref(void);
 void sref(void);
 epicsShareFuncRPNLIB long rpn_createarray(long size);
+/* Returns a borrowed pointer into process-global RPN array storage. If the
+ * pointer is retained while other threads may mutate RPN arrays, hold
+ * rpn_lock() until the pointer is no longer in use.
+ */
 epicsShareFuncRPNLIB double *rpn_getarraypointer(long memory_number, int32_t *length);
 epicsShareFuncRPNLIB long rpn_resizearray(long arraynum, long size);
 void udf_createarray(long type, long index, double data, char *rpn, long i_udf);
@@ -222,6 +234,13 @@ void nduplicate(void);
 void stack_lev(void);
 void pop(void);
 epicsShareFuncRPNLIB void rpn_clear(void);
+epicsShareFuncRPNLIB void rpn_clear_stacks(void);
+epicsShareFuncRPNLIB void rpn_lock(void);
+epicsShareFuncRPNLIB void rpn_unlock(void);
+epicsShareFuncRPNLIB long rpn_numeric_stack_size(void);
+epicsShareFuncRPNLIB long rpn_long_stack_size(void);
+epicsShareFuncRPNLIB long rpn_string_stack_size(void);
+epicsShareFuncRPNLIB long rpn_logical_stack_size(void);
 void pops(void);
 void rup(void);
 void rdn(void);
@@ -259,8 +278,20 @@ epicsShareFuncRPNLIB void rpn_clear_error(void);
 epicsShareFuncRPNLIB int if2pf(char *pfix, char *ifix, size_t size_of_pfix);
 
 #define STACKSIZE 5000
+/* Legacy direct stack-pointer names. New source code gets the per-thread
+ * values through these accessors; define RPN_NO_STACKPTR_COMPAT_MACROS before
+ * including this header only if the historical process-global data symbols are
+ * required.
+ */
+epicsShareFuncRPNLIB long *rpn_dstackptr_ptr(void);
+epicsShareFuncRPNLIB long *rpn_sstackptr_ptr(void);
+#ifdef RPN_NO_STACKPTR_COMPAT_MACROS
 epicsShareExtern long dstackptr;
 epicsShareExtern long sstackptr;
+#else
+#define dstackptr (*rpn_dstackptr_ptr())
+#define sstackptr (*rpn_sstackptr_ptr())
+#endif
 
 #ifdef __cplusplus
 }

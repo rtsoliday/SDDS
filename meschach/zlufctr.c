@@ -49,7 +49,7 @@ PERM	*pivot;
 	int	i_max;
 	Real	dtemp, max1;
 	complex	**A_v, *A_piv, *A_row, temp;
-	static	VEC	*scale = VNULL;
+	static MESCHACH_THREAD_LOCAL	VEC	*scale = VNULL;
 
 	if ( A==ZMNULL || pivot==PNULL )
 		error(E_NULL,"zLUfactor");
@@ -209,7 +209,7 @@ double	zLUcondest(LU,pivot)
 ZMAT	*LU;
 PERM	*pivot;
 {
-    static	ZVEC	*y = ZVNULL, *z = ZVNULL;
+    static MESCHACH_THREAD_LOCAL	ZVEC	*y = ZVNULL, *z = ZVNULL;
     Real	cond_est, L_norm, U_norm, norm, sn_inv;
     complex	sum;
     int		i, j, n;

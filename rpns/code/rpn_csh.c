@@ -14,193 +14,264 @@
  * M. Borland, 1993
  */
 #include "rpn_internal.h"
-#include <signal.h>
 #include <ctype.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 #if defined(_WIN32)
 #include <process.h>
 #else
+#include <fcntl.h>
+#include <limits.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 #endif
 
-#if defined(_WIN32) && !defined(__BORLANDC__)
-#define SIGUSR1 16
+#if !defined(PATH_MAX)
+#define PATH_MAX 4096
 #endif
-
-/* this gets the code to compile, but the code won't work! */
-/*
-#if defined(_WIN32) || defined(vxWorks)
-void sigpause(int x);
-
-void sigpause(x) 
-{
-  }
-#endif
-*/
-
-static FILE *fp = NULL;
-static int pid;
-
-/* dummy signal handler for use with sigpause */
-void dummy_sigusr1(int signum)
-{
-    }
 
 #if defined(_WIN32)
-void rpn_csh()
+static FILE *csh_input_fp = NULL;
 
+static int rpn_csh_start(void)
 {
-  char *ptr;
-  void dummy_sigusr1(int signum);
-  static char s[1024];
-
-  signal(SIGUSR1, dummy_sigusr1);
-
-  if (!fp) {
-    /* open a pipe and start csh */
-    fp = popen("csh", "w");
-    pid = getpid();
+  if (!csh_input_fp && !(csh_input_fp = popen("csh", "w"))) {
+    fprintf(stderr, "error: unable to start csh subprocess\n");
+    rpn_set_error();
+    stop();
+    return 0;
   }
-
-  /* loop to print prompt and accept commands */
-  while (fputs("csh> ", stdout), fgets(s, 100, stdin)) {
-    /* send user's command along with another than causes subprocess
-     * to send the SIGUSR1 signal this process 
-     */
-    ptr = s;
-    while (isspace(*ptr))
-      ptr++;
-    if (strncmp(ptr, "quit", 4)==0 || strncmp(ptr, "exit", 4)==0)
-      break;
-    fprintf(fp, "%s\nkill -USR1 %d\n", s, pid);
-    fflush(fp);
-    /* pause until SIGUSR1 is received */
-    //sigpause(SIGUSR1);
-  }
-
-  /* back to default behavior for sigusr1 */
-  signal(SIGUSR1, SIG_DFL);
+  return 1;
 }
 
-void rpn_csh_str()
+static int rpn_csh_send_command(const char *command)
 {
-  char *string;
-  void dummy_sigusr1();
-  signal(SIGUSR1, dummy_sigusr1);
-
-  if (!fp) {
-    /* open a pipe and start csh */
-    fp = popen("csh", "w");
-    pid = getpid();
+  if (!rpn_csh_start())
+    return 0;
+  if (fprintf(csh_input_fp, "%s\n", command) < 0 || fflush(csh_input_fp) == EOF) {
+    fprintf(stderr, "error: unable to write to csh subprocess\n");
+    rpn_set_error();
+    stop();
+    return 0;
   }
-  if (!(string = pop_string()))
-    return;
-
-  fprintf(fp, "%s\nkill -USR1 %d\n", string, pid);
-  fflush(fp);
-  /* pause until SIGUSR1 is received */
-  //sigpause(SIGUSR1);
-
-  /* back to default behavior for sigusr1 */
-  signal(SIGUSR1, SIG_DFL);
+  return 1;
 }
 
 #else
 
-static sigset_t mask, oldmask;
-static volatile sig_atomic_t sigusr1_received = 0;
-
-void rpn_csh() {
-  char *ptr;
-  static char s[1024];
-
-  struct sigaction sa;
-  sa.sa_handler = dummy_sigusr1;
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = 0;
-  sigaction(SIGUSR1, &sa, NULL);
-
-  /* Block SIGUSR1 and save old mask */
-  sigemptyset(&mask);
-  sigaddset(&mask, SIGUSR1);
-  sigprocmask(SIG_BLOCK, &mask, &oldmask);
-
-  if (!fp) {
-    /* open a pipe and start csh */
 #if defined(vxWorks)
-    fprintf(stderr, "popen is not supported in vxWorks\n");
-    exit(1);
-#endif
-    fp = popen("csh", "w");
-    pid = getpid();
+static int rpn_csh_start(void)
+{
+  fprintf(stderr, "csh subprocesses are not supported in vxWorks\n");
+  exit(1);
+}
+
+static int rpn_csh_send_command(const char *command)
+{
+  (void)command;
+  return rpn_csh_start();
+}
+
+#else
+
+static FILE *csh_input_fp = NULL;
+static int csh_ack_fd = -1;
+static int csh_ack_hold_fd = -1;
+static char csh_ack_dir[PATH_MAX] = "";
+static char csh_ack_path[PATH_MAX] = "";
+static int csh_cleanup_registered = 0;
+
+static void rpn_csh_reset(void)
+{
+  if (csh_input_fp) {
+    fclose(csh_input_fp);
+    csh_input_fp = NULL;
+  }
+  if (csh_ack_fd >= 0) {
+    close(csh_ack_fd);
+    csh_ack_fd = -1;
+  }
+  if (csh_ack_hold_fd >= 0) {
+    close(csh_ack_hold_fd);
+    csh_ack_hold_fd = -1;
+  }
+  if (csh_ack_path[0]) {
+    unlink(csh_ack_path);
+    csh_ack_path[0] = 0;
+  }
+  if (csh_ack_dir[0]) {
+    rmdir(csh_ack_dir);
+    csh_ack_dir[0] = 0;
+  }
+}
+
+static int rpn_csh_error(const char *operation)
+{
+  if (errno)
+    fprintf(stderr, "error: %s failed for csh subprocess: %s\n", operation, strerror(errno));
+  else
+    fprintf(stderr, "error: %s failed for csh subprocess\n", operation);
+  rpn_csh_reset();
+  rpn_set_error();
+  stop();
+  return 0;
+}
+
+static int rpn_csh_create_ack_fifo(void)
+{
+  int flags;
+
+  if (!csh_cleanup_registered) {
+    if (atexit(rpn_csh_reset)) {
+      errno = 0;
+      return rpn_csh_error("register csh cleanup");
+    }
+    csh_cleanup_registered = 1;
   }
 
-  /* loop to print prompt and accept commands */
+  if (snprintf(csh_ack_dir, sizeof(csh_ack_dir), "/tmp/rpn_csh_%ld_XXXXXX", (long)getpid()) >= (int)sizeof(csh_ack_dir)) {
+    errno = ENAMETOOLONG;
+    return rpn_csh_error("temporary directory name");
+  }
+  if (!mkdtemp(csh_ack_dir))
+    return rpn_csh_error("mkdtemp");
+
+  if (snprintf(csh_ack_path, sizeof(csh_ack_path), "%s/ack", csh_ack_dir) >= (int)sizeof(csh_ack_path)) {
+    errno = ENAMETOOLONG;
+    return rpn_csh_error("temporary fifo name");
+  }
+  if (mkfifo(csh_ack_path, 0600) < 0)
+    return rpn_csh_error("mkfifo");
+
+  csh_ack_fd = open(csh_ack_path, O_RDONLY | O_NONBLOCK);
+  if (csh_ack_fd < 0)
+    return rpn_csh_error("open acknowledgment fifo");
+
+  csh_ack_hold_fd = open(csh_ack_path, O_WRONLY | O_NONBLOCK);
+  if (csh_ack_hold_fd < 0)
+    return rpn_csh_error("open acknowledgment fifo");
+
+  if ((flags = fcntl(csh_ack_fd, F_GETFL, 0)) < 0)
+    return rpn_csh_error("fcntl");
+  if (fcntl(csh_ack_fd, F_SETFL, flags & ~O_NONBLOCK) < 0)
+    return rpn_csh_error("fcntl");
+
+  return 1;
+}
+
+static int rpn_csh_start(void)
+{
+  int command_pipe[2];
+  pid_t child;
+
+  if (csh_input_fp)
+    return 1;
+
+  if (!rpn_csh_create_ack_fifo())
+    return 0;
+
+  if (pipe(command_pipe) < 0)
+    return rpn_csh_error("pipe");
+
+  child = fork();
+  if (child < 0) {
+    close(command_pipe[0]);
+    close(command_pipe[1]);
+    return rpn_csh_error("fork");
+  }
+
+  if (child == 0) {
+    close(command_pipe[1]);
+    close(csh_ack_fd);
+    close(csh_ack_hold_fd);
+    if (dup2(command_pipe[0], STDIN_FILENO) < 0)
+      _exit(127);
+    close(command_pipe[0]);
+    execlp("csh", "csh", (char *)NULL);
+    _exit(127);
+  }
+
+  close(command_pipe[0]);
+
+  if (!(csh_input_fp = fdopen(command_pipe[1], "w"))) {
+    close(command_pipe[1]);
+    return rpn_csh_error("fdopen");
+  }
+  return 1;
+}
+
+static int rpn_csh_wait_for_ack(void)
+{
+  char ch;
+  ssize_t bytes;
+
+  do {
+    bytes = read(csh_ack_fd, &ch, 1);
+  } while (bytes < 0 && errno == EINTR);
+  if (bytes <= 0) {
+    if (bytes == 0)
+      errno = 0;
+    return rpn_csh_error("read acknowledgment");
+  }
+
+  while (ch != '\n') {
+    do {
+      bytes = read(csh_ack_fd, &ch, 1);
+    } while (bytes < 0 && errno == EINTR);
+    if (bytes <= 0) {
+      if (bytes == 0)
+        errno = 0;
+      return rpn_csh_error("read acknowledgment");
+    }
+  }
+  return 1;
+}
+
+static int rpn_csh_send_command(const char *command)
+{
+  if (!rpn_csh_start())
+    return 0;
+
+  if (fprintf(csh_input_fp, "%s\n/bin/echo __rpn_ack__ >! %s\n", command, csh_ack_path) < 0 ||
+      fflush(csh_input_fp) == EOF)
+    return rpn_csh_error("write");
+
+  return rpn_csh_wait_for_ack();
+}
+
+#endif
+#endif
+
+void rpn_csh()
+{
+  char *ptr;
+  static RPN_THREAD_LOCAL char s[1024];
+
+  rpn_lock();
   while (fputs("csh> ", stdout), fgets(s, sizeof(s), stdin)) {
-    /* send user's command along with another that causes subprocess
-     * to send the SIGUSR1 signal to this process
-     */
     ptr = s;
     while (isspace(*ptr))
       ptr++;
     if (strncmp(ptr, "quit", 4) == 0 || strncmp(ptr, "exit", 4) == 0)
       break;
-    fprintf(fp, "%s\nkill -USR1 %d\n", s, pid);
-    fflush(fp);
-
-    /* Suspend until SIGUSR1 is received */
-    sigsuspend(&oldmask);
+    if (!rpn_csh_send_command(s))
+      break;
   }
-
-  /* Restore old signal mask */
-  sigprocmask(SIG_SETMASK, &oldmask, NULL);
-
-  /* Back to default behavior for SIGUSR1 */
-  sa.sa_handler = SIG_DFL;
-  sigaction(SIGUSR1, &sa, NULL);
+  rpn_unlock();
 }
 
-void rpn_csh_str() {
-    char *string;
-    struct sigaction sa;
-    sigset_t mask, oldmask;
+void rpn_csh_str()
+{
+  char *string;
 
-    /* Set up signal handler for SIGUSR1 */
-    sa.sa_handler = dummy_sigusr1;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGUSR1, &sa, NULL);
-
-    if (!fp) {
-#if defined(vxWorks)
-        fprintf(stderr, "popen is not supported in vxWorks\n");
-        exit(1);
-#else
-        fp = popen("csh", "w");
-        pid = getpid();
-#endif
-    }
-    if (!(string = pop_string()))
-        return;
-
-    fprintf(fp, "%s\nkill -USR1 %d\n", string, pid);
-    fflush(fp);
-
-    /* Block SIGUSR1 and suspend execution until it's received */
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGUSR1);
-    sigprocmask(SIG_BLOCK, &mask, &oldmask);
-
-    while (!sigusr1_received) {
-        sigsuspend(&oldmask);
-    }
-
-    /* Restore previous signal mask */
-    sigprocmask(SIG_SETMASK, &oldmask, NULL);
-
-    /* Back to default behavior for SIGUSR1 */
-    signal(SIGUSR1, SIG_DFL);
+  rpn_lock();
+  string = pop_string();
+  if (string)
+    rpn_csh_send_command(string);
+  rpn_unlock();
 }
-#endif
 
 void rpn_execs()
 {
@@ -283,4 +354,3 @@ void rpn_execn()
 #endif
 
   }
-

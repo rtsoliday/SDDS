@@ -42,8 +42,6 @@
 
 /*  new types list */
 
-extern MEM_CONNECT mem_connect[MEM_CONNECT_MAX_LISTS];
-
 /* the number of a new list */
 #define FOO_LIST 1
 

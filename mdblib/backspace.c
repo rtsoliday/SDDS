@@ -24,8 +24,8 @@
  * @param n The number of characters to backspace.
  */
 void backspace(long n) {
-  static char *bspace = NULL;
-  static long n_bspace = 0;
+  static MDB_THREAD_LOCAL char *bspace = NULL;
+  static MDB_THREAD_LOCAL long n_bspace = 0;
 
   if (n > n_bspace) {
     register long i;

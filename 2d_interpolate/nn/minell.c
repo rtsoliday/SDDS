@@ -71,18 +71,21 @@
 #include <limits.h>
 #include <float.h>
 #include <errno.h>
+#include "mdb.h"
 #include "config.h"
 #include "nan.h"
 #include "minell.h"
+#include "nn_thread.h"
 
+#undef EPS
 #define BIGNUMBER 1.0e+100
 #define SECANT_COUNT_MAX 30
 #define SECANT_EPS 5.0e-11
 #define EPS 1.0e-14
 
-static int me_seed = 1;
-static int me_classic = 0;
-static int me_verbose = 0;
+static NN_THREAD_LOCAL int me_seed = 1;
+static NN_THREAD_LOCAL int me_classic = 0;
+static NN_THREAD_LOCAL int me_verbose = 0;
 
 struct minell {
     /*
@@ -273,15 +276,16 @@ static point** points_shuffle(int n, point* p)
     for (i = 0; i < n; ++i)
         numbers[i] = i;
 
-    srand(me_seed);
-
+    mdbmth_lock_rand();
+    mdbmth_srand_unlocked((unsigned int) me_seed);
     for (i = 0; i < n; ++i) {
-        int nn = (int) ((double) n * (double) rand() / ((double) RAND_MAX + 1.0));
+        int nn = (int) ((double) n * mdbmth_rand_fraction_unlocked());
         int tmp = numbers[i];
 
         numbers[i] = numbers[nn];
         numbers[nn] = tmp;
     }
+    mdbmth_unlock_rand();
 
     for (i = 0; i < n; ++i)
         pp[i] = &p[numbers[i]];
@@ -1011,6 +1015,7 @@ void minell_rescalepoints(minell* me, int n, point points[])
 #if defined(ME_STANDALONE)
 
 #include <sys/time.h>
+#include "nn_tokenize.h"
 
 int userandomseed = 0;
 int test = 0;
@@ -1164,6 +1169,7 @@ static void points_read(char* fname, int dim, int* n, point** points)
     char buf[BUFSIZE];
     char seps[] = " ,;\t";
     char* token;
+    char* token_state;
 
     if (dim < 2 || dim > 3) {
         *n = 0;
@@ -1194,21 +1200,22 @@ static void points_read(char* fname, int dim, int* n, point** points)
         }
 
         p = &(*points)[*n];
+        token_state = NULL;
 
         if (buf[0] == '#')
             continue;
-        if ((token = strtok(buf, seps)) == NULL)
+        if ((token = nn_tokenize(buf, seps, &token_state)) == NULL)
             continue;
         if (!str2double(token, &p->x))
             continue;
-        if ((token = strtok(NULL, seps)) == NULL)
+        if ((token = nn_tokenize(NULL, seps, &token_state)) == NULL)
             continue;
         if (!str2double(token, &p->y))
             continue;
         if (dim == 2)
             p->z = NaN;
         else {
-            if ((token = strtok(NULL, seps)) == NULL)
+            if ((token = nn_tokenize(NULL, seps, &token_state)) == NULL)
                 continue;
             if (!str2double(token, &p->z))
                 continue;

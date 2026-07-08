@@ -27,11 +27,11 @@
  *
  * @note The function modifies the input data array in place.
  * @warning The input data array must have at least (nLeft + nRight + 1) elements.
- * @warning This function is not thread-safe due to the use of static internal buffers.
+ * @warning The function uses thread-local internal buffers.
  */
 long SavitzkyGolaySmooth(double *data, long rows, long order, long nLeft, long nRight, long derivativeOrder) {
-  static double *FFTdata = NULL, *FFTfilter = NULL, *TMPdata = NULL;
-  static long arraySize = 0, TMParraySize = 0;
+  static MDB_THREAD_LOCAL double *FFTdata = NULL, *FFTfilter = NULL, *TMPdata = NULL;
+  static MDB_THREAD_LOCAL long arraySize = 0, TMParraySize = 0;
   long i, nfreq, sizeNeeded;
 
   if (order < 0) {
@@ -106,8 +106,8 @@ long SavitzkyGolaySmooth(double *data, long rows, long order, long nLeft, long n
     return (1);
   } else { /* Smooth data in the time domain */
     long np = nLeft + nRight + 1, j;
-    static long coeffArraySize = 0;
-    static double *filterCoeff = NULL;
+    static MDB_THREAD_LOCAL long coeffArraySize = 0;
+    static MDB_THREAD_LOCAL double *filterCoeff = NULL;
 
     sizeNeeded = rows + nLeft + nRight;
     if (TMParraySize < sizeNeeded && (!(TMPdata = realloc(TMPdata, sizeof(*TMPdata) * (TMParraySize = sizeNeeded))))) {
@@ -183,8 +183,8 @@ typedef struct
   long order, right, left, derivOrder;
 } SAVITZKYGOLAY_COEF;
 
-static SAVITZKYGOLAY_COEF *svCoef = NULL;
-static long nSVCoef = 0;
+static MDB_THREAD_LOCAL SAVITZKYGOLAY_COEF *svCoef = NULL;
+static MDB_THREAD_LOCAL long nSVCoef = 0;
 
 void SavitzkyGolayCoefficients(double *coef, long maxCoefs, long order, long nLeft, long nRight, long derivativeOrder, long wrapAround) {
   MATRIX *A, *At, *AtA;

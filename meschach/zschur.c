@@ -52,7 +52,7 @@ ZMAT	*A, *Q;
     complex	det, discrim, lambda, lambda0, lambda1, s, sum, ztmp;
     complex	x, y;	/* for chasing algorithm */
     complex	**A_me;
-    static	ZVEC	*diag=ZVNULL;
+    static MESCHACH_THREAD_LOCAL	ZVEC	*diag=ZVNULL;
     
     if ( ! A )
 	error(E_NULL,"zschur");
@@ -199,7 +199,7 @@ MAT	*T, *Q, *X_re, *X_im;
 		val1_re, val1_im, val2_re, val2_im,
 		tmp_val1_re, tmp_val1_im, tmp_val2_re, tmp_val2_im, **T_me;
 	Real	sum, diff, discrim, magdet, norm, scale;
-	static VEC	*tmp1_re=VNULL, *tmp1_im=VNULL,
+	static MESCHACH_THREAD_LOCAL VEC	*tmp1_re=VNULL, *tmp1_im=VNULL,
 			*tmp2_re=VNULL, *tmp2_im=VNULL;
 
 	if ( ! T || ! X_re )

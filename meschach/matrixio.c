@@ -34,7 +34,7 @@
 
 
 /* local variables */
-static char line[MAXLINE];
+static MESCHACH_THREAD_LOCAL char line[MAXLINE];
 
 MAT     *im_finput(FILE *fp, MAT *mat);
 MAT     *bm_finput(FILE *fp, MAT *mat);
@@ -382,7 +382,7 @@ VEC     *vec;
 /**************************************************************************
   Output routines
   **************************************************************************/
-static char    *format = "%14.9g ";
+static MESCHACH_THREAD_LOCAL char    *format = "%14.9g ";
 
 char	*setformat(f_string)
 char    *f_string;

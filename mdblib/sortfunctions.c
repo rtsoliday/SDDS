@@ -13,6 +13,7 @@
  * @author M. Borland, C. Saunders, R. Soliday, H. Shang
  */
 #include "mdb.h"
+#include "mdb_thread.h"
 #include "SDDStypes.h"
 
 /**
@@ -223,10 +224,10 @@ int unique(void *base, size_t n_items, size_t size,
   return (n_items);
 }
 
-static int (*item_compare)(const void *a, const void *b);
-static int column_to_compare;
-static int size_of_element;
-static int number_of_columns;
+static MDB_THREAD_LOCAL int (*item_compare)(const void *a, const void *b);
+static MDB_THREAD_LOCAL int column_to_compare;
+static MDB_THREAD_LOCAL int size_of_element;
+static MDB_THREAD_LOCAL int number_of_columns;
 
 /**
  * @brief Set up parameters for row-based sorting.
@@ -277,7 +278,8 @@ void row_copy(void *av, void *bv) {
   *b = ptr;
 }
 
-static long orderIndices; /* compare source indices if keys are identical? */
+static MDB_THREAD_LOCAL long orderIndices; /* compare source indices if keys are identical? */
+static MDB_THREAD_LOCK keyed_group_lock = MDB_THREAD_LOCK_INITIALIZER;
 
 /**
  * @brief Compare two KEYED_INDEX structures based on string keys.
@@ -365,7 +367,7 @@ int CompareDoubleKeyedGroup(const void *kg1, const void *kg2) {
  */
 KEYED_EQUIVALENT **MakeSortedKeyGroups(long *keyGroups, long keyType, void *data, long points) {
   KEYED_EQUIVALENT **keyedEquiv = NULL;
-  static KEYED_INDEX *keyedIndex = NULL;
+  static MDB_THREAD_LOCAL KEYED_INDEX *keyedIndex = NULL;
   long iEquiv, i2, j;
   long i1;
 
@@ -447,28 +449,32 @@ KEYED_EQUIVALENT **MakeSortedKeyGroups(long *keyGroups, long keyType, void *data
  */
 long FindMatchingKeyGroup(KEYED_EQUIVALENT **keyGroup, long keyGroups, long keyType,
                           void *searchKeyData, long reuse) {
-  static KEYED_EQUIVALENT *searchKey = NULL;
-  static KEYED_INDEX keyedIndex;
+  KEYED_EQUIVALENT searchKey;
+  KEYED_INDEX keyedIndex;
+  KEYED_INDEX *equivalent[1];
   long rowIndex, i;
 
-  if (!searchKey) {
-    searchKey = (KEYED_EQUIVALENT *)malloc(sizeof(*searchKey));
-    searchKey->equivalent = (KEYED_INDEX **)malloc(sizeof(*(searchKey->equivalent)));
-    searchKey->equivalent[0] = &keyedIndex;
-    searchKey->equivalents = 1;
-  }
+  equivalent[0] = &keyedIndex;
+  searchKey.equivalent = equivalent;
+  searchKey.equivalents = 1;
+  searchKey.nextIndex = 0;
   if (keyType == SDDS_STRING) {
     keyedIndex.stringKey = *(char **)searchKeyData;
-    i = binaryIndexSearch((void **)keyGroup, keyGroups, (void *)searchKey, CompareStringKeyedGroup, 0);
+    mdb_thread_lock(&keyed_group_lock);
+    i = binaryIndexSearch((void **)keyGroup, keyGroups, (void *)&searchKey, CompareStringKeyedGroup, 0);
   } else {
     keyedIndex.doubleKey = *(double *)searchKeyData;
-    i = binaryIndexSearch((void **)keyGroup, keyGroups, (void *)searchKey, CompareDoubleKeyedGroup, 0);
+    mdb_thread_lock(&keyed_group_lock);
+    i = binaryIndexSearch((void **)keyGroup, keyGroups, (void *)&searchKey, CompareDoubleKeyedGroup, 0);
   }
-  if (i < 0 || keyGroup[i]->nextIndex >= keyGroup[i]->equivalents)
+  if (i < 0 || keyGroup[i]->nextIndex >= keyGroup[i]->equivalents) {
+    mdb_thread_unlock(&keyed_group_lock);
     return -1;
+  }
   rowIndex = keyGroup[i]->equivalent[keyGroup[i]->nextIndex]->rowIndex;
   if (!reuse)
     keyGroup[i]->nextIndex += 1;
+  mdb_thread_unlock(&keyed_group_lock);
   return rowIndex;
 }
 

@@ -11,6 +11,7 @@
 /*#include "SDDS.h"*/
 #include "fftpackC.h"
 #include <ctype.h>
+#include <stdlib.h>
 
 /* functions to perform Numerical Analysis of Fundamental Frequencies
  * (Laskar's method).
@@ -21,13 +22,18 @@
 
 long simpleFFT(double *magnitude2, double *data, long points)
 {
-  static double *real_imag = NULL;
-  static long sizeLimit = 0;
+  static MDB_THREAD_LOCAL double *real_imag = NULL;
+  static MDB_THREAD_LOCAL long sizeLimit = 0;
+  double *new_real_imag;
   long FFTFreqs, i;
 
-  if (sizeLimit<(points+2) &&
-      !(real_imag = malloc(sizeof(*real_imag)*(sizeLimit=points+2)))) 
+  if (sizeLimit < (points + 2)) {
+    new_real_imag = realloc(real_imag, sizeof(*real_imag) * (points + 2));
+    if (!new_real_imag)
       return 0;
+    real_imag = new_real_imag;
+    sizeLimit = points + 2;
+  }
 
   realFFT2(real_imag, data, points, 0);
   FFTFreqs = points/2+1;
@@ -41,8 +47,49 @@ long simpleFFT(double *magnitude2, double *data, long points)
   return FFTFreqs;
 }
 
-double *NAFFData, NAFFdt;
+double *NAFFData;
+double NAFFdt;
 long NAFFPoints;
+
+static MDB_THREAD_LOCK NAFFStateLock = MDB_THREAD_LOCK_INITIALIZER;
+static MDB_THREAD_LOCAL double *NAFFDataThread;
+static MDB_THREAD_LOCAL double NAFFdtThread;
+static MDB_THREAD_LOCAL long NAFFPointsThread;
+static MDB_THREAD_LOCAL short NAFFThreadStateInitialized;
+static MDB_THREAD_LOCAL short NAFFThreadStateOwned;
+
+static void NAFFInitThreadState(void) {
+  if (!NAFFThreadStateInitialized) {
+    mdb_thread_lock(&NAFFStateLock);
+    NAFFDataThread = NAFFData;
+    NAFFdtThread = NAFFdt;
+    NAFFPointsThread = NAFFPoints;
+    mdb_thread_unlock(&NAFFStateLock);
+    NAFFThreadStateInitialized = 1;
+  }
+}
+
+static void NAFFPublishLegacyState(void) {
+  NAFFInitThreadState();
+  mdb_thread_lock(&NAFFStateLock);
+  NAFFData = NAFFDataThread;
+  NAFFdt = NAFFdtThread;
+  NAFFPoints = NAFFPointsThread;
+  mdb_thread_unlock(&NAFFStateLock);
+}
+
+static void NAFFImportLegacyState(void) {
+  mdb_thread_lock(&NAFFStateLock);
+  NAFFDataThread = NAFFData;
+  NAFFdtThread = NAFFdt;
+  NAFFPointsThread = NAFFPoints;
+  mdb_thread_unlock(&NAFFStateLock);
+  NAFFThreadStateInitialized = 1;
+}
+
+#define NAFFData NAFFDataThread
+#define NAFFdt NAFFdtThread
+#define NAFFPoints NAFFPointsThread
 
 /* used to find optimum frequency */
 double NAFFFunc(double omega, long *invalid)
@@ -50,6 +97,10 @@ double NAFFFunc(double omega, long *invalid)
   long i;
   double sum1, sum2, cosine, sine;
   
+  if (NAFFThreadStateOwned)
+    NAFFInitThreadState();
+  else
+    NAFFImportLegacyState();
   *invalid = 0;
   for (i=sum1=sum2=0; i<NAFFPoints; i++) {
     cosine = cos(omega*i*NAFFdt);
@@ -93,13 +144,28 @@ long PerformNAFF(double *frequency,   /* return or input frequencies */
   if (points<2) {
     return -1;
   }
-  sine=cosine=NAFFData=NULL;
+  NAFFInitThreadState();
+  NAFFThreadStateOwned = 1;
+  sine = cosine = magnitude2 = hanning = NAFFData = NULL;
+  NAFFdt = 0;
+  NAFFPoints = 0;
   if (!(magnitude2 = malloc(sizeof(*magnitude2)*points)) ||
       !(hanning = malloc(sizeof(*hanning)*points)) ||
       !(NAFFData = malloc(sizeof(*NAFFData)*points)) ||
       !(cosine = malloc(sizeof(*cosine)*points)) ||
-      !(sine = malloc(sizeof(*sine)*points)))
+      !(sine = malloc(sizeof(*sine)*points))) {
+    free(NAFFData);
+    free(magnitude2);
+    free(hanning);
+    free(cosine);
+    free(sine);
+    NAFFData = NULL;
+    NAFFdt = 0;
+    NAFFPoints = 0;
+    NAFFThreadStateOwned = 0;
+    NAFFPublishLegacyState();
     return -1;
+  }
   freqSpacing = 1./(points*dt);
   NAFFdt = dt;
   
@@ -197,6 +263,11 @@ long PerformNAFF(double *frequency,   /* return or input frequencies */
     }
   }
   free(NAFFData);
+  NAFFData = NULL;
+  NAFFdt = 0;
+  NAFFPoints = 0;
+  NAFFThreadStateOwned = 0;
+  NAFFPublishLegacyState();
   free(magnitude2);
   free(hanning);
   free(cosine);

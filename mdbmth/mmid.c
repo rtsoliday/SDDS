@@ -51,8 +51,8 @@ void mmid(
   void (*derivs)(double *_dydx, double *_y, double _x)) {
   long i, j;
   double x = 0, ynSave, h, hTimes2;
-  static double *ym, *yn;
-  static long last_equations = 0;
+  static MDB_THREAD_LOCAL double *ym = NULL, *yn = NULL;
+  static MDB_THREAD_LOCAL long last_equations = 0;
   double *dydxTemp;
 
   if (equations > last_equations) {
@@ -118,8 +118,9 @@ void mmid2(
   double *yFinal,  /* final values of dependent variables */
   /* function return derivatives */
   void (*derivs)(double *_dydx, double *_y, double _x)) {
-  static double *yFinal2;
-  static long i, last_equations = 0;
+  static MDB_THREAD_LOCAL double *yFinal2 = NULL;
+  static MDB_THREAD_LOCAL long last_equations = 0;
+  long i;
 
   if (steps % 2)
     steps += 1;
@@ -191,9 +192,9 @@ long mmid_odeint3_na(
   /* function that is to be zeroed */
   double exit_accuracy /* how close to zero to get */
 ) {
-  static double *y0, *yscale;
-  static double *dydx0, *y1, *dydx1, *dydx2, *y2, *accur;
-  static long last_neq = 0;
+  static MDB_THREAD_LOCAL double *y0 = NULL, *yscale = NULL;
+  static MDB_THREAD_LOCAL double *dydx0 = NULL, *y1 = NULL, *dydx1 = NULL, *dydx2 = NULL, *y2 = NULL, *accur = NULL;
+  static MDB_THREAD_LOCAL long last_neq = 0;
   double ex0, ex1, ex2, x1, x2;
   double xdiff;
   long i, n_exit_iterations;

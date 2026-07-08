@@ -1,5 +1,5 @@
 \begin{sddsprog}{sddsgroupedenvelope}
-  \item \textbf{description:} {\tt sddsgroupedenvelope} processes pages from SDDS files in a directory, groups the pages by a parameter value, and writes an output file with one page for each group. Each output page contains the requested row-by-row quantities across pages for selected columns. It is intended for cases where separate envelope files would otherwise be made for many groups; it avoids temporary SDDS files and reads only one input file at a time.
+  \item \textbf{description:} {\tt sddsgroupedenvelope} processes pages from SDDS files in a directory, groups the pages by a parameter value, and writes an output file with one page for each group. Each output page contains the requested row-by-row quantities across pages for selected columns. It is intended for cases where separate envelope files would otherwise be made for many groups; it avoids temporary SDDS files and can read multiple input files concurrently.
   \item \textbf{examples:} Make grouped PSD envelopes for selected files:
   \begin{verbatim}
 sddsgroupedenvelope -inputDir 2024/09/10 -pattern "PSD-00:0*" \
@@ -29,6 +29,7 @@ sddsgroupedenvelope [-inputDir directory] [-pattern pattern]
                     [-intercept=independentParameter,columnNames]
                     [-exmmMean=columnNames]
                     [-majorOrder={row|column}] [-noOverwrite]
+                    [-threads=number]
                     [-nowarnings] [-verbose]
   \end{verbatim}
   \item \textbf{switches:}
@@ -46,6 +47,7 @@ sddsgroupedenvelope [-inputDir directory] [-pattern pattern]
     \item \verb|-pmaximum=\emph{independentParameter},\emph{columnNames}|, \verb|-pminimum=\emph{independentParameter},\emph{columnNames}| --- For each named column and row, records the independent parameter value from the page containing the maximum or minimum value.
     \item \verb|-slope=\emph{independentParameter},\emph{columnNames}|, \verb|-intercept=\emph{independentParameter},\emph{columnNames}| --- Computes a row-by-row linear fit of the named columns against the independent parameter.
     \item \verb|-majorOrder={row|column}| --- Specifies the output data order. The default is column-major order.
+    \item \verb|-threads=\emph{number}| --- Specifies the number of input files to read concurrently. The default is 1. Results are merged in sorted input-file order, so output ordering and first-page choices remain deterministic.
     \item \verb|-noOverwrite| --- Refuses to replace an existing output file.
     \item \verb|-nowarnings| --- Suppresses warnings about degenerate weighted statistics.
     \item \verb|-verbose| --- Prints details about input files and row-count selection.

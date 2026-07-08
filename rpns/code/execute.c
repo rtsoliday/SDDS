@@ -34,7 +34,7 @@
  *          It also interprets "pcode".
  */
 
-long execute_code(void)
+static long execute_code_unlocked(void)
 {
   register char *ptr=NULL;
   register long index;
@@ -73,12 +73,12 @@ long execute_code(void)
         push_string(ptr);
         continue;
       }
-      if (is_udf(ptr)) {
+      if (is_udf_unlocked(ptr)) {
         /* token is a udf name */
         if (do_trace)
           fprintf(stderr, "calling udf %s   %ld %ld %ld %ld %ld\n", ptr,
                             stackptr, sstackptr, lstackptr, astackptr, code_lev);
-        return_code=cycle_through_udf();
+        return_code=cycle_through_udf_unlocked();
         continue;
       }
       if (is_memory(&x, &dummy, &is_string, ptr)!=-1) {
@@ -129,6 +129,16 @@ long execute_code(void)
   return(return_code);
 }
 
+long execute_code(void)
+{
+  long return_code;
+
+  rpn_lock();
+  return_code = execute_code_unlocked();
+  rpn_unlock();
+  return return_code;
+}
+
 /* routine: set_ptrs()
  * purpose: set pointers used by execute_code() to keep track of what
  *          is being parsed.
@@ -151,7 +161,7 @@ void set_ptrs(char **text, char **buffer, char **token)
  *          number of that function in the array func, otherwise return -1.
  */
 
-long is_func(char *string)
+static long is_func_unlocked(char *string)
 {
   long lo, hi, mid, cmp;
   
@@ -171,6 +181,16 @@ long is_func(char *string)
   if (!strcmp(string, funcRPN[hi].keyword))
     return(hi);
   return(-1);
+}
+
+long is_func(char *string)
+{
+  long index;
+
+  rpn_lock();
+  index = is_func_unlocked(string);
+  rpn_unlock();
+  return index;
 }
 
 /* routine: quit()
@@ -280,7 +300,7 @@ void rpn_sleep(void)
 }
 
 
-long cycle_through_udf(void) 
+long cycle_through_udf_unlocked(void)
 {
   register long return_code, udf_current_step, udf_last_step;
   register int continue_cycle;
@@ -339,7 +359,7 @@ long cycle_through_udf(void)
           fprintf(stderr, "calling udf %s   %ld %ld %ld %ld %ld\n", udf_temp_stack.keyword, 
                   stackptr, sstackptr, lstackptr, astackptr, code_lev);
         udf_id[cycle_counter].udf_start_index = udf_current_step + 1;
-        get_udf_indexes(udf_temp_stack.index);
+        get_udf_indexes_unlocked(udf_temp_stack.index);
         continue_cycle = 0;
         break;
       case 3:
@@ -371,7 +391,7 @@ long cycle_through_udf(void)
         return_code = 3;
         if (do_trace) 
           fprintf(stderr, "conditional operation\n");
-        conditional_udf(udf_current_step);
+        conditional_udf_unlocked(udf_current_step);
         continue_cycle = 0;
         break;
       case 8:
@@ -413,4 +433,12 @@ long cycle_through_udf(void)
   return(return_code);
 }
 
+long cycle_through_udf(void)
+{
+  long return_code;
 
+  rpn_lock();
+  return_code = cycle_through_udf_unlocked();
+  rpn_unlock();
+  return return_code;
+}

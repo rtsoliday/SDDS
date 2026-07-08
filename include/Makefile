@@ -10,6 +10,7 @@ INC = SDDS.h \
       match_string.h \
       matlib.h \
       mdb.h \
+      mdb_thread.h \
       namelist.h \
       non_dominated_sort.h \
       recycle.h \
@@ -19,4 +20,3 @@ INC = SDDS.h \
       table.h
       
 include ../Makefile.build
-

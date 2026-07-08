@@ -41,11 +41,6 @@
 #endif
 
 
-/* global variable */
-
-extern MEM_CONNECT mem_connect[MEM_CONNECT_MAX_LISTS];
-
-
 /* local type */
 
 typedef struct {
@@ -58,19 +53,19 @@ typedef struct {
 /* local variables */
 
 /* how many marks are used */
-static int mem_stat_mark_many = 0;
+static MESCHACH_THREAD_LOCAL int mem_stat_mark_many = 0;
 
 /* current mark */
-static int mem_stat_mark_curr = 0;
+static MESCHACH_THREAD_LOCAL int mem_stat_mark_curr = 0;
 
 
-static MEM_STAT_STRUCT mem_stat_var[MEM_HASHSIZE];
+static MESCHACH_THREAD_LOCAL MEM_STAT_STRUCT mem_stat_var[MEM_HASHSIZE];
 
 /* array of indices (+1) to mem_stat_var */
-static unsigned int mem_hash_idx[MEM_HASHSIZE];
+static MESCHACH_THREAD_LOCAL unsigned int mem_hash_idx[MEM_HASHSIZE];
 
 /* points to the first unused element in mem_hash_idx */
-static unsigned int mem_hash_idx_end = 0;
+static MESCHACH_THREAD_LOCAL unsigned int mem_hash_idx_end = 0;
 
 
 

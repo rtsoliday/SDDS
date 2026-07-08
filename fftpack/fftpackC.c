@@ -13,15 +13,10 @@
  */
 #include "stdio.h"
 #include "stdlib.h"
+#include "mdb_thread.h"
 #include "fftpack.h"
 #include "fftpackC.h"
 #include "string.h"
-
-#if defined(linux) || (defined(_WIN32) && !defined(_MINGW))
-#  include <omp.h>
-#else
-#  define NOTHREADS 1
-#endif
 
 #define SWAP_DOUBLE(x, y)   \
   {                         \
@@ -44,9 +39,26 @@ FFTPACK_WORKSPACE *complexWorkspace = NULL;
 long complexWorkspaces = 0;
 
 short atexitFFTpackRegistered = 0;
+static MDB_THREAD_LOCK fftpackWorkspaceLock = MDB_THREAD_LOCK_INITIALIZER;
+
+static long fftpackWorkspaceInUse(void) {
+  long i;
+  for (i = 0; i < realWorkspaces; i++)
+    if (realWorkspace[i].inUse)
+      return 1;
+  for (i = 0; i < complexWorkspaces; i++)
+    if (complexWorkspace[i].inUse)
+      return 1;
+  return 0;
+}
 
 void atexitFFTpack(void) {
   long i;
+  mdb_thread_lock(&fftpackWorkspaceLock);
+  if (fftpackWorkspaceInUse()) {
+    mdb_thread_unlock(&fftpackWorkspaceLock);
+    return;
+  }
   if (realWorkspace) {
     for (i = 0; i < realWorkspaces; i++)
       if (realWorkspace[i].array)
@@ -64,10 +76,13 @@ void atexitFFTpack(void) {
     complexWorkspaces = 0;
   }
   atexitFFTpackRegistered = 0;
+  mdb_thread_unlock(&fftpackWorkspaceLock);
 }
 
 long realFFT(double *data, long n, unsigned long flags) {
   long i, iWorkspace, memerror=0;
+  double *workspace = NULL;
+  FFTPACK_WORKSPACE *newWorkspace;
 
   if (flags & (~(INVERSE_FFT | MINUS_I_THETA))) {
     fputs("invalid flag bits set for realFFT()\n", stderr);
@@ -79,34 +94,38 @@ long realFFT(double *data, long n, unsigned long flags) {
   if (n == 1)
     return 1;
 
-#pragma omp critical
-  {
-    if (!atexitFFTpackRegistered) {
-      atexit(atexitFFTpack);
-      atexitFFTpackRegistered = 1;
-    }
-    
-    for (iWorkspace = 0; iWorkspace < realWorkspaces; iWorkspace++)
-      if (n == realWorkspace[iWorkspace].length && !realWorkspace[iWorkspace].inUse)
-        break;
-    if (iWorkspace == realWorkspaces) {
-      if (!realWorkspace)
-        realWorkspace = (FFTPACK_WORKSPACE *)
-          malloc(sizeof(*realWorkspace) * (realWorkspaces + 1));
-      else
-        realWorkspace = (FFTPACK_WORKSPACE *)
-          realloc(realWorkspace, sizeof(*realWorkspace) * (realWorkspaces + 1));
-      if (!realWorkspace ||
-          !(realWorkspace[realWorkspaces].array = (double *)malloc(sizeof(double) * (2 * n + 15)))) {
-        memerror=1;
+  mdb_thread_lock(&fftpackWorkspaceLock);
+  if (!atexitFFTpackRegistered) {
+    atexit(atexitFFTpack);
+    atexitFFTpackRegistered = 1;
+  }
+
+  for (iWorkspace = 0; iWorkspace < realWorkspaces; iWorkspace++)
+    if (n == realWorkspace[iWorkspace].length && !realWorkspace[iWorkspace].inUse)
+      break;
+  if (iWorkspace == realWorkspaces) {
+    newWorkspace = (FFTPACK_WORKSPACE *)
+      realloc(realWorkspace, sizeof(*realWorkspace) * (realWorkspaces + 1));
+    if (!newWorkspace) {
+      memerror = 1;
+    } else {
+      realWorkspace = newWorkspace;
+      realWorkspace[iWorkspace].array = (double *)malloc(sizeof(double) * (2 * n + 15));
+      if (!realWorkspace[iWorkspace].array) {
+        memerror = 1;
       } else {
-        realWorkspace[realWorkspaces].length = n;
+        realWorkspace[iWorkspace].length = n;
+        realWorkspace[iWorkspace].inUse = 0;
         realWorkspaces++;
         rffti_(&n, realWorkspace[iWorkspace].array);
       }
     }
-    realWorkspace[iWorkspace].inUse = 1;
   }
+  if (!memerror) {
+    realWorkspace[iWorkspace].inUse = 1;
+    workspace = realWorkspace[iWorkspace].array;
+  }
+  mdb_thread_unlock(&fftpackWorkspaceLock);
   if (memerror) {
     fputs("allocation error in realFFT()\n", stderr);
     return 0;
@@ -119,7 +138,7 @@ long realFFT(double *data, long n, unsigned long flags) {
            if (n is even) data[n-1] = Nyquist frequency term
            else data ends with (real, imag) for frequency (n-1)/2.
          */
-    rfftf_(&n, data, realWorkspace[iWorkspace].array);
+    rfftf_(&n, data, workspace);
 
     /* normalize the transform */
     for (i = 0; i < n; i++)
@@ -133,12 +152,11 @@ long realFFT(double *data, long n, unsigned long flags) {
       /* convert from exp(-i*theta) convention for DFT commposition */
       for (i = 2; i < n; i += 2)
         data[i] *= -1;
-    rfftb_(&n, data, realWorkspace[iWorkspace].array);
+    rfftb_(&n, data, workspace);
   }
-#pragma omp critical
-  {
-    realWorkspace[iWorkspace].inUse = 0;
-  }
+  mdb_thread_lock(&fftpackWorkspaceLock);
+  realWorkspace[iWorkspace].inUse = 0;
+  mdb_thread_unlock(&fftpackWorkspaceLock);
   return 1;
 }
 
@@ -186,6 +204,8 @@ long realFFT2(double *output, double *input, long n, unsigned long flags)
 
 long complexFFT(double *data, long n, unsigned long flags) {
   long i, iWorkspace, memerror=0;
+  double *workspace = NULL;
+  FFTPACK_WORKSPACE *newWorkspace;
 
   if (flags & (~(INVERSE_FFT | MINUS_I_THETA))) {
     fputs("invalid flag bits set for realFFT()\n", stderr);
@@ -197,41 +217,44 @@ long complexFFT(double *data, long n, unsigned long flags) {
   if (n == 1)
     return 1;
 
-#pragma omp critical
-  {
-    if (!atexitFFTpackRegistered) {
-#if defined(ATEXIT_AVAIL)
-      atexit(atexitFFTpack);
-#endif
-      atexitFFTpackRegistered = 1;
-    }
+  mdb_thread_lock(&fftpackWorkspaceLock);
+  if (!atexitFFTpackRegistered) {
+    atexit(atexitFFTpack);
+    atexitFFTpackRegistered = 1;
+  }
 
-    for (iWorkspace = 0; iWorkspace < complexWorkspaces; iWorkspace++)
-      if (n == complexWorkspace[iWorkspace].length && !complexWorkspace[iWorkspace].inUse)
-        break;
-    if (iWorkspace == complexWorkspaces) {
-      if (!complexWorkspace)
-        complexWorkspace = (FFTPACK_WORKSPACE *)malloc(sizeof(*complexWorkspace) * (complexWorkspaces + 1));
-      else
-        complexWorkspace = (FFTPACK_WORKSPACE *)realloc(complexWorkspace, sizeof(*complexWorkspace) * (complexWorkspaces + 1));
-      if (!complexWorkspace ||
-          !(complexWorkspace[complexWorkspaces].array = (double *)malloc(sizeof(double) * (4 * n + 15)))) {
+  for (iWorkspace = 0; iWorkspace < complexWorkspaces; iWorkspace++)
+    if (n == complexWorkspace[iWorkspace].length && !complexWorkspace[iWorkspace].inUse)
+      break;
+  if (iWorkspace == complexWorkspaces) {
+    newWorkspace = (FFTPACK_WORKSPACE *)realloc(complexWorkspace, sizeof(*complexWorkspace) * (complexWorkspaces + 1));
+    if (!newWorkspace) {
+      memerror = 1;
+    } else {
+      complexWorkspace = newWorkspace;
+      complexWorkspace[iWorkspace].array = (double *)malloc(sizeof(double) * (4 * n + 15));
+      if (!complexWorkspace[iWorkspace].array) {
         memerror = 1;
       } else {
-        complexWorkspace[complexWorkspaces].length = n;
+        complexWorkspace[iWorkspace].length = n;
+        complexWorkspace[iWorkspace].inUse = 0;
         complexWorkspaces++;
         cffti_(&n, complexWorkspace[iWorkspace].array);
       }
     }
-    complexWorkspace[iWorkspace].inUse = 1;
   }
+  if (!memerror) {
+    complexWorkspace[iWorkspace].inUse = 1;
+    workspace = complexWorkspace[iWorkspace].array;
+  }
+  mdb_thread_unlock(&fftpackWorkspaceLock);
   if (memerror) {
     fputs("allocation error in complexFFT()\n", stderr);
     return 0;
   }
   if (!(flags & INVERSE_FFT)) {
     /* forward FFT */
-    cfftf_(&n, data, complexWorkspace[iWorkspace].array);
+    cfftf_(&n, data, workspace);
 
     /* normalize the transform */
     for (i = 0; i < 2 * n; i++)
@@ -254,11 +277,10 @@ long complexFFT(double *data, long n, unsigned long flags) {
     }
 
     /* inverse FFT */
-    cfftb_(&n, data, complexWorkspace[iWorkspace].array);
+    cfftb_(&n, data, workspace);
   }
-#pragma omp critical
-  {
-    complexWorkspace[iWorkspace].inUse = 0;
-  }
+  mdb_thread_lock(&fftpackWorkspaceLock);
+  complexWorkspace[iWorkspace].inUse = 0;
+  mdb_thread_unlock(&fftpackWorkspaceLock);
   return 1;
 }

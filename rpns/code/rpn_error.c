@@ -15,20 +15,28 @@
  */
 #include "rpn_internal.h"
 
-static long error_occurred = 0;
+static RPN_THREAD_LOCAL long error_occurred = 0;
 
 void rpn_set_error()
 {
+    rpn_lock();
     error_occurred = 1;
+    rpn_unlock();
     }
 
 long rpn_check_error()
 {
-    return(error_occurred);
+    long status;
+
+    rpn_lock();
+    status = error_occurred;
+    rpn_unlock();
+    return(status);
     }
 
 void rpn_clear_error()
 {
+    rpn_lock();
     error_occurred = 0;
+    rpn_unlock();
     }
-

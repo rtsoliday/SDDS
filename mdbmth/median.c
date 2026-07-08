@@ -27,8 +27,8 @@
  * @return Returns 1 on success, 0 on failure.
  */
 long compute_median(double *value, double *x, long n) {
-  static double *data = NULL;
-  static long last_n = 0;
+  static MDB_THREAD_LOCAL double *data = NULL;
+  static MDB_THREAD_LOCAL long last_n = 0;
   long i;
 
   if (n <= 0)
@@ -54,8 +54,8 @@ long compute_median(double *value, double *x, long n) {
  * @return Returns 1 on success, 0 on failure.
  */
 long compute_percentile(double *value, double *x, long n, double percentile) {
-  static double *data = NULL;
-  static long last_n = 0;
+  static MDB_THREAD_LOCAL double *data = NULL;
+  static MDB_THREAD_LOCAL long last_n = 0;
   long i;
 
   if (n <= 0 || percentile < 0 || percentile > 100)
@@ -82,8 +82,8 @@ long compute_percentile(double *value, double *x, long n, double percentile) {
  * @return Returns 1 on success, 0 on failure.
  */
 long compute_percentiles(double *position, double *percent, long positions, double *x, long n) {
-  static double *data = NULL;
-  static long last_n = 0;
+  static MDB_THREAD_LOCAL double *data = NULL;
+  static MDB_THREAD_LOCAL long last_n = 0;
   long ip;
 
   if (n <= 0 || positions <= 0)
@@ -111,8 +111,8 @@ long compute_percentiles(double *position, double *percent, long positions, doub
  * @return Returns 1 on success, 0 on failure.
  */
 long compute_percentiles_flagged(double *position, double *percent, long positions, double *x, int32_t *keep, int64_t n) {
-  static double *data = NULL;
-  static int64_t last_n = 0;
+  static MDB_THREAD_LOCAL double *data = NULL;
+  static MDB_THREAD_LOCAL int64_t last_n = 0;
   int64_t ip, jp, count;
 
   if (n <= 0 || positions <= 0)

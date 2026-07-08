@@ -607,7 +607,7 @@ int32_t SDDS_MPI_InitializeInput(SDDS_DATASET *SDDS_dataset, char *filename) {
 #endif
   {
     /*  char *ptr, *datafile, *headerfile; */
-    static char s[SDDS_MAXLINE];
+    char s[SDDS_MAXLINE];
 #if defined(zLib)
     char *extension;
 #endif

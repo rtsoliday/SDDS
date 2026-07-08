@@ -49,7 +49,7 @@ PERM	*pivot;
 	int	i_max;
 	Real	**A_v, *A_piv, *A_row;
 	Real	max1, temp, tiny;
-	static	VEC	*scale = VNULL;
+	static MESCHACH_THREAD_LOCAL	VEC	*scale = VNULL;
 
 	if ( A==(MAT *)NULL || pivot==(PERM *)NULL )
 		error(E_NULL,"LUfactor");
@@ -178,9 +178,9 @@ MAT	*m_inverse(A,out)
 MAT	*A, *out;
 {
 	int	i;
-	static VEC	*tmp = VNULL, *tmp2 = VNULL;
-	static MAT	*A_cp = MNULL;
-	static PERM	*pivot = PNULL;
+	static MESCHACH_THREAD_LOCAL VEC	*tmp = VNULL, *tmp2 = VNULL;
+	static MESCHACH_THREAD_LOCAL MAT	*A_cp = MNULL;
+	static MESCHACH_THREAD_LOCAL PERM	*pivot = PNULL;
 
 	if ( ! A )
 	    error(E_NULL,"m_inverse");
@@ -215,7 +215,7 @@ double	LUcondest(LU,pivot)
 MAT	*LU;
 PERM	*pivot;
 {
-    static	VEC	*y = VNULL, *z = VNULL;
+    static MESCHACH_THREAD_LOCAL	VEC	*y = VNULL, *z = VNULL;
     Real	cond_est=0, L_norm, U_norm, sum, tiny;
     int		i, j, n;
 

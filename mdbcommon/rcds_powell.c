@@ -17,7 +17,23 @@
 #define DEBUG 0
 
 #define RCDS_ABORT 0x0001UL
+static MDB_THREAD_LOCK rcdsFlagsLock = MDB_THREAD_LOCK_INITIALIZER;
 static unsigned long rcdsFlags = 0;
+
+static void clearRcdsAbort(void) {
+  mdb_thread_lock(&rcdsFlagsLock);
+  rcdsFlags &= ~RCDS_ABORT;
+  mdb_thread_unlock(&rcdsFlagsLock);
+}
+
+static long rcdsAbortRequested(void) {
+  long requested;
+
+  mdb_thread_lock(&rcdsFlagsLock);
+  requested = (rcdsFlags & RCDS_ABORT) ? 1 : 0;
+  mdb_thread_unlock(&rcdsFlagsLock);
+  return requested;
+}
 
 /**
  * @brief Sets or queries the abort flag for the RCDS minimization.
@@ -26,14 +42,19 @@ static unsigned long rcdsFlags = 0;
  * @return Returns 1 if the abort flag is set, 0 otherwise.
  */
 long rcdsMinAbort(long abort) {
+  long requested;
+
+  mdb_thread_lock(&rcdsFlagsLock);
   if (abort) {
     /* if zero, then operation is a query */
     rcdsFlags |= RCDS_ABORT;
-#ifdef DEBUG
+#if DEBUG
     fprintf(stderr, "rcdsMin abort requested\n");
 #endif
   }
-  return rcdsFlags & RCDS_ABORT ? 1 : 0;
+  requested = rcdsFlags & RCDS_ABORT ? 1 : 0;
+  mdb_thread_unlock(&rcdsFlagsLock);
+  return requested;
 }
 
 /* translated from powellmain.m by X. Huang
@@ -77,12 +98,12 @@ void normalize_variables(double *x0, double *relative_x, double *lowerLimit, dou
 void scale_variables(double *x0, double *relative_x, double *lowerLimit, double *upperLimit, long dimensions);
 
 /*static double (*ipower)(double x, long n); */
-static long DIMENSIONS;
+static MDB_THREAD_LOCAL long DIMENSIONS;
 
 long bracketmin(double (*func)(double *x, long *invalid),
                 double *x0, double f0, double *dv, double *lowerLimit, double *upperLimit, long dimensions, double noise, double step, double *a10, double *a20, double **stepList, double **flist, long *nflist, double *xm, double *fm, double *xmin, double *fmin);
 
-long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, double *dv, double *lowerLimit, double *upperLimit, long dimensions, double alo, double ahi, long Np, double *step_list, double *f_list, long n_list, double *xm, double *fm, double *xmin, double *fmin);
+long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, double *dv, double *lowerLimit, double *upperLimit, long dimensions, double alo, double ahi, long Np, double **stepList, double **fList, long n_list, double *xm, double *fm, double *xmin, double *fmin);
 
 long outlier_1d(double *x, long n, double mul_tol, double perlim, long *removed_index);
 
@@ -116,13 +137,14 @@ long rcdsMin(double *yReturn, double *xBest, double *xGuess, double *dxGuess, do
              long maxPasses,                                                                                                                                            /*maximum number of iterations */
              double noise, double rcdsStep, unsigned long flags) {
   long i, j, totalEvaluations = 0, inValid = 0, k, pass, Npmin = 6, direction;
+  long dmat0Allocated = 0;
   double *x0 = NULL; /*normalized xGuess */
   double *dv = NULL, del = 0, f0, step = 0.01, f1, fm, ft, a1, a2, tmp, norm, maxp = 0, tmpf, *tmpx = NULL;
   double *xm = NULL, *x1 = NULL, *xt = NULL, *ndv = NULL, *dotp = NULL, *x_value = NULL, *xmin = NULL, fmin;
   double *step_list = NULL, *f_list = NULL, step_init;
   long n_list;
 
-  rcdsFlags = 0;
+  clearRcdsAbort();
   if (rcdsStep > 0 && rcdsStep < 1)
     step = rcdsStep;
 
@@ -149,6 +171,7 @@ long rcdsMin(double *yReturn, double *xBest, double *xGuess, double *dxGuess, do
   totalEvaluations++;
   if (!dmat0) {
     dmat0 = malloc(sizeof(*dmat0) * dimensions);
+    dmat0Allocated = 1;
     for (i = 0; i < dimensions; i++) {
       dmat0[i] = calloc(dimensions, sizeof(**dmat0));
       for (j = 0; j < dimensions; j++)
@@ -187,7 +210,8 @@ long rcdsMin(double *yReturn, double *xBest, double *xGuess, double *dxGuess, do
     free(x0);
     free(xm);
     free(xmin);
-    free_zarray_2d((void **)dmat0, dimensions, dimensions);
+    if (dmat0Allocated)
+      free_zarray_2d((void **)dmat0, dimensions, dimensions);
     return (totalEvaluations);
   }
 
@@ -211,12 +235,12 @@ long rcdsMin(double *yReturn, double *xBest, double *xGuess, double *dxGuess, do
     fprintf(stdout, "starting funcation value %le \n", f0);
   }
   pass = 0;
-  while (pass < maxPasses && !(rcdsFlags & RCDS_ABORT)) {
+  while (pass < maxPasses && !rcdsAbortRequested()) {
     step = step / 1.2;
     step_init = step;
     k = 0;
     del = 0;
-    for (i = 0; !(rcdsFlags & RCDS_ABORT) && i < dimensions; i++) {
+    for (i = 0; !rcdsAbortRequested() && i < dimensions; i++) {
       dv = dmat0[i];
       if (flags & SIMPLEX_VERBOSE_LEVEL1)
         fprintf(stdout, "begin iteration %ld, var %ld, nf=%ld\n", pass + 1, i + 1, totalEvaluations);
@@ -233,9 +257,9 @@ long rcdsMin(double *yReturn, double *xBest, double *xGuess, double *dxGuess, do
       tmpf = f1;
       if (flags & SIMPLEX_VERBOSE_LEVEL1)
         fprintf(stdout, "\niter %ld, dir (var) %ld: begin linescan %ld\n", pass + 1, i + 1, totalEvaluations);
-      if (rcdsFlags & RCDS_ABORT)
+      if (rcdsAbortRequested())
         break;
-      totalEvaluations += linescan(func, tmpx, tmpf, dv, xLowerLimit, xUpperLimit, dimensions, a1, a2, Npmin, step_list, f_list, n_list, x1, &f1, xmin, &fmin);
+      totalEvaluations += linescan(func, tmpx, tmpf, dv, xLowerLimit, xUpperLimit, dimensions, a1, a2, Npmin, &step_list, &f_list, n_list, x1, &f1, xmin, &fmin);
       /*direction with largest decrease */
       if ((fm - f1) > del) {
         del = fm - f1;
@@ -256,7 +280,7 @@ long rcdsMin(double *yReturn, double *xBest, double *xGuess, double *dxGuess, do
     }
     if (flags & SIMPLEX_VERBOSE_LEVEL1)
       fprintf(stderr, "\niteration %ld, fm=%f fmin=%f\n", pass + 1, fm, fmin);
-    if (rcdsFlags & RCDS_ABORT)
+    if (rcdsAbortRequested())
       break;
     inValid = 0;
     for (i = 0; i < dimensions; i++) {
@@ -314,7 +338,7 @@ long rcdsMin(double *yReturn, double *xBest, double *xGuess, double *dxGuess, do
 
         memcpy(tmpx, x1, sizeof(*tmpx) * dimensions);
         tmpf = f1;
-        totalEvaluations += linescan(func, tmpx, tmpf, dv, xLowerLimit, xUpperLimit, dimensions, a1, a2, Npmin, step_list, f_list, n_list, x1, &f1, xmin, &fmin);
+        totalEvaluations += linescan(func, tmpx, tmpf, dv, xLowerLimit, xUpperLimit, dimensions, a1, a2, Npmin, &step_list, &f_list, n_list, x1, &f1, xmin, &fmin);
         memcpy(xm, x1, sizeof(*xm) * dimensions);
         fm = f1;
         if (flags & SIMPLEX_VERBOSE_LEVEL1)
@@ -350,7 +374,8 @@ long rcdsMin(double *yReturn, double *xBest, double *xGuess, double *dxGuess, do
 
   free(x0);
   free(xm);
-  free_zarray_2d((void **)dmat0, dimensions, dimensions);
+  if (dmat0Allocated)
+    free_zarray_2d((void **)dmat0, dimensions, dimensions);
   free(x1);
   free(xt);
   free(ndv);
@@ -388,23 +413,21 @@ long bracketmin(double (*func)(double *x, long *invalid),
                 double *x0, double f0, double *dv, double *lowerLimit, double *upperLimit, long dimensions, 
                 double noise, double step, double *a10, double *a20, double **stepList, double **fList, 
                 long *nflist, double *xm, double *fm, double *xmin, double *fmin) {
-  long nf = 0, inValid, i, n_list;
+  long nf = 0, inValid, i, n_list, list_capacity = 100;
   //long count;
-  static double *x1 = NULL, *x2 = NULL, gold_r = 1.618034;
+  double *x1 = NULL, *x2 = NULL;
+  const double gold_r = 1.618034;
   double *step_list = NULL, *f_list = NULL;
   double f1, step_init, am, a1, a2, f2, tmp, step0;
-  static double *x_value = NULL;
+  double *x_value = NULL;
 
   *fm = f0;
   memcpy(xm, x0, sizeof(*xm) * dimensions);
   am = 0;
 
-  if (!x1)
-    x1 = malloc(sizeof(*x1) * dimensions);
-  if (!f_list)
-    f_list = malloc(sizeof(*f_list) * 100);
-  if (!step_list)
-    step_list = malloc(sizeof(*step_list) * 100);
+  x1 = tmalloc(sizeof(*x1) * dimensions);
+  f_list = tmalloc(sizeof(*f_list) * list_capacity);
+  step_list = tmalloc(sizeof(*step_list) * list_capacity);
   n_list = 0;
   step_list[0] = 0;
   f_list[0] = f0;
@@ -418,8 +441,7 @@ long bracketmin(double (*func)(double *x, long *invalid),
       break;
     }
   }
-  if (!x_value)
-    x_value = malloc(sizeof(*x_value) * dimensions);
+  x_value = tmalloc(sizeof(*x_value) * dimensions);
 
   if (inValid)
     f1 = DBL_MAX;
@@ -446,7 +468,7 @@ long bracketmin(double (*func)(double *x, long *invalid),
     memcpy(xmin, x1, sizeof(*xmin) * dimensions);
   }
   //count = 0;
-  while (f1 < *fm + noise * 3 && !(rcdsFlags & RCDS_ABORT)) {
+  while (f1 < *fm + noise * 3 && !rcdsAbortRequested()) {
     step0 = step;
     /*maximum step 0.1 */
     if (fabs(step) < 0.1)
@@ -471,9 +493,10 @@ long bracketmin(double (*func)(double *x, long *invalid),
         f1 = DBL_MAX;
       nf++;
     }
-    if (n_list > 100) {
-      f_list = trealloc(f_list, sizeof(*f_list) * (n_list + 1));
-      step_list = trealloc(step_list, sizeof(*step_list) * (n_list + 1));
+    if (n_list >= list_capacity) {
+      list_capacity = n_list + 100;
+      f_list = trealloc(f_list, sizeof(*f_list) * list_capacity);
+      step_list = trealloc(step_list, sizeof(*step_list) * list_capacity);
     }
     if (inValid) {
       step = step0; /*get the last vaild solution */
@@ -500,10 +523,6 @@ long bracketmin(double (*func)(double *x, long *invalid),
     a2 = a2 - am;
     for (i = 0; i < n_list; i++)
       step_list[i] -= am;
-    free(x1);
-    x1 = NULL;
-    free(x2);
-    x2 = NULL;
     *a10 = a1;
     *a20 = a2;
 
@@ -513,14 +532,12 @@ long bracketmin(double (*func)(double *x, long *invalid),
     *a10 = a1;
     *a20 = a2;
     free(x1);
-    x1 = NULL;
     free(x2);
-    x2 = NULL;
+    free(x_value);
     return nf;
   }
 
-  if (!x2)
-    x2 = malloc(sizeof(*x2) * dimensions);
+  x2 = tmalloc(sizeof(*x2) * dimensions);
   /*go to negative direction */
   step = -1 * step_init;
   inValid = 0;
@@ -540,9 +557,10 @@ long bracketmin(double (*func)(double *x, long *invalid),
       f2 = DBL_MAX;
     nf++;
   }
-  if (n_list > 100) {
-    f_list = trealloc(f_list, sizeof(*f_list) * (n_list + 1));
-    step_list = trealloc(step_list, sizeof(*step_list) * (n_list + 1));
+  if (n_list >= list_capacity) {
+    list_capacity = n_list + 100;
+    f_list = trealloc(f_list, sizeof(*f_list) * list_capacity);
+    step_list = trealloc(step_list, sizeof(*step_list) * list_capacity);
   }
   f_list[n_list] = f2;
   step_list[n_list] = step;
@@ -558,7 +576,7 @@ long bracketmin(double (*func)(double *x, long *invalid),
     memcpy(xmin, x2, sizeof(*xmin) * dimensions);
   }
   //count = 0;
-  while (f2 < *fm + noise * 3 && !(rcdsFlags & RCDS_ABORT)) {
+  while (f2 < *fm + noise * 3 && !rcdsAbortRequested()) {
     step0 = step;
     if (fabs(step) < 0.1)
       step = step * (1.0 + gold_r);
@@ -587,9 +605,10 @@ long bracketmin(double (*func)(double *x, long *invalid),
       break;
     }
 
-    if (n_list > 100) {
-      f_list = trealloc(f_list, sizeof(*f_list) * (n_list + 1));
-      step_list = trealloc(step_list, sizeof(*step_list) * (n_list + 1));
+    if (n_list >= list_capacity) {
+      list_capacity = n_list + 100;
+      f_list = trealloc(f_list, sizeof(*f_list) * list_capacity);
+      step_list = trealloc(step_list, sizeof(*step_list) * list_capacity);
     }
     f_list[n_list] = f2;
     step_list[n_list] = step;
@@ -626,9 +645,8 @@ long bracketmin(double (*func)(double *x, long *invalid),
   *nflist = n_list;
 
   free(x1);
-  x1 = NULL;
   free(x2);
-  x2 = NULL;
+  free(x_value);
   *a10 = a1;
   *a20 = a2;
   return nf;
@@ -675,15 +693,18 @@ void normalize_variables(double *x0, double *relative_x, double *lowerLimit, dou
 
 */
 
-long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, double *dv, double *lowerLimit, double *upperLimit, long dimensions, double alo, double ahi, long Np, double *step_list, double *f_list, long n_list, double *xm, double *fm, double *xmin, double *fmin) {
+long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, double *dv, double *lowerLimit, double *upperLimit, long dimensions, double alo, double ahi, long Np, double **stepList, double **fList, long n_list, double *xm, double *fm, double *xmin, double *fmin) {
   long nf = 0, i, j, k, MP, n_new, terms, *order;
   long inValid;
   int64_t imin, imax;
   long *is_outlier, outliers;
   double a1, f1, tmp_min, tmp_max, tmp, delta, delta2, mina;
-  static double *x1 = NULL, *aNew = NULL, *fNew = NULL, *av = NULL, *x_value = NULL;
+  double *step_list, *f_list;
+  double *x1 = NULL, *aNew = NULL, *fNew = NULL, *av = NULL, *x_value = NULL;
   double *coef, *coefSigma, chi, *diff, *tmpa = NULL, *tmpf = NULL, *fv = NULL;
 
+  step_list = *stepList;
+  f_list = *fList;
   if (alo >= ahi) {
     fprintf(stderr, "high bound should be larger than the low bound\n");
     return 0;
@@ -692,18 +713,14 @@ long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, d
     Np = 6;
   delta = (ahi - alo) / (Np - 1);
   delta2 = delta / 2.0;
-  if (!x1)
-    x1 = malloc(sizeof(*x1) * dimensions);
+  x1 = tmalloc(sizeof(*x1) * dimensions);
   /*add interpolation points to eveanly space */
   n_new = 0;
-  if (!aNew)
-    aNew = malloc(sizeof(*aNew) * Np);
-  if (!fNew)
-    fNew = malloc(sizeof(*fNew) * Np);
-  if (!x_value)
-    x_value = malloc(sizeof(*x_value) * dimensions);
+  aNew = tmalloc(sizeof(*aNew) * Np);
+  fNew = tmalloc(sizeof(*fNew) * Np);
+  x_value = tmalloc(sizeof(*x_value) * dimensions);
 
-  for (i = 0; i < Np && !(rcdsFlags & RCDS_ABORT); i++) {
+  for (i = 0; i < Np && !rcdsAbortRequested(); i++) {
     a1 = alo + delta * i;
     mina = fabs(a1 - step_list[0]);
     for (j = 1; j < n_list; j++) {
@@ -719,25 +736,27 @@ long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, d
         x1[k] = x0[k] + dv[k] * a1;
       }
       scale_variables(x_value, x1, lowerLimit, upperLimit, dimensions);
+      inValid = 0;
       f1 = (*func)(x_value, &inValid);
       nf++;
-      if (f1 < *fmin) {
-        *fmin = f1;
-        memcpy(xmin, x1, sizeof(*xmin) * dimensions);
-      }
       if (inValid) {
         f1 = DBL_MAX;
       } else {
+        if (f1 < *fmin) {
+          *fmin = f1;
+          memcpy(xmin, x1, sizeof(*xmin) * dimensions);
+        }
         aNew[n_new] = a1;
         fNew[n_new] = f1;
         n_new++;
       }
     }
   }
-  if (rcdsFlags & RCDS_ABORT) {
-    if (x1)
-      free(x1);
-    x1 = NULL;
+  if (rcdsAbortRequested()) {
+    free(x1);
+    free(aNew);
+    free(fNew);
+    free(x_value);
     return nf;
   }
 
@@ -746,6 +765,8 @@ long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, d
     if (n_new + n_list > 100) {
       f_list = trealloc(f_list, sizeof(*f_list) * (n_list + n_new + 1));
       step_list = trealloc(step_list, sizeof(*step_list) * (n_list + n_new + 1));
+      *fList = f_list;
+      *stepList = step_list;
     }
     for (i = 0; i < n_new; i++) {
       step_list[n_list + i] = aNew[i];
@@ -754,11 +775,9 @@ long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, d
     n_list += n_new;
   }
 
-  if (aNew)
-    free(aNew);
+  free(aNew);
   aNew = NULL;
-  if (fNew)
-    free(fNew);
+  free(fNew);
   fNew = NULL;
 
   /*sort new list after adding inserting points */
@@ -772,15 +791,17 @@ long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, d
     *fmin = *fm;
     memcpy(xmin, xm, sizeof(*xmin) * dimensions);
   }
-  if (n_list <= 5)
+  if (n_list <= 5) {
+    free(x1);
+    free(x_value);
     return nf;
+  }
   /*else, do outlier */
   tmp_min = MAX(step_list[0], step_list[imin] - 6 * delta);
   tmp_max = MIN(step_list[n_list - 1], step_list[imin] + 6 * delta);
 
   MP = 101;
-  if (!av)
-    av = tmalloc(sizeof(*av) * MP);
+  av = tmalloc(sizeof(*av) * MP);
   for (i = 0; i < MP; i++)
     av[i] = tmp_min + (tmp_max - tmp_min) * i * 1.0 / MP;
   fv = tmalloc(sizeof(*fv) * MP);
@@ -833,6 +854,7 @@ long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, d
     scale_variables(x_value, x1, lowerLimit, upperLimit, dimensions);
     memcpy(xm, x1, sizeof(*xm) * dimensions);
 
+    inValid = 0;
     f1 = (*func)(x_value, &inValid);
     nf++;
     if (inValid)
@@ -845,11 +867,12 @@ long linescan(double (*func)(double *x, long *invalid), double *x0, double f0, d
   } else {
     /* do nothing, use the minimum result */
   }
-  if (x1)
-    free(x1);
+  free(x1);
   x1 = NULL;
   free(av);
   av = NULL;
+  free(x_value);
+  x_value = NULL;
   free(coef);
   coef = NULL;
   free(coefSigma);
@@ -869,9 +892,9 @@ void sort_two_arrays(double *x, double *y, long n) {
   double *tmpx, *tmpy;
   long i, j;
 
-  tmpx = malloc(sizeof(*tmpx) * n);
+  tmpx = tmalloc(sizeof(*tmpx) * n);
   memcpy(tmpx, x, sizeof(*tmpx) * n);
-  tmpy = malloc(sizeof(*tmpy) * n);
+  tmpy = tmalloc(sizeof(*tmpy) * n);
 
   qsort(tmpx, n, sizeof(*tmpx), double_cmpasc);
   for (i = 0; i < n; i++) {
@@ -950,6 +973,9 @@ long outlier_1d(double *x, long n, double mul_tol, double perlim, long *is_outli
       is_outlier[index[0]] = 1;
       outlier++;
     }
+    free(tmpx);
+    free(diff);
+    free(index);
     return outlier;
   }
   upl = MAX((int)(n * (1 - perlim)), 3) - 1;

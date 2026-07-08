@@ -20,7 +20,7 @@
  */
 #include "rpn_internal.h"
 
-double pop_num(void)
+static double pop_num_unlocked(void)
 {
     if (stackptr<1) {
         fputs("too few items on numeric stack (pop_num)\n", stderr);
@@ -31,7 +31,17 @@ double pop_num(void)
     return(stack[--stackptr]);
     }
 
-long push_long(long num)
+double pop_num(void)
+{
+    double value;
+
+    rpn_lock();
+    value = pop_num_unlocked();
+    rpn_unlock();
+    return value;
+    }
+
+static long push_long_unlocked(long num)
 {
   if (dstackptr>=STACKSIZE) {
     fputs("stack overflow--numeric stack size exceeded (push_num)\n", stderr);
@@ -43,7 +53,17 @@ long push_long(long num)
   return(1);
 }
 
-long pop_long(void)
+long push_long(long num)
+{
+  long status;
+
+  rpn_lock();
+  status = push_long_unlocked(num);
+  rpn_unlock();
+  return status;
+}
+
+static long pop_long_unlocked(void)
 {
   if (dstackptr<1) {
     fputs("too few items on numeric stack (pop_long)\n", stderr);
@@ -54,7 +74,17 @@ long pop_long(void)
   return(dstack[--dstackptr]);
 }
 
-long push_num(double num)
+long pop_long(void)
+{
+  long value;
+
+  rpn_lock();
+  value = pop_long_unlocked();
+  rpn_unlock();
+  return value;
+}
+
+static long push_num_unlocked(double num)
 {
     if (stackptr>=STACKSIZE) {
         fputs("stack overflow--numeric stack size exceeded (push_num)\n", stderr);
@@ -66,8 +96,18 @@ long push_num(double num)
     return(1);
     }
 
+long push_num(double num)
+{
+    long status;
 
-long pop_log(int32_t *logical)
+    rpn_lock();
+    status = push_num_unlocked(num);
+    rpn_unlock();
+    return status;
+    }
+
+
+static long pop_log_unlocked(int32_t *logical)
 {
     if (lstackptr<1) {
         fputs("too few items on logical stack (pop_log)\n", stderr);
@@ -79,7 +119,17 @@ long pop_log(int32_t *logical)
     return(1);
     }
 
-long push_log(long logical)
+long pop_log(int32_t *logical)
+{
+    long status;
+
+    rpn_lock();
+    status = pop_log_unlocked(logical);
+    rpn_unlock();
+    return status;
+    }
+
+static long push_log_unlocked(long logical)
 {
     if (lstackptr==LOGICSTACKSIZE) {
         fputs("stack overflow--logical stack size exceeded (push_log)\n", stderr);
@@ -91,7 +141,17 @@ long push_log(long logical)
     return(1);
     }
 
-long pop_file(void)
+long push_log(long logical)
+{
+    long status;
+
+    rpn_lock();
+    status = push_log_unlocked(logical);
+    rpn_unlock();
+    return status;
+    }
+
+static long pop_file_unlocked(void)
 {
     if (istackptr<1) {
         fputs("too few items on input file stack (pop_file)\n", stderr);
@@ -103,7 +163,17 @@ long pop_file(void)
     return(1);
     }
 
-long push_file(char *filename)
+long pop_file(void)
+{
+    long status;
+
+    rpn_lock();
+    status = pop_file_unlocked();
+    rpn_unlock();
+    return status;
+    }
+
+static long push_file_unlocked(char *filename)
 {
     if (istackptr==FILESTACKSIZE) {
         fputs("stack overflow--input file stack size exceeded (push_file)\n", stderr);
@@ -122,7 +192,17 @@ long push_file(char *filename)
     }
 
 
-char *pop_string(void)
+long push_file(char *filename)
+{
+    long status;
+
+    rpn_lock();
+    status = push_file_unlocked(filename);
+    rpn_unlock();
+    return status;
+    }
+
+static char *pop_string_unlocked(void)
 {
     if (sstackptr<1) {
         fputs("too few values on string stack (pop_string)\n", stderr);
@@ -133,7 +213,17 @@ char *pop_string(void)
     return(sstack[--sstackptr]);
     }
 
-void push_string(char *s)
+char *pop_string(void)
+{
+    char *string;
+
+    rpn_lock();
+    string = pop_string_unlocked();
+    rpn_unlock();
+    return string;
+    }
+
+static void push_string_unlocked(char *s)
 {
     register long len;
 
@@ -150,7 +240,14 @@ void push_string(char *s)
     cp_str(&(sstack[sstackptr++]), s);
     }
 
-void pop_code(void)
+void push_string(char *s)
+{
+    rpn_lock();
+    push_string_unlocked(s);
+    rpn_unlock();
+    }
+
+static void pop_code_unlocked(void)
 {
 #ifdef DEBUG
     fprintf(stderr, "popping code: text=<%s> mode=%ld\n", code_ptr->text, code_ptr->storage_mode);
@@ -176,7 +273,14 @@ void pop_code(void)
         }
     }
 
-void push_code(char *code, long mode)
+void pop_code(void)
+{
+    rpn_lock();
+    pop_code_unlocked();
+    rpn_unlock();
+    }
+
+static void push_code_unlocked(char *code, long mode)
 {
     /* If there is still data in the current node's text string, advance
      * to the next node, otherwise just copy the new code onto the current
@@ -212,4 +316,10 @@ void push_code(char *code, long mode)
 #endif
     }
 
+void push_code(char *code, long mode)
+{
+    rpn_lock();
+    push_code_unlocked(code, mode);
+    rpn_unlock();
+    }
 

@@ -28,17 +28,26 @@
 #define DOLLARSIGN_TOO 0
 #define BIGBUFSIZE 16384
 
+static MDB_THREAD_LOCK scan_namelist_buffer_size_lock = MDB_THREAD_LOCK_INITIALIZER;
 static long scan_namelist_buffer_size = BIGBUFSIZE;
 
 void set_namelist_buffer_size(long size)
 {
-    if (size>BIGBUFSIZE)
+    if (size>BIGBUFSIZE) {
+        mdb_thread_lock(&scan_namelist_buffer_size_lock);
         scan_namelist_buffer_size = size;
+        mdb_thread_unlock(&scan_namelist_buffer_size_lock);
+    }
 }
 
 long get_namelist_buffer_size()
 {
-  return scan_namelist_buffer_size;
+  long size;
+
+  mdb_thread_lock(&scan_namelist_buffer_size_lock);
+  size = scan_namelist_buffer_size;
+  mdb_thread_unlock(&scan_namelist_buffer_size_lock);
+  return size;
 }
 
 static void cleanup_scan_namelist_buffers(char *ptr_to_free, char *values,
@@ -63,8 +72,8 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
     char *ptr_p, *ptr_to_free ;
     long n_entities, i, j, length_values, length;
     char *values;
-    static char *buffer = NULL;
-    static long bufsize = 0;
+    static MDB_THREAD_LOCAL char *buffer = NULL;
+    static MDB_THREAD_LOCAL long bufsize = 0;
     char *psBuffer, *tempptr, *command;
 #if !defined(vxWorks)
     long k, m, n, len, insideCommand, indexLimit, workingBufferSize;
@@ -82,7 +91,7 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
         buffer = tmalloc(sizeof(*buffer)*(bufsize = 128));
 
 #if !defined(vxWorks)
-    workingBufferSize = scan_namelist_buffer_size;
+    workingBufferSize = get_namelist_buffer_size();
     if (workingBufferSize<128)
         workingBufferSize = 128;
     indexLimit = workingBufferSize-4;
@@ -366,7 +375,7 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
 	    }
             pclose(fID);
 #else
-            tmpnam(tmpName);
+            tmpname(tmpName);
             snprintf(psBuffer, workingBufferSize, "%s > %s", command, tmpName);
             system(psBuffer);
             if (!(fID = fopen(tmpName, "r"))) {
@@ -503,4 +512,3 @@ long scan_namelist(NAMELIST_TEXT *nl, char *line)
 #endif
     return(nl->n_entities=n_entities);
     }
-

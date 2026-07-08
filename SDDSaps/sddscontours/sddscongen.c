@@ -176,6 +176,7 @@ int main(int argc, char **argv)
     if (z_equation==NULL)
         bomb("-zequation must be supplied", NULL);
 
+    rpn_lock();
     rpn(rpn_defns_file?rpn_defns_file:getenv("RPN_DEFNS"));
     if (rpn_init_command)
         rpn(rpn_init_command);
@@ -200,6 +201,7 @@ int main(int argc, char **argv)
             rpn_clear();
             }
         }
+    rpn_unlock();
 
     if (output)
         fp = fopen_e(output, "w", 0);
@@ -228,4 +230,3 @@ char *addOuterParentheses(char *arg)
   sprintf(ptr, "(%s)", arg);
   return ptr;
 }
-

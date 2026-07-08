@@ -197,6 +197,56 @@ def test_grouped_statistics_and_group_filter(tmp_path):
   not (SDDSGROUPEDENVELOPE.exists() and SDDS2STREAM.exists()),
   reason="sddsgroupedenvelope or sdds2stream not built",
 )
+def test_threads_match_serial_output(tmp_path):
+  input_dir = tmp_path / "input"
+  serial_output = tmp_path / "serial"
+  threaded_output = tmp_path / "threaded"
+  write_grouped_inputs(input_dir)
+
+  base_command = [
+    str(SDDSGROUPEDENVELOPE),
+    "-inputDir",
+    str(input_dir),
+    "-pattern",
+    "test-*.sdds",
+    "-groupBy",
+    "Group",
+    "-copy=x",
+    "-maximum=y",
+    "-minimum=y",
+    "-mean=y",
+    "-sum=2,y",
+    "-rms=y",
+    "-wmean=w,y",
+    "-cmaximum=x,y",
+    "-pmaximum=P,y",
+  ]
+  subprocess.run(base_command + ["-output", str(serial_output)], check=True)
+  subprocess.run(base_command + ["-threads=2", "-output", str(threaded_output)], check=True)
+
+  columns = [
+    "x",
+    "yMax",
+    "yMin",
+    "yMean",
+    "y2Sum",
+    "yRms",
+    "yWMean",
+    "xCMaximumy",
+    "PPMaximumy",
+  ]
+  serial_rows = stream_columns(serial_output, columns)
+  threaded_rows = stream_columns(threaded_output, columns)
+
+  assert len(threaded_rows) == len(serial_rows)
+  for threaded_row, serial_row in zip(threaded_rows, serial_rows):
+    assert threaded_row == pytest.approx(serial_row)
+
+
+@pytest.mark.skipif(
+  not (SDDSGROUPEDENVELOPE.exists() and SDDS2STREAM.exists()),
+  reason="sddsgroupedenvelope or sdds2stream not built",
+)
 def test_output_path_is_current_directory_relative_and_skipped_as_input(tmp_path):
   input_dir = tmp_path / "data"
   output = input_dir / "test-output"
@@ -250,3 +300,22 @@ def test_requires_at_least_one_statistic_option(tmp_path):
 
   assert result.returncode != 0
   assert "at least one statistic option is required" in result.stderr
+
+
+@pytest.mark.skipif(
+  not SDDSGROUPEDENVELOPE.exists(),
+  reason="sddsgroupedenvelope not built",
+)
+def test_threads_must_be_positive():
+  result = subprocess.run(
+    [
+      str(SDDSGROUPEDENVELOPE),
+      "-threads=0",
+      "-mean=y",
+    ],
+    capture_output=True,
+    text=True,
+  )
+
+  assert result.returncode != 0
+  assert "-threads must be >= 1" in result.stderr

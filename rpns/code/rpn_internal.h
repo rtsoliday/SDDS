@@ -71,11 +71,11 @@ epicsShareFuncRPNLIB long memory_added;
 epicsShareFuncRPNLIB long n_memories;
 
 /* stack for computations */
-epicsShareFuncRPNLIB double stack[STACKSIZE];
-epicsShareFuncRPNLIB long stackptr;
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL double stack[STACKSIZE];
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL long stackptr;
 
 /*stack for long numbers */
-epicsShareFuncRPNLIB long dstack[STACKSIZE];
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL long dstack[STACKSIZE];
 
 /* stack that replaces PCODE */
 typedef struct {
@@ -84,7 +84,7 @@ typedef struct {
     double data;
     char *keyword;
     } UDF_CODE;
-epicsShareFuncRPNLIB UDF_CODE *udf_stack; 
+epicsShareFuncRPNLIB UDF_CODE *udf_stack;
 epicsShareFuncRPNLIB long udf_stackptr;
 epicsShareFuncRPNLIB long max_udf_stackptr;
 
@@ -93,10 +93,10 @@ typedef struct {
     long udf_start_index;
     long udf_end_index;
     } UDF_INDEX;
-epicsShareFuncRPNLIB UDF_INDEX *udf_id;
-epicsShareFuncRPNLIB long cycle_counter;
-epicsShareFuncRPNLIB long cycle_counter_stop;
-extern long max_cycle_counter;
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL UDF_INDEX *udf_id;
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL long cycle_counter;
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL long cycle_counter_stop;
+extern RPN_THREAD_LOCAL long max_cycle_counter;
 
 /* stack that is used to locate breakpoints in conditional statements */
 typedef struct {
@@ -125,7 +125,7 @@ epicsShareFuncRPNLIB long astackptr;
 extern long max_astackptr;
 
 /* stack for strings */
-extern char *sstack[STACKSIZE];
+extern RPN_THREAD_LOCAL char *sstack[STACKSIZE];
 
 /* structure for stack of code strings */
 #define CODE_LEN 16384
@@ -140,14 +140,14 @@ struct CODE {
 #define LBUFFER 256
     struct CODE *pred, *succ;  /* list links */
     } ;
-epicsShareFuncRPNLIB struct CODE code;		/* root node */
-epicsShareFuncRPNLIB struct CODE *code_ptr;           /* will point to current node */
-epicsShareFuncRPNLIB long code_lev;                    /* number of links */
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL struct CODE code;		/* root node */
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL struct CODE *code_ptr;           /* will point to current node */
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL long code_lev;                    /* number of links */
 
 /* stack for logical operations */
 #define LOGICSTACKSIZE 500
-epicsShareFuncRPNLIB long logicstack[LOGICSTACKSIZE];
-epicsShareFuncRPNLIB long lstackptr;
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL long logicstack[LOGICSTACKSIZE];
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL long lstackptr;
 
 
 /* structure and stack for command input files */
@@ -162,8 +162,8 @@ struct INPUT_FILE {
 #define ECHO 0
 #define NO_ECHO 1
 
-epicsShareFuncRPNLIB struct INPUT_FILE input_stack[FILESTACKSIZE];
-epicsShareFuncRPNLIB long istackptr;
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL struct INPUT_FILE input_stack[FILESTACKSIZE];
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL long istackptr;
 
 /* structure and array (not stack) for user IO files */
 struct IO_FILE {
@@ -174,20 +174,38 @@ struct IO_FILE {
 #define OUTPUT 2
     } ;
 
-epicsShareFuncRPNLIB struct IO_FILE io_file[FILESTACKSIZE];
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL struct IO_FILE io_file[FILESTACKSIZE];
 
 /* values to indicate scientific notation or non-scientific notation output */
 #define SCIENTIFIC 0
 #define NO_SCIENTIFIC 1
 #define USER_SPECIFIED 2
-epicsShareFuncRPNLIB long format_flag;
+epicsShareFuncRPNLIB RPN_THREAD_LOCAL long format_flag;
 
 /* flag to indicate trace/notrace mode */
-extern long do_trace;
+extern RPN_THREAD_LOCAL long do_trace;
 
 extern char *additional_help;
 
 double rpn_internal(char *expression);
+epicsShareFuncRPNLIB void rpn_lock(void);
+epicsShareFuncRPNLIB void rpn_unlock(void);
+void rpn_update_legacy_stackptrs(void);
+
+long find_udf_unlocked(char *udf_name);
+long find_udf_mod_unlocked(char *udf_name);
+long get_udf_unlocked(long number);
+void get_udf_indexes_unlocked(long number);
+long is_udf_unlocked(char *string);
+void revudf_unlocked(void);
+long cycle_through_udf_unlocked(void);
+void conditional_udf_unlocked(long udf_current_step);
+void gen_pcode_unlocked(char *s, long i);
+void udf_createarray_unlocked(long type, long index, double data, char *ptr, long i_udf);
+void udf_cond_createarray_unlocked(long colon, long i);
+void udf_modarray_unlocked(long type, long index, double data, long i);
+void udf_id_createarray_unlocked(long start_index_value, long end_index_value);
+void udf_create_unknown_array_unlocked(char *ptr, long index);
 
 #ifdef USE_GSL
 #include "gsl/gsl_errno.h"

@@ -13,7 +13,7 @@
 
 /* must agree with #defines in namelist.h ! */
 
-static char *namelistTypeName[TYPE_CHAR+1] = {
+static const char *const namelistTypeName[TYPE_CHAR+1] = {
     "", "short", "int", "int32_t", "long", "float", "double", "string", "char"
         } ;
 

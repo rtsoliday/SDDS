@@ -41,13 +41,13 @@ int compare_mem(const void *m1, const void *m2)
   return strcmp(((MEMORY *)m1)->name, ((MEMORY *)m2)->name);
 }
 
-long rpn_create_mem(char *name, long is_string)
+static long rpn_create_mem_unlocked(char *name, long is_string)
 {
   long i_mem;
   int32_t duplicate;
   MEMORY *newMem;
   
-  if (is_func(name)!=-1 || find_udf(name)!=-1) {
+  if (is_func(name)!=-1 || find_udf_unlocked(name)!=-1) {
     fprintf(stderr, "error: attempt to create rpn memory with reserved name \"%s\"\n", name);
     return -1;
   }
@@ -77,11 +77,21 @@ long rpn_create_mem(char *name, long is_string)
   return Memory[i_mem]->index;
 }
 
+long rpn_create_mem(char *name, long is_string)
+{
+  long index;
+
+  rpn_lock();
+  index = rpn_create_mem_unlocked(name, is_string);
+  rpn_unlock();
+  return index;
+}
+
 /* routine: rpn_store()
  * purpose: utility command for fast storage to an rpn memory, by number
  */
 
-long rpn_store(double value, char *str_value, long memory_number)
+static long rpn_store_unlocked(double value, char *str_value, long memory_number)
 {
   if (memory_number>=0 && memory_number<n_memories) {
     str_memoryData[memory_number]=str_value;
@@ -91,11 +101,31 @@ long rpn_store(double value, char *str_value, long memory_number)
   return(0);
 }
 
-long rpn_quick_store(double value, char *str_value, long memory_number)
+long rpn_store(double value, char *str_value, long memory_number)
+{
+  long status;
+
+  rpn_lock();
+  status = rpn_store_unlocked(value, str_value, memory_number);
+  rpn_unlock();
+  return status;
+}
+
+static long rpn_quick_store_unlocked(double value, char *str_value, long memory_number)
 {
   memoryData[memory_number] = value;
   str_memoryData[memory_number]=str_value;
   return 1;
+}
+
+long rpn_quick_store(double value, char *str_value, long memory_number)
+{
+  long status;
+
+  rpn_lock();
+  status = rpn_quick_store_unlocked(value, str_value, memory_number);
+  rpn_unlock();
+  return status;
 }
 
 
@@ -103,7 +133,7 @@ long rpn_quick_store(double value, char *str_value, long memory_number)
  * purpose: utility command for fast recall of an rpn memory, by number
  */
 
-double rpn_recall(long memory_number)
+static double rpn_recall_unlocked(long memory_number)
 {
   if (memory_number>=0 && memory_number<n_memories) {
     return memoryData[memory_number];
@@ -112,7 +142,17 @@ double rpn_recall(long memory_number)
   return(0);
 }
 
-char *rpn_str_recall(long memory_number)
+double rpn_recall(long memory_number)
+{
+  double value;
+
+  rpn_lock();
+  value = rpn_recall_unlocked(memory_number);
+  rpn_unlock();
+  return value;
+}
+
+static char *rpn_str_recall_unlocked(long memory_number)
 {
   if (memory_number>=0 && memory_number<n_memories) {
     char *ptr;
@@ -123,16 +163,26 @@ char *rpn_str_recall(long memory_number)
   return(0);
 }
 
+char *rpn_str_recall(long memory_number)
+{
+  char *ptr;
+
+  rpn_lock();
+  ptr = rpn_str_recall_unlocked(memory_number);
+  rpn_unlock();
+  return ptr;
+}
+
 
 /* routine: store_in_str_mem()
  * purpose: implements user's 'ssto' command
  */
 
-void store_in_mem(void)
+static void store_in_mem_unlocked(void)
 {
-  static long i_mem;
-  static char *name;
-  static char buffer[LBUFFER];
+  long i_mem;
+  char *name;
+  char buffer[LBUFFER];
   
   if ((name = get_token_rpn(code_ptr->text,
                             buffer, LBUFFER, &(code_ptr->position)))==NULL) {
@@ -153,15 +203,22 @@ void store_in_mem(void)
     memoryData[i_mem] = stack[stackptr-1];
 }
 
+void store_in_mem(void)
+{
+  rpn_lock();
+  store_in_mem_unlocked();
+  rpn_unlock();
+}
+
 /* routine: store_in_str_mem()
  * purpose: implements user's 'ssto' command
  */
 
-void store_in_str_mem(void)
+static void store_in_str_mem_unlocked(void)
 {
-  static long i_mem;
-  static char *name;
-  static char buffer[LBUFFER];
+  long i_mem;
+  char *name;
+  char buffer[LBUFFER];
   
   if ((name = get_token_rpn(code_ptr->text,
                             buffer, LBUFFER, &(code_ptr->position)))==NULL) {
@@ -182,6 +239,13 @@ void store_in_str_mem(void)
     str_memoryData[i_mem] = sstack[sstackptr-1];
 }
 
+void store_in_str_mem(void)
+{
+  rpn_lock();
+  store_in_str_mem_unlocked();
+  rpn_unlock();
+}
+
 /* routine: is_memory()
  * purpose: return the memory number of a named memory, and put the
  *          data stored in the memory into a location supplied by the
@@ -189,7 +253,7 @@ void store_in_str_mem(void)
  *          facility.
  */
 
-long is_memory(double *val, char **str_val, long *is_string,  char *string)
+static long is_memory_unlocked(double *val, char **str_val, long *is_string,  char *string)
 {
   long i_mem;
   MEMORY newMem;
@@ -206,11 +270,21 @@ long is_memory(double *val, char **str_val, long *is_string,  char *string)
   return(-1);
 }
 
+long is_memory(double *val, char **str_val, long *is_string,  char *string)
+{
+  long index;
+
+  rpn_lock();
+  index = is_memory_unlocked(val, str_val, is_string, string);
+  rpn_unlock();
+  return index;
+}
+
 /* routine: revmem()
  * purpose: implement user's 'smem' command
  */
 
-void revmem(void)
+static void revmem_unlocked(void)
 {
   long i_mem;
   double data;
@@ -226,4 +300,9 @@ void revmem(void)
   }
 }
 
-
+void revmem(void)
+{
+  rpn_lock();
+  revmem_unlocked();
+  rpn_unlock();
+}

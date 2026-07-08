@@ -46,6 +46,7 @@ LIBRARY_SRC = array.c \
     substituteTagValue.c \
     time.c \
     timeconvert.c \
+    time_utils.c \
     timer.c \
     tmpname.c \
     trim_spaces.c \
@@ -60,5 +61,4 @@ endif
 
 
 include ../Makefile.build
-
 

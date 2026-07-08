@@ -14,6 +14,7 @@
  */
 
 #include "mdb.h"
+#include "time_utils.h"
 #include <time.h>
 
 /**
@@ -34,7 +35,7 @@ short IsLeapYear(short year) {
 }
 
 /* days in each month for leap years, nonleap years */
-static short DaysInMonths[2][12] = {
+static const short DaysInMonths[2][12] = {
   {
     31,
     28,
@@ -126,7 +127,6 @@ short MonthDayFromJulianDay(short julianDay, short year, short *month, short *da
   return 1;
 }
 
-#include <time.h>
 /**
  * @brief Breaks down epoch time into its constituent components.
  *
@@ -141,24 +141,24 @@ short MonthDayFromJulianDay(short julianDay, short year, short *month, short *da
  * @return Returns 1 on success, 0 on failure.
  */
 short TimeEpochToBreakdown(short *year, short *jDay, short *month, short *day, double *hour, double epochTime) {
-  struct tm *timeBreakdown;
+  struct tm timeBreakdown;
   double dayStartTime;
   short lyear, ljDay, lhour;
   time_t theTime;
   theTime = epochTime;
-  if (!(timeBreakdown = localtime(&theTime)))
+  if (!mdb_localtime_copy(&theTime, &timeBreakdown))
     return 0;
-  lyear = timeBreakdown->tm_year + 1900;
-  ljDay = timeBreakdown->tm_yday + 1;
-  lhour = timeBreakdown->tm_hour;
+  lyear = timeBreakdown.tm_year + 1900;
+  ljDay = timeBreakdown.tm_yday + 1;
+  lhour = timeBreakdown.tm_hour;
   if (year)
     *year = lyear;
   if (jDay)
     *jDay = ljDay;
   if (month)
-    *month = timeBreakdown->tm_mon + 1;
+    *month = timeBreakdown.tm_mon + 1;
   if (day)
-    *day = timeBreakdown->tm_mday;
+    *day = timeBreakdown.tm_mday;
   if (hour) {
     /* go through some contortions to preserve fractional seconds */
     TimeBreakdownToEpoch(lyear, ljDay, (short)0, (short)0, (double)0.0, &dayStartTime);

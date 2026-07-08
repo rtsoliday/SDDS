@@ -15,14 +15,14 @@
 
 #include "mdb.h"
 
-static double *lastPointValue = NULL;
-static long *R = NULL;
-static long sequencesInUse = 0;
+static MDB_THREAD_LOCAL double *lastPointValue = NULL;
+static MDB_THREAD_LOCAL long *R = NULL;
+static MDB_THREAD_LOCAL long sequencesInUse = 0;
 /* These 12 primes work pretty well together.  
  * If more are needed, they are generated on the fly.
  */
 #define N_SEQ_PREDEFINED 12
-static long Rvalues[N_SEQ_PREDEFINED] = {2, 3, 5, 7, 11, 19, 23, 29, 37, 47, 59, 67};
+static const long Rvalues[N_SEQ_PREDEFINED] = {2, 3, 5, 7, 11, 19, 23, 29, 37, 47, 59, 67};
 
 /**
  * @brief Initialize and start a new Halton sequence.
@@ -129,9 +129,10 @@ double nextHaltonSequencePoint(long ID) {
    Modified (9.29.03)
 */
 #define MAX_D 500
-static int32_t sDim = 12, nextPoint[12];
-static double eError;
-static int32_t prime[] = {
+static MDB_THREAD_LOCAL int32_t sDim = 12;
+static MDB_THREAD_LOCAL int32_t nextPoint[12];
+static MDB_THREAD_LOCAL double eError;
+static MDB_THREAD_LOCAL int32_t prime[] = {
   2,
   3,
   5,
@@ -228,7 +229,7 @@ static int32_t prime[] = {
   491,
   499,
 };
-static double iprime[] = {
+static MDB_THREAD_LOCAL double iprime[] = {
   2,
   3,
   5,
@@ -326,8 +327,8 @@ static double iprime[] = {
   499,
 };
 
-static int32_t modSequenceInUse = 0;
-static int32_t primroots[][10] = {
+static MDB_THREAD_LOCAL int32_t modSequenceInUse = 0;
+static const int32_t primroots[][10] = {
   {1, 2, 3, 3, 8, 11, 12, 14, 7, 18},
   {12, 13, 17, 18, 29, 14, 18, 43, 41, 44},
   {40, 30, 47, 65, 71, 28, 40, 60, 79, 89},
@@ -337,7 +338,7 @@ static int32_t primroots[][10] = {
   {166, 173, 188, 181, 91, 233, 210, 217, 153, 212},
 };
 
-static int32_t warnockOpt[] = {
+static const int32_t warnockOpt[] = {
   1,
   2,
   2,
@@ -439,7 +440,7 @@ static int32_t warnockOpt[] = {
   455,
   138,
 };
-static double *quasi = NULL;
+static MDB_THREAD_LOCAL double *quasi = NULL;
 
 int32_t power(int32_t a, int32_t b, int32_t m) {
   int32_t i, c = 1;
@@ -622,7 +623,7 @@ int32_t generateModHaltSequence(double *quasi, double *dq, double *wq, long ID) 
  * @return The next point in the modified Halton sequence.
  */
 double nextModHaltonSequencePoint(long ID) {
-  static double *dq = NULL, *wq = NULL;
+  static MDB_THREAD_LOCAL double *dq = NULL, *wq = NULL;
 
   ID -= 1;
   if (dq == NULL)

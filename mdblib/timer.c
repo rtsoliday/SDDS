@@ -28,8 +28,8 @@ double delapsed_time(void);
  */
 
 char *elapsed_time() {
-  static char buffer[20];
-  static double dtime;
+  static MDB_THREAD_LOCAL char buffer[20];
+  double dtime;
   int h, m;
   float s;
 
@@ -62,8 +62,8 @@ char *elapsed_time() {
 # endif
 
 # if defined(linux)
-static struct timespec delapsedStart;
-static short delapsedStartInitialized = 0;
+static MDB_THREAD_LOCAL struct timespec delapsedStart;
+static MDB_THREAD_LOCAL short delapsedStartInitialized = 0;
 /**
  * @brief Initializes the run-time statistics collection.
  *
@@ -75,7 +75,7 @@ void init_stats() {
   delapsedStartInitialized = 1;
 }
 # else
-static double delapsed_start = 0;
+static MDB_THREAD_LOCAL double delapsed_start = 0;
 void init_stats() {
   delapsed_start = delapsed_time();
   clock();
@@ -98,7 +98,7 @@ double delapsed_time() {
   return (double)(delapsedNow.tv_sec - delapsedStart.tv_sec) +
     (delapsedNow.tv_nsec - delapsedStart.tv_nsec)/1e9;
 # else
-  static long delapsed_start = -1;
+  static MDB_THREAD_LOCAL long delapsed_start = -1;
   if (delapsed_start == -1) {
     delapsed_start = time(0);
     return 0.0;
@@ -179,4 +179,3 @@ long memory_count() {
   return 0;
 }
 # endif
-

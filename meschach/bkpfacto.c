@@ -229,7 +229,7 @@ MAT	*A;
 PERM	*pivot, *block;
 VEC	*b, *x;
 {
-	static VEC	*tmp=VNULL;	/* dummy storage needed */
+	static MESCHACH_THREAD_LOCAL VEC	*tmp=VNULL;	/* dummy storage needed */
 	int	i, j, n, onebyone;
 	Real	a11, a12, a22, b1, b2, det, sum, tmp_diag;
 

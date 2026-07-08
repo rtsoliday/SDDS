@@ -297,7 +297,7 @@ MAT	*bifactor(A,U,V)
      MAT	*A, *U, *V;
 {
   int	k;
-  static VEC	*tmp1=VNULL, *tmp2=VNULL;
+  static MESCHACH_THREAD_LOCAL VEC	*tmp1=VNULL, *tmp2=VNULL;
   Real	beta;
 
   if ( ! A )
@@ -354,7 +354,7 @@ VEC	*svd(A,U,V,d)
      MAT	*A, *U, *V;
      VEC	*d;
 {
-  static VEC	*f=VNULL;
+  static MESCHACH_THREAD_LOCAL VEC	*f=VNULL;
   int	i, limit;
   MAT	*A_tmp;
 

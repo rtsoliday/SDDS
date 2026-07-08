@@ -35,7 +35,9 @@
 #include	<stdio.h>
 #include	<setjmp.h>
 #include	<ctype.h>
+#define MESCHACH_NO_RESTART_COMPAT_MACRO
 #include        "err.h"
+#undef MESCHACH_NO_RESTART_COMPAT_MACRO
 
 
 #ifdef SYSV
@@ -101,7 +103,29 @@ static char *warn_mesg[] = {
 
 #define	MAX_ERRS	100
 
+/*
+ * Keep the historical data symbol available for already-built clients that
+ * reference restart directly. New code reaches the per-thread buffer via the
+ * macro in err.h.
+ */
 jmp_buf	restart;
+static MESCHACH_THREAD_LOCAL jmp_buf	restart_data;
+static MESCHACH_THREAD_LOCAL int restart_data_active = FALSE;
+
+#ifdef ANSI_C
+jmp_buf *meschach_restart_ptr(void)
+#else
+jmp_buf *meschach_restart_ptr()
+#endif
+{
+   restart_data_active = TRUE;
+   return &restart_data;
+}
+
+static jmp_buf *meschach_restart_for_longjmp(void)
+{
+   return restart_data_active ? &restart_data : &restart;
+}
 
 
 /* array of pointers to lists of errors */
@@ -112,13 +136,13 @@ typedef struct {
    unsigned warn;   /* =FALSE - errors, =TRUE - warnings */
 }  Err_list;
 
-static Err_list     err_list[ERR_LIST_MAX_LEN] = {
+static MESCHACH_THREAD_LOCAL Err_list     err_list[ERR_LIST_MAX_LEN] = {
  {err_mesg,MAXERR,FALSE},	/* basic errors list */
  {warn_mesg,MAXWARN,TRUE}	/* basic warnings list */
 };
 
 
-static int err_list_end = 2;   /* number of elements in err_list */
+static MESCHACH_THREAD_LOCAL int err_list_end = 2;   /* number of elements in err_list */
 
 /* attach a new list of errors pointed by err_ptr
    or change a previous one;
@@ -193,7 +217,7 @@ int list_num;
 
 /* other local variables */
 
-static	int	err_flag = EF_EXIT, num_errs = 0, cnt_errs = 1;
+static	MESCHACH_THREAD_LOCAL int	err_flag = EF_EXIT, num_errs = 0, cnt_errs = 1;
 
 /* set_err_flag -- sets err_flag -- returns old err_flag */
 int	set_err_flag(flag)
@@ -280,7 +304,7 @@ int	err_num, line_num,list_num;
        switch ( err_flag )
        {
 	   case EF_SILENT:
-	   longjmp(restart,(err_num==0)? -1 : err_num);
+	   longjmp(*meschach_restart_for_longjmp(),(err_num==0)? -1 : err_num);
 	   break;
 	   case EF_ABORT:
 	   fprintf(stderr,"\n\"%s\", line %d: %s in function %s()\n",
@@ -300,7 +324,7 @@ int	err_num, line_num,list_num;
 	       fprintf(stdout,"\n\"%s\", line %d: %s in function %s()\n",
 		       file,line_num,err_list[list_num].listp[num],
 		       isascii(*fn_name) ? fn_name : "???");
-	   longjmp(restart,(err_num==0)? -1 : err_num);
+	   longjmp(*meschach_restart_for_longjmp(),(err_num==0)? -1 : err_num);
 	   break;
 	   default:
 	   fprintf(stderr,"\n\"%s\", line %d: %s in function %s()\n\n",
@@ -332,4 +356,3 @@ static void float_error(int num) {
 void catch_FPE() {
    signal(SIGFPE, float_error);
 }
-

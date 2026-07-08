@@ -15,6 +15,7 @@
  */
 
 #include "mdb.h"
+#include "mdb_thread.h"
 
 #ifdef _WIN32
 #  include <windows.h>
@@ -73,6 +74,24 @@ void usleep(long usecs) {
 #endif
 
 #include <time.h>
+
+static struct tm *mdbmth_localtime(const time_t *timep, struct tm *result) {
+#if defined(_MSC_VER)
+  return localtime_s(result, timep) == 0 ? result : NULL;
+#elif defined(_POSIX_VERSION) || defined(__unix__) || defined(__APPLE__)
+  return localtime_r(timep, result);
+#else
+  struct tm *tmp;
+  static MDB_THREAD_LOCK localtime_lock = MDB_THREAD_LOCK_INITIALIZER;
+  mdb_thread_lock(&localtime_lock);
+  tmp = localtime(timep);
+  if (tmp)
+    *result = *tmp;
+  mdb_thread_unlock(&localtime_lock);
+  return tmp ? result : NULL;
+#endif
+}
+
 /**
  * @brief Create a human-readable timestamp from the given time in seconds since the Epoch.
  * @param Time Time in seconds since the Epoch.
@@ -80,10 +99,18 @@ void usleep(long usecs) {
  */
 char *makeTimeStamp(double Time) {
   time_t intTime;
-  char *TimeStamp;
+  struct tm tmBreakdown;
+  static MDB_THREAD_LOCAL char TimeStamp[32];
+  static const char *const weekday[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+  static const char *const month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   intTime = Time;
-  TimeStamp = ctime(&intTime);
-  TimeStamp[strlen(TimeStamp) - 1] = 0; /* kill newline */
+  if (!mdbmth_localtime(&intTime, &tmBreakdown))
+    return NULL;
+  snprintf(TimeStamp, sizeof(TimeStamp), "%s %s %2d %02d:%02d:%02d %04d",
+           weekday[tmBreakdown.tm_wday], month[tmBreakdown.tm_mon],
+           tmBreakdown.tm_mday, tmBreakdown.tm_hour, tmBreakdown.tm_min,
+           tmBreakdown.tm_sec, tmBreakdown.tm_year + 1900);
   return TimeStamp;
 }
 
@@ -117,7 +144,7 @@ double getHourOfDay() {
   return hour;
 }
 
-static long daysInMonth[12] = {
+static const long daysInMonth[12] = {
   31,
   28,
   31,
@@ -149,6 +176,7 @@ void makeTimeBreakdown(double Time, double *ptrTime, double *ptrDay, double *ptr
   double SubSeconds;
   double Day, Hour, JulianDay, Year;
   struct tm *tmBreakdown;
+  struct tm tmBreakdownData;
   time_t integerTime;
   long isLeap;
 
@@ -160,7 +188,9 @@ void makeTimeBreakdown(double Time, double *ptrTime, double *ptrDay, double *ptr
   /* get breakdown based on integer part of time */
   integerTime = (time_t)Time;
   SubSeconds = Time - integerTime;
-  tmBreakdown = localtime(&integerTime);
+  tmBreakdown = mdbmth_localtime(&integerTime, &tmBreakdownData);
+  if (!tmBreakdown)
+    return;
 
   /* time since midnight in hours */
   Hour = (tmBreakdown->tm_min + (tmBreakdown->tm_sec + SubSeconds) / 60.0) / 60.0 + tmBreakdown->tm_hour;
@@ -201,10 +231,13 @@ void makeTimeBreakdown(double Time, double *ptrTime, double *ptrDay, double *ptr
  */
 double computeYearStartTime(double StartTime) {
   struct tm *YearStart;
+  struct tm YearStartData;
   time_t intTime;
 
   intTime = StartTime;
-  YearStart = localtime(&intTime);
+  YearStart = mdbmth_localtime(&intTime, &YearStartData);
+  if (!YearStart)
+    return 0;
   YearStart->tm_sec = 0;
   YearStart->tm_min = 0;
   YearStart->tm_hour = 0;
@@ -218,6 +251,8 @@ double computeYearStartTime(double StartTime) {
 }
 
 #if defined(_WIN32)
+static MDB_THREAD_LOCK clock_gettime_oag_lock = MDB_THREAD_LOCK_INITIALIZER;
+
 struct timespecoag {
   long tv_sec;
   long tv_nsec;
@@ -245,6 +280,7 @@ int clock_gettime_oag(struct timespecoag *spec) {
   static double ticks2nano;
   static __int64 startticks, tps = 0;
   __int64 tmp, curticks;
+  mdb_thread_lock(&clock_gettime_oag_lock);
   QueryPerformanceFrequency((LARGE_INTEGER *)&tmp);
   if (tps != tmp) {
     tps = tmp;
@@ -260,6 +296,7 @@ int clock_gettime_oag(struct timespecoag *spec) {
     spec->tv_sec++;
     spec->tv_nsec -= exp9;
   }
+  mdb_thread_unlock(&clock_gettime_oag_lock);
   return 0;
 }
 #endif
@@ -396,6 +433,7 @@ char *MakeSCRDailyTimeGenerationFilename(char *rootname) {
   char *name;
   time_t now;
   struct tm *now1;
+  struct tm nowData;
   FILE *fp;
 
   if (!rootname) {
@@ -405,7 +443,9 @@ char *MakeSCRDailyTimeGenerationFilename(char *rootname) {
   /*generate a new file name */
   do {
     now = time(NULL);
-    now1 = localtime(&now);
+    now1 = mdbmth_localtime(&now, &nowData);
+    if (!now1)
+      return NULL;
     strftime(buffer, 1024, "%Y-%j-%m%d-%H%M%S", now1);
     sprintf(filename, "%s%s", rootname, buffer);
     fp = fopen(filename, "r");
@@ -625,20 +665,15 @@ void usleepSystemIndependent(long usec) {
  */
 char *getHourMinuteSecond() {
   time_t now;
-  char *Hour, *ptr;
-  int i = 0;
+  struct tm nowBreakdown;
+  static MDB_THREAD_LOCAL char Hour[9];
 
   now = time(NULL);
-  Hour = ctime(&now);
-  ptr = strtok(Hour, " ");
-  i++;
-  while (ptr != NULL) {
-    if (i == 4)
-      break;
-    ptr = strtok(NULL, " ");
-    i++;
-  }
-  return ptr;
+  if (!mdbmth_localtime(&now, &nowBreakdown))
+    return NULL;
+  snprintf(Hour, sizeof(Hour), "%02d:%02d:%02d",
+           nowBreakdown.tm_hour, nowBreakdown.tm_min, nowBreakdown.tm_sec);
+  return Hour;
 }
 
 /**
@@ -685,10 +720,13 @@ void TouchFile(char *filename) {
 #if !defined(vxWorks) && !defined(__rtems__)
   FILE *fp;
   static FILE *fsh = NULL;
+  static MDB_THREAD_LOCK touch_file_lock = MDB_THREAD_LOCK_INITIALIZER;
 
+  mdb_thread_lock(&touch_file_lock);
   if (!fsh) {
     if (!(fsh = popen("csh", "w"))) {
       fprintf(stderr, "Error: unable to launch csh for touchFile operations\n");
+      mdb_thread_unlock(&touch_file_lock);
       exit(1);
     }
   }
@@ -699,5 +737,6 @@ void TouchFile(char *filename) {
       fflush(fsh);
     }
   }
+  mdb_thread_unlock(&touch_file_lock);
 #endif
 }

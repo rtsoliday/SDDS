@@ -31,6 +31,8 @@
 
 #include "xlslib/tostr.h"
 
+#include <atomic>
+
 static void exception_throwing_assertion_reporter(const char *expr, const char *filename, int lineno, const char *funcname)
 {
 	str_stream s;
@@ -57,18 +59,19 @@ extern "C"
 		exception_throwing_assertion_reporter(expr, fname, lineno, funcname);
 	}
 
-	static xlslib_userdef_assertion_reporter *callback = &xlslib_default_assertion_reporter;
+	static std::atomic<xlslib_userdef_assertion_reporter *> callback(&xlslib_default_assertion_reporter);
 
 
 	void xlslib_report_failed_assertion(const char *expr, const char *fname, int lineno, const char *funcname)
 	{
-		if(callback) {
-			callback(expr, fname, lineno, funcname);
+		xlslib_userdef_assertion_reporter *reporter = callback.load(std::memory_order_acquire);
+		if(reporter) {
+			reporter(expr, fname, lineno, funcname);
 		}
 	}
 
 	void xlslib_register_assert_reporter(xlslib_userdef_assertion_reporter *user_func)
 	{
-		callback = user_func;
+		callback.store(user_func, std::memory_order_release);
 	}
 };

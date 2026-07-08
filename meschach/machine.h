@@ -94,6 +94,20 @@
 /* if not, change it */
 #include        <stdio.h>
 
+#if defined(SDDS_UNSAFE_NO_THREADS)
+#define MESCHACH_THREAD_LOCAL
+#elif defined(_MSC_VER)
+#define MESCHACH_THREAD_LOCAL __declspec(thread)
+#elif defined(__cplusplus) && __cplusplus >= 201103L
+#define MESCHACH_THREAD_LOCAL thread_local
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
+#define MESCHACH_THREAD_LOCAL _Thread_local
+#elif defined(__GNUC__) || defined(__clang__)
+#define MESCHACH_THREAD_LOCAL __thread
+#else
+#error "Meschach thread-safety requires compiler TLS support. Define SDDS_UNSAFE_NO_THREADS only for explicit single-thread builds."
+#endif
+
 
 /* Check for ANSI C memmove and memset */
 #ifdef STDC_HEADERS
@@ -241,4 +255,3 @@
 #ifdef ANSI_C
 extern	int	isatty(int);
 #endif
-

@@ -22,14 +22,15 @@
  */
 
 #include "SDDS.h"
+#include "SDDS_internal.h"
+#include "mdb_thread.h"
 #include "stdio.h"
 
 int32_t SDDS_mpi_error_str_len;
 char SDDS_mpi_error_str[MPI_MAX_ERROR_STRING];
+static MDB_THREAD_LOCK SDDS_mpi_error_lock = MDB_THREAD_LOCK_INITIALIZER;
 /*external32 data is written in "big-endian IEEE", use it as default */
 char *SDDS_MPI_FILE_TYPE[2] = {"external32", "native"};
-
-static int32_t terminateMode = 0;
 
 #if MPI_DEBUG
 /**
@@ -91,11 +92,18 @@ char *BlankToNull(char *string) {
  * @param exit_code If non-zero, the function will terminate the program.
  */
 void SDDS_MPI_GOTO_ERROR(FILE *fp, char *str, int32_t mpierr, int32_t exit_code) {
-  MPI_Error_string(mpierr, SDDS_mpi_error_str, &SDDS_mpi_error_str_len);
+  char mpi_error_str[MPI_MAX_ERROR_STRING];
+  int32_t mpi_error_str_len;
+
+  MPI_Error_string(mpierr, mpi_error_str, &mpi_error_str_len);
+  mdb_thread_lock(&SDDS_mpi_error_lock);
+  SDDS_mpi_error_str_len = mpi_error_str_len;
+  snprintf(SDDS_mpi_error_str, sizeof(SDDS_mpi_error_str), "%s", mpi_error_str);
+  mdb_thread_unlock(&SDDS_mpi_error_lock);
   if (str)
     fprintf(fp, "%s: ", str);
-  if (SDDS_mpi_error_str_len > 0)
-    fprintf(fp, "%s\n", SDDS_mpi_error_str);
+  if (mpi_error_str_len > 0)
+    fprintf(fp, "%s\n", mpi_error_str);
   if (exit_code)
     exit(1);
 }
@@ -773,6 +781,7 @@ int32_t SDDS_MPI_Terminate(SDDS_DATASET *SDDS_dataset) {
   SDDS_LAYOUT *layout;
   char **ptr;
   int32_t i, j;
+  int32_t terminateMode;
 
 #if MPI_DEBUG
   logDebug("SDDS_MPI_Terminate", SDDS_dataset);
@@ -780,6 +789,7 @@ int32_t SDDS_MPI_Terminate(SDDS_DATASET *SDDS_dataset) {
 
   MPI_dataset = SDDS_dataset->MPI_dataset;
   layout = &(SDDS_dataset->original_layout);
+  terminateMode = SDDS_GetTerminateMode();
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_Terminate"))
     return (0);
   if (SDDS_dataset->pagecount_offset)

@@ -15,11 +15,23 @@
  */
 
 #include "mdb.h"
+#include "mdb_thread.h"
 
 static double ceiAccuracy = 1e-14;
+static MDB_THREAD_LOCK cei_accuracy_lock = MDB_THREAD_LOCK_INITIALIZER;
+
+static double getCeiAccuracy(void) {
+  double accuracy;
+  mdb_thread_lock(&cei_accuracy_lock);
+  accuracy = ceiAccuracy;
+  mdb_thread_unlock(&cei_accuracy_lock);
+  return accuracy;
+}
 
 void setCeiAccuracy(double newAccuracy) {
+  mdb_thread_lock(&cei_accuracy_lock);
   ceiAccuracy = newAccuracy;
+  mdb_thread_unlock(&cei_accuracy_lock);
 }
 
 /**
@@ -32,6 +44,7 @@ void setCeiAccuracy(double newAccuracy) {
  */
 double K_cei(double k) {
   double a0, b0, c0, a1, b1;
+  double accuracy = getCeiAccuracy();
 
   a0 = 1;
   b0 = sqrt(1 - sqr(k));
@@ -44,7 +57,7 @@ double K_cei(double k) {
     a0 = (a1 + b1) / 2;
     b0 = sqrt(a1 * b1);
     c0 = (a1 - b1) / 2;
-  } while (fabs(c0) > ceiAccuracy);
+  } while (fabs(c0) > accuracy);
   return PI / (2 * a0);
 }
 
@@ -58,6 +71,7 @@ double K_cei(double k) {
  */
 double E_cei(double k) {
   double a0, b0, c0, a1, b1, c1, K, sum, powerOf2;
+  double accuracy = getCeiAccuracy();
 
   a0 = 1;
   b0 = sqrt(1 - sqr(k));
@@ -77,7 +91,7 @@ double E_cei(double k) {
     b0 = sqrt(a1 * b1);
     c0 = (a1 - b1) / 2;
     sum += sqr(c0) * (powerOf2 *= 2);
-  } while (fabs(c0) > ceiAccuracy);
+  } while (fabs(c0) > accuracy);
 
   K = PI / (2 * a0);
   return K * (1 - sum / 2);
@@ -85,6 +99,7 @@ double E_cei(double k) {
 
 double *KE_cei(double k, double *buffer) {
   double a0, b0, c0, a1, b1, c1, K, sum, powerOf2;
+  double accuracy = getCeiAccuracy();
 
   if (!buffer)
     buffer = tmalloc(sizeof(*buffer) * 2);
@@ -107,7 +122,7 @@ double *KE_cei(double k, double *buffer) {
     b0 = sqrt(a1 * b1);
     c0 = (a1 - b1) / 2;
     sum += sqr(c0) * (powerOf2 *= 2);
-  } while (fabs(c0) > ceiAccuracy);
+  } while (fabs(c0) > accuracy);
 
   buffer[0] = K = PI / (2 * a0);
   buffer[1] = K * (1 - sum / 2);

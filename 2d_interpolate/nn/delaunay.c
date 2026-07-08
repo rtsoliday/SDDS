@@ -32,6 +32,7 @@
 #include <string.h>
 #include <limits.h>
 #include <float.h>
+#include "mdb_thread.h"
 #include "triangle.h"
 #include "istack_internal.h"
 #include "nn.h"
@@ -65,6 +66,13 @@ extern int make_iso_compilers_happy;
 #define N_SEARCH_TURNON 20
 #define N_FLAGS_TURNON 1000
 #define N_FLAGS_INC 100
+
+/*
+ * Triangle is a legacy library entry point with historical process-global
+ * state.  Keep its use serialized while the surrounding nn objects remain
+ * per-call/per-thread.
+ */
+static MDB_THREAD_LOCK triangulate_lock = MDB_THREAD_LOCK_INITIALIZER;
 
 static void tio_destroy(struct triangulateio* tio)
 {
@@ -259,7 +267,9 @@ delaunay* delaunay_build(int np, point points[], int ns, int segments[], int nh,
         /*
          * climax 
          */
+        mdb_thread_lock(&triangulate_lock);
         triangulate(cmd, &tio_in, &tio_out, NULL);
+        mdb_thread_unlock(&triangulate_lock);
 
         if (nn_verbose)
             fflush(stderr);

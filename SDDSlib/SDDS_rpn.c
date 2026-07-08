@@ -310,7 +310,7 @@ int32_t SDDS_ConvertToLong(int32_t type, void *data, int64_t index) {
 
 #if defined(RPN_SUPPORT)
 
-static double (*SDDS_ConvertTypeToDouble[SDDS_NUM_TYPES + 1])(void *data, int64_t index) =
+static double (*const SDDS_ConvertTypeToDouble[SDDS_NUM_TYPES + 1])(void *data, int64_t index) =
   {
     NULL,
     SDDS_ConvertLongDoubleToDouble,
@@ -326,10 +326,10 @@ static double (*SDDS_ConvertTypeToDouble[SDDS_NUM_TYPES + 1])(void *data, int64_
     SDDS_ConvertCharToDouble};
 
 // Static variables to store memory identifiers for RPN operations
-static int64_t table_number_mem = -1;
-static int64_t i_page_mem = -1;
-static int64_t n_rows_mem = -1;
-static int64_t i_row_mem = -1;
+static MDB_THREAD_LOCAL int64_t table_number_mem = -1;
+static MDB_THREAD_LOCAL int64_t i_page_mem = -1;
+static MDB_THREAD_LOCAL int64_t n_rows_mem = -1;
+static MDB_THREAD_LOCAL int64_t i_row_mem = -1;
 
 /**
  * @brief Creates an RPN memory block.
@@ -351,17 +351,21 @@ int64_t SDDS_CreateRpnMemory(const char *name, short is_string) {
  * @return Identifier of the created RPN array, or -1 on failure.
  */
 int64_t SDDS_CreateRpnArray(char *name) {
-  int64_t memnum;
+  int64_t memnum = -1;
   double dummy;
   char *dummy1 = NULL;
   long is_string = 0;
 
   if (!name)
     return (-1);
-  if ((memnum = is_memory(&dummy, &dummy1, &is_string, name)) >= 0)
+  rpn_lock();
+  if ((memnum = is_memory(&dummy, &dummy1, &is_string, name)) >= 0) {
+    rpn_unlock();
     return memnum;
+  }
   if ((memnum = rpn_create_mem(name, is_string)) >= 0)
     rpn_store((double)rpn_createarray(1), NULL, memnum);
+  rpn_unlock();
   return memnum;
 }
 
@@ -376,28 +380,30 @@ int64_t SDDS_CreateRpnArray(char *name) {
 int32_t SDDS_ComputeParameter(SDDS_DATASET *SDDS_dataset, int32_t parameter, char *equation) {
   SDDS_LAYOUT *layout;
   double value;
+  int32_t status = 0;
 
+  rpn_lock();
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_ComputeParameter"))
-    return (0);
+    goto cleanup;
   layout = &SDDS_dataset->layout;
   if (parameter < 0 || parameter >= layout->n_parameters)
-    return (0);
+    goto cleanup;
 
   if (!equation) {
     SDDS_SetError("Unable to compute defined parameter--no equation for named parameter (SDDS_ComputeParameter)");
-    return (0);
+    goto cleanup;
   }
 
   if (!SDDS_StoreParametersInRpnMemories(SDDS_dataset))
-    return (0);
+    goto cleanup;
   if (!SDDS_StoreColumnsInRpnArrays(SDDS_dataset))
-    return 0;
+    goto cleanup;
 
   value = rpn(equation);
   rpn_store(value, NULL, layout->parameter_definition[parameter].memory_number);
   if (rpn_check_error()) {
     SDDS_SetError("Unable to compute rpn expression--rpn error (SDDS_ComputeParameter)");
-    return (0);
+    goto cleanup;
   }
 #  if defined(DEBUG)
   fprintf(stderr, "computed parameter value %s with equation %s: %e\n", layout->parameter_definition[parameter].name, equation, value);
@@ -435,7 +441,11 @@ int32_t SDDS_ComputeParameter(SDDS_DATASET *SDDS_dataset, int32_t parameter, cha
     break;
   }
 
-  return (1);
+  status = 1;
+
+cleanup:
+  rpn_unlock();
+  return status;
 }
 
 /**
@@ -450,17 +460,19 @@ int32_t SDDS_ComputeColumn(SDDS_DATASET *SDDS_dataset, int32_t column, char *equ
   int64_t j;
   SDDS_LAYOUT *layout;
   double value;
+  int32_t status = 0;
 
+  rpn_lock();
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_ComputeColumn"))
-    return (0);
+    goto cleanup;
   layout = &SDDS_dataset->layout;
   if (column < 0 || column >= layout->n_columns)
-    return (0);
+    goto cleanup;
 
   if (!SDDS_StoreParametersInRpnMemories(SDDS_dataset))
-    return (0);
+    goto cleanup;
   if (!SDDS_StoreColumnsInRpnArrays(SDDS_dataset))
-    return 0;
+    goto cleanup;
 
   if (table_number_mem == -1) {
     table_number_mem = rpn_create_mem("table_number", 0);
@@ -479,13 +491,13 @@ int32_t SDDS_ComputeColumn(SDDS_DATASET *SDDS_dataset, int32_t column, char *equ
   for (j = 0; j < SDDS_dataset->n_rows; j++) {
     rpn_clear();
     if (!SDDS_StoreRowInRpnMemories(SDDS_dataset, j))
-      return (0);
+      goto cleanup;
     rpn_store((double)j, NULL, i_row_mem);
     value = rpn(equation);
     rpn_store(value, NULL, layout->column_definition[column].memory_number);
     if (rpn_check_error()) {
       SDDS_SetError("Unable to compute rpn expression--rpn error (SDDS_ComputeDefinedColumn)");
-      return (0);
+      goto cleanup;
     }
 #  if defined(DEBUG)
     fprintf(stderr, "computed row value: %s = %e\n", layout->column_definition[column].name, value);
@@ -524,7 +536,11 @@ int32_t SDDS_ComputeColumn(SDDS_DATASET *SDDS_dataset, int32_t column, char *equ
     }
   }
 
-  return (1);
+  status = 1;
+
+cleanup:
+  rpn_unlock();
+  return status;
 }
 
 /**
@@ -539,11 +555,13 @@ int32_t SDDS_FilterRowsWithRpnTest(SDDS_DATASET *SDDS_dataset, char *rpn_test) {
   int32_t n_columns;
   SDDS_LAYOUT *layout;
   int32_t accept;
-  static int64_t table_number_mem = -1, n_rows_mem = -1, i_page_mem = -1;
+  static MDB_THREAD_LOCAL int64_t table_number_mem = -1, n_rows_mem = -1, i_page_mem = -1;
   COLUMN_DEFINITION *coldef;
+  int32_t status = 0;
 
+  rpn_lock();
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_ComputeRpnEquations"))
-    return (0);
+    goto cleanup;
   layout = &SDDS_dataset->layout;
 
   if (table_number_mem == -1) {
@@ -560,7 +578,7 @@ int32_t SDDS_FilterRowsWithRpnTest(SDDS_DATASET *SDDS_dataset, char *rpn_test) {
   for (i = 0; i < layout->n_columns; i++) {
     if (layout->column_definition[i].memory_number < 0) {
       SDDS_SetError("Unable to compute equations--column lacks rpn memory number (SDDS_FilterRowsWithRpnTest)");
-      return (0);
+      goto cleanup;
     }
   }
 
@@ -581,17 +599,21 @@ int32_t SDDS_FilterRowsWithRpnTest(SDDS_DATASET *SDDS_dataset, char *rpn_test) {
     rpn(rpn_test);
     if (rpn_check_error()) {
       SDDS_SetError("Unable to compute rpn expression--rpn error (SDDS_FilterRowsWithRpnTest)");
-      return (0);
+      goto cleanup;
     }
     if (!pop_log(&accept)) {
       SDDS_SetError("rpn column-based test expression problem");
-      return (0);
+      goto cleanup;
     }
     if (!accept)
       SDDS_dataset->row_flag[j] = 0;
   }
   rpn_clear();
-  return (1);
+  status = 1;
+
+cleanup:
+  rpn_unlock();
+  return status;
 }
 
 /**
@@ -603,9 +625,11 @@ int32_t SDDS_FilterRowsWithRpnTest(SDDS_DATASET *SDDS_dataset, char *rpn_test) {
 int32_t SDDS_StoreParametersInRpnMemories(SDDS_DATASET *SDDS_dataset) {
   int32_t i;
   SDDS_LAYOUT *layout;
+  int32_t status = 0;
 
+  rpn_lock();
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_StoreParametersInRpnMemories"))
-    return (0);
+    goto cleanup;
   layout = &SDDS_dataset->layout;
 
   rpn_clear();
@@ -615,7 +639,7 @@ int32_t SDDS_StoreParametersInRpnMemories(SDDS_DATASET *SDDS_dataset) {
   for (i = 0; i < layout->n_parameters; i++) {
     if (layout->parameter_definition[i].memory_number < 0) {
       SDDS_SetError("Unable to compute equations--parameter lacks rpn memory number (SDDS_StoreParametersInRpnMemories");
-      return (0);
+      goto cleanup;
     }
     if (layout->parameter_definition[i].type != SDDS_STRING) {
       rpn_quick_store((*SDDS_ConvertTypeToDouble[layout->parameter_definition[i].type])(SDDS_dataset->parameter[i], 0), NULL, layout->parameter_definition[i].memory_number);
@@ -630,15 +654,19 @@ int32_t SDDS_StoreParametersInRpnMemories(SDDS_DATASET *SDDS_dataset) {
     }
   }
   if (SDDS_NumberOfErrors())
-    return (0);
+    goto cleanup;
   if (rpn_check_error()) {
     SDDS_SetError("Unable to compute rpn expression--rpn error (SDDS_StoreParametersInRpnMemories)");
-    return (0);
+    goto cleanup;
   }
 #  if defined(DEBUG)
   fputc('\n', stderr);
 #  endif
-  return (1);
+  status = 1;
+
+cleanup:
+  rpn_unlock();
+  return status;
 }
 
 /**
@@ -651,14 +679,16 @@ int32_t SDDS_StoreParametersInRpnMemories(SDDS_DATASET *SDDS_dataset) {
 int32_t SDDS_StoreRowInRpnMemories(SDDS_DATASET *SDDS_dataset, int64_t row) {
   int32_t i, columns;
   COLUMN_DEFINITION *coldef;
+  int32_t status = 0;
 
+  rpn_lock();
   columns = SDDS_dataset->layout.n_columns;
   if (row == 0) {
     coldef = SDDS_dataset->layout.column_definition;
     for (i = 0; i < columns; i++, coldef++) {
       if (coldef->memory_number < 0) {
         SDDS_SetError("Unable to compute equations--column lacks rpn memory number (SDDS_StoreRowInRpnMemories)");
-        return (0);
+        goto cleanup;
       }
     }
   }
@@ -670,7 +700,11 @@ int32_t SDDS_StoreRowInRpnMemories(SDDS_DATASET *SDDS_dataset, int64_t row) {
       rpn_quick_store(0, ((char **)SDDS_dataset->data[i])[row], coldef->memory_number);
     }
   }
-  return (1);
+  status = 1;
+
+cleanup:
+  rpn_unlock();
+  return status;
 }
 
 /**
@@ -694,24 +728,26 @@ int32_t SDDS_StoreColumnsInRpnArrays(SDDS_DATASET *SDDS_dataset) {
   /*  double *doublePtr; */
   float *floatPtr;
   char *charPtr;
+  int32_t status = 0;
 
+  rpn_lock();
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_StoreColumnsRpnArrays"))
-    return (0);
+    goto cleanup;
   layout = &SDDS_dataset->layout;
   rpn_clear();
   for (i = 0; i < layout->n_columns; i++) {
     if (layout->column_definition[i].type != SDDS_STRING) {
       if (layout->column_definition[i].pointer_number < 0) {
         SDDS_SetError("Unable to compute equations--column lacks rpn pointer number (SDDS_StoreColumnsInRpnArrays)");
-        return (0);
+        goto cleanup;
       }
       if (!rpn_resizearray((int32_t)rpn_recall(layout->column_definition[i].pointer_number), SDDS_dataset->n_rows)) {
         SDDS_SetError("Unable to compute equations--couldn't resize rpn arrays (SDDS_StoreColumnsInRpnArrays)");
-        return 0;
+        goto cleanup;
       }
       if (!(arraydata = rpn_getarraypointer(layout->column_definition[i].pointer_number, &arraysize)) || arraysize != SDDS_dataset->n_rows) {
         SDDS_SetError("Unable to compute equations--couldn't retrieve rpn arrays (SDDS_StoreColumnsInRpnArrays)");
-        return 0;
+        goto cleanup;
       }
       switch (layout->column_definition[i].type) {
       case SDDS_LONGDOUBLE:
@@ -770,7 +806,11 @@ int32_t SDDS_StoreColumnsInRpnArrays(SDDS_DATASET *SDDS_dataset) {
       }
     }
   }
-  return 1;
+  status = 1;
+
+cleanup:
+  rpn_unlock();
+  return status;
 }
 
 #else /* end of RPN_SUPPORT section */

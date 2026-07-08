@@ -23,13 +23,77 @@
  */
 
 #include "mdb.h"
+#include "mdb_thread.h"
 #include "SDDS.h"
 
+static MDB_THREAD_LOCK defaultStringLengthLock = MDB_THREAD_LOCK_INITIALIZER;
 static int32_t defaultStringLength = SDDS_MPI_STRING_COLUMN_LEN;
-static int32_t number_of_string_truncated = 0;
+
+static MDB_THREAD_LOCK defaultTitleBufferSizeLock = MDB_THREAD_LOCK_INITIALIZER;
 static int32_t defaultTitleBufferSize = 2400000;
+
+static MDB_THREAD_LOCK defaultReadBufferSizeLock = MDB_THREAD_LOCK_INITIALIZER;
 static int32_t defaultReadBufferSize = 4000000;
+
+static MDB_THREAD_LOCK defaultWriteBufferSizeLock = MDB_THREAD_LOCK_INITIALIZER;
 static int32_t defaultWriteBufferSize = 0;
+
+static MDB_THREAD_LOCK number_of_string_truncated_lock = MDB_THREAD_LOCK_INITIALIZER;
+static int32_t number_of_string_truncated = 0;
+
+static MDB_THREAD_LOCK SDDS_MPI_write_kludge_usleep_lock = MDB_THREAD_LOCK_INITIALIZER;
+static long SDDS_MPI_write_kludge_usleep = 0;
+
+static MDB_THREAD_LOCK SDDS_MPI_force_file_sync_lock = MDB_THREAD_LOCK_INITIALIZER;
+static short SDDS_MPI_force_file_sync = 0;
+
+static int32_t SDDS_GetLockedDefaultStringLength(void) {
+  int32_t length;
+  mdb_thread_lock(&defaultStringLengthLock);
+  length = defaultStringLength;
+  mdb_thread_unlock(&defaultStringLengthLock);
+  return length;
+}
+
+static int32_t SDDS_GetLockedDefaultTitleBufferSize(void) {
+  int32_t size;
+  mdb_thread_lock(&defaultTitleBufferSizeLock);
+  size = defaultTitleBufferSize;
+  mdb_thread_unlock(&defaultTitleBufferSizeLock);
+  return size;
+}
+
+static int32_t SDDS_GetLockedDefaultReadBufferSize(void) {
+  int32_t size;
+  mdb_thread_lock(&defaultReadBufferSizeLock);
+  size = defaultReadBufferSize;
+  mdb_thread_unlock(&defaultReadBufferSizeLock);
+  return size;
+}
+
+static int32_t SDDS_GetLockedDefaultWriteBufferSize(void) {
+  int32_t size;
+  mdb_thread_lock(&defaultWriteBufferSizeLock);
+  size = defaultWriteBufferSize;
+  mdb_thread_unlock(&defaultWriteBufferSizeLock);
+  return size;
+}
+
+static long SDDS_MPI_GetLockedWriteKludgeUsleep(void) {
+  long value;
+  mdb_thread_lock(&SDDS_MPI_write_kludge_usleep_lock);
+  value = SDDS_MPI_write_kludge_usleep;
+  mdb_thread_unlock(&SDDS_MPI_write_kludge_usleep_lock);
+  return value;
+}
+
+static short SDDS_MPI_GetLockedForceFileSync(void) {
+  short value;
+  mdb_thread_lock(&SDDS_MPI_force_file_sync_lock);
+  value = SDDS_MPI_force_file_sync;
+  mdb_thread_unlock(&SDDS_MPI_force_file_sync_lock);
+  return value;
+}
 
 #if MPI_DEBUG
 static FILE *fpdeb = NULL;
@@ -48,9 +112,11 @@ static FILE *fpdeb = NULL;
 int32_t SDDS_SetDefaultReadBufferSize(int32_t newSize) {
   int32_t previous;
   if (newSize <= 0)
-    return defaultReadBufferSize;
+    return SDDS_GetLockedDefaultReadBufferSize();
+  mdb_thread_lock(&defaultReadBufferSizeLock);
   previous = defaultReadBufferSize;
   defaultReadBufferSize = newSize;
+  mdb_thread_unlock(&defaultReadBufferSizeLock);
   return previous;
 }
 
@@ -67,9 +133,11 @@ int32_t SDDS_SetDefaultReadBufferSize(int32_t newSize) {
 int32_t SDDS_SetDefaultWriteBufferSize(int32_t newSize) {
   int32_t previous;
   if (newSize <= 0)
-    return defaultWriteBufferSize;
+    return SDDS_GetLockedDefaultWriteBufferSize();
+  mdb_thread_lock(&defaultWriteBufferSizeLock);
   previous = defaultWriteBufferSize;
   defaultWriteBufferSize = newSize;
+  mdb_thread_unlock(&defaultWriteBufferSizeLock);
   return previous;
 }
 
@@ -86,9 +154,11 @@ int32_t SDDS_SetDefaultWriteBufferSize(int32_t newSize) {
 int32_t SDDS_SetDefaultTitleBufferSize(int32_t newSize) {
   int32_t previous;
   if (newSize <= 0)
-    return defaultTitleBufferSize;
+    return SDDS_GetLockedDefaultTitleBufferSize();
+  mdb_thread_lock(&defaultTitleBufferSizeLock);
   previous = defaultTitleBufferSize;
   defaultTitleBufferSize = newSize;
+  mdb_thread_unlock(&defaultTitleBufferSizeLock);
   return previous;
 }
 
@@ -101,7 +171,12 @@ int32_t SDDS_SetDefaultTitleBufferSize(int32_t newSize) {
  * @return The number of truncated strings.
  */
 int32_t SDDS_CheckStringTruncated(void) {
-  return number_of_string_truncated;
+  int32_t count;
+
+  mdb_thread_lock(&number_of_string_truncated_lock);
+  count = number_of_string_truncated;
+  mdb_thread_unlock(&number_of_string_truncated_lock);
+  return count;
 }
 
 /**
@@ -110,7 +185,9 @@ int32_t SDDS_CheckStringTruncated(void) {
  * This function increments the count of strings that have been truncated.
  */
 void SDDS_StringTuncated(void) {
+  mdb_thread_lock(&number_of_string_truncated_lock);
   number_of_string_truncated++;
+  mdb_thread_unlock(&number_of_string_truncated_lock);
 }
 
 /**
@@ -126,9 +203,11 @@ void SDDS_StringTuncated(void) {
 int32_t SDDS_SetDefaultStringLength(int32_t newValue) {
   int32_t previous;
   if (newValue < 0)
-    return defaultStringLength;
+    return SDDS_GetLockedDefaultStringLength();
+  mdb_thread_lock(&defaultStringLengthLock);
   previous = defaultStringLength;
   defaultStringLength = newValue;
+  mdb_thread_unlock(&defaultStringLengthLock);
   return previous;
 }
 
@@ -160,7 +239,6 @@ int32_t SDDS_MPI_WriteBinaryPage(SDDS_DATASET *SDDS_dataset) {
  * @return 1 on success, 0 on failure.
  */
 int32_t SDDS_MPI_WriteBinaryString(SDDS_DATASET *SDDS_dataset, char *string) {
-  static char *dummy_string = "";
   int32_t length;
 
 #if MPI_DEBUG
@@ -168,7 +246,7 @@ int32_t SDDS_MPI_WriteBinaryString(SDDS_DATASET *SDDS_dataset, char *string) {
 #endif
 
   if (!string)
-    string = dummy_string;
+    string = "";
 
   length = strlen(string);
   if (!SDDS_MPI_BufferedWrite(&length, sizeof(length), SDDS_dataset))
@@ -190,7 +268,6 @@ int32_t SDDS_MPI_WriteBinaryString(SDDS_DATASET *SDDS_dataset, char *string) {
  * @return 1 on success, 0 on failure.
  */
 int32_t SDDS_MPI_WriteNonNativeBinaryString(SDDS_DATASET *SDDS_dataset, char *string) {
-  static char *dummy_string = "";
   int32_t length;
 
 #if MPI_DEBUG
@@ -198,7 +275,7 @@ int32_t SDDS_MPI_WriteNonNativeBinaryString(SDDS_DATASET *SDDS_dataset, char *st
 #endif
 
   if (!string)
-    string = dummy_string;
+    string = "";
 
   length = strlen(string);
   SDDS_SwapLong(&length);
@@ -409,7 +486,6 @@ int32_t SDDS_MPI_WriteNonNativeBinaryArrays(SDDS_DATASET *SDDS_dataset) {
   return (1);
 }
 
-static long SDDS_MPI_write_kludge_usleep = 0;
 /**
  * @brief Set the write kludge usleep duration.
  *
@@ -420,10 +496,11 @@ static long SDDS_MPI_write_kludge_usleep = 0;
  * @param value The number of microseconds to sleep after writing a row.
  */
 void SDDS_MPI_SetWriteKludgeUsleep(long value) {
+  mdb_thread_lock(&SDDS_MPI_write_kludge_usleep_lock);
   SDDS_MPI_write_kludge_usleep = value;
+  mdb_thread_unlock(&SDDS_MPI_write_kludge_usleep_lock);
 }
 
-static short SDDS_MPI_force_file_sync = 0;
 /**
  * @brief Set the file synchronization flag.
  *
@@ -435,7 +512,9 @@ static short SDDS_MPI_force_file_sync = 0;
  *              and zero disables it.
  */
 void SDDS_MPI_SetFileSync(short value) {
+  mdb_thread_lock(&SDDS_MPI_force_file_sync_lock);
   SDDS_MPI_force_file_sync = value;
+  mdb_thread_unlock(&SDDS_MPI_force_file_sync_lock);
 }
 
 /**
@@ -457,6 +536,8 @@ int32_t SDDS_MPI_WriteBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row) {
   /*char buff[defaultStringLength+1], format[256]; */
   char *buff;
   char format[256];
+  int32_t currentDefaultStringLength;
+  long writeKludgeUsleep;
 
 #if MPI_DEBUG
   logDebug("SDDS_MPI_WriteBinaryRow", SDDS_dataset);
@@ -466,23 +547,31 @@ int32_t SDDS_MPI_WriteBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row) {
     return (0);
 
   layout = &SDDS_dataset->layout;
+  currentDefaultStringLength = SDDS_GetLockedDefaultStringLength();
 
-  sprintf(format, "%%-%ds", defaultStringLength);
-  if (!(buff = malloc(sizeof(*buff) * (defaultStringLength + 1)))) {
+  if (currentDefaultStringLength < 0 || currentDefaultStringLength >= INT32_MAX) {
+    SDDS_SetError("Default string length is too large in SDDS_MPI_WriteBinaryRow!");
+    return 0;
+  }
+  if (snprintf(format, sizeof(format), "%%-%" PRId32 "s", currentDefaultStringLength) >= (int)sizeof(format)) {
+    SDDS_SetError("Default string length is too large in SDDS_MPI_WriteBinaryRow!");
+    return 0;
+  }
+  if (!(buff = malloc(sizeof(*buff) * ((size_t)currentDefaultStringLength + 1)))) {
     SDDS_SetError("Can not allocate memory in SDDS_MPI_WriteBinaryRow!");
     return 0;
   }
-  buff[defaultStringLength] = 0;
+  buff[currentDefaultStringLength] = 0;
   for (i = 0; i < layout->n_columns; i++) {
     type = layout->column_definition[i].type;
     size = SDDS_type_size[type - 1];
 
     if (type == SDDS_STRING) {
-      if (strlen(*((char **)SDDS_dataset->data[i] + row)) <= defaultStringLength)
+      if (strlen(*((char **)SDDS_dataset->data[i] + row)) <= currentDefaultStringLength)
         sprintf(buff, format, *((char **)SDDS_dataset->data[i] + row));
       else {
-        strncpy(buff, *((char **)SDDS_dataset->data[i] + row), defaultStringLength);
-        number_of_string_truncated++;
+        strncpy(buff, *((char **)SDDS_dataset->data[i] + row), currentDefaultStringLength);
+        SDDS_StringTuncated();
       }
       if (!SDDS_MPI_WriteBinaryString(SDDS_dataset, buff)) {
         free(buff);
@@ -497,9 +586,10 @@ int32_t SDDS_MPI_WriteBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row) {
     }
   }
   free(buff);
-  if (SDDS_MPI_write_kludge_usleep)
-    usleepSystemIndependent(SDDS_MPI_write_kludge_usleep); /*  This fixes write issue in test case. No data corruption observed. */
-  if (SDDS_MPI_force_file_sync)
+  writeKludgeUsleep = SDDS_MPI_GetLockedWriteKludgeUsleep();
+  if (writeKludgeUsleep)
+    usleepSystemIndependent(writeKludgeUsleep); /*  This fixes write issue in test case. No data corruption observed. */
+  if (SDDS_MPI_GetLockedForceFileSync())
     MPI_File_sync(SDDS_dataset->MPI_dataset->MPI_file); /* This also seems to fix it. */
   return (1);
 }
@@ -523,6 +613,8 @@ int32_t SDDS_MPI_WriteNonNativeBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row
   /*char buff[defaultStringLength+1], format[256]; */
   char *buff;
   char format[256];
+  int32_t currentDefaultStringLength;
+  long writeKludgeUsleep;
 #if MPI_DEBUG
   logDebug("SDDS_MPI_WriteNonNativeBinaryRow", SDDS_dataset);
 #endif
@@ -531,23 +623,31 @@ int32_t SDDS_MPI_WriteNonNativeBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row
     return (0);
 
   layout = &SDDS_dataset->layout;
+  currentDefaultStringLength = SDDS_GetLockedDefaultStringLength();
 
-  sprintf(format, "%%-%ds", defaultStringLength);
-  if (!(buff = malloc(sizeof(*buff) * (defaultStringLength + 1)))) {
+  if (currentDefaultStringLength < 0 || currentDefaultStringLength >= INT32_MAX) {
+    SDDS_SetError("Default string length is too large in SDDS_MPI_WriteNonNativeBinaryRow!");
+    return 0;
+  }
+  if (snprintf(format, sizeof(format), "%%-%" PRId32 "s", currentDefaultStringLength) >= (int)sizeof(format)) {
+    SDDS_SetError("Default string length is too large in SDDS_MPI_WriteNonNativeBinaryRow!");
+    return 0;
+  }
+  if (!(buff = malloc(sizeof(*buff) * ((size_t)currentDefaultStringLength + 1)))) {
     SDDS_SetError("Can not allocate memory in SDDS_MPI_WriteNonNativeBinaryRow!");
     return 0;
   }
-  buff[defaultStringLength] = 0;
+  buff[currentDefaultStringLength] = 0;
   for (i = 0; i < layout->n_columns; i++) {
     type = layout->column_definition[i].type;
     size = SDDS_type_size[type - 1];
 
     if (type == SDDS_STRING) {
-      if (strlen(*((char **)SDDS_dataset->data[i] + row)) <= defaultStringLength)
+      if (strlen(*((char **)SDDS_dataset->data[i] + row)) <= currentDefaultStringLength)
         sprintf(buff, format, *((char **)SDDS_dataset->data[i] + row));
       else {
-        strncpy(buff, *((char **)SDDS_dataset->data[i] + row), defaultStringLength);
-        number_of_string_truncated++;
+        strncpy(buff, *((char **)SDDS_dataset->data[i] + row), currentDefaultStringLength);
+        SDDS_StringTuncated();
       }
       if (!SDDS_MPI_WriteNonNativeBinaryString(SDDS_dataset, buff)) {
         free(buff);
@@ -562,9 +662,10 @@ int32_t SDDS_MPI_WriteNonNativeBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row
     }
   }
   free(buff);
-  if (SDDS_MPI_write_kludge_usleep)
-    usleepSystemIndependent(SDDS_MPI_write_kludge_usleep); /*  This fixes write issue in test case. No data corruption observed. */
-  if (SDDS_MPI_force_file_sync)
+  writeKludgeUsleep = SDDS_MPI_GetLockedWriteKludgeUsleep();
+  if (writeKludgeUsleep)
+    usleepSystemIndependent(writeKludgeUsleep); /*  This fixes write issue in test case. No data corruption observed. */
+  if (SDDS_MPI_GetLockedForceFileSync())
     MPI_File_sync(SDDS_dataset->MPI_dataset->MPI_file); /* This also seems to fix it. */
   return (1);
 }
@@ -583,13 +684,15 @@ MPI_Offset SDDS_MPI_Get_Column_Size(SDDS_DATASET *SDDS_dataset) {
   int64_t i;
   MPI_Offset column_offset = 0;
   SDDS_LAYOUT *layout;
+  int32_t currentDefaultStringLength;
 
   layout = &SDDS_dataset->layout;
+  currentDefaultStringLength = SDDS_GetLockedDefaultStringLength();
   for (i = 0; i < layout->n_columns; i++) {
     if (layout->column_definition[i].type == SDDS_STRING)
       /* for string type column, the fixed column size defined by user use SDDS_SetDefaultStringLength(value), 
 	   and the length of string is written before the string */
-      column_offset += sizeof(int32_t) + defaultStringLength * sizeof(char);
+      column_offset += sizeof(int32_t) + currentDefaultStringLength * sizeof(char);
     else
       column_offset += SDDS_type_size[layout->column_definition[i].type - 1];
   }
@@ -867,7 +970,7 @@ int32_t SDDS_MPI_WriteNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset) {
   else {
     rows = SDDS_CountRowsOfInterest(SDDS_dataset);
     if (!fBuffer->buffer) {
-      fBuffer->bufferSize = defaultWriteBufferSize;
+      fBuffer->bufferSize = SDDS_GetLockedDefaultWriteBufferSize();
       if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (fBuffer->bufferSize + 1)))) {
         SDDS_SetError("Unable to do buffered read--allocation failure (SDDS_WriteNonNativeBinaryPage)");
         return 0;
@@ -895,7 +998,7 @@ int32_t SDDS_MPI_WriteNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset) {
   if (MPI_dataset->myid == 0) {
     fixed_rows = total_rows;
     if (!fBuffer->buffer) {
-      fBuffer->bufferSize = defaultWriteBufferSize;
+      fBuffer->bufferSize = SDDS_GetLockedDefaultWriteBufferSize();
       if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (fBuffer->bufferSize + 1)))) {
         SDDS_SetError("Unable to do buffered read--allocation failure (SDDS_WriteNonNativeBinaryPage)");
         return 0;
@@ -1029,7 +1132,7 @@ int32_t SDDS_MPI_WriteContinuousBinaryPage(SDDS_DATASET *SDDS_dataset) {
   else {
     rows = SDDS_CountRowsOfInterest(SDDS_dataset);
     if (!fBuffer->buffer) {
-      fBuffer->bufferSize = defaultWriteBufferSize;
+      fBuffer->bufferSize = SDDS_GetLockedDefaultWriteBufferSize();
       if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (fBuffer->bufferSize + 1)))) {
         SDDS_SetError("Unable to do buffered read--allocation failure (SDDS_WriteContinuousBinaryPage)");
         return 0;
@@ -1057,7 +1160,7 @@ int32_t SDDS_MPI_WriteContinuousBinaryPage(SDDS_DATASET *SDDS_dataset) {
   if (MPI_dataset->myid == 0) {
     fixed_rows = total_rows;
     if (!fBuffer->buffer) {
-      fBuffer->bufferSize = defaultWriteBufferSize;
+      fBuffer->bufferSize = SDDS_GetLockedDefaultWriteBufferSize();
       if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (fBuffer->bufferSize + 1)))) {
         SDDS_SetError("Unable to do buffered read--allocation failure (SDDS_WriteContinuousBinaryPage)");
         return 0;
@@ -1421,7 +1524,7 @@ int32_t SDDS_MPI_ReadBinaryParameters(SDDS_DATASET *SDDS_dataset, SDDS_FILEBUFFE
   int32_t i;
   SDDS_LAYOUT *layout;
   /*  char *predefined_format; */
-  static char buffer[SDDS_MAXLINE];
+  char buffer[SDDS_MAXLINE];
 
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_MPI_ReadBinaryParameters"))
     return (0);
@@ -1606,7 +1709,7 @@ int32_t SDDS_MPI_ReadBinaryArrays(SDDS_DATASET *SDDS_dataset, SDDS_FILEBUFFER *f
 int32_t SDDS_MPI_ReadNonNativeBinaryParameters(SDDS_DATASET *SDDS_dataset, SDDS_FILEBUFFER *fBuffer) {
   int32_t i;
   SDDS_LAYOUT *layout;
-  static char buffer[SDDS_MAXLINE];
+  char buffer[SDDS_MAXLINE];
 
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_MPI_ReadNonNativeBinaryParameters"))
     return (0);
@@ -2002,7 +2105,7 @@ int32_t SDDS_MPI_ReadBinaryPage(SDDS_DATASET *SDDS_dataset) {
   } else {
     /* read row by row */
     if (!fBuffer->buffer) {
-      fBuffer->bufferSize = defaultReadBufferSize;
+      fBuffer->bufferSize = SDDS_GetLockedDefaultReadBufferSize();
       if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (fBuffer->bufferSize + 1)))) {
         SDDS_SetError("Unable to do buffered read--allocation failure");
         return 0;
@@ -2222,7 +2325,7 @@ int32_t SDDS_MPI_ReadNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset) {
   } else {
     /* read row by row */
     if (!fBuffer->buffer) {
-      fBuffer->bufferSize = defaultReadBufferSize;
+      fBuffer->bufferSize = SDDS_GetLockedDefaultReadBufferSize();
       if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (fBuffer->bufferSize + 1)))) {
         SDDS_SetError("Unable to do buffered read--allocation failure");
         return 0;
@@ -2289,7 +2392,7 @@ int32_t SDDS_MPI_BufferedReadNonNativeBinaryTitle(SDDS_DATASET *SDDS_dataset) {
   MPI_dataset = SDDS_dataset->MPI_dataset;
   fBuffer = &(SDDS_dataset->titleBuffer);
   if (!fBuffer->buffer) {
-    fBuffer->bufferSize = defaultTitleBufferSize;
+    fBuffer->bufferSize = SDDS_GetLockedDefaultTitleBufferSize();
     if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (fBuffer->bufferSize + 1)))) {
       SDDS_SetError("Unable to do buffered read--allocation failure(SDDS_MPI_ReadNonNativeBinaryTitle)");
       return 0;
@@ -2405,7 +2508,7 @@ int32_t SDDS_MPI_BufferedReadBinaryTitle(SDDS_DATASET *SDDS_dataset) {
   MPI_dataset = SDDS_dataset->MPI_dataset;
   fBuffer = &(SDDS_dataset->titleBuffer);
   if (!fBuffer->buffer) {
-    fBuffer->bufferSize = defaultTitleBufferSize;
+    fBuffer->bufferSize = SDDS_GetLockedDefaultTitleBufferSize();
     if (!(fBuffer->buffer = fBuffer->data = SDDS_Malloc(sizeof(char) * (fBuffer->bufferSize + 1)))) {
       SDDS_SetError("Unable to do buffered read--allocation failure(SDDS_MPI_ReadBinaryTitle)");
       return 0;

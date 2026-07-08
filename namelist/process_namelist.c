@@ -38,11 +38,24 @@ long process_namelists(
   return(process_namelist(nl[i_namelist], nl_t));
 }
 
+static MDB_THREAD_LOCK np_procflags_lock = MDB_THREAD_LOCK_INITIALIZER;
 static long np_procflags = 0;
 
 void set_namelist_processing_flags(long processing_flags)
 {
+  mdb_thread_lock(&np_procflags_lock);
   np_procflags = processing_flags;
+  mdb_thread_unlock(&np_procflags_lock);
+}
+
+static long get_namelist_processing_flags(void)
+{
+  long processing_flags;
+
+  mdb_thread_lock(&np_procflags_lock);
+  processing_flags = np_procflags;
+  mdb_thread_unlock(&np_procflags_lock);
+  return processing_flags;
 }
 
 /* routine: process_namelist()
@@ -63,17 +76,21 @@ long processNamelist(NAMELIST *nl, NAMELIST_TEXT *nl_t)
   register long i, j, k;
   char **item_name;
   long n_items;
+  long processing_flags;
 
   item_name = tmalloc(sizeof(*item_name)*(n_items=nl->n_items));
+  processing_flags = get_namelist_processing_flags();
   for (i=0; i<n_items; i++) {
     item_name[i] = nl->item_list[i].name;
-    if (np_procflags&STICKY_NAMELIST_DEFAULTS)
+    if (processing_flags&STICKY_NAMELIST_DEFAULTS)
       memcpy(nl->item_list[i].root, nl->item_list[i].def_root, nl->item_list[i].data_size);
   }
 
   for (i=j=0; i<nl_t->n_entities; i++) {
-    if ((k=process_entity(nl->item_list, item_name, n_items, nl_t, i))<0)
+    if ((k=process_entity(nl->item_list, item_name, n_items, nl_t, i))<0) {
+      free(item_name);
       return NAMELIST_ERROR;
+    }
     j += k;
   }
   
@@ -85,12 +102,10 @@ long processNamelist(NAMELIST *nl, NAMELIST_TEXT *nl_t)
 void reset_namelist_values(NAMELIST *nl)
 {
   register long i;
-  char **item_name;
   long n_items;
 
-  item_name = tmalloc(sizeof(*item_name)*(n_items=nl->n_items));
+  n_items=nl->n_items;
   for (i=0; i<n_items; i++) {
-    item_name[i] = nl->item_list[i].name;
     memcpy(nl->item_list[i].root, nl->item_list[i].def_root, nl->item_list[i].data_size);
   }
 }
@@ -407,5 +422,3 @@ char *get_address(
   ptr = root + size*offset;
   return(ptr);
 }
-
-

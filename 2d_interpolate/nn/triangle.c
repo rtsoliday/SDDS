@@ -346,6 +346,7 @@
 #include <string.h>
 #include <math.h>
 #include "config.h"
+#include "nn_thread.h"
 #ifndef NO_TIMER
 #include <sys/time.h>
 #endif /* not NO_TIMER */
@@ -645,7 +646,8 @@ struct memorypool {
 };
 
 
-/* Global constants.                                                         */
+/* Global constants. Keep historical data symbols for ABI compatibility,
+   while Triangle's internal state is per-thread.                            */
 
 REAL splitter;       /* Used to split REAL factors for exact multiplication. */
 REAL epsilon;                             /* Floating-point machine epsilon. */
@@ -654,9 +656,31 @@ REAL ccwerrboundA, ccwerrboundB, ccwerrboundC;
 REAL iccerrboundA, iccerrboundB, iccerrboundC;
 REAL o3derrboundA, o3derrboundB, o3derrboundC;
 
+static NN_THREAD_LOCAL REAL splitter_data;
+static NN_THREAD_LOCAL REAL epsilon_data;
+static NN_THREAD_LOCAL REAL resulterrbound_data;
+static NN_THREAD_LOCAL REAL ccwerrboundA_data, ccwerrboundB_data, ccwerrboundC_data;
+static NN_THREAD_LOCAL REAL iccerrboundA_data, iccerrboundB_data, iccerrboundC_data;
+static NN_THREAD_LOCAL REAL o3derrboundA_data, o3derrboundB_data, o3derrboundC_data;
+
+#define splitter splitter_data
+#define epsilon epsilon_data
+#define resulterrbound resulterrbound_data
+#define ccwerrboundA ccwerrboundA_data
+#define ccwerrboundB ccwerrboundB_data
+#define ccwerrboundC ccwerrboundC_data
+#define iccerrboundA iccerrboundA_data
+#define iccerrboundB iccerrboundB_data
+#define iccerrboundC iccerrboundC_data
+#define o3derrboundA o3derrboundA_data
+#define o3derrboundB o3derrboundB_data
+#define o3derrboundC o3derrboundC_data
+
 /* Random number seed is not constant, but I've made it global anyway.       */
 
 unsigned long randomseed;                     /* Current random number seed. */
+static NN_THREAD_LOCAL unsigned long randomseed_data;
+#define randomseed randomseed_data
 
 
 /* Mesh data structure.  Triangle operates on only one mesh, but the mesh    */

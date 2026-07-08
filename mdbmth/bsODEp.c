@@ -16,6 +16,7 @@
  */
 
 #include "mdb.h"
+#include "mdb_thread.h"
 
 void new_scale_factors_dp(double *yscale, double *y0, double *dydx0,
                           double h_start, double *tiny, long *accmode, double *accuracy,
@@ -26,12 +27,15 @@ void initial_scale_factors_dp(double *yscale, double *y0, double *dydx0,
 
 static double stepIncreaseFactor = 0.50;
 static double stepDecreaseFactor = 0.95;
+static MDB_THREAD_LOCK bs_qctune_lock = MDB_THREAD_LOCK_INITIALIZER;
 
 void bs_qctune(double newStepIncreaseFactor, double newStepDecreaseFactor) {
+  mdb_thread_lock(&bs_qctune_lock);
   if (newStepIncreaseFactor > 0)
     stepIncreaseFactor = newStepIncreaseFactor;
   if (newStepDecreaseFactor > 0)
     stepDecreaseFactor = newStepDecreaseFactor;
+  mdb_thread_unlock(&bs_qctune_lock);
 }
 
 #define DEBUG 0
@@ -58,11 +62,17 @@ long bs_step(
   /* function to return dy/dx at x for given y */
   long *misses /* number of failures caused by each component */
 ) {
-  static double **solution, *hSqr, *yLast, *yError;
+  static MDB_THREAD_LOCAL double **solution = NULL, *hSqr = NULL, *yLast = NULL, *yError = NULL;
   long i, j, iWorst = 0, code, nuse;
   double maxError, error, yInterp;
-  static long mmidSteps[IMAX] = {2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96};
-  static long lastEquations = 0;
+  double localStepIncreaseFactor, localStepDecreaseFactor;
+  static const long mmidSteps[IMAX] = {2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96};
+  static MDB_THREAD_LOCAL long lastEquations = 0;
+
+  mdb_thread_lock(&bs_qctune_lock);
+  localStepIncreaseFactor = stepIncreaseFactor;
+  localStepDecreaseFactor = stepDecreaseFactor;
+  mdb_thread_unlock(&bs_qctune_lock);
 
   if (equations > lastEquations) {
     if (lastEquations != 0) {
@@ -120,10 +130,10 @@ long bs_step(
           *stepRecommended = *stepUsed = step;
           if (i == NUSE - 1)
             /* had a hard time, so recommend smaller step */
-            *stepRecommended *= stepDecreaseFactor;
+            *stepRecommended *= localStepDecreaseFactor;
           else {
             /* increase the step to make better use of extrapolation */
-            *stepRecommended *= stepIncreaseFactor / sqrt(maxError);
+            *stepRecommended *= localStepIncreaseFactor / sqrt(maxError);
           }
 #if DEBUG
           printf("returning with i=%ld, stepUsed=%e, stepRec=%e\n", i, *stepUsed, *stepRecommended);
@@ -855,9 +865,9 @@ long bs_odeint3(
   /* function that is to be zeroed */
   double exit_accuracy /* how close to zero to get */
 ) {
-  static double *yscale;
-  static double *dydx0, *y1, *dydx1, *dydx2, *y2, *accur, *y0;
-  static long last_neq = 0;
+  static MDB_THREAD_LOCAL double *yscale = NULL;
+  static MDB_THREAD_LOCAL double *dydx0 = NULL, *y1 = NULL, *dydx1 = NULL, *dydx2 = NULL, *y2 = NULL, *accur = NULL, *y0 = NULL;
+  static MDB_THREAD_LOCAL long last_neq = 0;
   double ex0, ex1, ex2, x1, x2;
   double h_used, h_next, xdiff;
   long i, n_step_ups = 0;
@@ -1267,4 +1277,3 @@ long bs_odeint4(
     }
   } while (1);
 }
-

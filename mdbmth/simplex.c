@@ -19,7 +19,23 @@
 #define DEFAULT_MAXPASSES 5
 
 #define SIMPLEX_ABORT 0x0001UL
+static MDB_THREAD_LOCK simplexFlagsLock = MDB_THREAD_LOCK_INITIALIZER;
 static unsigned long simplexFlags = 0;
+
+static void clearSimplexAbort(void) {
+  mdb_thread_lock(&simplexFlagsLock);
+  simplexFlags &= ~SIMPLEX_ABORT;
+  mdb_thread_unlock(&simplexFlagsLock);
+}
+
+static long simplexAbortRequested(void) {
+  long requested;
+
+  mdb_thread_lock(&simplexFlagsLock);
+  requested = (simplexFlags & SIMPLEX_ABORT) ? 1 : 0;
+  mdb_thread_unlock(&simplexFlagsLock);
+  return requested;
+}
 
 /**
  * @brief Abort or query the status of the simplex optimization.
@@ -32,9 +48,16 @@ static unsigned long simplexFlags = 0;
  * @return 1 if abort was requested, 0 otherwise.
  */
 long simplexMinAbort(unsigned long abort) {
+  long requested;
+
+  mdb_thread_lock(&simplexFlagsLock);
   if (abort) {
     /* if zero, then operation is a query */
     simplexFlags |= SIMPLEX_ABORT;
+  }
+  requested = (simplexFlags & SIMPLEX_ABORT) ? 1 : 0;
+  mdb_thread_unlock(&simplexFlagsLock);
+  if (abort) {
     if (abort & SIMPLEX_ABORT_ANNOUNCE_STDOUT) {
       printf("simplexMin abort requested\n");
       fflush(stdout);
@@ -42,7 +65,7 @@ long simplexMinAbort(unsigned long abort) {
     if (abort & SIMPLEX_ABORT_ANNOUNCE_STDERR)
       fprintf(stderr, "simplexMin abort requested\n");
   }
-  return simplexFlags & SIMPLEX_ABORT ? 1 : 0;
+  return requested;
 }
 
 long checkVariableLimits(double *x, double *xlo, double *xhi, short *disable, long n) {
@@ -261,7 +284,7 @@ long simplexMinimization(
   computeSimplexCenter(simplexCenter, simplexVector, dimensions, activeDimensions);
 
   points = activeDimensions + 1;
-  while (*evaluations < maxEvaluations && !(simplexFlags & SIMPLEX_ABORT)) {
+  while (*evaluations < maxEvaluations && !simplexAbortRequested()) {
     /* find indices of lowest, highest, and next-to-highest y values .
        These starting values are to guarantee that worstPoint!=bestPoint even if
        all function values are the same.
@@ -499,10 +522,11 @@ long simplexMin(
   double yLast, dVector = 1, divisor, denominator, merit;
   long direction, point, evaluations, totalEvaluations = 0, isInvalid, pass = 0, step, divisions;
   long activeDimensions, dimension, i;
+  long randomSigns;
 
   if (divisorFactor <= 1.0)
     divisorFactor = 3; /* old default value */
-  simplexFlags = 0;
+  clearSimplexAbort();
   if (dimensions <= 0)
     return (-3);
   if (disable) {
@@ -539,10 +563,12 @@ long simplexMin(
     for (direction = 0; direction < dimensions; direction++)
       dxGuess[direction] = 0;
   }
-  if (flags & SIMPLEX_RANDOM_SIGNS) {
+  randomSigns = flags & SIMPLEX_RANDOM_SIGNS;
+  if (randomSigns) {
     time_t intTime;
     time(&intTime);
-    srand(intTime);
+    mdbmth_lock_rand();
+    mdbmth_srand_unlocked((unsigned int)intTime);
   }
   for (direction = 0; direction < dimensions; direction++) {
     if (dxGuess[direction] == 0) {
@@ -551,8 +577,8 @@ long simplexMin(
       else if ((dxGuess[direction] = xGuess[direction] / 4) == 0)
         dxGuess[direction] = 1;
     }
-    if (flags & SIMPLEX_RANDOM_SIGNS) {
-      if (rand() > RAND_MAX / 2.0)
+    if (randomSigns) {
+      if (mdbmth_rand_unlocked() > RAND_MAX / 2.0)
         dxGuess[direction] *= -1;
     }
     if (xLowerLimit && xUpperLimit) {
@@ -562,6 +588,8 @@ long simplexMin(
     if (disable && disable[direction])
       dxGuess[direction] = 0;
   }
+  if (randomSigns)
+    mdbmth_unlock_rand();
 
   if (xLowerLimit) {
     /* if start is at lower limit, make sure initial step is positive */
@@ -595,7 +623,7 @@ long simplexMin(
   for (point = 0; point < activeDimensions + 1; point++)
     y[point] = DBL_MAX;
 
-  while (pass < maxPasses && !(simplexFlags & SIMPLEX_ABORT)) {
+  while (pass < maxPasses && !simplexAbortRequested()) {
     /* Set up the initial simplex */
     /* The first vertex is just the starting point */
     for (direction = 0; direction < dimensions; direction++)
@@ -629,7 +657,7 @@ long simplexMin(
 
     divisor = 1;
     divisions = 0;
-    for (point = 1; !(simplexFlags & SIMPLEX_ABORT) && point < activeDimensions + 1; point++) {
+    for (point = 1; !simplexAbortRequested() && point < activeDimensions + 1; point++) {
       if (flags & SIMPLEX_VERBOSE_LEVEL1) {
         fprintf(stdout, "simplexMin: Setting initial simplex for direction %ld\n", point - 1);
         fflush(stdout);
@@ -646,7 +674,7 @@ long simplexMin(
         divisions = 0;
         divisor = 1;
         yLast = y[point - 1];
-        while (divisions < maxDivisions && !(simplexFlags & SIMPLEX_ABORT)) {
+        while (divisions < maxDivisions && !simplexAbortRequested()) {
           if (flags & SIMPLEX_VERBOSE_LEVEL1) {
             fprintf(stdout, "simplexMin: working on division %ld (divisor=%e) for direction %ld\n",
                     divisions, divisor, point - 1);
@@ -723,7 +751,7 @@ long simplexMin(
         divisions = 0;
         divisor = 1;
         yLast = y[point - 1];
-        while (divisions < maxDivisions && !(simplexFlags & SIMPLEX_ABORT)) {
+        while (divisions < maxDivisions && !simplexAbortRequested()) {
 #if DEBUG
           fprintf(stdout, "Trying divisor %ld\n", divisions);
           fflush(stdout);
@@ -770,7 +798,7 @@ long simplexMin(
           fflush(stdout);
         }
         /* decrease found---try a few more steps in this direction */
-        for (step = 0; !(simplexFlags & SIMPLEX_ABORT) && step < 3; step++) {
+        for (step = 0; !simplexAbortRequested() && step < 3; step++) {
           divisor /= divisorFactor; /* increase step size */
           simplexVector[point][dimension] += dxGuess[dimension] / divisor;
           if ((xLowerLimit || xUpperLimit) &&
@@ -818,7 +846,7 @@ long simplexMin(
       fflush(stdout);
     }
 
-    if (simplexFlags & SIMPLEX_ABORT) {
+    if (simplexAbortRequested()) {
       long best = 0;
       for (point = 1; point < activeDimensions + 1; point++)
         if (y[point] < y[best])
@@ -866,7 +894,7 @@ long simplexMin(
     if (report)
       (*report)(y[0], simplexVector[0], pass, totalEvaluations, dimensions);
 
-    if (y[0] <= target || (simplexFlags & SIMPLEX_ABORT)) {
+    if (y[0] <= target || simplexAbortRequested()) {
       *yReturn = y[0];
       if (flags & SIMPLEX_VERBOSE_LEVEL1) {
         fprintf(stdout, "simplexMin: target value achieved---returning\n");
@@ -954,4 +982,3 @@ void enforceVariableLimits(double *x, double *xlo, double *xhi, long n) {
       if ((!xlo || xlo[i] != xhi[i]) && x[i] > xhi[i])
         x[i] = xhi[i];
 }
-

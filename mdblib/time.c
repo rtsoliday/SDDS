@@ -13,12 +13,13 @@
  * @author M. Borland, C. Saunders, R. Soliday
  */
 #include "mdb.h"
+#include "time_utils.h"
 #include <ctype.h>
 #include <time.h>
 
 #ifdef VAX_VMS
 
-static char *month[12] = {
+static const char *const month[12] = {
   "january", "february", "march",
   "april", "may", "june", "july",
   "august", "september", "october",
@@ -83,10 +84,14 @@ convert_date_time(dt, ct0)
 }
 #endif
 
+static const char *const MonthAbbreviation[12] = {
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
 /**
  * @brief Generates a formatted time string.
  *
- * This function returns a more user-friendly time string compared to `ctime()`.
+ * This function returns a compact local time string.
  * 
  * **Format Comparison:**
  * - `ctime`: "wkd mmm dd hh:mm:ss 19yy\n"
@@ -95,42 +100,31 @@ convert_date_time(dt, ct0)
  * @return A pointer to the newly allocated formatted time string.
  */
 char *mtime(void) {
-  char *ct, *mt;
-  char *month, *day, *t, *ptr;
+  char *mt;
+  struct tm timeBreakdown;
   time_t i;
-  //time_t time();
 
   while ((mt = tmalloc((unsigned)30 * sizeof(*mt))) == NULL)
     puts("allocation failure in mtime()");
   time(&i);
-  ct = ctime(&i) + 4;
-  *(ct + strlen(ct) - 1) = 0;
+  if (!mdb_localtime_copy(&i, &timeBreakdown)) {
+    mt[0] = 0;
+    return mt;
+  }
 
-  month = ct;
-  ct = strchr(ct, ' ');
-  while (*ct == ' ')
-    *ct++ = 0;
-
-  day = ct;
-  ct = strchr(ct, ' ');
-  while (*ct == ' ')
-    *ct++ = 0;
-
-  t = ct;
-  ct = strchr(ct, ' ');
-  while (*ct == ' ')
-    *ct++ = 0;
-  ptr = strrchr(t, ':');
-  *ptr = 0;
-
-  sprintf(mt, "%s %s %s %s", day, month, ct + 2, t);
+  sprintf(mt, "%d %s %02d %02d:%02d",
+          timeBreakdown.tm_mday,
+          MonthAbbreviation[timeBreakdown.tm_mon],
+          (timeBreakdown.tm_year + 1900) % 100,
+          timeBreakdown.tm_hour,
+          timeBreakdown.tm_min);
   return (mt);
 }
 
 /**
  * @brief Generates a detailed formatted time string.
  *
- * This function returns a more detailed and user-friendly time string compared to `ctime()`.
+ * This function returns a compact local time string including seconds.
  * 
  * **Format Comparison:**
  * - `ctime`: "wkd mmm dd hh:mm:ss 19yy\n"
@@ -139,32 +133,24 @@ char *mtime(void) {
  * @return A pointer to the newly allocated detailed formatted time string.
  */
 char *mtimes(void) {
-  char *ct, *mt;
-  char *month, *day, *t;
+  char *mt;
+  struct tm timeBreakdown;
   time_t i;
-  //time_t time();
 
   while ((mt = tmalloc((unsigned)30 * sizeof(*mt))) == NULL)
     puts("allocation failure in mtime()");
   time(&i);
-  ct = ctime(&i) + 4;
-  *(ct + strlen(ct) - 1) = 0;
+  if (!mdb_localtime_copy(&i, &timeBreakdown)) {
+    mt[0] = 0;
+    return mt;
+  }
 
-  month = ct;
-  ct = strchr(ct, ' ');
-  while (*ct == ' ')
-    *ct++ = 0;
-
-  day = ct;
-  ct = strchr(ct, ' ');
-  while (*ct == ' ')
-    *ct++ = 0;
-
-  t = ct;
-  ct = strchr(ct, ' ');
-  while (*ct == ' ')
-    *ct++ = 0;
-
-  sprintf(mt, "%s %s %s %s", day, month, ct + 2, t);
+  sprintf(mt, "%d %s %02d %02d:%02d:%02d",
+          timeBreakdown.tm_mday,
+          MonthAbbreviation[timeBreakdown.tm_mon],
+          (timeBreakdown.tm_year + 1900) % 100,
+          timeBreakdown.tm_hour,
+          timeBreakdown.tm_min,
+          timeBreakdown.tm_sec);
   return (mt);
 }
