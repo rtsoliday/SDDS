@@ -1683,7 +1683,7 @@ static int read_input_files_serial(const STRING_LIST *files, const OPTIONS *opts
 static int read_input_files_threaded(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups) {
 #if SDDSGROUPEDENVELOPE_USE_OPENMP
   FILE_READ_RESULT *result;
-  long iFile;
+  long batchStart, iBatch, batchSize;
   int ok = 1;
   int threads = opts->threads;
 
@@ -1692,23 +1692,31 @@ static int read_input_files_threaded(const STRING_LIST *files, const OPTIONS *op
   if (threads <= 1)
     return read_input_files_serial(files, opts, groups);
 
-  result = xcalloc((size_t)files->items, sizeof(*result));
+  result = xcalloc((size_t)threads, sizeof(*result));
   omp_set_num_threads(threads);
 
-#pragma omp parallel for schedule(dynamic)
-  for (iFile = 0; iFile < files->items; iFile++)
-    result[iFile].ok = read_input_file(files->item[iFile], opts, &result[iFile].groups);
+  for (batchStart = 0; ok && batchStart < files->items; batchStart += threads) {
+    batchSize = files->items - batchStart;
+    if (batchSize > threads)
+      batchSize = threads;
 
-  for (iFile = 0; iFile < files->items; iFile++) {
-    if (!result[iFile].ok)
-      ok = 0;
+#pragma omp parallel for schedule(dynamic)
+    for (iBatch = 0; iBatch < batchSize; iBatch++)
+      result[iBatch].ok = read_input_file(files->item[batchStart + iBatch], opts, &result[iBatch].groups);
+
+    for (iBatch = 0; iBatch < batchSize; iBatch++) {
+      if (!result[iBatch].ok)
+        ok = 0;
+    }
+    if (ok) {
+      for (iBatch = 0; iBatch < batchSize; iBatch++)
+        merge_group_list(groups, &result[iBatch].groups, opts);
+    }
+    for (iBatch = 0; iBatch < batchSize; iBatch++) {
+      free_group_list(&result[iBatch].groups, opts);
+      memset(&result[iBatch], 0, sizeof(*result));
+    }
   }
-  if (ok) {
-    for (iFile = 0; iFile < files->items; iFile++)
-      merge_group_list(groups, &result[iFile].groups, opts);
-  }
-  for (iFile = 0; iFile < files->items; iFile++)
-    free_group_list(&result[iFile].groups, opts);
   free(result);
   return ok;
 #else

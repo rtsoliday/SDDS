@@ -47,7 +47,7 @@ sddsgroupedenvelope [-inputDir directory] [-pattern pattern]
     \item \verb|-pmaximum=\emph{independentParameter},\emph{columnNames}|, \verb|-pminimum=\emph{independentParameter},\emph{columnNames}| --- For each named column and row, records the independent parameter value from the page containing the maximum or minimum value.
     \item \verb|-slope=\emph{independentParameter},\emph{columnNames}|, \verb|-intercept=\emph{independentParameter},\emph{columnNames}| --- Computes a row-by-row linear fit of the named columns against the independent parameter.
     \item \verb|-majorOrder={row|column}| --- Specifies the output data order. The default is column-major order.
-    \item \verb|-threads=\emph{number}| --- Specifies the number of input files to read concurrently. The default is 1. Results are merged in sorted input-file order, so output ordering and first-page choices remain deterministic.
+    \item \verb|-threads=\emph{number}| --- Specifies the number of input files to read concurrently. The default is 1. At most this many per-file accumulators are kept before being merged and freed. Results are merged in sorted input-file order, so output ordering and first-page choices remain deterministic.
     \item \verb|-noOverwrite| --- Refuses to replace an existing output file.
     \item \verb|-nowarnings| --- Suppresses warnings about degenerate weighted statistics.
     \item \verb|-verbose| --- Prints details about input files and row-count selection.

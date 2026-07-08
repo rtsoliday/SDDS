@@ -202,6 +202,8 @@ def test_threads_match_serial_output(tmp_path):
   serial_output = tmp_path / "serial"
   threaded_output = tmp_path / "threaded"
   write_grouped_inputs(input_dir)
+  (input_dir / "test-03.sdds").write_text((input_dir / "test-01.sdds").read_text())
+  (input_dir / "test-04.sdds").write_text((input_dir / "test-02.sdds").read_text())
 
   base_command = [
     str(SDDSGROUPEDENVELOPE),
