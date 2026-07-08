@@ -1,5 +1,5 @@
 \begin{sddsprog}{sddscheck}
-  \item \textbf{description:} \verb|sddscheck| is a simple tool to allow checking a file to see if it is a valid SDDS file or if it is corrupted. The primary use is in shell scripts that need to detect such conditions. \verb|sddscheck| issues one of four messages: \verb|ok|, \verb|nonexistent|, \verb|badHeader|, or \verb|corrupted|. (See \progref{sddsconvert} about recovering corrupted files.)
+  \item \textbf{description:} \verb|sddscheck| is a simple tool to allow checking one or more files to see if they are valid SDDS files or if they are corrupted. The primary use is in shell scripts that need to detect such conditions. For a single file, \verb|sddscheck| issues one of four messages: \verb|ok|, \verb|nonexistent|, \verb|badHeader|, or \verb|corrupted|. For multiple files, each line contains the file name followed by one of these messages. (See \progref{sddsconvert} about recovering corrupted files.)
   \item \textbf{examples:}
     \begin{verbatim}
 if (`sddscheck APS.twi` == "ok") plotTwissParameters APS.twi
@@ -7,14 +7,24 @@ if (`sddscheck APS.twi` == "ok") plotTwissParameters APS.twi
     where \verb|plotTwissParameters| is a hypothetical plotting script.
   \item \textbf{synopsis:}
     \begin{verbatim}
-sddscheck [-printErrors] filename
+sddscheck [options] filename|directory [filename|directory...]
     \end{verbatim}
   \item \textbf{switches:}
     \begin{itemize}
       \item \verb|-printErrors| --- Causes the SDDS error traceback to be printed if the file is not \verb|ok|. This may be helpful in determining the problem with the file.
+      \item \verb|-threads=\emph{number}| --- Specifies the number of input files to check concurrently. The default is 1. Output is still printed in the same order as the input file names.
+      \item \verb|-summary| --- Prints aggregate counts for checked files after the per-file results.
+      \item \verb|-failuresOnly| --- Suppresses result lines for files that are \verb|ok|.
+      \item \verb|-failOnError| --- Exits with status 1 if any checked file is not \verb|ok|. Without this option, completed checks exit with status 0 for compatibility.
+      \item \verb|-recursive| --- Expands directory arguments recursively. Without \verb|-pattern|, all regular files under the directory are checked.
+      \item \verb|-pattern=\emph{glob}| --- Filters files found from directory arguments by base-name wildcard. This option may be repeated. With a directory argument and without \verb|-recursive|, matching is limited to the directory itself.
+      \item \verb|-maxErrors=\emph{number}| --- Stops starting new checks after this many failed files. With \verb|-threads|, already-running checks may cause the final number of failed files to exceed this value.
+      \item \verb|-showPages| --- Adds \verb|pagesRead=| to each result line.
+      \item \verb|-checkDefinitionsOnly| --- Checks only that the SDDS header and definitions can be read.
+      \item \verb|-verbose| --- Adds file size and SDDS layout metadata to each result line.
+      \item \verb|-stdin| --- Reads additional file or directory names from standard input, one per line.
     \end{itemize}
-  \item \textbf{files:} \emph{filename} is the name of a single file to be checked.
+  \item \textbf{files:} \emph{filename} is the name of a file to be checked. Multiple file names may be provided. Directory arguments are expanded only when \verb|-recursive| or \verb|-pattern| is used. When multiple files are provided, or when detail options are used, output lines have the form \verb|filename: status|.
   \item \textbf{see also:} \progref{sddsconvert}
   \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
-
