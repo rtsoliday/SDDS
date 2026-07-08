@@ -192,6 +192,20 @@ static char *checkedStrdup(const char *text) {
   return copy;
 }
 
+static int parseLongOptionValue(const char *text, long minimum, long maximum, long *value) {
+  char *endptr;
+  long parsed;
+
+  if (!text || !*text)
+    return 0;
+  errno = 0;
+  parsed = strtol(text, &endptr, 10);
+  if (errno == ERANGE || endptr == text || *endptr || parsed < minimum || parsed > maximum)
+    return 0;
+  *value = parsed;
+  return 1;
+}
+
 static void stringListAppend(StringList *list, const char *text) {
   if (list->items >= list->allocated) {
     list->allocated = list->allocated ? 2 * list->allocated : 16;
@@ -477,9 +491,7 @@ int main(int argc, char **argv) {
         break;
       case CLO_THREADS:
         if (s_arg[i_arg].n_items != 2 ||
-            !sscanf(s_arg[i_arg].list[1], "%ld", &threads) ||
-            threads < 1 ||
-            threads > INT_MAX)
+            !parseLongOptionValue(s_arg[i_arg].list[1], 1, INT_MAX, &threads))
           SDDS_Bomb("invalid -threads syntax");
         break;
       case CLO_SUMMARY:
@@ -501,8 +513,7 @@ int main(int argc, char **argv) {
         break;
       case CLO_MAXERRORS:
         if (s_arg[i_arg].n_items != 2 ||
-            !sscanf(s_arg[i_arg].list[1], "%ld", &maxErrors) ||
-            maxErrors < 1)
+            !parseLongOptionValue(s_arg[i_arg].list[1], 1, LONG_MAX, &maxErrors))
           SDDS_Bomb("invalid -maxErrors syntax");
         break;
       case CLO_SHOWPAGES:

@@ -106,6 +106,30 @@ def test_sddscheck_threads_must_be_positive():
 
 
 @pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
+@pytest.mark.parametrize("value", ["2xyz", "1.5", "999999999999999999999999999"])
+def test_sddscheck_threads_rejects_malformed_values(value):
+  result = subprocess.run(
+    [str(SDDSCHECK), f"-threads={value}", str(EXAMPLE)],
+    capture_output=True,
+    text=True,
+  )
+  assert result.returncode != 0
+  assert "invalid -threads syntax" in result.stderr
+
+
+@pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
+@pytest.mark.parametrize("value", ["1xyz", "1.5", "0", "999999999999999999999999999"])
+def test_sddscheck_max_errors_rejects_malformed_values(value):
+  result = subprocess.run(
+    [str(SDDSCHECK), f"-maxErrors={value}", str(EXAMPLE)],
+    capture_output=True,
+    text=True,
+  )
+  assert result.returncode != 0
+  assert "invalid -maxErrors syntax" in result.stderr
+
+
+@pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
 def test_sddscheck_summary(tmp_path):
   missing = tmp_path / "missing.sdds"
   result = subprocess.run(
