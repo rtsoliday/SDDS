@@ -48,6 +48,7 @@
  */
 
 #define _XOPEN_SOURCE
+#include <ctype.h>
 #include <time.h>
 #include "mdb.h"
 #include "SDDS.h"
@@ -127,6 +128,302 @@ void InitializeOutput(SDDS_DATASET *SDDSout, char *outputfile, TIME_CONVERSION *
 void CheckEpochConversionElements(SDDS_DATASET *SDDSin, TIME_CONVERSION *conversion, long conversions);
 void CheckBreakdownConversionElements(SDDS_DATASET *SDDSin, TIME_CONVERSION *conversion, long conversions);
 void CheckDateConversionElements(SDDS_DATASET *SDDSin, TIME_CONVERSION *conversion, long conversions);
+
+#if defined(_WIN32)
+typedef struct {
+  struct tm *value;
+  int century;
+  int shortYear;
+  int twelveHour;
+  int meridiem;
+  int julianDay;
+} DATE_PARSE_STATE;
+
+static const char *parseDateNumber(const char *input, int minimumDigits, int maximumDigits,
+                                   int minimumValue, int maximumValue, int *value) {
+  int digits = 0, result = 0;
+
+  while (digits < maximumDigits && isdigit((unsigned char)*input)) {
+    result = 10 * result + (*input - '0');
+    input++;
+    digits++;
+  }
+  if (digits < minimumDigits || result < minimumValue || result > maximumValue)
+    return NULL;
+  *value = result;
+  return input;
+}
+
+static int dateTextMatches(const char *input, const char *text) {
+  int length = 0;
+
+  while (text[length]) {
+    if (!input[length] ||
+        tolower((unsigned char)input[length]) != tolower((unsigned char)text[length]))
+      return 0;
+    length++;
+  }
+  return length;
+}
+
+static const char *parseDateName(const char *input, const char *const *names, int namesCount, int *index) {
+  int i, length;
+
+  for (i = 0; i < namesCount; i++) {
+    if ((length = dateTextMatches(input, names[i]))) {
+      *index = i;
+      return input + length;
+    }
+  }
+  return NULL;
+}
+
+static const char *parseWindowsDateFormat(const char *input, const char *format, DATE_PARSE_STATE *state) {
+  static const char *const abbreviatedMonth[] = {
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  };
+  static const char *const fullMonth[] = {
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  };
+  static const char *const abbreviatedWeekday[] = {
+    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+  };
+  static const char *const fullWeekday[] = {
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+  };
+  static const char *const meridiem[] = {"AM", "PM"};
+  const char *parsed;
+  int value;
+
+  while (*format) {
+    if (isspace((unsigned char)*format)) {
+      while (isspace((unsigned char)*format))
+        format++;
+      while (isspace((unsigned char)*input))
+        input++;
+      continue;
+    }
+    if (*format != '%') {
+      if (*input != *format)
+        return NULL;
+      input++;
+      format++;
+      continue;
+    }
+
+    format++;
+    if (*format == 'E' || *format == 'O')
+      format++;
+    if (!*format)
+      return NULL;
+
+    switch (*format++) {
+    case '%':
+      if (*input++ != '%')
+        return NULL;
+      break;
+    case 'Y':
+      if (!(input = parseDateNumber(input, 1, 4, 0, 9999, &value)))
+        return NULL;
+      state->value->tm_year = value - 1900;
+      break;
+    case 'C':
+      if (!(input = parseDateNumber(input, 1, 2, 0, 99, &state->century)))
+        return NULL;
+      break;
+    case 'y':
+      if (!(input = parseDateNumber(input, 1, 2, 0, 99, &state->shortYear)))
+        return NULL;
+      break;
+    case 'm':
+      if (!(input = parseDateNumber(input, 1, 2, 1, 12, &value)))
+        return NULL;
+      state->value->tm_mon = value - 1;
+      break;
+    case 'b':
+    case 'h':
+      if (!(input = parseDateName(input, abbreviatedMonth, 12, &value)))
+        return NULL;
+      state->value->tm_mon = value;
+      break;
+    case 'B':
+      if (!(input = parseDateName(input, fullMonth, 12, &value)))
+        return NULL;
+      state->value->tm_mon = value;
+      break;
+    case 'd':
+      if (!(input = parseDateNumber(input, 1, 2, 1, 31, &state->value->tm_mday)))
+        return NULL;
+      break;
+    case 'e':
+      while (*input == ' ')
+        input++;
+      if (!(input = parseDateNumber(input, 1, 2, 1, 31, &state->value->tm_mday)))
+        return NULL;
+      break;
+    case 'H':
+    case 'k':
+      while (*input == ' ')
+        input++;
+      if (!(input = parseDateNumber(input, 1, 2, 0, 23, &state->value->tm_hour)))
+        return NULL;
+      break;
+    case 'I':
+    case 'l':
+      while (*input == ' ')
+        input++;
+      if (!(input = parseDateNumber(input, 1, 2, 1, 12, &state->value->tm_hour)))
+        return NULL;
+      state->twelveHour = 1;
+      break;
+    case 'M':
+      if (!(input = parseDateNumber(input, 1, 2, 0, 59, &state->value->tm_min)))
+        return NULL;
+      break;
+    case 'S':
+      if (!(input = parseDateNumber(input, 1, 2, 0, 60, &state->value->tm_sec)))
+        return NULL;
+      break;
+    case 'j':
+      if (!(input = parseDateNumber(input, 1, 3, 1, 366, &state->julianDay)))
+        return NULL;
+      state->value->tm_yday = state->julianDay - 1;
+      break;
+    case 'a':
+      if (!(input = parseDateName(input, abbreviatedWeekday, 7, &state->value->tm_wday)))
+        return NULL;
+      break;
+    case 'A':
+      if (!(input = parseDateName(input, fullWeekday, 7, &state->value->tm_wday)))
+        return NULL;
+      break;
+    case 'w':
+      if (!(input = parseDateNumber(input, 1, 1, 0, 6, &state->value->tm_wday)))
+        return NULL;
+      break;
+    case 'u':
+      if (!(input = parseDateNumber(input, 1, 1, 1, 7, &value)))
+        return NULL;
+      state->value->tm_wday = value % 7;
+      break;
+    case 'p':
+    case 'P':
+      if (!(input = parseDateName(input, meridiem, 2, &state->meridiem)))
+        return NULL;
+      break;
+    case 'n':
+    case 't':
+      while (isspace((unsigned char)*input))
+        input++;
+      break;
+    case 'D':
+      if (!(input = parseWindowsDateFormat(input, "%m/%d/%y", state)))
+        return NULL;
+      break;
+    case 'F':
+      if (!(input = parseWindowsDateFormat(input, "%Y-%m-%d", state)))
+        return NULL;
+      break;
+    case 'R':
+      if (!(input = parseWindowsDateFormat(input, "%H:%M", state)))
+        return NULL;
+      break;
+    case 'T':
+    case 'X':
+      if (!(input = parseWindowsDateFormat(input, "%H:%M:%S", state)))
+        return NULL;
+      break;
+    case 'r':
+      if (!(input = parseWindowsDateFormat(input, "%I:%M:%S %p", state)))
+        return NULL;
+      break;
+    case 'x':
+      if (!(input = parseWindowsDateFormat(input, "%m/%d/%y", state)))
+        return NULL;
+      break;
+    case 'c':
+      if (!(input = parseWindowsDateFormat(input, "%a %b %e %H:%M:%S %Y", state)))
+        return NULL;
+      break;
+    case 'Z':
+      parsed = input;
+      while (isalpha((unsigned char)*input) || *input == '_' || *input == '/')
+        input++;
+      if (input == parsed)
+        return NULL;
+      break;
+    default:
+      return NULL;
+    }
+  }
+  return input;
+}
+
+static int dateMonthDayFromJulianDay(int julianDay, int year, int *month, int *day) {
+  static const int daysPerMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  int i, days;
+
+  for (i = 0; i < 12; i++) {
+    days = daysPerMonth[i];
+    if (i == 1 && ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0))
+      days++;
+    if (julianDay <= days) {
+      *month = i + 1;
+      *day = julianDay;
+      return 1;
+    }
+    julianDay -= days;
+  }
+  return 0;
+}
+
+static const char *parseDateTime(const char *input, const char *format, struct tm *value) {
+  DATE_PARSE_STATE state;
+  const char *result;
+  int month, day;
+  int year;
+
+  memset(&state, 0, sizeof(state));
+  state.value = value;
+  state.century = -1;
+  state.shortYear = -1;
+  state.meridiem = -1;
+
+  if (!(result = parseWindowsDateFormat(input, format, &state)))
+    return NULL;
+
+  if (state.shortYear >= 0) {
+    if (state.century >= 0)
+      year = state.century * 100 + state.shortYear;
+    else
+      year = state.shortYear <= 68 ? 2000 + state.shortYear : 1900 + state.shortYear;
+    value->tm_year = year - 1900;
+  } else if (state.century >= 0) {
+    value->tm_year = state.century * 100 - 1900;
+  }
+
+  if (state.twelveHour && state.meridiem >= 0) {
+    value->tm_hour %= 12;
+    if (state.meridiem)
+      value->tm_hour += 12;
+  }
+
+  if (state.julianDay) {
+    year = value->tm_year + 1900;
+    if (!dateMonthDayFromJulianDay(state.julianDay, year, &month, &day))
+      return NULL;
+    value->tm_mon = month - 1;
+    value->tm_mday = day;
+  }
+  return result;
+}
+#else
+static const char *parseDateTime(const char *input, const char *format, struct tm *value) {
+  return strptime(input, format, value);
+}
+#endif
 
 int main(int argc, char **argv) {
   SDDS_DATASET SDDSin, SDDSout;
@@ -536,10 +833,6 @@ void DoParameterBreakdownConversion(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin,
 }
 
 void DoParameterDateToTimeConversion(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, TIME_CONVERSION *conversion) {
-#if defined(_WIN32)
-  fprintf(stderr, "Error: strptime function needed by DoParameterDateToTimeConversion is not available on Windows\n");
-  exit(EXIT_FAILURE);
-#else
   double hour;
   double month = 0, day = 0, jDay = 0, year, epochTime;
   char *timestr = NULL;
@@ -553,7 +846,7 @@ void DoParameterDateToTimeConversion(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);
   }
-  if (strptime(timestr, conversion->format, &tm) == NULL) {
+  if (parseDateTime(timestr, conversion->format, &tm) == NULL) {
     fprintf(stderr, "Error: Failed to parse date string '%s' with format '%s'\n", timestr, conversion->format);
     exit(EXIT_FAILURE);
   }
@@ -565,7 +858,6 @@ void DoParameterDateToTimeConversion(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin
   TimeBreakdownToEpoch((short)year, (short)jDay, (short)month, (short)day, hour, &epochTime);
   if (!SDDS_SetParametersFromDoubles(SDDSout, SDDS_BY_NAME | SDDS_PASS_BY_VALUE, conversion->epochName, epochTime, NULL))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-#endif
 }
 
 void DoColumnEpochConversion(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, TIME_CONVERSION *conversion) {
@@ -605,10 +897,6 @@ void DoColumnEpochConversion(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, TIME_C
 }
 
 void DoColumnDateToTimeConversion(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, TIME_CONVERSION *conversion) {
-#if defined(_WIN32)
-  fprintf(stderr, "Error: strptime function needed by DoColumnDateToTimeConversion is not available on Windows\n");
-  exit(EXIT_FAILURE);
-#else
   double hour;
   double month = 0, day = 0, year = 0, jDay = 0, *epochTime;
   int64_t row, rows;
@@ -628,7 +916,7 @@ void DoColumnDateToTimeConversion(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, T
     SDDS_Bomb("Memory allocation failure");
 
   for (row = 0; row < rows; row++) {
-    if (strptime(timestr[row], conversion->format, &tm) == NULL) {
+    if (parseDateTime(timestr[row], conversion->format, &tm) == NULL) {
       fprintf(stderr, "Error: Failed to parse date string '%s' with format '%s'\n", timestr[row], conversion->format);
       exit(EXIT_FAILURE);
     }
@@ -642,7 +930,6 @@ void DoColumnDateToTimeConversion(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, T
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   SDDS_FreeStringArray(timestr, rows);
   free(epochTime);
-#endif
 }
 
 void DoColumnBreakdownConversion(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, TIME_CONVERSION *conversion) {

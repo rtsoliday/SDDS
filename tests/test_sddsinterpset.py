@@ -50,7 +50,7 @@ def create_input(tmp_path):
     "-noRowCount",
   ], check=True)
   meta_plain = tmp_path / "meta.txt"
-  meta_plain.write_text(f"{data}\n")
+  meta_plain.write_text(f"{data.as_posix()}\n")
   meta = tmp_path / "meta.sdds"
   subprocess.run([
     str(PLAINDATA2SDDS),
@@ -88,7 +88,7 @@ def create_threaded_input(tmp_path):
     data_files.append(data)
 
   meta_plain = tmp_path / "threaded_meta.txt"
-  meta_plain.write_text("".join(f"{path}\n" for path in data_files))
+  meta_plain.write_text("".join(f"{path.as_posix()}\n" for path in data_files))
   meta = tmp_path / "threaded_meta.sdds"
   subprocess.run([
     str(PLAINDATA2SDDS),

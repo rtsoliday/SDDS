@@ -10,7 +10,7 @@
 #include "SDDStypes.h"
 #include "mdb_thread.h"
 #include <stddef.h>
-#if defined(_WIN32) && !defined(_MINGW)
+#if defined(_WIN32) && !defined(_MINGW) && (!defined(_MSC_VER) || _MSC_VER < 1800)
 typedef __int32 int32_t;
 typedef unsigned __int32 uint32_t;
 #define PRId32 "ld"

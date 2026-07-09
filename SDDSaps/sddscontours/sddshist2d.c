@@ -40,7 +40,7 @@
 #define SET_INCLUDE_XY 14
 #define SET_XBINSIZE 15
 #define SET_YBINSIZE 16
-#define SET_SPREAD 17
+#define SET_SPREAD_OPTION 17
 #define SET_THREADS 18
 #define N_OPTIONS 19
 
@@ -320,7 +320,7 @@ int main(int argc, char **argv)
       case SET_INCLUDE_XY:
         includeXY = 1;
         break;
-      case SET_SPREAD:
+      case SET_SPREAD_OPTION:
 	spreadParameter[0] = spreadParameter[1] = NULL;
 	spreadValue[0] = spreadValue[1] = -1;
 	scanned[i_arg].n_items -= 1;

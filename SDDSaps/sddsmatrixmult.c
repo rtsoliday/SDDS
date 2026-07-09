@@ -399,7 +399,7 @@ int main(int argc, char **argv) {
 }
 
 static int threaded_matrix_mult(MATRIX *C, MATRIX *A, MATRIX *B, int threads) {
-  long i, j, k;
+  long i;
   long n, m, p;
 
   if ((m = A->m) != B->n || (n = A->n) != C->n || (p = B->m) != C->m)
@@ -407,8 +407,9 @@ static int threaded_matrix_mult(MATRIX *C, MATRIX *A, MATRIX *B, int threads) {
   if (threads <= 1)
     return m_mult(C, A, B);
 
-#pragma omp parallel for private(j, k) if (threads > 1) num_threads(threads)
+#pragma omp parallel for if (threads > 1) num_threads(threads)
   for (i = 0; i < n; i++) {
+    long j, k;
     double *a_i = A->a[i];
     double *c_i = C->a[i];
     for (j = 0; j < p; j++) {

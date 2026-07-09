@@ -60,4 +60,4 @@ def test_sddsbinarystring_pipe(tmp_path):
     check=True,
   )
   expected = f"{5:032b}\n{15:032b}\n"
-  assert result.stdout.decode() == expected
+  assert result.stdout.decode().splitlines() == expected.splitlines()

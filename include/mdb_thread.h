@@ -36,15 +36,20 @@ static inline void mdb_thread_unlock(MDB_THREAD_LOCK *lock) {
   atomic_flag_clear_explicit(lock, memory_order_release);
 }
 #elif defined(_MSC_VER)
-#  include <windows.h>
-typedef volatile LONG MDB_THREAD_LOCK;
+long _InterlockedCompareExchange(long volatile *destination, long exchange, long comparand);
+long _InterlockedExchange(long volatile *target, long value);
+#  pragma intrinsic(_InterlockedCompareExchange)
+#  pragma intrinsic(_InterlockedExchange)
+typedef volatile long MDB_THREAD_LOCK;
 #  define MDB_THREAD_LOCK_INITIALIZER 0
 static inline void mdb_thread_lock(MDB_THREAD_LOCK *lock) {
-  while (InterlockedCompareExchange(lock, 1, 0) != 0)
-    Sleep(0);
+  while (_InterlockedCompareExchange(lock, 1, 0) != 0) {
+    while (*lock) {
+    }
+  }
 }
 static inline void mdb_thread_unlock(MDB_THREAD_LOCK *lock) {
-  InterlockedExchange(lock, 0);
+  _InterlockedExchange(lock, 0);
 }
 #elif defined(__GNUC__) || defined(__clang__)
 typedef volatile int MDB_THREAD_LOCK;

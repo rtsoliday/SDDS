@@ -114,10 +114,9 @@ PROD = agilentArb2sdds \
         wfm2sdds
 
 # sddssplinefit
+PROD += sddskde sddskde2d sddslocaldensity sddsgroupedenvelope
 ifneq ($(OS), Windows)
   PROD += sddslogserver sddslogclient
-  PROD += sddskde sddskde2d sddslocaldensity
-  PROD += sddsgroupedenvelope
   #PROD += agilentwaveform2sdds agilentcomm 
 endif
 
@@ -184,8 +183,8 @@ ifeq ($(OS), Darwin)
 endif
 
 ifeq ($(OS), Windows)
-  CFLAGS += -I../tiff -I../lzma -I../zlib -openmp -wd4018 -wd4244 -wd4267 -wd4305 -wd4311 -wd4312
-  CCFLAGS += -I../tiff -I../lzma -I../zlib -openmp -wd4018 -wd4244 -wd4267 -wd4305 -wd4311 -wd4312
+  CFLAGS += -I../tiff -I../lzma -I../zlib -I../../gsl -openmp -wd4018 -wd4244 -wd4267 -wd4305 -wd4311 -wd4312
+  CCFLAGS += -I../tiff -I../lzma -I../zlib -I../../gsl -openmp -wd4018 -wd4244 -wd4267 -wd4305 -wd4311 -wd4312
   PROD_LIBS = csa.lib nnetwork.lib mdbcommon.lib matlib.lib fftpack.lib SDDS1.lib rpnlib.lib gsl.lib gslcblas.lib mdbmth.lib mdblib.lib lzma.lib z.lib xls.lib
   TIFF_LIBS = tiff.lib 
 endif

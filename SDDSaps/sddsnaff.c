@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
   char *indepQuantity, **depenQuantity, **exclude, **depenQuantityPair;
   long depenQuantities, excludes;
   char *input, *output;
-  long iArg, j, readCode, noWarnings, items;
+  long iArg, readCode, noWarnings, items;
   int64_t i, rows, rowsToUse;
   unsigned long flags, pairFlags, tmpFlags, pipeFlags, majorOrderFlag;
   SCANNED_ARG *scArg;
@@ -405,8 +405,9 @@ int main(int argc, char **argv) {
         if (pairs && !(pairDataArray[i] = SDDS_GetColumnInDoubles(&SDDSin, depenQuantityPair[i])))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       }
-#pragma omp parallel for private(j) if (threads > 1) num_threads(threads)
+#pragma omp parallel for if (threads > 1) num_threads(threads)
       for (i = 0; i < depenQuantities; i++) {
+        long j;
         double *frequency1 = frequency + i * maxFrequencies;
         double *amplitude0 = amplitude + i * maxFrequencies;
         double *phase0 = phase + i * maxFrequencies;

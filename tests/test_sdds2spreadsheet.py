@@ -26,7 +26,7 @@ def normalize_scientific_numbers(text):
 
 
 def assert_spreadsheet_text(text, expected):
-  assert normalize_scientific_numbers(text) == normalize_scientific_numbers(expected)
+  assert normalize_scientific_numbers(text).replace(chr(92), "/") == normalize_scientific_numbers(expected).replace(chr(92), "/")
 
 
 @pytest.mark.skipif(not SDDS2SPREADSHEET.exists(), reason="sdds2spreadsheet not built")

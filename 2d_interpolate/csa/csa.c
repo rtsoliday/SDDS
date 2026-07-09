@@ -1764,7 +1764,7 @@ int do_csa_2d_interpolate(specs *spec, int nin, point *pin, int *nout, point **p
   if (spec->nppc > 0)
     csa_setnppc(a, spec->nppc);
   if (spec->k > 0)
-    csa_setk(a, spec->k); 
+    csa_setk(a, (int)spec->k);
   csa_calculatespline(a);
   
   /*

@@ -98,11 +98,11 @@ keep
 "p 3 *"
 123
 5
-1 3 1 alpha 1 "x 2 *" "printf sys1" -2000000000
-2 5 1 beta bad "x y +" "printf sys2" 0
-3 7 2 gamma 3 "y 1 -" "printf sys3" 1000000000
-4 9 2 beta 4x "x y *" "printf sys4" 2000000000
-5 11 4 epsilon 5 "x 1 +" "printf sys5" 3000000000
+1 3 1 alpha 1 "x 2 *" "echo sys1" -2000000000
+2 5 1 beta bad "x y +" "echo sys2" 0
+3 7 2 gamma 3 "y 1 -" "echo sys3" 1000000000
+4 9 2 beta 4x "x y *" "echo sys4" 2000000000
+5 11 4 epsilon 5 "x 1 +" "echo sys5" 3000000000
 """,
     encoding="ascii",
   )

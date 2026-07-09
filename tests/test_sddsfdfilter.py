@@ -89,7 +89,7 @@ def test_sddsfdfilter_option(tmp_path, opt):
       f"-{opt}",
     ]
   result = subprocess.run(cmd, capture_output=True, text=True)
-  expected = EXPECTED[opt](str(out_file))
+  expected = EXPECTED[opt](out_file.as_posix())
   assert result.stderr == expected
 
 

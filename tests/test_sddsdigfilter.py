@@ -63,7 +63,7 @@ def test_sddsdigfilter_option(tmp_path, opt):
   else:
     cmd = base_cmd + ["-columns=longCol,shortCol", f"-{opt}"]
   result = subprocess.run(cmd, capture_output=True, text=True)
-  expected = EXPECTED[opt](str(out_file))
+  expected = EXPECTED[opt](out_file.as_posix())
   assert result.stderr == expected
 
 

@@ -74,4 +74,4 @@ def test_sdds2stream_pipe():
     capture_output=True,
     check=True,
   )
-  assert result.stdout.decode() == "100\n200\n300\n400\n500\n"
+  assert result.stdout.decode().splitlines() == ["100", "200", "300", "400", "500"]

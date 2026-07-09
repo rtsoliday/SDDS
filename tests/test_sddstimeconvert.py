@@ -135,6 +135,35 @@ def test_date_to_time_conversion(tmp_path):
 
 
 @pytest.mark.skipif(not all(tool.exists() for tool in TOOLS), reason="tools not built")
+def test_parameter_date_to_time_conversion(tmp_path):
+    input_file = tmp_path / "param_date.sdds"
+    input_file.write_text(
+        "SDDS1\n"
+        "&parameter name=Date, type=string &end\n"
+        "&column name=dummy, type=double &end\n"
+        "&data mode=ascii &end\n"
+        "! page 1\n"
+        "\"Tuesday December 31 2024 12:30:00 PM\"\n"
+        "1\n"
+        "0\n"
+    )
+    output = tmp_path / "param_date_epoch.sdds"
+    subprocess.run([
+        str(SDDSTIMECONVERT),
+        str(input_file),
+        str(output),
+        "-dateToTime=parameter,Epoch,Date,format=%A %B %e %Y %r",
+    ], check=True, env=ENV)
+    result = subprocess.run([
+        str(SDDS2STREAM),
+        "-parameters=Epoch",
+        str(output),
+    ], capture_output=True, text=True, check=True)
+    value = float(result.stdout.strip())
+    assert value == pytest.approx(_epoch(2024, 12, 31, 12, 30))
+    subprocess.run([str(SDDSCHECK), str(output)], check=True, capture_output=True, text=True)
+
+@pytest.mark.skipif(not all(tool.exists() for tool in TOOLS), reason="tools not built")
 def test_parameter_epoch_conversion(tmp_path):
     input_file = tmp_path / "param.sdds"
     input_file.write_text(

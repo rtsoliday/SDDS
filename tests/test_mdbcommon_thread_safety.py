@@ -7,6 +7,7 @@ import subprocess
 import pytest
 
 from sdds_test_utils import (
+  built_library,
   PLATFORM_ID,
   ROOT_DIR,
   external_include_args,
@@ -16,14 +17,14 @@ from sdds_test_utils import (
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
 REQUIRED_LIBS = [
-  LIB_DIR / "libmdbcommon.a",
-  LIB_DIR / "libSDDS1.a",
-  LIB_DIR / "libnamelist.a",
-  LIB_DIR / "librpnlib.a",
-  LIB_DIR / "libmatlib.a",
-  LIB_DIR / "libfftpack.a",
-  LIB_DIR / "libmdbmth.a",
-  LIB_DIR / "libmdblib.a",
+  built_library("mdbcommon"),
+  built_library("SDDS1"),
+  built_library("namelist"),
+  built_library("rpnlib"),
+  built_library("matlib"),
+  built_library("fftpack"),
+  built_library("mdbmth"),
+  built_library("mdblib"),
 ]
 
 HARNESS_SOURCE = r"""

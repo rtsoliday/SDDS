@@ -564,7 +564,7 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
   int64_t n_freq, i, fftrows = 0;
   double r, r1, r2, length, factor, df, min, max, delta;
   double *real, *imag, *magData, *arg = NULL, *real_imag, *data, *psd = NULL, *psdInteg = NULL, *psdIntegPower = NULL, *unwrapArg = NULL, phase_correction = 0;
-  double dtf_real, dtf_imag, t0;
+  double t0;
   char s[256];
   double *fdata, *imagData = NULL;
   double *tDataStore = NULL;
@@ -784,8 +784,9 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
     }
   }
 
-#pragma omp parallel for private(dtf_real, dtf_imag) if (threads > 1) num_threads(threads)
+#pragma omp parallel for if (threads > 1) num_threads(threads)
   for (i = 0; i < n_freq; i++) {
+    double dtf_real, dtf_imag;
     fdata[i] = i * df;
     dtf_real = cos(-2 * PI * fdata[i] * t0);
     dtf_imag = sin(-2 * PI * fdata[i] * t0);

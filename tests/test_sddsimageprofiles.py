@@ -177,7 +177,7 @@ def test_auto_background_integrated(tmp_path):
   )
   data = read_sdds(output)
   assert data == [[1, 5], [2, 6], [3, 7], [4, 6], [5, 5]]
-  assert result.stdout.decode() == "Background level subtracted: 1\n"
+  assert result.stdout.decode().splitlines() == ["Background level subtracted: 1"]
 
 @pytest.mark.skipif(not SDDSIMAGEPROFILES.exists(), reason="sddsimageprofiles not built")
 def test_auto_background_keep_negative(tmp_path):
@@ -198,7 +198,7 @@ def test_auto_background_keep_negative(tmp_path):
   )
   data = read_sdds(output)
   assert data == [[1, 4], [2, 5], [3, 6], [4, 5], [5, 4]]
-  assert result.stdout.decode() == "Background level subtracted: 1\n"
+  assert result.stdout.decode().splitlines() == ["Background level subtracted: 1"]
 
 @pytest.mark.skipif(not SDDSIMAGEPROFILES.exists(), reason="sddsimageprofiles not built")
 def test_area_of_interest(tmp_path):

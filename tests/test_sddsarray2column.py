@@ -91,10 +91,16 @@ def test_nowarnings_option(tmp_path):
 
 def test_pipe_option(tmp_path):
   input_file = create_input(tmp_path)
-  cmd = (
-    f"{SDDSARRAY2COLUMN} {input_file} -convert=A,Acol -pipe=out | "
-    f"{SDDS2PLAINDATA} -pipe -column=Acol -noRowCount"
+  generated = subprocess.run(
+    [str(SDDSARRAY2COLUMN), str(input_file), "-convert=A,Acol", "-pipe=out"],
+    stdout=subprocess.PIPE,
+    check=True,
   )
-  result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
+  result = subprocess.run(
+    [str(SDDS2PLAINDATA), "-pipe", "-column=Acol", "-noRowCount"],
+    input=generated.stdout,
+    capture_output=True,
+    check=True,
+  )
   values = [int(x) for x in result.stdout.split()]
   assert values == [1, 2, 3, 4, 5, 6, 7, 8]

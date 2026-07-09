@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
   year = month = day = julianDay = 0;
   secondsSinceEpoch = hour = 0;
   time(&longTime);
-  secondsSinceEpoch = longTime;
+  secondsSinceEpoch = (double)longTime;
   textOutput = scriptOutput = 0;
 
   for (i_arg = 1; i_arg < argc; i_arg++) {
@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
     if (scriptOutput) {
       printf("set %sEpoch%s%.6f\n",
              variableRootname, useEquals ? " = " : " ", secondsSinceEpoch);
-      longTime = secondsSinceEpoch;
+      longTime = (time_t)secondsSinceEpoch;
       timeStamp = ctime(&longTime);
       timeStamp[strlen(timeStamp) - 1] = 0;
       printf("set %sTimeStamp%s{%s}\n",
@@ -168,8 +168,8 @@ int main(int argc, char **argv) {
       printf("%.6f\n", secondsSinceEpoch);
   } else {
     TimeEpochToBreakdown(&year, &julianDay, &month, &day, &hour, secondsSinceEpoch);
-    ihour = hour;
-    iminute = (minute = (hour - ihour) * 60);
+    ihour = (short)hour;
+    iminute = (short)(minute = (hour - ihour) * 60);
     second = (minute - iminute) * 60;
     if (scriptOutput) {
       printf("set %sYear%s%hd\n",
@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
       printf("set %sHHMMSS%s%02hd:%02hd:%02hd\n",
              variableRootname, useEquals ? " = " : " ",
              ihour, iminute, (short)second);
-      longTime = secondsSinceEpoch + 0.5;
+      longTime = (time_t)(secondsSinceEpoch + 0.5);
       timeStamp = ctime(&longTime);
       timeStamp[strlen(timeStamp) - 1] = 0;
       printf("set %sTimeStamp%s{%s}\n",
@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
     }
   }
   if (textOutput) {
-    longTime = secondsSinceEpoch + 0.5;
+    longTime = (time_t)(secondsSinceEpoch + 0.5);
     fputs(ctime(&longTime), stdout);
   }
   return (0);

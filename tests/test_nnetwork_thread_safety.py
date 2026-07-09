@@ -6,14 +6,14 @@ import subprocess
 
 import pytest
 
-from sdds_test_utils import PLATFORM_ID, ROOT_DIR
+from sdds_test_utils import PLATFORM_ID, ROOT_DIR, built_library
 
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
 REQUIRED_LIBS = [
-  LIB_DIR / "libnnetwork.a",
-  LIB_DIR / "libmdbmth.a",
-  LIB_DIR / "libmdblib.a",
+  built_library("nnetwork"),
+  built_library("mdbmth"),
+  built_library("mdblib"),
 ]
 
 HARNESS_SOURCE = r"""

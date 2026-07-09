@@ -1,10 +1,35 @@
+import os
 import platform
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-PLATFORM_ID = f"{platform.system()}-{platform.machine()}"
+IS_WINDOWS = platform.system() == "Windows"
+PLATFORM_ID = "Windows-x86_64" if IS_WINDOWS else f"{platform.system()}-{platform.machine()}"
 IS_DARWIN_ARM64 = PLATFORM_ID == "Darwin-arm64"
-BIN_DIR = ROOT_DIR / "bin" / PLATFORM_ID
+LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
+
+
+class ArtifactDirectory:
+  """Path-like build directory that applies the native executable suffix."""
+
+  def __init__(self, path, suffix=""):
+    self.path = Path(path)
+    self.suffix = suffix
+
+  def __truediv__(self, name):
+    path = self.path / name
+    if self.suffix and not path.suffix:
+      path = path.with_suffix(self.suffix)
+    return path
+
+  def __fspath__(self):
+    return os.fspath(self.path)
+
+  def __str__(self):
+    return str(self.path)
+
+
+BIN_DIR = ArtifactDirectory(ROOT_DIR / "bin" / PLATFORM_ID, ".exe" if IS_WINDOWS else "")
 
 SYSTEM_LIBRARY_DIRS = (
   Path("/usr/lib64"),
@@ -28,6 +53,12 @@ DARWIN_OPENMP_DIRS = (
 
 def sdds_binary(name):
   return BIN_DIR / name
+
+
+def built_library(name):
+  """Return a built library using the native platform naming convention."""
+  filename = f"{name}.lib" if IS_WINDOWS else f"lib{name}.a"
+  return LIB_DIR / filename
 
 
 def external_library(name):

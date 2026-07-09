@@ -15,16 +15,25 @@
 #include <ctype.h>
 #include <errno.h>
 #include <float.h>
-#include <glob.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <sys/stat.h>
-#include <unistd.h>
+
+#if defined(_WIN32)
+#  include <direct.h>
+#  define getcwd _getcwd
+#  if !defined(S_ISDIR)
+#    define S_ISDIR(mode) (((mode) & _S_IFMT) == _S_IFDIR)
+#  endif
+#else
+#  include <glob.h>
+#  include <strings.h>
+#  include <unistd.h>
+#endif
 
 #if defined(_OPENMP)
 #  include <omp.h>
@@ -300,9 +309,21 @@ static int is_absolute_path(const char *path) {
     return 0;
   if (path[0] == '/')
     return 1;
+#if defined(_WIN32)
+  if (path[0] == '\\')
+    return 1;
+#endif
   if (isalpha((unsigned char)path[0]) && path[1] == ':')
     return 1;
   return 0;
+}
+
+static int is_path_separator(char c) {
+#if defined(_WIN32)
+  return c == '/' || c == '\\';
+#else
+  return c == '/';
+#endif
 }
 
 static char *join_path(const char *dir, const char *name) {
@@ -316,7 +337,7 @@ static char *join_path(const char *dir, const char *name) {
 
   dirLen = strlen(dir);
   nameLen = strlen(name);
-  needSlash = dirLen && dir[dirLen - 1] != '/';
+  needSlash = dirLen && !is_path_separator(dir[dirLen - 1]);
   path = xmalloc(dirLen + needSlash + nameLen + 1);
   memcpy(path, dir, dirLen);
   if (needSlash)
@@ -340,6 +361,33 @@ static int path_exists(const char *path) {
 }
 
 static int same_existing_file(const char *path1, const char *path2) {
+#if defined(_WIN32)
+  BY_HANDLE_FILE_INFORMATION info1, info2;
+  HANDLE file1, file2;
+  int same = 0;
+
+  if (!path1 || !path2)
+    return 0;
+  if (_stricmp(path1, path2) == 0)
+    return 1;
+  file1 = CreateFileA(path1, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                      NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+  if (file1 == INVALID_HANDLE_VALUE)
+    return 0;
+  file2 = CreateFileA(path2, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                      NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+  if (file2 != INVALID_HANDLE_VALUE) {
+    if (GetFileInformationByHandle(file1, &info1) &&
+        GetFileInformationByHandle(file2, &info2)) {
+      same = info1.dwVolumeSerialNumber == info2.dwVolumeSerialNumber &&
+             info1.nFileIndexHigh == info2.nFileIndexHigh &&
+             info1.nFileIndexLow == info2.nFileIndexLow;
+    }
+    CloseHandle(file2);
+  }
+  CloseHandle(file1);
+  return same;
+#else
   struct stat st1, st2;
   if (!path1 || !path2)
     return 0;
@@ -348,6 +396,7 @@ static int same_existing_file(const char *path1, const char *path2) {
   if (stat(path1, &st1) != 0 || stat(path2, &st2) != 0)
     return 0;
   return st1.st_dev == st2.st_dev && st1.st_ino == st2.st_ino;
+#endif
 }
 
 static int is_directory(const char *path) {
@@ -358,6 +407,13 @@ static int is_directory(const char *path) {
 static const char *base_name(const char *path) {
   const char *slash;
   slash = strrchr(path, '/');
+#if defined(_WIN32)
+  {
+    const char *backslash = strrchr(path, '\\');
+    if (!slash || (backslash && backslash > slash))
+      slash = backslash;
+  }
+#endif
   return slash ? slash + 1 : path;
 }
 
@@ -750,6 +806,46 @@ static void collect_input_files(const char *workDir, const OPTIONS *opts, const 
   long i;
   for (i = 0; i < opts->pattern.items; i++) {
     char *globPattern;
+#if defined(_WIN32)
+    WIN32_FIND_DATAA findData;
+    HANDLE findHandle;
+    const char *separator;
+    size_t prefixLength;
+
+    globPattern = is_absolute_path(opts->pattern.item[i]) ? xstrdup(opts->pattern.item[i]) : join_path(workDir, opts->pattern.item[i]);
+    separator = strrchr(globPattern, '/');
+    {
+      const char *backslash = strrchr(globPattern, '\\');
+      if (!separator || (backslash && backslash > separator))
+        separator = backslash;
+    }
+    prefixLength = separator ? (size_t)(separator - globPattern + 1) : 0;
+    findHandle = FindFirstFileA(globPattern, &findData);
+    if (findHandle != INVALID_HANDLE_VALUE) {
+      do {
+        char *path;
+        size_t nameLength;
+        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+          continue;
+        nameLength = strlen(findData.cFileName);
+        path = xmalloc(prefixLength + nameLength + 1);
+        memcpy(path, globPattern, prefixLength);
+        memcpy(path + prefixLength, findData.cFileName, nameLength + 1);
+        if ((!finalOutput || !same_existing_file(path, finalOutput)) &&
+            !string_list_contains(files, path))
+          string_list_append_owned(files, path);
+        else
+          free(path);
+      } while (FindNextFileA(findHandle, &findData));
+      if (GetLastError() != ERROR_NO_MORE_FILES)
+        fprintf(stderr, "warning: file search failed for %s\n", globPattern);
+      FindClose(findHandle);
+    } else if (GetLastError() != ERROR_FILE_NOT_FOUND &&
+               GetLastError() != ERROR_PATH_NOT_FOUND) {
+      fprintf(stderr, "warning: file search failed for %s\n", globPattern);
+    }
+    free(globPattern);
+#else
     glob_t globResult;
     int status;
     size_t j;
@@ -770,6 +866,7 @@ static void collect_input_files(const char *workDir, const OPTIONS *opts, const 
     }
     globfree(&globResult);
     free(globPattern);
+#endif
   }
   if (files->items > 1)
     qsort(files->item, files->items, sizeof(*files->item), compare_input_files);

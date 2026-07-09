@@ -162,11 +162,23 @@ def test_majorOrder_option(tmp_path):
 
 def test_pipe_option(tmp_path):
   input_file = create_input(tmp_path)
-  cmd = (
-    f"{SDDSCORRELATE} {input_file} -pipe=out | "
-    f"{SDDS2PLAINDATA} -pipe -column=CorrelatePair -column=CorrelationCoefficient "
-    f"\"-separator= \" -labeled"
+  generated = subprocess.run(
+    [str(SDDSCORRELATE), str(input_file), "-pipe=out"],
+    stdout=subprocess.PIPE,
+    check=True,
   )
-  result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
-  pairs = parse_pairs_text(result.stdout)
+  result = subprocess.run(
+    [
+      str(SDDS2PLAINDATA),
+      "-pipe",
+      "-column=CorrelatePair",
+      "-column=CorrelationCoefficient",
+      "-separator= ",
+      "-labeled",
+    ],
+    input=generated.stdout,
+    capture_output=True,
+    check=True,
+  )
+  pairs = parse_pairs_text(result.stdout.decode())
   assert set(pairs.keys()) == {"x.y", "x.z", "y.z"}

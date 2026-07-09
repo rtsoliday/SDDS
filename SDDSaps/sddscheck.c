@@ -55,11 +55,19 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#if defined(_WIN32) && !defined(_MINGW) && !defined(S_ISDIR)
+#  define S_ISDIR(mode) (((mode) & _S_IFMT) == _S_IFDIR)
+#endif
+#if defined(_WIN32) && !defined(_MINGW) && !defined(S_ISREG)
+#  define S_ISREG(mode) (((mode) & _S_IFMT) == _S_IFREG)
+#endif
+
 #if !defined(_WIN32) || defined(_MINGW)
 #  include <dirent.h>
 #  include <unistd.h>
 #  define SDDSCHECK_USE_DIRENT 1
 #else
+#  include <windows.h>
 #  define SDDSCHECK_USE_DIRENT 0
 #endif
 
@@ -302,11 +310,12 @@ static char *joinPath(const char *directory, const char *name) {
 }
 
 static void collectDirectoryFiles(const char *directory, long recursive, const StringList *patterns, StringList *files) {
+  StringList entries = {NULL, 0, 0};
+  long i;
+
 #if SDDSCHECK_USE_DIRENT
   DIR *dir;
   struct dirent *entry;
-  StringList entries = {NULL, 0, 0};
-  long i;
 
   dir = opendir(directory);
   if (!dir) {
@@ -320,6 +329,42 @@ static void collectDirectoryFiles(const char *directory, long recursive, const S
     stringListAppend(&entries, entry->d_name);
   }
   closedir(dir);
+#elif defined(_WIN32)
+  WIN32_FIND_DATAA entry;
+  HANDLE findHandle;
+  char *searchPattern;
+  DWORD error;
+
+  searchPattern = joinPath(directory, "*");
+  findHandle = FindFirstFileA(searchPattern, &entry);
+  if (findHandle == INVALID_HANDLE_VALUE) {
+    error = GetLastError();
+    if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND)
+      fprintf(stderr, "warning: unable to read directory %s: Windows error %lu\n",
+              directory, (unsigned long)error);
+    free(searchPattern);
+    return;
+  }
+
+  do {
+    if (strcmp(entry.cFileName, ".") == 0 || strcmp(entry.cFileName, "..") == 0 ||
+        (entry.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+      continue;
+    stringListAppend(&entries, entry.cFileName);
+  } while (FindNextFileA(findHandle, &entry));
+  error = GetLastError();
+  if (error != ERROR_NO_MORE_FILES)
+    fprintf(stderr, "warning: unable to finish reading directory %s: Windows error %lu\n",
+            directory, (unsigned long)error);
+  FindClose(findHandle);
+  free(searchPattern);
+#else
+  (void)directory;
+  (void)recursive;
+  (void)patterns;
+  (void)files;
+  SDDS_Bomb("-recursive and directory -pattern expansion are not supported on this platform");
+#endif
 
   if (entries.items > 1)
     qsort(entries.item, entries.items, sizeof(*entries.item), compareStringPointers);
@@ -329,7 +374,11 @@ static void collectDirectoryFiles(const char *directory, long recursive, const S
     struct stat statBuffer;
 
     path = joinPath(directory, entries.item[i]);
+#if SDDSCHECK_USE_DIRENT
     if (lstat(path, &statBuffer) != 0) {
+#else
+    if (stat(path, &statBuffer) != 0) {
+#endif
       free(path);
       continue;
     }
@@ -342,13 +391,6 @@ static void collectDirectoryFiles(const char *directory, long recursive, const S
     free(path);
   }
   stringListFree(&entries);
-#else
-  (void)directory;
-  (void)recursive;
-  (void)patterns;
-  (void)files;
-  SDDS_Bomb("-recursive and directory -pattern expansion are not supported on this platform");
-#endif
 }
 
 static void readInputNamesFromStdin(StringList *input) {
@@ -593,15 +635,19 @@ int main(int argc, char **argv) {
     for (i_arg = 0; i_arg < input.items; i_arg++) {
       long failuresSeen = 0;
       if (maxErrors) {
-#pragma omp atomic read
-        failuresSeen = sharedFailures;
+#pragma omp critical(sddscheck_failures)
+        {
+          failuresSeen = sharedFailures;
+        }
         if (failuresSeen >= maxErrors)
           continue;
       }
       result[i_arg] = checkFile(input.item[i_arg], &checkOptions, 0);
       if (maxErrors && result[i_arg].status != CHECK_OK) {
-#pragma omp atomic update
-        sharedFailures++;
+#pragma omp critical(sddscheck_failures)
+        {
+          sharedFailures++;
+        }
       }
     }
 #else

@@ -25,6 +25,10 @@
 #define epicsShareFuncRPNLIB extern
 #endif
 
+#if defined(_WIN32) && !defined(__CYGWIN32__) && !defined(EXPORT_RPNLIB)
+#define RPN_USE_TLS_ACCESSORS 1
+#endif
+
 /* linked-list node structure for User-Defined Functions */
 struct UDF {
     char *udf_name;
@@ -71,11 +75,20 @@ epicsShareFuncRPNLIB long memory_added;
 epicsShareFuncRPNLIB long n_memories;
 
 /* stack for computations */
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL double stack[STACKSIZE];
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL long stackptr;
+epicsShareFuncRPNLIB double *rpn_stack_ptr(void);
+epicsShareFuncRPNLIB long *rpn_stackptr_ptr(void);
+epicsShareFuncRPNLIB long *rpn_dstack_ptr(void);
+#if defined(RPN_USE_TLS_ACCESSORS)
+#define stack (rpn_stack_ptr())
+#define stackptr (*rpn_stackptr_ptr())
+#define dstack (rpn_dstack_ptr())
+#else
+extern RPN_THREAD_LOCAL double stack[STACKSIZE];
+extern RPN_THREAD_LOCAL long stackptr;
 
 /*stack for long numbers */
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL long dstack[STACKSIZE];
+extern RPN_THREAD_LOCAL long dstack[STACKSIZE];
+#endif
 
 /* stack that replaces PCODE */
 typedef struct {
@@ -93,10 +106,21 @@ typedef struct {
     long udf_start_index;
     long udf_end_index;
     } UDF_INDEX;
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL UDF_INDEX *udf_id;
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL long cycle_counter;
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL long cycle_counter_stop;
+epicsShareFuncRPNLIB UDF_INDEX **rpn_udf_id_ptr(void);
+epicsShareFuncRPNLIB long *rpn_cycle_counter_ptr(void);
+epicsShareFuncRPNLIB long *rpn_cycle_counter_stop_ptr(void);
+epicsShareFuncRPNLIB long *rpn_max_cycle_counter_ptr(void);
+#if defined(RPN_USE_TLS_ACCESSORS)
+#define udf_id (*rpn_udf_id_ptr())
+#define cycle_counter (*rpn_cycle_counter_ptr())
+#define cycle_counter_stop (*rpn_cycle_counter_stop_ptr())
+#define max_cycle_counter (*rpn_max_cycle_counter_ptr())
+#else
+extern RPN_THREAD_LOCAL UDF_INDEX *udf_id;
+extern RPN_THREAD_LOCAL long cycle_counter;
+extern RPN_THREAD_LOCAL long cycle_counter_stop;
 extern RPN_THREAD_LOCAL long max_cycle_counter;
+#endif
 
 /* stack that is used to locate breakpoints in conditional statements */
 typedef struct {
@@ -125,7 +149,12 @@ epicsShareFuncRPNLIB long astackptr;
 extern long max_astackptr;
 
 /* stack for strings */
+epicsShareFuncRPNLIB char **rpn_sstack_ptr(void);
+#if defined(RPN_USE_TLS_ACCESSORS)
+#define sstack (rpn_sstack_ptr())
+#else
 extern RPN_THREAD_LOCAL char *sstack[STACKSIZE];
+#endif
 
 /* structure for stack of code strings */
 #define CODE_LEN 16384
@@ -140,14 +169,30 @@ struct CODE {
 #define LBUFFER 256
     struct CODE *pred, *succ;  /* list links */
     } ;
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL struct CODE code;		/* root node */
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL struct CODE *code_ptr;           /* will point to current node */
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL long code_lev;                    /* number of links */
+epicsShareFuncRPNLIB struct CODE *rpn_code_root_ptr(void);
+epicsShareFuncRPNLIB struct CODE **rpn_code_current_ptr(void);
+epicsShareFuncRPNLIB long *rpn_code_lev_ptr(void);
+#if defined(RPN_USE_TLS_ACCESSORS)
+#define code (*rpn_code_root_ptr())
+#define code_ptr (*rpn_code_current_ptr())
+#define code_lev (*rpn_code_lev_ptr())
+#else
+extern RPN_THREAD_LOCAL struct CODE code;		/* root node */
+extern RPN_THREAD_LOCAL struct CODE *code_ptr;           /* will point to current node */
+extern RPN_THREAD_LOCAL long code_lev;                    /* number of links */
+#endif
 
 /* stack for logical operations */
 #define LOGICSTACKSIZE 500
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL long logicstack[LOGICSTACKSIZE];
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL long lstackptr;
+epicsShareFuncRPNLIB long *rpn_logicstack_ptr(void);
+epicsShareFuncRPNLIB long *rpn_lstackptr_ptr(void);
+#if defined(RPN_USE_TLS_ACCESSORS)
+#define logicstack (rpn_logicstack_ptr())
+#define lstackptr (*rpn_lstackptr_ptr())
+#else
+extern RPN_THREAD_LOCAL long logicstack[LOGICSTACKSIZE];
+extern RPN_THREAD_LOCAL long lstackptr;
+#endif
 
 
 /* structure and stack for command input files */
@@ -162,8 +207,15 @@ struct INPUT_FILE {
 #define ECHO 0
 #define NO_ECHO 1
 
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL struct INPUT_FILE input_stack[FILESTACKSIZE];
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL long istackptr;
+epicsShareFuncRPNLIB struct INPUT_FILE *rpn_input_stack_ptr(void);
+epicsShareFuncRPNLIB long *rpn_istackptr_ptr(void);
+#if defined(RPN_USE_TLS_ACCESSORS)
+#define input_stack (rpn_input_stack_ptr())
+#define istackptr (*rpn_istackptr_ptr())
+#else
+extern RPN_THREAD_LOCAL struct INPUT_FILE input_stack[FILESTACKSIZE];
+extern RPN_THREAD_LOCAL long istackptr;
+#endif
 
 /* structure and array (not stack) for user IO files */
 struct IO_FILE {
@@ -174,22 +226,32 @@ struct IO_FILE {
 #define OUTPUT 2
     } ;
 
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL struct IO_FILE io_file[FILESTACKSIZE];
+epicsShareFuncRPNLIB struct IO_FILE *rpn_io_file_ptr(void);
+#if defined(RPN_USE_TLS_ACCESSORS)
+#define io_file (rpn_io_file_ptr())
+#else
+extern RPN_THREAD_LOCAL struct IO_FILE io_file[FILESTACKSIZE];
+#endif
 
 /* values to indicate scientific notation or non-scientific notation output */
 #define SCIENTIFIC 0
 #define NO_SCIENTIFIC 1
 #define USER_SPECIFIED 2
-epicsShareFuncRPNLIB RPN_THREAD_LOCAL long format_flag;
+epicsShareFuncRPNLIB long *rpn_format_flag_ptr(void);
+epicsShareFuncRPNLIB long *rpn_do_trace_ptr(void);
+#if defined(RPN_USE_TLS_ACCESSORS)
+#define format_flag (*rpn_format_flag_ptr())
+#define do_trace (*rpn_do_trace_ptr())
+#else
+extern RPN_THREAD_LOCAL long format_flag;
 
 /* flag to indicate trace/notrace mode */
 extern RPN_THREAD_LOCAL long do_trace;
+#endif
 
 extern char *additional_help;
 
 double rpn_internal(char *expression);
-epicsShareFuncRPNLIB void rpn_lock(void);
-epicsShareFuncRPNLIB void rpn_unlock(void);
 void rpn_update_legacy_stackptrs(void);
 
 long find_udf_unlocked(char *udf_name);

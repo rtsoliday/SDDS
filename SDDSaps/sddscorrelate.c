@@ -128,11 +128,11 @@ int main(int argc, char **argv) {
   char *input, *output;
   SCANNED_ARG *scanned;
   SDDS_DATASET SDDSin, SDDSout;
-  long i, j, row, count, readCode, rankOrder, iName1, iName2;
+  long i, j, row, readCode, rankOrder, iName1, iName2;
   long pairCount, pairIndex;
   int64_t rows;
   int32_t outlierStDevPasses;
-  double **data, correlation, significance, outlierStDevLimit;
+  double **data, outlierStDevLimit;
   double *correlationValue, *significanceValue;
   long *correlationPoints;
   double **rank;
@@ -309,9 +309,11 @@ int main(int argc, char **argv) {
       if (outlierStDevPasses)
         markStDevOutliers(data[i], outlierStDevLimit, outlierStDevPasses, accept[i], rows);
     }
-#pragma omp parallel for private(j, iName1, iName2, count, correlation, significance, pairIndex) if (threads > 1) num_threads(threads)
+#pragma omp parallel for private(j, iName1, iName2, pairIndex) if (threads > 1) num_threads(threads)
     for (i = 0; i < columns; i++) {
       for (j = i + 1; j < columns; j++) {
+        long count;
+        double correlation, significance;
         pairIndex = correlationPairIndex(i, j, columns);
         iName1 = i;
         iName2 = j;

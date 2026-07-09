@@ -132,6 +132,81 @@ RPN_THREAD_LOCAL long format_flag = NO_SCIENTIFIC;
 /* flag to indicate trace/notrace mode */
 RPN_THREAD_LOCAL long do_trace;
 
+/* MSVC does not permit thread-local data to have a DLL interface.  Keep the
+ * storage private to rpnlib and let Windows executables obtain the calling
+ * thread's state through exported functions instead. */
+double *rpn_stack_ptr(void) {
+  return stack;
+}
+
+long *rpn_stackptr_ptr(void) {
+  return &stackptr;
+}
+
+long *rpn_dstack_ptr(void) {
+  return dstack;
+}
+
+UDF_INDEX **rpn_udf_id_ptr(void) {
+  return &udf_id;
+}
+
+long *rpn_cycle_counter_ptr(void) {
+  return &cycle_counter;
+}
+
+long *rpn_cycle_counter_stop_ptr(void) {
+  return &cycle_counter_stop;
+}
+
+long *rpn_max_cycle_counter_ptr(void) {
+  return &max_cycle_counter;
+}
+
+char **rpn_sstack_ptr(void) {
+  return sstack;
+}
+
+struct CODE *rpn_code_root_ptr(void) {
+  return &code;
+}
+
+struct CODE **rpn_code_current_ptr(void) {
+  return &code_ptr;
+}
+
+long *rpn_code_lev_ptr(void) {
+  return &code_lev;
+}
+
+long *rpn_logicstack_ptr(void) {
+  return logicstack;
+}
+
+long *rpn_lstackptr_ptr(void) {
+  return &lstackptr;
+}
+
+struct INPUT_FILE *rpn_input_stack_ptr(void) {
+  return input_stack;
+}
+
+long *rpn_istackptr_ptr(void) {
+  return &istackptr;
+}
+
+struct IO_FILE *rpn_io_file_ptr(void) {
+  return io_file;
+}
+
+long *rpn_format_flag_ptr(void) {
+  return &format_flag;
+}
+
+long *rpn_do_trace_ptr(void) {
+  return &do_trace;
+}
+
 /* array of function structures */
 struct FUNCTION funcRPN[NFUNCS] = {
 /* program control and evaluation functions: */

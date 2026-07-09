@@ -2,10 +2,18 @@
 /* #undef NO_COPYSIGN */
 
 #if defined(_WIN32)
-#define isnan _isnan
-#define copysign _copysign
-#define rint (int)
-#define M_PI 3.14159265358979323846
+#  if !defined(isnan)
+#    define isnan _isnan
+#  endif
+#  if !defined(copysign)
+#    define copysign _copysign
+#  endif
+#  if !defined(rint)
+#    define rint (int)
+#  endif
+#  if !defined(M_PI)
+#    define M_PI 3.14159265358979323846
+#  endif
 #endif
 
 #if defined(NO_COPYSIGN)

@@ -1,3 +1,4 @@
+import shutil
 import subprocess
 from pathlib import Path
 import textwrap
@@ -160,7 +161,7 @@ def test_merge_parameter(tmp_path):
 
 def test_append(tmp_path):
   base = tmp_path / "base.sdds"
-  subprocess.run(["cp", str(EXAMPLE), str(base)], check=True)
+  shutil.copy(EXAMPLE, base)
   subprocess.run(
     [
       str(SDDSCOMBINE),
@@ -179,7 +180,7 @@ def test_append(tmp_path):
 def test_pipe():
   result = subprocess.run([str(SDDSCOMBINE), str(EXAMPLE), str(EXAMPLE), "-pipe=output"], stdout=subprocess.PIPE, check=True)
   stream = subprocess.run([str(SDDS2STREAM), "-pipe", "-columns=shortCol"], input=result.stdout, stdout=subprocess.PIPE, check=True)
-  assert stream.stdout.decode().strip() == PIPE_SHORTCOL
+  assert stream.stdout.decode().splitlines() == PIPE_SHORTCOL.splitlines()
 
 
 def test_delete_column(tmp_path):

@@ -24,7 +24,12 @@ def run_sdds2tiff(sdds: Path, out_prefix: Path, *opts: str, stdin=None) -> None:
 
 def read_pixels(path: Path) -> list[int]:
     with Image.open(path) as img:
-        return list(img.getdata())
+        return image_pixels(img)
+
+def image_pixels(img) -> list[int]:
+    if hasattr(img, "get_flattened_data"):
+        return list(img.get_flattened_data())
+    return list(img.getdata())
 
 def create_gray8(tmp_path: Path, values) -> Path:
     img = Image.new("L", (2, 2))
@@ -82,7 +87,7 @@ def test_sixteen_bit(tmp_path):
     with Image.open(out) as img:
         assert img.mode == "I;16"
         expected = [v >> 8 for v in [0, 65535, 32768, 16384]]
-        assert list(img.getdata()) == expected
+        assert image_pixels(img) == expected
 
 def test_page_range(tmp_path):
     sdds = tmp_path / "data.sdds"

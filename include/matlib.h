@@ -66,7 +66,9 @@ epicsShareFuncMATLIB extern void mat_alloc1(MATRIX **A, int n, int m);
 #define m_alloc1(A,n,m) mat_alloc1(A,n,m)
  
 epicsShareFuncMATLIB extern int mat_copy(MATRIX *A, MATRIX *B);
+#ifndef m_copy
 #define m_copy(A,B) mat_copy(A,B)
+#endif
  
 epicsShareFuncMATLIB extern double mat_det(MATRIX *D);
 #define m_det(D) mat_det(D)

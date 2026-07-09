@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from sdds_test_utils import PLATFORM_ID, ROOT_DIR, external_library_args
+from sdds_test_utils import PLATFORM_ID, ROOT_DIR, external_library_args, built_library
 
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
 REQUIRED_LIBS = [
-  LIB_DIR / "librpnlib.a",
-  LIB_DIR / "libmdbmth.a",
-  LIB_DIR / "libmdblib.a",
+  built_library("rpnlib"),
+  built_library("mdbmth"),
+  built_library("mdblib"),
 ]
 
 HARNESS_SOURCE = r"""

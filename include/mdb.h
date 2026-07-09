@@ -21,7 +21,7 @@
 #include <time.h>
 #include <stdint.h>
 #include "mdb_thread.h"
-#if defined(_WIN32) && !defined(_MINGW)
+#if defined(_WIN32) && !defined(_MINGW) && (!defined(_MSC_VER) || _MSC_VER < 1800)
 typedef __int16 int16_t;
 typedef unsigned __int16 uint16_t;
 typedef __int32 int32_t;
@@ -94,7 +94,7 @@ extern "C" {
 #endif
 #endif
 #endif
-#if defined(_WIN32) && !defined(_MINGW) && (_MSC_VER < 1800)
+#if defined(_WIN32) && !defined(_MINGW) && defined(_MSC_VER) && (_MSC_VER < 1800)
 #define isnan(x) _isnan(x)
 #define isinf(x) (0)
 #endif

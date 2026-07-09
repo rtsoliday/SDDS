@@ -447,7 +447,7 @@ int main(int argc, char **argv) {
           SDDS_Bomb("memory allocation failure");
         errorMessage[0] = 0;
 
-#pragma omp parallel for private(j) if (threads > 1 && rows[pages] > 1) num_threads(threads) schedule(dynamic)
+#pragma omp parallel for if (threads > 1 && rows[pages] > 1) num_threads(threads) schedule(dynamic)
         for (j = 0; j < rows[pages]; j++) {
           double localAtValue, localResult;
           unsigned long localInterpCode;

@@ -399,10 +399,10 @@ int32_t SDDS_MPI_WriteAsciiString(SDDS_DATASET *SDDS_dataset, char *string) {
   SDDS_FILEBUFFER *fBuffer;
   MPI_DATASET *MPI_dataset = SDDS_dataset->MPI_dataset;
   int32_t mpi_code;
-  size_t targetSize;
+  int64_t targetSize;
 
   fBuffer = &(SDDS_dataset->fBuffer);
-  targetSize = strlen(string) * sizeof(char);
+  targetSize = (int64_t)strlen(string) * sizeof(char);
 
   if (!fBuffer->bufferSize) {
     if ((mpi_code = MPI_File_write(MPI_dataset->MPI_file, string, targetSize, MPI_CHAR, MPI_STATUS_IGNORE)) != MPI_SUCCESS) {
@@ -416,7 +416,7 @@ int32_t SDDS_MPI_WriteAsciiString(SDDS_DATASET *SDDS_dataset, char *string) {
     fBuffer->data += targetSize;
     return 1;
   } else {
-    int32_t lastLeft;
+    int64_t lastLeft;
     /* add back what was subtracted in test above.
        * lastLeft is the number of bytes left in the buffer before doing anything 
        * and also the number of bytes from the users data that get copied into the buffer.

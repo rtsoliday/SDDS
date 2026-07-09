@@ -293,8 +293,8 @@ int main(int argc, char **argv) {
   char *input, *output;
   double *inputData, *otherData, indepData, *weight;
   unsigned long pipeFlags, majorOrderFlag;
-  double decilePoint[2] = {10.0, 90.0}, decileResult[2];
-  double percentilePoint, percentileResult;
+  double decilePoint[2] = {10.0, 90.0};
+  double percentilePoint;
   double percentile;
   short columnMajorOrder = -1;
   int threads = 1;
@@ -852,8 +852,9 @@ int main(int argc, char **argv) {
       }
       break;
     case SET_DRANGE:
-#pragma omp parallel for private(decileResult) if (threads > 1 && rows > 1) num_threads(threads)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
       for (i = 0; i < rows; i++) {
+        double decileResult[2];
         if (!compute_percentiles(decileResult, decilePoint, 2, stat[iStat].array[i], pages))
           stat[iStat].value1[i] = 0;
         else
@@ -862,8 +863,9 @@ int main(int argc, char **argv) {
       break;
     case SET_PERCENTILE:
       percentilePoint = stat[iStat].percentile;
-#pragma omp parallel for private(percentileResult) if (threads > 1 && rows > 1) num_threads(threads)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
       for (i = 0; i < rows; i++) {
+        double percentileResult;
         if (!compute_percentiles(&percentileResult, &percentilePoint, 1, stat[iStat].array[i], pages))
           stat[iStat].value1[i] = 0;
         else

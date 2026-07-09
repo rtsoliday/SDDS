@@ -7,12 +7,12 @@ import subprocess
 
 import pytest
 
-from sdds_test_utils import PLATFORM_ID, ROOT_DIR
+from sdds_test_utils import PLATFORM_ID, ROOT_DIR, built_library
 
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
 REQUIRED_LIBS = [
-  LIB_DIR / "libmeschach.a",
+  built_library("meschach"),
 ]
 
 HARNESS_SOURCE = r"""

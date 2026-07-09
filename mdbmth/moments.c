@@ -50,7 +50,7 @@ double standardDeviation(double *x, long n) {
  */
 double standardDeviationThreaded(double *x, long n, long numThreads) {
   long i;
-  double sum = 0, sumSqr = 0, value, mean;
+  double sum = 0, sumSqr = 0, mean;
   if (n < 1)
     return (0.0);
   omp_set_num_threads(numThreads);
@@ -71,12 +71,12 @@ double standardDeviationThreaded(double *x, long n, long numThreads) {
     }
   }
   mean = sum / n;
-#pragma omp parallel private(value) shared(sumSqr)
+#pragma omp parallel shared(sumSqr)
   {
     double partial_sumSqr = 0;
 #pragma omp for
     for (i = 0; i < n; i++) {
-      value = x[i] - mean;
+      double value = x[i] - mean;
       partial_sumSqr += value * value;
     }
 #pragma omp critical
@@ -127,7 +127,7 @@ long computeMoments(double *mean, double *rms, double *standDev,
 long computeMomentsThreaded(double *mean, double *rms, double *standDev,
                             double *meanAbsoluteDev, double *x, long n, long numThreads) {
   long i;
-  double sum = 0, sumSqr = 0, value, sum2 = 0;
+  double sum = 0, sumSqr = 0, sum2 = 0;
   double lMean, lRms, lStDev, lMAD;
 
   if (!mean)
@@ -146,13 +146,14 @@ long computeMomentsThreaded(double *mean, double *rms, double *standDev,
 
   omp_set_num_threads(numThreads);
 
-#pragma omp parallel private(value) shared(sumSqr, sum)
+#pragma omp parallel shared(sumSqr, sum)
   {
     double partial_sumSqr = 0;
     double partial_sum = 0;
 #pragma omp for
     for (i = 0; i < n; i++) {
-      partial_sum += (value = x[i]);
+      double value = x[i];
+      partial_sum += value;
       partial_sumSqr += sqr(value);
     }
 #pragma omp critical
@@ -171,13 +172,13 @@ long computeMomentsThreaded(double *mean, double *rms, double *standDev,
   *rms = sqrt(sumSqr / n);
 
   sum = 0;
-#pragma omp parallel private(value) shared(sum, sum2)
+#pragma omp parallel shared(sum, sum2)
   {
     double partial_sum = 0;
     double partial_sum2 = 0;
 #pragma omp for
     for (i = 0; i < n; i++) {
-      value = x[i] - *mean;
+      double value = x[i] - *mean;
       partial_sum2 += value * value;
       partial_sum += fabs(value);
     }
@@ -239,7 +240,7 @@ long computeWeightedMoments(double *mean, double *rms, double *standDev,
 long computeWeightedMomentsThreaded(double *mean, double *rms, double *standDev,
                                     double *meanAbsoluteDev, double *x, double *w, long n, long numThreads) {
   long i;
-  double sumW = 0, sum = 0, sumWx = 0, sumSqrWx = 0, sum2 = 0, value;
+  double sumW = 0, sum = 0, sumWx = 0, sumSqrWx = 0, sum2 = 0;
 
   double lMean, lRms, lStDev, lMAD;
 
@@ -259,7 +260,7 @@ long computeWeightedMomentsThreaded(double *mean, double *rms, double *standDev,
 
   omp_set_num_threads(numThreads);
 
-#pragma omp parallel private(value) shared(sumW, sumWx, sumSqrWx)
+#pragma omp parallel shared(sumW, sumWx, sumSqrWx)
   {
     double partial_sumW = 0;
     double partial_sumWx = 0;
@@ -267,7 +268,8 @@ long computeWeightedMomentsThreaded(double *mean, double *rms, double *standDev,
 #pragma omp for
     for (i = 0; i < n; i++) {
       partial_sumW += w[i];
-      partial_sumWx += (value = x[i]) * w[i];
+      double value = x[i];
+      partial_sumWx += value * w[i];
       partial_sumSqrWx += value * value * w[i];
     }
 #pragma omp critical
@@ -288,13 +290,13 @@ long computeWeightedMomentsThreaded(double *mean, double *rms, double *standDev,
   if (sumW) {
     *mean = sumWx / sumW;
     *rms = sqrt(sumSqrWx / sumW);
-#pragma omp parallel private(value) shared(sum, sum2)
+#pragma omp parallel shared(sum, sum2)
     {
       double partial_sum = 0;
       double partial_sum2 = 0;
 #pragma omp for
       for (i = 0; i < n; i++) {
-        value = x[i] - *mean;
+        double value = x[i] - *mean;
         partial_sum += value * w[i];
         partial_sum2 += value * value * w[i];
       }
@@ -331,7 +333,6 @@ long accumulateMomentsThreaded(double *mean, double *rms, double *standDev,
   static MDB_THREAD_LOCAL long savedNTotal;
   double sum = savedSum, sumSqr = savedSumSqr;
   long nTotal = savedNTotal;
-  double value;
 
   if (reset)
     nTotal = sum = sumSqr = 0;
@@ -345,13 +346,14 @@ long accumulateMomentsThreaded(double *mean, double *rms, double *standDev,
   }
 
   omp_set_num_threads(numThreads);
-#pragma omp parallel private(value) shared(sum, sumSqr)
+#pragma omp parallel shared(sum, sumSqr)
   {
     double partial_sum = 0;
     double partial_sumSqr = 0;
 #pragma omp for
     for (i = 0; i < n; i++) {
-      partial_sum += (value = x[i]);
+      double value = x[i];
+      partial_sum += value;
       partial_sumSqr += sqr(value);
     }
 #pragma omp critical
@@ -480,7 +482,7 @@ long computeCorrelations(double *C11, double *C12, double *C22, double *x, doubl
  */
 long computeCorrelationsThreaded(double *C11, double *C12, double *C22, double *x, double *y, long n, long numThreads) {
   long i;
-  double xAve = 0, yAve = 0, dx, dy;
+  double xAve = 0, yAve = 0;
 
   *C11 = *C12 = *C22 = 0;
   if (!n)
@@ -511,15 +513,15 @@ long computeCorrelationsThreaded(double *C11, double *C12, double *C22, double *
   xAve /= n;
   yAve /= n;
 
-#pragma omp parallel private(dx, dy) shared(C11, C12, C22)
+#pragma omp parallel shared(C11, C12, C22)
   {
     double partial_C11 = 0;
     double partial_C12 = 0;
     double partial_C22 = 0;
 #pragma omp for
     for (i = 0; i < n; i++) {
-      dx = x[i] - xAve;
-      dy = y[i] - yAve;
+      double dx = x[i] - xAve;
+      double dy = y[i] - yAve;
       partial_C11 += dx * dx;
       partial_C12 += dx * dy;
       partial_C22 += dy * dy;
@@ -934,7 +936,7 @@ double weightedStDev(double *y, double *w, long n) {
  */
 double weightedStDevThreaded(double *y, double *w, long n, long numThreads) {
   long i;
-  double mean, sum = 0, wSum = 0, value;
+  double mean, sum = 0, wSum = 0;
 
   if (!n)
     return (0.0);
@@ -964,12 +966,12 @@ double weightedStDevThreaded(double *y, double *w, long n, long numThreads) {
     return 0.0;
   mean = sum / wSum;
   sum = 0;
-#pragma omp parallel private(value) shared(sum)
+#pragma omp parallel shared(sum)
   {
     double partial_sum = 0;
 #pragma omp for
     for (i = 0; i < n; i++) {
-      value = y[i] - mean;
+      double value = y[i] - mean;
       partial_sum += value * value * w[i];
     }
 #pragma omp critical

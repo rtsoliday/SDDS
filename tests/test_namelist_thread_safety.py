@@ -6,15 +6,15 @@ import subprocess
 
 import pytest
 
-from sdds_test_utils import PLATFORM_ID, ROOT_DIR, external_library_args
+from sdds_test_utils import PLATFORM_ID, ROOT_DIR, external_library_args, built_library
 
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
 REQUIRED_LIBS = [
-  LIB_DIR / "libnamelist.a",
-  LIB_DIR / "librpnlib.a",
-  LIB_DIR / "libmdbmth.a",
-  LIB_DIR / "libmdblib.a",
+  built_library("namelist"),
+  built_library("rpnlib"),
+  built_library("mdbmth"),
+  built_library("mdblib"),
 ]
 
 HARNESS_SOURCE = r"""
@@ -120,37 +120,45 @@ static void cleanup_config(Config *config)
   config->label = config->label_default;
 }
 
+static char *finish_print_to_string(FILE *fp)
+{
+  long output_size;
+  char *output;
+
+  if (fflush(fp) || (output_size = ftell(fp)) < 0 || fseek(fp, 0, SEEK_SET)) {
+    fclose(fp);
+    return NULL;
+  }
+  output = (char *)malloc((size_t)output_size + 1);
+  if (!output || fread(output, 1, (size_t)output_size, fp) != (size_t)output_size) {
+    free(output);
+    fclose(fp);
+    return NULL;
+  }
+  output[output_size] = 0;
+  fclose(fp);
+  return output;
+}
+
 static char *print_to_string(NAMELIST *nl, long flags)
 {
-  char *output = NULL;
-  size_t output_size = 0;
-  FILE *fp = open_memstream(&output, &output_size);
+  FILE *fp = tmpfile();
 
   if (!fp)
     return NULL;
   set_print_namelist_flags(flags);
   print_namelist(fp, nl);
-  if (fclose(fp)) {
-    free(output);
-    return NULL;
-  }
-  return output;
+  return finish_print_to_string(fp);
 }
 
 static char *print_current_to_string(NAMELIST *nl)
 {
-  char *output = NULL;
-  size_t output_size = 0;
-  FILE *fp = open_memstream(&output, &output_size);
+  FILE *fp = tmpfile();
 
   if (!fp)
     return NULL;
   print_namelist(fp, nl);
-  if (fclose(fp)) {
-    free(output);
-    return NULL;
-  }
-  return output;
+  return finish_print_to_string(fp);
 }
 
 static int check_escape_quotes(Worker *worker, long iteration)

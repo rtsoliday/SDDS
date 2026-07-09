@@ -62,7 +62,7 @@ def test_default_summary_and_readall():
     text=True,
     check=True,
   )
-  assert "file SDDSlib/demo/example.sdds is in SDDS protocol version 5" in result.stdout
+  assert f"file {EXAMPLE} is in SDDS protocol version 5" in result.stdout
   assert "11 columns of data" in result.stdout
   assert "11 parameters" in result.stdout
 

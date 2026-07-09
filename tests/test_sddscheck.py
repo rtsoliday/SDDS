@@ -7,6 +7,9 @@ from sdds_test_utils import BIN_DIR
 SDDSCHECK = BIN_DIR / "sddscheck"
 EXAMPLE = Path("SDDSlib/demo/example.sdds")
 
+def display_path(path):
+  return path.as_posix() if path.is_absolute() else str(path)
+
 @pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
 def test_sddscheck_ok():
   result = subprocess.run([str(SDDSCHECK), str(EXAMPLE)], capture_output=True, text=True)
@@ -60,7 +63,7 @@ def test_sddscheck_multiple_files(tmp_path):
   assert result.returncode == 0
   assert result.stdout.splitlines() == [
     f"{EXAMPLE}: ok",
-    f"{missing}: nonexistent",
+    f"{display_path(missing)}: nonexistent",
   ]
 
 
@@ -88,10 +91,10 @@ def test_sddscheck_multiple_files_threaded_preserves_order(tmp_path):
   assert result.returncode == 0
   assert lines[:3] == [
     f"{EXAMPLE}: ok",
-    f"{missing}: nonexistent",
-    f"{bad}: badHeader",
+    f"{display_path(missing)}: nonexistent",
+    f"{display_path(bad)}: badHeader",
   ]
-  assert lines[3] in {f"{corrupted}: corrupted", f"{corrupted}: badHeader"}
+  assert lines[3] in {f"{display_path(corrupted)}: corrupted", f"{display_path(corrupted)}: badHeader"}
 
 
 @pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
@@ -150,7 +153,7 @@ def test_sddscheck_failures_only(tmp_path):
     text=True,
   )
   assert result.returncode == 0
-  assert result.stdout.splitlines() == [f"{missing}: nonexistent"]
+  assert result.stdout.splitlines() == [f"{display_path(missing)}: nonexistent"]
 
 
 @pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
@@ -182,8 +185,8 @@ def test_sddscheck_recursive_pattern(tmp_path):
   )
   assert result.returncode == 0
   assert sorted(result.stdout.splitlines()) == sorted([
-    f"{valid}: ok",
-    f"{bad}: badHeader",
+    f"{display_path(valid)}: ok",
+    f"{display_path(bad)}: badHeader",
   ])
 
 
@@ -237,12 +240,12 @@ def test_sddscheck_stdin(tmp_path):
   missing = tmp_path / "missing.sdds"
   result = subprocess.run(
     [str(SDDSCHECK), "-stdin"],
-    input=f"{EXAMPLE}\n{missing}\n",
+    input=f"{EXAMPLE}\n{display_path(missing)}\n",
     capture_output=True,
     text=True,
   )
   assert result.returncode == 0
   assert result.stdout.splitlines() == [
     f"{EXAMPLE}: ok",
-    f"{missing}: nonexistent",
+    f"{display_path(missing)}: nonexistent",
   ]
