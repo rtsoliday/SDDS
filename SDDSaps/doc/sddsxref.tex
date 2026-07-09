@@ -19,6 +19,7 @@ sddsxref [-pipe[=input][,output]] [input] [xRefFile] [output]
          [-transfer={parameter | array},name[,name...]]
          [-ifis={column | parameter | array},name[,name...]]
          [-ifnot={column | parameter | array},name[,name...]]
+         [-threads=number]
     \end{verbatim}
   \item \textbf{files:}
     \emph{input} is the data set to which data is being added. \emph{xRefFile} is the data set from
@@ -53,6 +54,9 @@ sddsxref [-pipe[=input][,output]] [input] [xRefFile] [output]
       \item \verb!-ifis={column | parameter | array},name[,name...]!, \verb!-ifnot={column | parameter | array},name[,name...]! --- These options allow conditional execution. If any
         column named under \verb|ifis| is not present, execution aborts. If any column named under
         \verb|ifnot| is present, execution aborts.
+      \item \verb|-threads=number| --- Specifies the number of reference files to read concurrently.
+        The default is 1. SDDS output operations and row/column transfer operations are performed
+        serially after the reference pages have been read.
     \end{itemize}
   \item \textbf{see also:}
     \begin{itemize}

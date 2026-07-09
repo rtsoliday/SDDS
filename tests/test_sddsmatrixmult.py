@@ -52,7 +52,7 @@ def test_basic_multiplication(tmp_path):
   a = create_matrix(tmp_path, "a", [[1, 2], [3, 4]], ["a1", "a2"])
   b = create_matrix(tmp_path, "b", [[5, 6], [7, 8]], ["b1", "b2"])
   out = tmp_path / "out.sdds"
-  subprocess.run([str(SDDSMATRIXMULT), str(a), str(b), str(out)], check=True)
+  subprocess.run([str(SDDSMATRIXMULT), str(a), str(b), str(out), "-threads=2"], check=True)
   result = read_matrix(out, tmp_path, ["b1", "b2"])
   assert result == [[19.0, 22.0], [43.0, 50.0]]
 

@@ -22,6 +22,7 @@
  *                [-poisson=columnName=<columnName>[,meanValue=<value>|@<parameter_name>][,units=<string>]]
  *                [-optimalHalton]
  *                [-majorOrder=row|column]
+ *                [-threads=<number>]
  * ```
  *
  * @section Options
@@ -39,6 +40,7 @@
  * | `-uniform`                            | Samples from a Uniform distribution.                                                 |
  * | `-poisson`                            | Samples from a Poisson distribution.                                                 |
  * | `-majorOrder`                         | Specifies the output file order as row-major or column-major.                        |
+ * | `-threads`                            | Number of datafile-backed distributions to read concurrently.                        |
  *
  * @subsection Incompatibilities
  *   - `-columns`
@@ -75,6 +77,7 @@ enum option_type {
   CLO_POISSON,
   CLO_OPTIMAL_HALTON,
   CLO_MAJOR_ORDER,
+  CLO_THREADS,
   CLO_OPTIONS
 };
 
@@ -89,6 +92,7 @@ static char *option[CLO_OPTIONS] = {
   "poisson",
   "optimalHalton",
   "majorOrder",
+  "threads",
 };
 
 char *USAGE1 =
@@ -103,7 +107,7 @@ char *USAGE1 =
   "       [-uniform=columnName=<columnName>[,minimumValue=<value>|@<parameter_name>]"
   "[,maximumValue=<value>|@<parameter_name>][,units=<string>]]\n"
   "       [-poisson=columnName=<columnName>[,meanValue=<value>|@<parameter_name>]"
-  "[,units=<string>]] [-optimalHalton] [-majorOrder=row|column]\n";
+  "[,units=<string>]] [-optimalHalton] [-majorOrder=row|column] [-threads=<number>]\n";
 
 char *USAGE2 =
   "Options:\n"
@@ -148,6 +152,8 @@ char *USAGE3 =
   "  -majorOrder     Specifies the output file order as row-major or column-major.\n"
   "                  Usage:\n"
   "                    -majorOrder=row|column\n"
+  "  -threads        Number of datafile-backed distributions to read concurrently.\n"
+  "                  Sampling and SDDS output operations remain serial. The default is 1.\n"
   "  -verbose        Enables verbose output, printing information to stderr during execution.\n\n"
   "Program by Michael Borland. (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
 
@@ -198,6 +204,8 @@ int main(int argc, char **argv) {
   RANDOMIZED_ORDER *randomizationData = NULL;
   long verbose, optimalHalton = 0;
   short columnMajorOrder = -1;
+  int threads = 1;
+  int *dataFilePageStatus = NULL;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&scanned, argc, argv);
@@ -398,6 +406,12 @@ int main(int argc, char **argv) {
       case CLO_OPTIMAL_HALTON:
         optimalHalton = 1;
         break;
+      case CLO_THREADS:
+        if (scanned[iArg].n_items != 2 ||
+            sscanf(scanned[iArg].list[1], "%d", &threads) != 1 ||
+            threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
+        break;
       default:
         fprintf(stderr, "error: unknown/ambiguous option: %s\n", scanned[iArg].list[0]);
         exit(EXIT_FAILURE);
@@ -583,15 +597,23 @@ int main(int argc, char **argv) {
 
   if (!(sample = calloc(samples, sizeof(*sample))))
     SDDS_Bomb("memory allocation failure");
+  if (!(dataFilePageStatus = calloc(seqRequests, sizeof(*dataFilePageStatus))))
+    SDDS_Bomb("memory allocation failure");
   while (1) {
     if (verbose)
       fprintf(stderr, "Beginning page loop\n");
     if (input && SDDS_ReadPage(&SDDSin) <= 0)
       break;
+    for (i = 0; i < seqRequests; i++)
+      dataFilePageStatus[i] = 1;
+#pragma omp parallel for if (threads > 1 && seqRequests > 1) num_threads(threads) schedule(dynamic)
     for (i = 0; i < seqRequests; i++) {
-      if (seqRequest[i].flags & SEQ_DATAFILE && SDDS_ReadPage(&seqRequest[i].SDDSin) <= 0)
-        break;
+      if (seqRequest[i].flags & SEQ_DATAFILE)
+        dataFilePageStatus[i] = SDDS_ReadPage(&seqRequest[i].SDDSin);
     }
+    for (i = 0; i < seqRequests; i++)
+      if ((seqRequest[i].flags & SEQ_DATAFILE) && dataFilePageStatus[i] <= 0)
+        break;
     if (i != seqRequests)
       break;
     if (!SDDS_StartPage(&SDDSout, samples) || (input && !SDDS_CopyParameters(&SDDSout, &SDDSin)))
@@ -755,6 +777,7 @@ int main(int argc, char **argv) {
   if (verbose)
     fprintf(stderr, "Exited read loop\n");
   free(sample);
+  free(dataFilePageStatus);
   if ((input && !SDDS_Terminate(&SDDSin)) || !SDDS_Terminate(&SDDSout))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   for (i = 0; i < seqRequests; i++) {

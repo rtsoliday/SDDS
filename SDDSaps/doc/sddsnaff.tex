@@ -26,6 +26,7 @@ sddsnaff [inputfile] [outputfile]
   [-exclude=depen-quantity[,...]]
   [-terminateSearch={changeLimit=fraction[,maxFrequencies=number] | frequencies=number}]
   [-iterateFrequency=[cycleLimit=number][,accuracyLimit=fraction]]
+  [-threads=number]
   [-truncate] [-noWarnings]
     \end{verbatim}
   \item \textbf{files:}
@@ -64,6 +65,8 @@ sddsnaff [inputfile] [outputfile]
         executes 100 passes and attempts to determine the frequency to a precision of 0.00001 of the
         Nyquist frequency. \verb|cycleLimit| changes the number of passes, while \verb|accuracyLimit|
         specifies the desired precision.
+      \item \verb|-threads=number| --- Specifies the number of threads for independent dependent-column
+        NAFF runs. SDDS output operations are performed serially. The default is 1.
       \item \verb|-truncate| --- Specifies that the data should be truncated so that the number of
         points is the largest product of primes from 2 to 19 not greater than the original number of
         points. In some cases, this results in significantly greater speed by making the FFTs faster.
@@ -76,4 +79,3 @@ sddsnaff [inputfile] [outputfile]
     \end{itemize}
   \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
-

@@ -104,7 +104,7 @@ def test_rankOrder_option(tmp_path):
   input_file = create_input(tmp_path)
   output = tmp_path / "out.sdds"
   subprocess.run(
-    [str(SDDSCORRELATE), str(input_file), str(output), "-rankOrder"],
+    [str(SDDSCORRELATE), str(input_file), str(output), "-rankOrder", "-threads=2"],
     check=True,
   )
   result = subprocess.run(
@@ -120,6 +120,7 @@ def test_rankOrder_option(tmp_path):
   )
   mode = result.stdout.splitlines()[0].strip().strip("\"")
   assert mode == "Rank-Order (Spearman)"
+  assert set(parse_pairs(output)) == {"x.y", "x.z", "y.z"}
 
 def test_stDevOutlier_option(tmp_path):
   input_file = create_input(tmp_path)

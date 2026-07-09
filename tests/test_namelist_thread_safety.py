@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from sdds_test_utils import PLATFORM_ID, ROOT_DIR
+from sdds_test_utils import PLATFORM_ID, ROOT_DIR, external_library_args
 
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
@@ -493,9 +493,7 @@ def namelist_harness(tmp_path_factory):
     "-lrpnlib",
     "-lmdbmth",
     "-lmdblib",
-    "-lgsl",
-    "-lgslcblas",
-    "-lz",
+    *external_library_args("gsl", "gslcblas", "z"),
     "-lpthread",
     "-lm",
   ]

@@ -91,7 +91,7 @@ def test_three_file_common_timestamps(tmp_path):
     in3 = create_input(tmp_path, "in3", "PV3", [(3, 3000), (4, 4000), (5, 5000)])
     output = tmp_path / "three.sdds"
     subprocess.run(
-        [SDDSCOMBINELOGFILES, in1, in2, in3, output, "-overwrite"],
+        [SDDSCOMBINELOGFILES, in1, in2, in3, output, "-overwrite", "-threads=2"],
         check=True,
     )
     assert sdds_print(output, ["Time", "PV1", "PV2", "PV3"]) == (

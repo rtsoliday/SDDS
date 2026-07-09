@@ -18,7 +18,7 @@
  */
 
 #include "mdb.h"
-#if defined(linux) || (defined(_WIN32) && !defined(_MINGW))
+#if defined(_OPENMP)
 #  include <omp.h>
 #else
 void omp_set_num_threads(int a) {}

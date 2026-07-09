@@ -13,6 +13,7 @@ sddsenvelope [-pipe=[input][,output]] [input] [output] [-copy=columnNames]
              [-slope=independentVariableName,columnNames]
              [-intercept=independentVariableName,columnNames]
              [-median=columnNames] [-decileRange=columnNames]
+             [-threads=number]
   \end{verbatim}
   \item \textbf{switches:}
   \begin{itemize}
@@ -21,6 +22,7 @@ sddsenvelope [-pipe=[input][,output]] [input] [output] [-copy=columnNames]
     \item \verb|-maximum=\emph{columnNames}|, \verb|-minimum=\emph{columnNames}|, \verb|-mean=\emph{columnNames}|, \verb|-rms=\emph{columnNames}|, \verb|-median=\emph{columnNames}|, \verb|-decileRange=\emph{columnNames}| --- Specifies that the named columns should be analysed in the indicated fashion. A comma-separated list of optionally wildcard-containing strings may be given. Decile range is the spread between the 90\% and 10\% points on the distribution.
     \item \verb|-sum=\emph{power},\emph{columnNames}| --- Specifies that the named columns should be analysed in the indicated fashion, i.e., that each output row should be the sum of the values to the indicated power. A comma-separated list of optionally wildcard-containing strings may be given.
     \item \verb|-slope=\emph{independentVariableName},\emph{columnNames}|, \verb|-intercept=\emph{independentVariableName},\emph{columnNames}| --- Specifies that the named columns should be analysed to get the slope or intercept with respect to the parameter \emph{independentVariableName}. A comma-separated list of optionally wildcard-containing strings may be given for the \emph{columnNames}.
+    \item \verb|-threads=\emph{number}| --- Specifies the number of threads for row-wise statistic calculations. The default is 1. SDDS input and output operations are performed serially.
   \end{itemize}
   \item \textbf{files:} \emph{inputFile} is a multipage file containing the data for which row-by-row statistics are desired. \emph{outputFile} is a single-page file containing the statistics. The column names in \emph{outputFile} are created from those in the input file by appending the appropriate suffix from the following list: {\tt Max}, {\tt Min}, {\tt Mean}, {\tt StDev}, {\tt RMS}, {\tt Sum}, {\tt Slope}, or {\tt Intercept}.
   \item \textbf{see also:}
@@ -30,4 +32,3 @@ sddsenvelope [-pipe=[input][,output]] [input] [output] [-copy=columnNames]
   \end{itemize}
   \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
-

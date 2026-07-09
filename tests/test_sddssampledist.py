@@ -88,3 +88,46 @@ def test_pipe_output_and_optimal_halton(tmp_path):
   out.write_bytes(result.stdout)
   values = [float(x) for x in subprocess.run([str(SDDS2STREAM), str(out), "-col=u"], capture_output=True, text=True, check=True).stdout.split()]
   assert len(values) == 50
+
+
+def create_distribution(tmp_path, name, values):
+  plain = tmp_path / f"{name}.txt"
+  plain.write_text("\n".join(f"{x} {cdf}" for x, cdf in values) + "\n")
+  sdds = tmp_path / f"{name}.sdds"
+  subprocess.run(
+    [
+      str(PLAINDATA2SDDS),
+      str(plain),
+      str(sdds),
+      "-column=x,double",
+      "-column=cdf,double",
+      "-inputMode=ascii",
+      "-outputMode=binary",
+      "-noRowCount",
+    ],
+    check=True,
+  )
+  return sdds
+
+
+@pytest.mark.skipif(
+  not SDDSSAMPLEDIST.exists() or not SDDS2STREAM.exists() or not PLAINDATA2SDDS.exists(),
+  reason="required tools not built",
+)
+def test_threads_match_serial_datafile_distributions(tmp_path):
+  dist1 = create_distribution(tmp_path, "dist1", [(0, 0), (1, 0.5), (2, 1)])
+  dist2 = create_distribution(tmp_path, "dist2", [(10, 0), (20, 0.25), (30, 1)])
+  serial = tmp_path / "serial.sdds"
+  threaded = tmp_path / "threaded.sdds"
+  args = [
+    "-samples=25",
+    "-seed=13579",
+    f"-columns=independentVariable=x,cdf=cdf,output=a,datafile={dist1}",
+    f"-columns=independentVariable=x,cdf=cdf,output=b,datafile={dist2}",
+  ]
+  subprocess.run([str(SDDSSAMPLEDIST), str(serial), *args, "-threads=1"], check=True)
+  subprocess.run([str(SDDSSAMPLEDIST), str(threaded), *args, "-threads=2"], check=True)
+  for column in ("a", "b"):
+    serial_values = subprocess.run([str(SDDS2STREAM), str(serial), f"-col={column}"], capture_output=True, text=True, check=True).stdout.split()
+    threaded_values = subprocess.run([str(SDDS2STREAM), str(threaded), f"-col={column}"], capture_output=True, text=True, check=True).stdout.split()
+    assert threaded_values == serial_values

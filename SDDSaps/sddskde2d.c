@@ -15,6 +15,7 @@
  *            -column=<column1,column2>
  *           [-samescales] 
  *           [-margin=<value>]
+ *           [-threads=<number>]
  * ```
  *
  * @section Options
@@ -27,6 +28,7 @@
  * | `-pipe`                | Utilize the standard SDDS Toolkit pipe option.                         |
  * | `-samescales`          | Use the same X and Y ranges for all output pages.                      |
  * | `-margin`              | Ratio to extend the original data range (default: 0.05).               |
+ * | `-threads`             | Set the number of threads for grid PDF evaluation.                     |
  *
  * ### Features
  * - Reads input data from SDDS files and writes results in SDDS format.
@@ -59,7 +61,8 @@
 double bandwidth(double data[], int64_t M);
 double gaussiankernelfunction(double sample);
 double kerneldensityestimate(double *trainingdata_x, double *trainingdata_y,
-                             double sample_x, double sample_y, int64_t n);
+                             double sample_x, double sample_y, int64_t n,
+                             double hx, double hy);
 double *gridX(double start, double end, int N);
 double *gridY(double start, double end, int N);
 
@@ -69,6 +72,7 @@ enum option_type {
   SET_PIPE,
   SET_MARGIN,
   SET_SAME_SCALES,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -76,18 +80,21 @@ char *option[N_OPTIONS] = {
   "column",
   "pipe",
   "margin",
-  "samescales"};
+  "samescales",
+  "threads"};
 
 static char *usage =
   "Usage: sddskde2d [<inputfile>] [<outputfile>] \n"
   "                 [-pipe=[input][,output]]  \n"
   "                  -column=<column1,column2> \n"
   "                 [-samescales] \n"
-  "                 [-margin=<value>]\n\n"
+  "                 [-margin=<value>]\n"
+  "                 [-threads=<number>]\n\n"
   "Options:\n"
   "  -column       Specify two column names separated by a comma. Wildcards are accepted.\n"
   "  -margin       Ratio to extend the original data (default: 0.05).\n"
   "  -samescales   Use the same X and Y ranges for all output pages.\n"
+  "  -threads      Number of threads to use for grid PDF evaluation.\n"
   "  -pipe         Utilize the standard SDDS Toolkit pipe option.\n\n"
   "Description:\n"
   "  sddskde2d performs kernel density estimation for two-dimensional data.\n\n"
@@ -95,7 +102,7 @@ static char *usage =
   "  Yipeng Sun (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
 
 int main(int argc, char **argv) {
-  int n_test, n_total, same_scales;
+  int n_test, n_total, same_scales, threads;
   double lowerx, upperx;
   double lowery, uppery;
   double margin = 0.05;
@@ -114,6 +121,7 @@ int main(int argc, char **argv) {
   columns = 0;
   column = NULL;
   same_scales = 0;
+  threads = 1;
 
   n_test = 50;
   n_total = n_test * n_test;
@@ -146,6 +154,11 @@ int main(int argc, char **argv) {
         if (s_arg[i_arg].n_items != 1)
           SDDS_Bomb("Invalid -sameScales option. No qualifiers are accepted.");
         same_scales = 1;
+        break;
+      case SET_THREADS:
+        if (s_arg[i_arg].n_items != 2 ||
+            sscanf(s_arg[i_arg].list[1], "%d", &threads) != 1 || threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
         break;
       case SET_PIPE:
         if (!processPipeOption(s_arg[i_arg].list + 1, s_arg[i_arg].n_items - 1, &pipe_flags)) {
@@ -236,8 +249,11 @@ int main(int argc, char **argv) {
     }
     double *x_array = gridX(lowerx, upperx, n_test);
     double *y_array = gridY(lowery, uppery, n_test);
+    double hx = bandwidth(column_data_x[i_page], rows[i_page]);
+    double hy = bandwidth(column_data_y[i_page], rows[i_page]);
+#pragma omp parallel for if (threads > 1) num_threads(threads)
     for (j = 0; j < n_total; j++) {
-      pdf[j] = kerneldensityestimate(column_data_x[i_page], column_data_y[i_page], x_array[j], y_array[j], rows[i_page]);
+      pdf[j] = kerneldensityestimate(column_data_x[i_page], column_data_y[i_page], x_array[j], y_array[j], rows[i_page], hx, hy);
     }
     if (!SDDS_SetColumnFromDoubles(&SDDSout, SDDS_SET_BY_NAME, x_array, n_total, column[0]))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -281,12 +297,11 @@ double gaussiankernelfunction(double sample) {
 }
 
 double kerneldensityestimate(double *trainingdata_x, double *trainingdata_y,
-                      double sample_x, double sample_y, int64_t n) {
+                             double sample_x, double sample_y, int64_t n,
+                             double hx, double hy) {
   int64_t i;
-  double pdf, hx, hy, z;
+  double pdf, z;
 
-  hx = bandwidth(trainingdata_x, n);
-  hy = bandwidth(trainingdata_y, n);
   pdf = 0.0;
   for (i = 0; i < n; i++) {
     z = (trainingdata_x[i] - sample_x) * (trainingdata_x[i] - sample_x) / hx;

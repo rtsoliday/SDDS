@@ -15,6 +15,7 @@ sddsinterpset [input] [output] [-pipe=[input][,output]]
   [-aboveRange={value=value|skip|saturate|extrapolate|wrap}[,{abort|warn}]]
   [-verbose]
   [-majorOrder=row|column]
+  [-threads=number]
     \end{verbatim}
   \item \textbf{switches:}
     \begin{itemize}
@@ -25,6 +26,9 @@ sddsinterpset [input] [output] [-pipe=[input][,output]]
       \item \verb!-aboveRange={value=value|skip|saturate|extrapolate|wrap}[,{abort|warn}]! --- Behavior when an interpolation point is above the data range.
       \item \verb|-verbose| --- Prints progress messages.
       \item \verb!-majorOrder=row|column! --- Specifies the binary SDDS layout.
+      \item \verb|-threads=number| --- Specifies the number of referenced data files to read and
+        interpolate concurrently for each input page. The default is 1. SDDS output operations are
+        performed serially.
     \end{itemize}
   \item \textbf{files:}
     \emph{input} contains one row per interpolation, with a column listing SDDS data files. \emph{output} receives the interpolated results.

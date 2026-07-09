@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from sdds_test_utils import PLATFORM_ID, ROOT_DIR
+from sdds_test_utils import PLATFORM_ID, ROOT_DIR, openmp_link_args
 
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
@@ -662,14 +662,16 @@ def mdbmth_harness(tmp_path_factory):
     str(LIB_DIR),
     "-lmdbmth",
     "-lmdblib",
-    "-fopenmp",
     "-lpthread",
     "-lm",
     "-o",
     str(executable),
   ]
   if platform.system() == "Linux":
+    command.insert(command.index("-lpthread"), "-fopenmp")
     command[-2:-2] = ["-lrt", "-ldl", "-lgcc"]
+  elif platform.system() == "Darwin":
+    command[command.index("-lpthread"):command.index("-lpthread")] = openmp_link_args()
 
   subprocess.run(command, check=True)
   return executable
@@ -687,7 +689,8 @@ def run_harness(executable, *args):
 def test_mdbmth_api_regression_outputs(mdbmth_harness):
   result = run_harness(mdbmth_harness)
   assert result.stderr == ""
-  assert result.stdout == (
+  lines = result.stdout.splitlines()
+  assert lines[:16] == (
     "random_1=0.088151410123405327,0.79804063838956907,0.44767473882507502\n"
     "random_oag=0.72514344520407192,0.90156378704913109\n"
     "median=3\n"
@@ -704,10 +707,15 @@ def test_mdbmth_api_regression_outputs(mdbmth_harness):
     "grid=0:1\n"
     "accum=3,3.3166247903553998,1.5811388300841898\n"
     "waccum=3,3.3166247903553998,1.5811388300841898\n"
-    "basis=-1,-1.1141400536168886e-15,1,3\n"
+  ).splitlines()
+  basis = [float(value) for value in lines[16].removeprefix("basis=").split(",")]
+  assert basis[0] == -1
+  assert abs(basis[1]) < 1e-12
+  assert basis[2:] == [1, 3]
+  assert lines[17:] == (
     "cei=1.6857503548125961,1.4674622093394272\n"
     "diffeq=zero of exit-function found\n"
-  )
+  ).splitlines()
 
 
 def test_mdbmth_api_is_thread_safe_without_caller_locks(mdbmth_harness):

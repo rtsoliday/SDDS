@@ -83,6 +83,7 @@ COPY_Y = [10, 20, 30]
     (["-copy=y"], "y", COPY_Y),
     (["-mean=x", "-nowarnings"], "xMean", MEAN),
     (["-mean=x", "-majorOrder=column"], "xMean", MEAN),
+    (["-mean=x", "-threads=2"], "xMean", MEAN),
   ],
 )
 def test_sddsenvelope_options(input_file, tmp_path, args, column, expected):
@@ -96,6 +97,48 @@ def test_sddsenvelope_options(input_file, tmp_path, args, column, expected):
   )
   values = [float(x) for x in result.stdout.strip().split()]
   assert values == pytest.approx(expected)
+
+
+@pytest.mark.skipif(
+  not (SDDSENVELOPE.exists() and SDDS2STREAM.exists()),
+  reason="sddsenvelope or sdds2stream not built",
+)
+def test_single_page_deviation_outputs_dbl_max(tmp_path):
+  infile = tmp_path / "single_page.sdds"
+  infile.write_text(
+    "SDDS2\n"
+    "&column name=x, type=double &end\n"
+    "&column name=w, type=double &end\n"
+    "&data mode=ascii &end\n"
+    "! page 1\n"
+    "3\n"
+    "1 1\n"
+    "2 1\n"
+    "3 1\n"
+  )
+  out = tmp_path / "out.sdds"
+  subprocess.run(
+    [
+      str(SDDSENVELOPE),
+      str(infile),
+      str(out),
+      "-standarddeviation=x",
+      "-wstandarddeviation=w,x",
+      "-sigma=x",
+      "-wsigma=w,x",
+      "-threads=2",
+    ],
+    check=True,
+  )
+  result = subprocess.run(
+    [str(SDDS2STREAM), "-columns=xStDev,xWStDev,xSigma,xWSigma", str(out)],
+    capture_output=True,
+    text=True,
+    check=True,
+  )
+  values = [float(x) for x in result.stdout.strip().split()]
+  assert len(values) == 12
+  assert all(value > 1e300 for value in values)
 
 
 @pytest.mark.skipif(

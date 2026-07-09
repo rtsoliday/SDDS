@@ -59,6 +59,7 @@
 #include "scan.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include <string.h>
 #include <float.h>
 #include <math.h>
@@ -264,7 +265,7 @@ int main(int argc, char **argv) {
     }
     if ((atValues = SDDS_RowCount(&SDDSvalues)) > 0) {
       if (verbose)
-	fprintf(stderr, "%ld values in values file\n", atValues);
+	fprintf(stderr, "%" PRIu64 " values in values file\n", atValues);
       if (inverse) {
         if (!(atValue[0] = SDDS_GetColumnInDoubles(&SDDSvalues, gridVariable[0]))) {
           SDDS_Bomb("Unable to retrieve values of first grid variable in values file.\n");

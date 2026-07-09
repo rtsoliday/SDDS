@@ -35,6 +35,7 @@
  *              [-wrms=<weightColumn>,<columnNames>]
  *              [-wsigma=<weightColumn>,<columnNames>]
  *              [-majorOrder=row|column]
+ *              [-threads=<number>]
  * ```
  *
  * @section Options
@@ -65,6 +66,7 @@
  * | `-wrms`                            | Compute weighted RMS.                                |
  * | `-wsigma`                          | Compute weighted sigma.                                                  |
  * | `-majorOrder`                      | Set data ordering for output file.                                       |
+ * | `-threads`                         | Number of threads for row-wise statistic calculations.                   |
  *
  * @subsection Incompatibilities
  *   - Only one of the following options may be specified:
@@ -118,6 +120,7 @@ enum option_type {
   SET_EXMM_MEAN,
   SET_CMAXIMA,
   SET_CMINIMA,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -149,6 +152,7 @@ char *option[N_OPTIONS] = {
   "exmmMean",
   "cmaximum",
   "cminimum",
+  "threads",
 };
 
 char *optionSuffix[N_OPTIONS] = {
@@ -179,6 +183,7 @@ char *optionSuffix[N_OPTIONS] = {
   "ExmmMean",
   "CMaximum",
   "CMinimum",
+  "",
 };
 
 /* this structure stores a command-line request for statistics computation */
@@ -242,6 +247,7 @@ static char *USAGE = "sddsenvelope [<input>] [<output>] [options]\n"
   "             [-wrms=<weightColumn>,<columnNames>]\n"
   "             [-wsigma=<weightColumn>,<columnNames>]\n"
   "             [-majorOrder=row|column]\n"
+  "             [-threads=<number>]\n"
   "Options:\n"
   "  -copy=<column-names>                         Copy specified columns.\n"
   "  -pipe=[input][,output]                       Use pipe for input/output.\n"
@@ -269,6 +275,7 @@ static char *USAGE = "sddsenvelope [<input>] [<output>] [options]\n"
   "  -wrms=<weightColumn>,<columnNames>           Compute weighted RMS.\n"
   "  -wsigma=<weightColumn>,<columnNames>         Compute weighted sigma.\n"
   "  -majorOrder=row|column                       Set major order.\n\n"
+  "  -threads=<number>                            Number of threads for row-wise statistics. The default is 1.\n"
   "Processes pages from <input> to produce <output> with\n"
   "one page containing the specified quantities across pages\n"
   "for each row of the specified columns.\n"
@@ -290,6 +297,7 @@ int main(int argc, char **argv) {
   double percentilePoint, percentileResult;
   double percentile;
   short columnMajorOrder = -1;
+  int threads = 1;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&scanned, argc, argv);
@@ -388,6 +396,12 @@ int main(int argc, char **argv) {
         else if (majorOrderFlag & SDDS_ROW_MAJOR_ORDER)
           columnMajorOrder = 0;
         break;
+      case SET_THREADS:
+        if (scanned[i_arg].n_items != 2 ||
+            sscanf(scanned[i_arg].list[1], "%d", &threads) != 1 ||
+            threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
+        break;
       default:
         fprintf(stderr, "error: unknown option '%s' given\n", scanned[i_arg].list[0]);
         exit(EXIT_FAILURE);
@@ -444,18 +458,22 @@ int main(int argc, char **argv) {
       switch (stat[iStat].optionCode) {
       case SET_MINIMA:
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             stat[iStat].value1[i] = inputData[i];
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             if (stat[iStat].value1[i] > inputData[i])
               stat[iStat].value1[i] = inputData[i];
         break;
       case SET_MAXIMA:
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             stat[iStat].value1[i] = inputData[i];
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             if (stat[iStat].value1[i] < inputData[i])
               stat[iStat].value1[i] = inputData[i];
@@ -465,11 +483,13 @@ int main(int argc, char **argv) {
         if (!(otherData = SDDS_GetColumnInDoubles(&inTable, stat[iStat].functionOf)))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             stat[iStat].value2[i] = inputData[i];
             stat[iStat].value1[i] = otherData[i];
           }
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             if (stat[iStat].value2[i] > inputData[i]) {
               stat[iStat].value2[i] = inputData[i];
@@ -482,11 +502,13 @@ int main(int argc, char **argv) {
         if (!(otherData = SDDS_GetColumnInDoubles(&inTable, stat[iStat].functionOf)))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             stat[iStat].value2[i] = inputData[i];
             stat[iStat].value1[i] = otherData[i];
           }
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             if (stat[iStat].value2[i] < inputData[i]) {
               stat[iStat].value2[i] = inputData[i];
@@ -496,33 +518,40 @@ int main(int argc, char **argv) {
         break;
       case SET_LARGEST:
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             stat[iStat].value1[i] = fabs(inputData[i]);
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             if (stat[iStat].value1[i] < fabs(inputData[i]))
               stat[iStat].value1[i] = fabs(inputData[i]);
         break;
       case SET_SIGNEDLARGEST:
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             stat[iStat].value1[i] = inputData[i];
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             if (fabs(stat[iStat].value1[i]) < fabs(inputData[i]))
               stat[iStat].value1[i] = inputData[i];
         break;
       case SET_MEANS:
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             stat[iStat].value1[i] = inputData[i];
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             stat[iStat].value1[i] += inputData[i];
         break;
       case SET_WMEANS:
         if (!(weight = SDDS_GetColumnInDoubles(&inTable, stat[iStat].weightColumn)))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
         for (i = 0; i < rows; i++) {
           stat[iStat].sumWeight[i] += weight[i];
           stat[iStat].value1[i] += inputData[i] * weight[i];
@@ -532,11 +561,13 @@ int main(int argc, char **argv) {
       case SET_SDS:
       case SET_SIGMAS:
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             stat[iStat].value1[i] = inputData[i];
             stat[iStat].value2[i] = inputData[i] * inputData[i];
           }
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             stat[iStat].value1[i] += inputData[i];
             stat[iStat].value2[i] += inputData[i] * inputData[i];
@@ -546,6 +577,7 @@ int main(int argc, char **argv) {
       case SET_WSIGMAS:
         if (!(weight = SDDS_GetColumnInDoubles(&inTable, stat[iStat].weightColumn)))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
         for (i = 0; i < rows; i++) {
           stat[iStat].sumWeight[i] += weight[i];
           stat[iStat].value1[i] += inputData[i] * weight[i];
@@ -555,15 +587,18 @@ int main(int argc, char **argv) {
         break;
       case SET_RMSS:
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             stat[iStat].value1[i] = inputData[i] * inputData[i];
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             stat[iStat].value1[i] += inputData[i] * inputData[i];
         break;
       case SET_WRMSS:
         if (!(weight = SDDS_GetColumnInDoubles(&inTable, stat[iStat].weightColumn)))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
         for (i = 0; i < rows; i++) {
           stat[iStat].sumWeight[i] += weight[i];
           stat[iStat].value1[i] += inputData[i] * inputData[i] * weight[i];
@@ -572,9 +607,11 @@ int main(int argc, char **argv) {
         break;
       case SET_SUMS:
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             stat[iStat].value1[i] = ipow(inputData[i], stat[iStat].sumPower);
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++)
             stat[iStat].value1[i] += ipow(inputData[i], stat[iStat].sumPower);
         break;
@@ -584,11 +621,13 @@ int main(int argc, char **argv) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         }
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             stat[iStat].value2[i] = inputData[i];
             stat[iStat].value1[i] = indepData;
           }
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             if (stat[iStat].value2[i] > inputData[i]) {
               stat[iStat].value2[i] = inputData[i];
@@ -602,11 +641,13 @@ int main(int argc, char **argv) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         }
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             stat[iStat].value2[i] = inputData[i];
             stat[iStat].value1[i] = indepData;
           }
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             if (stat[iStat].value2[i] < inputData[i]) {
               stat[iStat].value2[i] = inputData[i];
@@ -627,6 +668,7 @@ int main(int argc, char **argv) {
            D = N S x^2 - (S x)^2
         */
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             stat[iStat].value1[i] = indepData;                /* Sum x   */
             stat[iStat].value2[i] = indepData * indepData;    /* Sum x^2 */
@@ -634,6 +676,7 @@ int main(int argc, char **argv) {
             stat[iStat].value4[i] = indepData * inputData[i]; /* Sum xy  */
           }
         else
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             stat[iStat].value1[i] += indepData;
             stat[iStat].value2[i] += indepData * indepData;
@@ -646,11 +689,13 @@ int main(int argc, char **argv) {
       case SET_PERCENTILE:
       case SET_EXMM_MEAN:
         if (code == 1)
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             stat[iStat].array[i] = tmalloc(sizeof(*stat[iStat].array[i]));
             stat[iStat].array[i][pages - 1] = inputData[i];
           }
         else {
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
           for (i = 0; i < rows; i++) {
             stat[iStat].array[i] = SDDS_Realloc(stat[iStat].array[i], sizeof(*stat[iStat].array[i]) * pages);
             stat[iStat].array[i][pages - 1] = inputData[i];
@@ -680,6 +725,7 @@ int main(int argc, char **argv) {
     case SET_SUMS:
       break;
     case SET_MEANS:
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
       for (i = 0; i < rows; i++)
         stat[iStat].value1[i] /= pages;
       break;
@@ -694,9 +740,12 @@ int main(int argc, char **argv) {
         }
       break;
     case SET_SDS:
-      if (pages < 2)
-        stat[iStat].value1[i] = DBL_MAX;
-      else
+      if (pages < 2) {
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
+        for (i = 0; i < rows; i++)
+          stat[iStat].value1[i] = DBL_MAX;
+      } else {
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
         for (i = 0; i < rows; i++) {
           double tmp1;
           if ((tmp1 = stat[iStat].value2[i] / pages - sqr(stat[iStat].value1[i] / pages)) <= 0)
@@ -704,11 +753,14 @@ int main(int argc, char **argv) {
           else
             stat[iStat].value1[i] = sqrt(tmp1 * pages / (pages - 1.0));
         }
+      }
       break;
     case SET_WSDS:
-      if (pages < 2)
-        stat[iStat].value1[i] = DBL_MAX;
-      else
+      if (pages < 2) {
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
+        for (i = 0; i < rows; i++)
+          stat[iStat].value1[i] = DBL_MAX;
+      } else {
         for (i = 0; i < rows; i++) {
           double tmp1;
           if (stat[iStat].sumWeight[i]) {
@@ -722,11 +774,15 @@ int main(int argc, char **argv) {
             stat[iStat].value1[i] = DBL_MAX;
           }
         }
+      }
       break;
     case SET_SIGMAS:
-      if (pages < 2)
-        stat[iStat].value1[i] = DBL_MAX;
-      else
+      if (pages < 2) {
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
+        for (i = 0; i < rows; i++)
+          stat[iStat].value1[i] = DBL_MAX;
+      } else {
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
         for (i = 0; i < rows; i++) {
           double tmp1;
           if ((tmp1 = stat[iStat].value2[i] / pages - sqr(stat[iStat].value1[i] / pages)) <= 0)
@@ -734,11 +790,14 @@ int main(int argc, char **argv) {
           else
             stat[iStat].value1[i] = sqrt(tmp1 / (pages - 1.0));
         }
+      }
       break;
     case SET_WSIGMAS:
-      if (pages < 2)
-        stat[iStat].value1[i] = DBL_MAX;
-      else
+      if (pages < 2) {
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
+        for (i = 0; i < rows; i++)
+          stat[iStat].value1[i] = DBL_MAX;
+      } else {
         for (i = 0; i < rows; i++) {
           double tmp1;
           if (stat[iStat].sumWeight[i]) {
@@ -752,8 +811,10 @@ int main(int argc, char **argv) {
             stat[iStat].value1[i] = DBL_MAX;
           }
         }
+      }
       break;
     case SET_RMSS:
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
       for (i = 0; i < rows; i++)
         stat[iStat].value1[i] = sqrt(stat[iStat].value1[i] / pages);
       break;
@@ -769,6 +830,7 @@ int main(int argc, char **argv) {
       }
       break;
     case SET_SLOPE:
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
       for (i = 0; i < rows; i++) {
         double D;
         D = pages * stat[iStat].value2[i] - stat[iStat].value1[i] * stat[iStat].value1[i];
@@ -776,6 +838,7 @@ int main(int argc, char **argv) {
       }
       break;
     case SET_INTERCEPT:
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
       for (i = 0; i < rows; i++) {
         double D;
         D = pages * stat[iStat].value2[i] - stat[iStat].value1[i] * stat[iStat].value1[i];
@@ -783,11 +846,13 @@ int main(int argc, char **argv) {
       }
       break;
     case SET_MEDIAN:
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
       for (i = 0; i < rows; i++) {
         compute_median(&stat[iStat].value1[i], stat[iStat].array[i], pages);
       }
       break;
     case SET_DRANGE:
+#pragma omp parallel for private(decileResult) if (threads > 1 && rows > 1) num_threads(threads)
       for (i = 0; i < rows; i++) {
         if (!compute_percentiles(decileResult, decilePoint, 2, stat[iStat].array[i], pages))
           stat[iStat].value1[i] = 0;
@@ -797,6 +862,7 @@ int main(int argc, char **argv) {
       break;
     case SET_PERCENTILE:
       percentilePoint = stat[iStat].percentile;
+#pragma omp parallel for private(percentileResult) if (threads > 1 && rows > 1) num_threads(threads)
       for (i = 0; i < rows; i++) {
         if (!compute_percentiles(&percentileResult, &percentilePoint, 1, stat[iStat].array[i], pages))
           stat[iStat].value1[i] = 0;
@@ -805,6 +871,7 @@ int main(int argc, char **argv) {
       }
       break;
     case SET_EXMM_MEAN:
+#pragma omp parallel for if (threads > 1 && rows > 1) num_threads(threads)
       for (i = 0; i < rows; i++)
         if (!compute_mean_exclude_min_max(&(stat[iStat].value1[i]), stat[iStat].array[i], pages))
           stat[iStat].value1[i] = 0;

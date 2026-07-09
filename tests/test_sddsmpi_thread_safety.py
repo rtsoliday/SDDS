@@ -6,7 +6,12 @@ import subprocess
 
 import pytest
 
-from sdds_test_utils import PLATFORM_ID, ROOT_DIR
+from sdds_test_utils import (
+  PLATFORM_ID,
+  ROOT_DIR,
+  external_include_args,
+  external_library_args,
+)
 
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
@@ -325,6 +330,7 @@ def sddsmpi_harness(tmp_path_factory):
     "-DSDDS_MPI_IO=1",
     "-I",
     str(ROOT_DIR / "include"),
+    *external_include_args("lzma"),
     str(source),
     "-L",
     str(LIB_DIR),
@@ -333,10 +339,7 @@ def sddsmpi_harness(tmp_path_factory):
     "-lrpnlib",
     "-lmdbmth",
     "-lmdblib",
-    "-lgsl",
-    "-lgslcblas",
-    "-llzma",
-    "-lz",
+    *external_library_args("gsl", "gslcblas", "lzma", "z"),
     "-lpthread",
     "-lm",
   ]

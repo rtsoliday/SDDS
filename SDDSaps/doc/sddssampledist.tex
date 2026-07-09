@@ -11,7 +11,7 @@
         [,output=name][,units=string][,factor=value]
         [,offset=value][,datafile=filename]
         [,haltonRadix=primeNumber[,randomize[,group=groupID]]]
-      [-columns=...] [-samples=integer] [-seed=integer]
+      [-columns=...] [-samples=integer] [-seed=integer] [-threads=number]
     \end{verbatim}
   \item \textbf{files:}
     \emph{input} is the default input file for distribution functions (DFs) and cumulative distribution functions (CDFs). \emph{input} is not required if all \verb|-columns| options give the \verb|datafile| qualifier.
@@ -22,7 +22,7 @@
       \item \verb!-columns=independentVariable=name,{cdf=CDFName | df=DFName}[,output=name][,units=string][,factor=value][,offset=value][,datafile=filename][,haltonRadix=primeNumber[,randomize[,group=groupID]]]!--- Specifies the CDF or DF from which to draw samples (\verb|cdf| or \verb|df| qualifier) and the independent variable. This option may be given multiple times. \verb|output| sets the column name for the samples. \verb|units| specifies the units. \verb|factor| and \verb|offset| apply a transformation $x \rightarrow x*f+o$. \verb|datafile| gives an alternate file containing the distribution function data, otherwise the main input file is used. \verb|haltonRadix| selects the radix for generating a non-random Halton sequence, which provides smoother sampling than a pseudo-random sequence. The radix should be a small prime number. Use \verb|randomize| to remove correlations when using the same radix for multiple sequences. Use \verb|group| to assign options to a group for correlated randomization.
       \item \verb|-samples=integer| --- Specifies the number of samples to generate.
       \item \verb|-seed=integer| --- Specifies the seed for the random number generation. Should be a large, odd integer. If not given, the system clock is used.
+      \item \verb|-threads=number| --- Specifies the number of \verb|datafile| distributions to read concurrently. The default is 1. Sampling and SDDS output operations are performed serially, preserving seeded output order.
     \end{itemize}
   \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
-

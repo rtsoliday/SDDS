@@ -25,6 +25,7 @@
  *              [-sample=[<limitOps>],<columnNameList>]
  *              [-slope=independent=<columnName>,<columnNameList>]
  *              [-majorOrder=row|column]
+ *              [-threads=<number>]
  *
  *              <limitOps> is of the form [topLimit=<value>,][bottomLimit=<value>]
  * ```
@@ -47,6 +48,7 @@
  * | `-sample`                    | Sample values from specified columns with optional limits.                  |
  * | `-slope`                     | Compute slope of specified columns with a designated independent column.    |
  * | `-majorOrder`                | Specify the major order for data processing.                                |
+ * | `-threads`                   | Number of threads for per-column running-statistic calculations.            |
  *
  * @subsection Incompatibilities
  * - Only one of the following may be specified:
@@ -95,6 +97,7 @@ enum option_type {
   SET_WINDOW,
   SET_PARTIALOK,
   SET_MAJOR_ORDER,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -115,6 +118,7 @@ char *option[N_OPTIONS] = {
   "window",
   "partialok",
   "majorOrder",
+  "threads",
 };
 
 #define N_STATS 10
@@ -160,6 +164,7 @@ typedef struct
 long addStatRequests(STAT_REQUEST **statRequest, long requests, char **item, long items, long code, unsigned long flag);
 STAT_DEFINITION *compileStatDefinitions(SDDS_DATASET *inTable, STAT_REQUEST *request, long requests);
 long setupOutputFile(SDDS_DATASET *outTable, char *output, SDDS_DATASET *inTable, STAT_DEFINITION *stat, long stats, short columnMajorOrder);
+static double computeRunningStatistic(STAT_DEFINITION *stat, double *inputDataOffset, double *indepDataOffset, int64_t pointsToStat);
 
 static char *USAGE =
   "sddsrunstats [<input>] [<output>] [-pipe[=input][,output]]\n"
@@ -175,6 +180,7 @@ static char *USAGE =
   "  [-sum=[<limitOps>][,power=<integer>],<columnNameList>]\n"
   "  [-sample=[<limitOps>],<columnNameList>]\n"
   "  [-slope=independent=<columnName>,<columnNameList>]\n"
+  "  [-threads=<number>]\n"
   "\n"
   "  <limitOps> is of the form [topLimit=<value>,][bottomLimit=<value>] [-majorOrder=row|column]\n\n"
   "Computes running statistics of columns of data. The <columnNameList> may contain\n"
@@ -185,6 +191,8 @@ static char *USAGE =
   "The -partialOk option tells sddsrunstats to do computations even\n"
   "if the number of available rows is less than the number of points\n"
   "specified; by default, such data is simply ignored.\n"
+  "The -threads option controls parallel per-column running-statistic calculations.\n"
+  "Input and output SDDS operations are performed serially. The default is 1.\n"
   "Program by Michael Borland. (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
 
 int main(int argc, char **argv) {
@@ -192,7 +200,6 @@ int main(int argc, char **argv) {
   long stats;
   STAT_REQUEST *request;
   long requests;
-  int64_t count;
   SCANNED_ARG *scanned;
   SDDS_DATASET inData, outData;
   char *independent;
@@ -201,23 +208,22 @@ int main(int argc, char **argv) {
   long pointsToStat0, overlap;
   int64_t rows, outputRowsMax, outputRows, outputRow;
   long iArg, code, iStat, iColumn;
-  int64_t startRow, rowOffset;
+  int64_t startRow, rowsToSet;
   char *input, *output, *windowColumn;
-  double *inputData, *outputData, topLimit, bottomLimit, *inputDataOffset, result, sum1, sum2, *newData;
-  double windowWidth, *windowData, slope, intercept, variance;
+  double *inputData, *outputData, topLimit, bottomLimit, *inputDataOffset;
+  double windowWidth, *windowData;
   long windowIndex;
   unsigned long pipeFlags, scanFlags, majorOrderFlag;
   char s[100];
   long lastRegion, region, windowRef, partialOk;
   short columnMajorOrder = -1;
+  int threads = 1;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&scanned, argc, argv);
   if (argc < 2) {
     bomb("too few arguments", USAGE);
   }
-  newData = NULL;
-  result = 0;
   input = output = NULL;
   stat = NULL;
   request = NULL;
@@ -245,6 +251,12 @@ int main(int argc, char **argv) {
           columnMajorOrder = 1;
         else if (majorOrderFlag & SDDS_ROW_MAJOR_ORDER)
           columnMajorOrder = 0;
+        break;
+      case SET_THREADS:
+        if (scanned[iArg].n_items != 2 ||
+            sscanf(scanned[iArg].list[1], "%d", &threads) != 1 ||
+            threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
         break;
       case SET_POINTS:
         if (scanned[iArg].n_items != 2 || sscanf(scanned[iArg].list[1], "%" SCNd64, &pointsToStat) != 1 ||
@@ -424,8 +436,18 @@ int main(int argc, char **argv) {
         if (stat[iStat].independentColumn &&
             !(indepData = SDDS_GetColumnInDoubles(&inData, stat[iStat].independentColumn)))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-        for (outputRow = startRow = 0; outputRow < outputRows; outputRow++, startRow += (overlap ? 1 : pointsToStat)) {
-          if (windowColumn) {
+        rowsToSet = outputRows;
+        if (!windowColumn) {
+#pragma omp parallel for private(startRow, inputDataOffset) if (threads > 1 && outputRows > 1) num_threads(threads)
+          for (outputRow = 0; outputRow < outputRows; outputRow++) {
+            startRow = overlap ? outputRow : outputRow * pointsToStat;
+            inputDataOffset = inputData + startRow;
+            outputData[outputRow] = computeRunningStatistic(&stat[iStat], inputDataOffset,
+                                                            indepData ? indepData + startRow : NULL,
+                                                            pointsToStat);
+          }
+        } else {
+          for (outputRow = startRow = 0; outputRow < outputRows; outputRow++, startRow += (overlap ? 1 : pointsToStat)) {
             short windowFound = 0;
             if (overlap) {
               windowRef += 1;
@@ -449,138 +471,17 @@ int main(int argc, char **argv) {
 #ifdef DEBUG
             fprintf(stderr, "row=%" PRId64 " pointsToStat=%" PRId64 "  delta=%.9lf (%.9lf -> %.9lf)\n", startRow, pointsToStat, windowData[startRow + pointsToStat - 1] - windowData[startRow], windowData[startRow], windowData[startRow + pointsToStat - 1]);
 #endif
+            inputDataOffset = inputData + startRow;
+            outputData[outputRow] = computeRunningStatistic(&stat[iStat], inputDataOffset,
+                                                            indepData ? indepData + startRow : NULL,
+                                                            pointsToStat);
           }
-          inputDataOffset = inputData + startRow;
-          switch (stat[iStat].optionCode) {
-          case SET_MAXIMUM:
-            result = -DBL_MAX;
-            for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
-              if ((stat[iStat].flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat[iStat].topLimit) ||
-                  (stat[iStat].flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat[iStat].bottomLimit))
-                continue;
-              if (inputDataOffset[rowOffset] > result)
-                result = inputDataOffset[rowOffset];
-            }
-            break;
-          case SET_MINIMUM:
-            result = DBL_MAX;
-            for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
-              if ((stat[iStat].flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat[iStat].topLimit) ||
-                  (stat[iStat].flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat[iStat].bottomLimit))
-                continue;
-              if (inputDataOffset[rowOffset] < result)
-                result = inputDataOffset[rowOffset];
-            }
-            break;
-          case SET_MEAN:
-            result = 0;
-            count = 0;
-            for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
-              if ((stat[iStat].flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat[iStat].topLimit) ||
-                  (stat[iStat].flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat[iStat].bottomLimit))
-                continue;
-              result += inputDataOffset[rowOffset];
-              count++;
-            }
-            if (count)
-              result /= count;
-            else
-              result = DBL_MAX;
-            break;
-          case SET_MEDIAN:
-            result = 0;
-            count = 0;
-            for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
-              if ((stat[iStat].flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat[iStat].topLimit) ||
-                  (stat[iStat].flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat[iStat].bottomLimit))
-                continue;
-              newData = SDDS_Realloc(newData, sizeof(*newData) * (count + 1));
-              newData[count] = inputDataOffset[rowOffset];
-              count++;
-            }
-            if (count) {
-              if (!compute_median(&result, newData, count))
-                result = DBL_MAX;
-              free(newData);
-              newData = NULL;
-            } else
-              result = DBL_MAX;
-            break;
-          case SET_STANDARDDEVIATION:
-          case SET_SIGMA:
-            sum1 = sum2 = count = 0;
-            for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
-              if ((stat[iStat].flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat[iStat].topLimit) ||
-                  (stat[iStat].flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat[iStat].bottomLimit))
-                continue;
-              sum1 += inputDataOffset[rowOffset];
-              sum2 += inputDataOffset[rowOffset] * inputDataOffset[rowOffset];
-              count++;
-            }
-            if (count > 1) {
-              if ((result = sum2 / count - sqr(sum1 / count)) <= 0)
-                result = 0;
-              else
-                result = sqrt(result * count / (count - 1.0));
-              if (stat[iStat].optionCode == SET_SIGMA)
-                result /= sqrt(count);
-            }
-            break;
-          case SET_RMS:
-            sum2 = count = 0;
-            for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
-              if ((stat[iStat].flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat[iStat].topLimit) ||
-                  (stat[iStat].flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat[iStat].bottomLimit))
-                continue;
-              sum2 += inputDataOffset[rowOffset] * inputDataOffset[rowOffset];
-              count++;
-            }
-            if (count > 0)
-              result = sqrt(sum2 / count);
-            else
-              result = DBL_MAX;
-            break;
-          case SET_SUM:
-            sum1 = count = 0;
-            for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
-              if ((stat[iStat].flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat[iStat].topLimit) ||
-                  (stat[iStat].flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat[iStat].bottomLimit))
-                continue;
-              sum1 += ipow(inputDataOffset[rowOffset], stat[iStat].sumPower);
-              count++;
-            }
-            if (count > 0)
-              result = sum1;
-            else
-              result = DBL_MAX;
-            break;
-          case SET_SLOPE:
-            if (!unweightedLinearFit(indepData + startRow, inputDataOffset, pointsToStat, &slope, &intercept,
-                                     &variance)) {
-              result = DBL_MAX;
-            } else
-              result = slope;
-            break;
-          case SET_SAMPLE:
-            result = DBL_MAX;
-            for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
-              if ((stat[iStat].flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat[iStat].topLimit) ||
-                  (stat[iStat].flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat[iStat].bottomLimit))
-                continue;
-              result = inputDataOffset[rowOffset];
-              break;
-            }
-            break;
-          default:
-            fprintf(stderr, "Unknown statistics code %ld in sddsrunave\n", stat[iStat].optionCode);
-            exit(EXIT_FAILURE);
-            break;
-          }
-          outputData[outputRow] = result;
+          rowsToSet = outputRow;
         }
-        if (!SDDS_SetColumnFromDoubles(&outData, SDDS_SET_BY_INDEX, outputData, outputRow, stat[iStat].resultIndex[iColumn]))
+        if (!SDDS_SetColumnFromDoubles(&outData, SDDS_SET_BY_INDEX, outputData, rowsToSet, stat[iStat].resultIndex[iColumn]))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         free(inputData);
+        free(indepData);
       }
     }
     if (windowColumn)
@@ -599,6 +500,140 @@ int main(int argc, char **argv) {
   if (outputData)
     free(outputData);
   return EXIT_SUCCESS;
+}
+
+static double computeRunningStatistic(STAT_DEFINITION *stat, double *inputDataOffset, double *indepDataOffset, int64_t pointsToStat) {
+  int64_t rowOffset, count;
+  double result, sum1, sum2, slope, intercept, variance;
+  double *newData;
+
+  switch (stat->optionCode) {
+  case SET_MAXIMUM:
+    result = -DBL_MAX;
+    for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
+      if ((stat->flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat->topLimit) ||
+          (stat->flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat->bottomLimit))
+        continue;
+      if (inputDataOffset[rowOffset] > result)
+        result = inputDataOffset[rowOffset];
+    }
+    break;
+  case SET_MINIMUM:
+    result = DBL_MAX;
+    for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
+      if ((stat->flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat->topLimit) ||
+          (stat->flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat->bottomLimit))
+        continue;
+      if (inputDataOffset[rowOffset] < result)
+        result = inputDataOffset[rowOffset];
+    }
+    break;
+  case SET_MEAN:
+    result = 0;
+    count = 0;
+    for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
+      if ((stat->flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat->topLimit) ||
+          (stat->flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat->bottomLimit))
+        continue;
+      result += inputDataOffset[rowOffset];
+      count++;
+    }
+    if (count)
+      result /= count;
+    else
+      result = DBL_MAX;
+    break;
+  case SET_MEDIAN:
+    result = 0;
+    count = 0;
+    newData = NULL;
+    for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
+      if ((stat->flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat->topLimit) ||
+          (stat->flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat->bottomLimit))
+        continue;
+      newData = SDDS_Realloc(newData, sizeof(*newData) * (count + 1));
+      newData[count] = inputDataOffset[rowOffset];
+      count++;
+    }
+    if (count) {
+      if (!compute_median(&result, newData, count))
+        result = DBL_MAX;
+      free(newData);
+    } else
+      result = DBL_MAX;
+    break;
+  case SET_STANDARDDEVIATION:
+  case SET_SIGMA:
+    sum1 = sum2 = count = 0;
+    for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
+      if ((stat->flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat->topLimit) ||
+          (stat->flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat->bottomLimit))
+        continue;
+      sum1 += inputDataOffset[rowOffset];
+      sum2 += inputDataOffset[rowOffset] * inputDataOffset[rowOffset];
+      count++;
+    }
+    if (count > 1) {
+      if ((result = sum2 / count - sqr(sum1 / count)) <= 0)
+        result = 0;
+      else
+        result = sqrt(result * count / (count - 1.0));
+      if (stat->optionCode == SET_SIGMA)
+        result /= sqrt(count);
+    } else
+      result = DBL_MAX;
+    break;
+  case SET_RMS:
+    sum2 = count = 0;
+    for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
+      if ((stat->flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat->topLimit) ||
+          (stat->flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat->bottomLimit))
+        continue;
+      sum2 += inputDataOffset[rowOffset] * inputDataOffset[rowOffset];
+      count++;
+    }
+    if (count > 0)
+      result = sqrt(sum2 / count);
+    else
+      result = DBL_MAX;
+    break;
+  case SET_SUM:
+    sum1 = count = 0;
+    for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
+      if ((stat->flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat->topLimit) ||
+          (stat->flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat->bottomLimit))
+        continue;
+      sum1 += ipow(inputDataOffset[rowOffset], stat->sumPower);
+      count++;
+    }
+    if (count > 0)
+      result = sum1;
+    else
+      result = DBL_MAX;
+    break;
+  case SET_SLOPE:
+    if (!indepDataOffset ||
+        !unweightedLinearFit(indepDataOffset, inputDataOffset, pointsToStat, &slope, &intercept, &variance)) {
+      result = DBL_MAX;
+    } else
+      result = slope;
+    break;
+  case SET_SAMPLE:
+    result = DBL_MAX;
+    for (rowOffset = 0; rowOffset < pointsToStat; rowOffset++) {
+      if ((stat->flags & TOPLIMIT_GIVEN && inputDataOffset[rowOffset] > stat->topLimit) ||
+          (stat->flags & BOTTOMLIMIT_GIVEN && inputDataOffset[rowOffset] < stat->bottomLimit))
+        continue;
+      result = inputDataOffset[rowOffset];
+      break;
+    }
+    break;
+  default:
+    fprintf(stderr, "Unknown statistics code %ld in sddsrunstats\n", stat->optionCode);
+    exit(EXIT_FAILURE);
+    break;
+  }
+  return result;
 }
 
 long addStatRequests(STAT_REQUEST **statRequest, long requests, char **item, long items, long code, unsigned long flags) {

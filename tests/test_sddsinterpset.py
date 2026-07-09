@@ -28,6 +28,7 @@ option_args = {
   "data": [base_data],
   "verbose": ["-verbose", base_data],
   "majorOrder": ["-majorOrder=column", base_data],
+  "threads": ["-threads=2", base_data],
 }
 
 missing = set(option_names) - option_args.keys()
@@ -51,6 +52,44 @@ def create_input(tmp_path):
   meta_plain = tmp_path / "meta.txt"
   meta_plain.write_text(f"{data}\n")
   meta = tmp_path / "meta.sdds"
+  subprocess.run([
+    str(PLAINDATA2SDDS),
+    str(meta_plain),
+    str(meta),
+    "-column=dataFile,string",
+    "-inputMode=ascii",
+    "-outputMode=binary",
+    "-noRowCount",
+  ], check=True)
+  return meta
+
+
+def create_threaded_input(tmp_path):
+  data_files = []
+  for name, rows in (
+      ("data1", "0 0 0 100\n1 1 1 200\n2 4 2 300\n"),
+      ("data2", "0 0 0 1000\n1 10 1 2000\n2 20 2 3000\n"),
+  ):
+    plain = tmp_path / f"{name}.txt"
+    plain.write_text(rows)
+    data = tmp_path / f"{name}.sdds"
+    subprocess.run([
+      str(PLAINDATA2SDDS),
+      str(plain),
+      str(data),
+      "-column=x,double",
+      "-column=y,double",
+      "-column=u,double",
+      "-column=z,double",
+      "-inputMode=ascii",
+      "-outputMode=binary",
+      "-noRowCount",
+    ], check=True)
+    data_files.append(data)
+
+  meta_plain = tmp_path / "threaded_meta.txt"
+  meta_plain.write_text("".join(f"{path}\n" for path in data_files))
+  meta = tmp_path / "threaded_meta.sdds"
   subprocess.run([
     str(PLAINDATA2SDDS),
     str(meta_plain),
@@ -101,3 +140,31 @@ def test_sddsinterpset_flags(tmp_path, name):
       assert "column_major_order=1" in strings_out
     else:
       assert read_column(out, "y") == pytest.approx([2.5])
+
+
+@pytest.mark.skipif(not all(x.exists() for x in REQUIRED), reason="required tools not built")
+def test_threads_match_serial_output(tmp_path):
+  meta = create_threaded_input(tmp_path)
+  serial = tmp_path / "serial.sdds"
+  threaded = tmp_path / "threaded.sdds"
+  args = [base_data]
+  subprocess.run([str(SDDSINTERPSET), str(meta), str(serial), *args, "-threads=1"], check=True)
+  subprocess.run([str(SDDSINTERPSET), str(meta), str(threaded), *args, "-threads=2"], check=True)
+  assert read_column(threaded, "y") == pytest.approx(read_column(serial, "y"))
+  assert read_column(threaded, "y") == pytest.approx([2.5, 15])
+
+
+@pytest.mark.skipif(not all(x.exists() for x in REQUIRED), reason="required tools not built")
+def test_multiple_data_options_keep_independent_results(tmp_path):
+  meta = create_threaded_input(tmp_path)
+  output = tmp_path / "multiple.sdds"
+  subprocess.run([
+    str(SDDSINTERPSET),
+    str(meta),
+    str(output),
+    base_data,
+    "-data=fileColumn=dataFile,interpolate=z,functionOf=u,atValue=1.5",
+    "-threads=2",
+  ], check=True)
+  assert read_column(output, "y") == pytest.approx([2.5, 15])
+  assert read_column(output, "z") == pytest.approx([250, 2500])

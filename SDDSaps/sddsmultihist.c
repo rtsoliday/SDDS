@@ -26,6 +26,7 @@
  *               [-weightColumn=<name>]
  *               [-majorOrder=row|column]
  *               [-normalize={sum|peak|no}]
+ *               [-threads=<number>]
  * ```
  *
  * @section Options
@@ -51,6 +52,7 @@
  * | `-weightColumn`                       | Specifies a column to weight the histogram.                                           |
  * | `-majorOrder`                         | Sets the output data order to row-major or column-major.                              |
  * | `-normalize`                          | Normalizes the histogram based on sum, peak, or none.                                 |
+ * | `-threads`                            | Number of threads for regular histogram binning.                                      |
  *
  * @subsection Incompatibilities
  *   -boundaryData is incompatible with:
@@ -100,6 +102,7 @@ enum option_type {
   SET_BOUNDARYDATA,
   SET_WEIGHT,
   SET_NORMALIZE,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -121,6 +124,7 @@ char *option[N_OPTIONS] = {
   "boundaryData",
   "weightColumn",
   "normalize",
+  "threads",
 };
 
 static char *USAGE =
@@ -142,6 +146,7 @@ static char *USAGE =
   "                     [-weightColumn=<name>]\n"
   "                     [-majorOrder=row|column]\n"
   "                     [-normalize={sum|peak|no}]\n"
+  "                     [-threads=<number>]\n"
   "Options:\n"
   "  -pipe=[input][,output]             The standard SDDS Toolkit pipe option.\n"
   "  -columns=<name>[,...]              Specifies the names of columns from the input to be histogrammed.\n"
@@ -173,6 +178,7 @@ static char *USAGE =
   "                                     'sum' normalizes so that the sum of all bins equals 1.\n"
   "                                     'peak' normalizes so that the peak bin equals 1.\n"
   "                                     'no' applies no normalization.\n"
+  "  -threads=<number>                  Number of threads for regular histogram binning.\n"
   "\n"
   "Program by Michael Borland. (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
 
@@ -195,6 +201,10 @@ double *ReadBoundaryData(char *file, char *column, int64_t *n, char **units);
 void MakeBoundaryHistogram(double *histogram, double *cdf, double *boundaryValue, int64_t nBoundaryValues,
                            double *data, double *weight, int64_t nData);
 void NormalizeHistogram(double *hist, int64_t bins, short mode);
+static long make_histogram_threaded(double *hist, long n_bins, double lo, double hi, double *data,
+                                    int64_t n_pts, long new_start, int threads);
+static long make_histogram_weighted_threaded(double *hist, long n_bins, double lo, double hi, double *data,
+                                             int64_t n_pts, long new_start, double *weight, int threads);
 
 static short cdfOnly, freOnly;
 
@@ -225,6 +235,7 @@ int main(int argc, char **argv) {
   char *CDFONLY;
   unsigned long dummyFlags, majorOrderFlag;
   short columnMajorOrder = -1;
+  int threads = 1;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&scanned, argc, argv);
@@ -412,6 +423,11 @@ int main(int argc, char **argv) {
         else if (scanned[iArg].n_items != 2 ||
                  (normMode = match_string(scanned[iArg].list[1], normalize_option, N_NORMALIZE_OPTIONS, 0)) < 0)
           SDDS_Bomb("invalid -normalize syntax");
+        break;
+      case SET_THREADS:
+        if (scanned[iArg].n_items != 2 ||
+            sscanf(scanned[iArg].list[1], "%d", &threads) != 1 || threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
         break;
       default:
         fprintf(stderr, "Error: unknown or ambiguous option: %s\n", scanned[iArg].list[0]);
@@ -672,9 +688,9 @@ int main(int argc, char **argv) {
         for (column = 0; column < columnNames; column++) {
           histogram[0] = histogram[bins + 1] = 0;
           if (!weightColumn)
-            make_histogram(histogram + 1, bins, lowerLimit[0], upperLimit[0], inputData[column], rows, 1);
+            make_histogram_threaded(histogram + 1, bins, lowerLimit[0], upperLimit[0], inputData[column], rows, 1, threads);
           else
-            make_histogram_weighted(histogram + 1, bins, lowerLimit[0], upperLimit[0], inputData[column], rows, 1, weightData);
+            make_histogram_weighted_threaded(histogram + 1, bins, lowerLimit[0], upperLimit[0], inputData[column], rows, 1, weightData, threads);
           NormalizeHistogram(histogram, bins, normMode);
           sum = 0;
           for (i = 0; i <= bins + 1; i++)
@@ -713,9 +729,9 @@ int main(int argc, char **argv) {
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
           histogram[0] = histogram[bins + 1] = 0;
           if (!weightColumn)
-            make_histogram(histogram + 1, bins, lowerLimit[column], upperLimit[column], inputData[column], rows, 1);
+            make_histogram_threaded(histogram + 1, bins, lowerLimit[column], upperLimit[column], inputData[column], rows, 1, threads);
           else
-            make_histogram_weighted(histogram + 1, bins, lowerLimit[column], upperLimit[column], inputData[column], rows, 1, weightData);
+            make_histogram_weighted_threaded(histogram + 1, bins, lowerLimit[column], upperLimit[column], inputData[column], rows, 1, weightData, threads);
           NormalizeHistogram(histogram, bins + 2, normMode);
           sum = 0;
           for (i = 0; i <= bins + 1; i++)
@@ -915,4 +931,114 @@ void NormalizeHistogram(double *hist, int64_t bins, short mode) {
   if (value)
     for (i = 0; i < bins; i++)
       hist[i] /= value;
+}
+
+static long make_histogram_threaded(double *hist, long n_bins, double lo, double hi, double *data,
+                                    int64_t n_pts, long new_start, int threads) {
+  double bin_size, *partial;
+  long *counts, count = 0;
+  int activeThreads, thread;
+  int64_t i;
+
+  if (threads <= 1 || n_pts <= 0 || n_bins <= 0)
+    return make_histogram(hist, n_bins, lo, hi, data, n_pts, new_start);
+
+  activeThreads = threads;
+  if (activeThreads > n_pts)
+    activeThreads = (int)n_pts;
+  if (activeThreads <= 1)
+    return make_histogram(hist, n_bins, lo, hi, data, n_pts, new_start);
+
+  if (new_start)
+    for (i = 0; i < n_bins; i++)
+      hist[i] = 0;
+  bin_size = (hi - lo) / n_bins;
+  partial = calloc((size_t)activeThreads * n_bins, sizeof(*partial));
+  counts = calloc(activeThreads, sizeof(*counts));
+  if (!partial || !counts)
+    SDDS_Bomb("memory allocation failure");
+
+#pragma omp parallel for if (activeThreads > 1) num_threads(activeThreads)
+  for (thread = 0; thread < activeThreads; thread++) {
+    int64_t start = thread * (n_pts / activeThreads);
+    int64_t end = (thread == activeThreads - 1) ? n_pts : (thread + 1) * (n_pts / activeThreads);
+    double *local = partial + (size_t)thread * n_bins;
+    long localCount = 0;
+    for (int64_t point = start; point < end; point++) {
+      double dbin = (data[point] - lo) / bin_size;
+      long bin = dbin;
+      if (dbin < 0)
+        continue;
+      if (bin < 0 || bin >= n_bins)
+        continue;
+      local[bin] += 1;
+      localCount++;
+    }
+    counts[thread] = localCount;
+  }
+
+  for (thread = 0; thread < activeThreads; thread++) {
+    double *local = partial + (size_t)thread * n_bins;
+    count += counts[thread];
+    for (i = 0; i < n_bins; i++)
+      hist[i] += local[i];
+  }
+  free(partial);
+  free(counts);
+  return count;
+}
+
+static long make_histogram_weighted_threaded(double *hist, long n_bins, double lo, double hi, double *data,
+                                             int64_t n_pts, long new_start, double *weight, int threads) {
+  double bin_size, *partial;
+  long *counts, count = 0;
+  int activeThreads, thread;
+  int64_t i;
+
+  if (threads <= 1 || n_pts <= 0 || n_bins <= 0)
+    return make_histogram_weighted(hist, n_bins, lo, hi, data, n_pts, new_start, weight);
+
+  activeThreads = threads;
+  if (activeThreads > n_pts)
+    activeThreads = (int)n_pts;
+  if (activeThreads <= 1)
+    return make_histogram_weighted(hist, n_bins, lo, hi, data, n_pts, new_start, weight);
+
+  if (new_start)
+    for (i = 0; i < n_bins; i++)
+      hist[i] = 0;
+  bin_size = (hi - lo) / n_bins;
+  partial = calloc((size_t)activeThreads * n_bins, sizeof(*partial));
+  counts = calloc(activeThreads, sizeof(*counts));
+  if (!partial || !counts)
+    SDDS_Bomb("memory allocation failure");
+
+#pragma omp parallel for if (activeThreads > 1) num_threads(activeThreads)
+  for (thread = 0; thread < activeThreads; thread++) {
+    int64_t start = thread * (n_pts / activeThreads);
+    int64_t end = (thread == activeThreads - 1) ? n_pts : (thread + 1) * (n_pts / activeThreads);
+    double *local = partial + (size_t)thread * n_bins;
+    long localCount = 0;
+    for (int64_t point = start; point < end; point++) {
+      double dbin = (data[point] - lo) / bin_size;
+      long bin = dbin;
+      if (dbin < 0)
+        continue;
+      if (bin < 0 || bin >= n_bins)
+        continue;
+      local[bin] += weight[point];
+      localCount++;
+    }
+    counts[thread] = localCount;
+  }
+
+  for (thread = 0; thread < activeThreads; thread++) {
+    double *local = partial + (size_t)thread * n_bins;
+    count += counts[thread];
+    for (i = 0; i < n_bins; i++)
+      hist[i] += local[i];
+  }
+  free(partial);
+  free(counts);
+  return count;
 }

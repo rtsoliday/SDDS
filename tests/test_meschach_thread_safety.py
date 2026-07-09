@@ -1,3 +1,4 @@
+import ctypes
 import os
 import platform
 import shlex
@@ -78,15 +79,41 @@ typedef struct {
 
 static double ref_mrand(RefRand *state);
 
+static long ref_seed_step(long value)
+{
+  unsigned long product = 123413UL * (unsigned long)value;
+  unsigned long magnitude;
+
+  if (product <= (unsigned long)LONG_MAX)
+    return (long)(product % (unsigned long)REF_MODULUS);
+  magnitude = ULONG_MAX - product + 1UL;
+  return -(long)(magnitude % (unsigned long)REF_MODULUS);
+}
+
+static long ref_subtract(long left, long right)
+{
+  unsigned long difference = (unsigned long)left - (unsigned long)right;
+  unsigned long magnitude;
+
+  if (difference <= (unsigned long)LONG_MAX)
+    return (long)difference;
+  magnitude = ULONG_MAX - difference + 1UL;
+  if (magnitude == (unsigned long)LONG_MAX + 1UL)
+    return LONG_MIN;
+  return -(long)magnitude;
+}
+
 static void ref_smrand(RefRand *state, int seed)
 {
   int i;
 
-  state->list[0] = (123413 * seed) % REF_MODULUS;
+  state->list[0] = ref_seed_step((long)seed);
   for (i = 1; i < 55; i++)
-    state->list[i] = (123413 * state->list[i - 1]) % REF_MODULUS;
+    state->list[i] = ref_seed_step(state->list[i - 1]);
 
   state->started = 1;
+  state->inext = 0;
+  state->inextp = 31;
   for (i = 0; i < 55 * 55; i++)
     ref_mrand(state);
 }
@@ -102,7 +129,7 @@ static double ref_mrand(RefRand *state)
   state->inext = (state->inext >= 54) ? 0 : state->inext + 1;
   state->inextp = (state->inextp >= 54) ? 0 : state->inextp + 1;
 
-  lval = state->list[state->inext] - state->list[state->inextp];
+  lval = ref_subtract(state->list[state->inext], state->list[state->inextp]);
   if (lval < 0L)
     lval += REF_MODULUS;
   state->list[state->inext] = lval;
@@ -547,11 +574,15 @@ def run_harness(executable, *args):
 def test_meschach_api_regression_outputs(meschach_harness):
   result = run_harness(meschach_harness)
   assert result.stderr == ""
+  if ctypes.sizeof(ctypes.c_long) == 4:
+    expected_random = "0.27627434128721912,0.04329907197658861,0.67216925633706581"
+  else:
+    expected_random = "0.80915062618171318,0.74767531892110062,0.51433257064167481"
   assert result.stdout == (
     "inverse=0.60000000000000009,-0.70000000000000007,-0.20000000000000001,0.40000000000000002\n"
     "power=30,70,20,50\n"
     "solve=0.60000000000000009,-0.20000000000000001\n"
-    "rand=0.80915062618171318,0.74767531892110062,0.51433257064167481\n"
+    f"rand={expected_random}\n"
     "catch=1\n"
     "legacy_mem_connect=1\n"
     "legacy_restart=1\n"

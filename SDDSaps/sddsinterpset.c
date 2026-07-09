@@ -18,6 +18,7 @@
  *               [-majorOrder=row|column]
  *               [-belowRange={value=<value>|skip|saturate|extrapolate|wrap}[,{abort|warn}]]
  *               [-aboveRange={value=<value>|skip|saturate|extrapolate|wrap}[,{abort|warn}]]
+ *               [-threads=<number>]
  * ```
  *
  * @section Options
@@ -30,6 +31,7 @@
  * | `-majorOrder`       | Specify data ordering for output: `row` or `column`.                       |
  * | `-belowRange`       | Define behavior for out-of-range points below data range.                  |
  * | `-aboveRange`       | Define behavior for out-of-range points above data range.                  |
+ * | `-threads`          | Number of referenced data files to read concurrently.                      |
  *
  * @subsection Incompatibilities
  * - The `column` and `atValue` options within `-data` are mutually exclusive; only one can be specified per invocation.
@@ -61,6 +63,7 @@ enum option_type {
   CLO_DATA,
   CLO_VERBOSE,
   CLO_MAJOR_ORDER,
+  CLO_THREADS,
   N_OPTIONS
 };
 
@@ -72,6 +75,7 @@ char *option[N_OPTIONS] = {
   "data",
   "verbose",
   "majorOrder",
+  "threads",
 };
 
 static const char *USAGE =
@@ -83,7 +87,8 @@ static const char *USAGE =
   "                            column=<colName> | atValue=<value>] \n"
   "                     [-majorOrder=row|column] \n"
   "                     [-belowRange={value=<value>|skip|saturate|extrapolate|wrap}[,{abort|warn}]] \n"
-  "                     [-aboveRange={value=<value>|skip|saturate|extrapolate|wrap}[,{abort|warn}]]\n\n"
+  "                     [-aboveRange={value=<value>|skip|saturate|extrapolate|wrap}[,{abort|warn}]]\n"
+  "                     [-threads=<number>]\n\n"
   "Options:\n"
   "  -verbose      Print detailed processing messages.\n"
   "  -pipe         Use standard SDDS Toolkit pipe options for input and output.\n"
@@ -102,6 +107,8 @@ static const char *USAGE =
   "                Options: value=<value>, skip, saturate, extrapolate, wrap, abort, warn.\n"
   "  -aboveRange   Define behavior for interpolation points above data range:\n"
   "                Options: value=<value>, skip, saturate, extrapolate, wrap, abort, warn.\n\n"
+  "  -threads      Number of referenced data files to read concurrently.\n"
+  "                Default is 1.\n\n"
   "Program by Hairong Shang. ("__DATE__
   " "__TIME__
   ", SVN revision: " SVN_VERSION ")\n";
@@ -124,23 +131,28 @@ typedef struct {
 
 long checkMonotonicity(double *indepValue, int64_t rows);
 void freedatacontrol(DATA_CONTROL *data_control, long dataControls);
+static long interpolateDataFile(char *filename, DATA_CONTROL *control, double atValue,
+                                OUTRANGE_CONTROL *belowRange, OUTRANGE_CONTROL *aboveRange,
+                                long order, double *result, unsigned long *interpCode,
+                                char *errorMessage, long errorMessageSize);
 
 int main(int argc, char **argv) {
   int i_arg;
   char *input = NULL, *output = NULL, **interpCol = NULL, **funcOf = NULL;
-  long order = 1, dataControls = 0, valid_option = 1, monotonicity;
+  long order = 1, dataControls = 0, valid_option = 1;
   //long verbose = 0;
   SCANNED_ARG *s_arg;
   OUTRANGE_CONTROL aboveRange, belowRange;
   DATA_CONTROL *data_control = NULL;
-  unsigned long pipeFlags = 0, interpCode = 0, majorOrderFlag;
+  unsigned long pipeFlags = 0, majorOrderFlag;
   SDDS_DATASET SDDSdata, SDDSout, SDDSin;
-  double *indepValue = NULL, *depenValue = NULL, **out_depenValue = NULL, atValue = 0;
+  double ***out_depenValue = NULL, atValue = 0;
   int32_t **rowFlag = NULL;
   long valid_data = 0, index, pages = 0;
   int64_t *rows = NULL;
-  int64_t i, j, datarows, row;
+  int64_t i, j, row;
   short columnMajorOrder = -1;
+  int threads = 1;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&s_arg, argc, argv);
@@ -167,6 +179,13 @@ int main(int argc, char **argv) {
           columnMajorOrder = 1;
         else if (majorOrderFlag & SDDS_ROW_MAJOR_ORDER)
           columnMajorOrder = 0;
+        break;
+      case CLO_THREADS:
+        if (s_arg[i_arg].n_items != 2 ||
+            sscanf(s_arg[i_arg].list[1], "%d", &threads) != 1 ||
+            threads < 1) {
+          SDDS_Bomb("invalid -threads syntax/value");
+        }
         break;
 
       case CLO_ORDER:
@@ -358,13 +377,23 @@ int main(int argc, char **argv) {
     }
 
     rowFlag[pages] = (int32_t *)malloc(sizeof(**rowFlag) * rows[pages]);
-    out_depenValue[pages] = (double *)malloc(sizeof(**out_depenValue) * rows[pages]);
+    out_depenValue[pages] = calloc(dataControls, sizeof(*out_depenValue[pages]));
+    if (!out_depenValue[pages])
+      SDDS_Bomb("memory allocation failure");
 
     for (i = 0; i < rows[pages]; i++)
       rowFlag[pages][i] = 1;
 
     for (i = 0; i < dataControls; i++) {
       if (data_control[i].hasdata) {
+        unsigned long *interpCodeRow = NULL;
+        char errorMessage[1024];
+        int failed = 0;
+
+        out_depenValue[pages][i] = malloc(sizeof(*out_depenValue[pages][i]) * rows[pages]);
+        if (!out_depenValue[pages][i])
+          SDDS_Bomb("memory allocation failure");
+
         data_control[i].files = rows[pages];
         if (!(data_control[i].file = (char **)SDDS_GetColumn(&SDDSin, data_control[i].fileColumn))) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -379,18 +408,15 @@ int main(int argc, char **argv) {
         if (!data_control[i].atCol)
           atValue = data_control[i].atValue;
 
-        for (j = 0; j < rows[pages]; j++) {
+        if (!pages) {
+          j = rows[pages] - 1;
           if (!SDDS_InitializeInput(&SDDSdata, data_control[i].file[j]))
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
           switch (SDDS_CheckColumn(&SDDSdata, data_control[i].interpCol, NULL, SDDS_ANY_NUMERIC_TYPE, NULL)) {
           case SDDS_CHECK_OKAY:
-            if (j == (rows[pages] - 1)) {
-              if (!pages) {
-                if (!SDDS_TransferColumnDefinition(&SDDSout, &SDDSdata, data_control[i].interpCol, data_control[i].interpCol))
-                  SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-              }
-            }
+            if (!SDDS_TransferColumnDefinition(&SDDSout, &SDDSdata, data_control[i].interpCol, data_control[i].interpCol))
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
             break;
           default:
             fprintf(stderr, "Error: Column '%s' missing or invalid in file '%s'.\n",
@@ -401,12 +427,9 @@ int main(int argc, char **argv) {
 
           switch (SDDS_CheckColumn(&SDDSdata, data_control[i].funcOfCol, NULL, SDDS_ANY_NUMERIC_TYPE, NULL)) {
           case SDDS_CHECK_OKAY:
-            if (j == (rows[pages] - 1)) {
-              if ((!pages) && !(data_control[i].atCol)) {
-                if (!SDDS_TransferColumnDefinition(&SDDSout, &SDDSdata, data_control[i].funcOfCol, data_control[i].funcOfCol))
-                  SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-              }
-            }
+            if (!(data_control[i].atCol) &&
+                !SDDS_TransferColumnDefinition(&SDDSout, &SDDSdata, data_control[i].funcOfCol, data_control[i].funcOfCol))
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
             break;
           default:
             fprintf(stderr, "Error: Column '%s' missing or invalid in file '%s'.\n",
@@ -415,49 +438,59 @@ int main(int argc, char **argv) {
             break;
           }
 
-          if (SDDS_ReadPage(&SDDSdata) <= 0)
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-
-          datarows = SDDS_CountRowsOfInterest(&SDDSdata);
-
-          if (!(indepValue = SDDS_GetColumnInDoubles(&SDDSdata, data_control[i].funcOfCol))) {
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-          }
-          if (!(depenValue = SDDS_GetColumnInDoubles(&SDDSdata, data_control[i].interpCol))) {
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-          }
-
           if (!SDDS_Terminate(&SDDSdata))
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+        }
 
-          if (!(monotonicity = checkMonotonicity(indepValue, datarows))) {
-            fprintf(stderr, "Error: Independent (%s) data in file '%s' is not monotonic.\n",
-                    data_control[i].funcOfCol, data_control[i].file[j]);
-            exit(EXIT_FAILURE);
-          }
+        interpCodeRow = calloc(rows[pages], sizeof(*interpCodeRow));
+        if (!interpCodeRow)
+          SDDS_Bomb("memory allocation failure");
+        errorMessage[0] = 0;
 
-          if (data_control[i].atCol)
-            atValue = data_control[i].colValue[j];
+#pragma omp parallel for private(j) if (threads > 1 && rows[pages] > 1) num_threads(threads) schedule(dynamic)
+        for (j = 0; j < rows[pages]; j++) {
+          double localAtValue, localResult;
+          unsigned long localInterpCode;
+          char localError[1024];
+          localAtValue = data_control[i].atCol ? data_control[i].colValue[j] : atValue;
+          localResult = 0;
+          localInterpCode = 0;
+          localError[0] = 0;
 
-          out_depenValue[pages][j] = interpolate(depenValue, indepValue, datarows, atValue,
-                                                 &belowRange, &aboveRange, order, &interpCode, monotonicity);
-
-          if (interpCode) {
-            if (interpCode & OUTRANGE_ABORT) {
-              fprintf(stderr, "Error: Value %e out of range for column '%s'.\n",
-                      atValue, data_control[i].interpCol);
-              exit(EXIT_FAILURE);
+          if (!interpolateDataFile(data_control[i].file[j], &data_control[i], localAtValue,
+                                   &belowRange, &aboveRange, order, &localResult, &localInterpCode,
+                                   localError, sizeof(localError))) {
+#pragma omp critical
+            {
+              if (!failed) {
+                failed = 1;
+                snprintf(errorMessage, sizeof(errorMessage), "%s", localError);
+              }
             }
-            if (interpCode & OUTRANGE_WARN)
-              fprintf(stderr, "Warning: Value %e out of range for column '%s'.\n",
-                      atValue, data_control[i].interpCol);
-            if (interpCode & OUTRANGE_SKIP)
+          } else {
+            out_depenValue[pages][i][j] = localResult;
+            interpCodeRow[j] = localInterpCode;
+            if (localInterpCode & OUTRANGE_SKIP)
               rowFlag[pages][j] = 0;
           }
-
-          free(depenValue);
-          free(indepValue);
         }
+
+        if (failed) {
+          fprintf(stderr, "%s\n", errorMessage);
+          exit(EXIT_FAILURE);
+        }
+
+        for (j = 0; j < rows[pages]; j++) {
+          if (interpCodeRow[j] & OUTRANGE_ABORT) {
+            fprintf(stderr, "Error: Value %e out of range for column '%s'.\n",
+                    data_control[i].atCol ? data_control[i].colValue[j] : atValue, data_control[i].interpCol);
+            exit(EXIT_FAILURE);
+          }
+          if (interpCodeRow[j] & OUTRANGE_WARN)
+            fprintf(stderr, "Warning: Value %e out of range for column '%s'.\n",
+                    data_control[i].atCol ? data_control[i].colValue[j] : atValue, data_control[i].interpCol);
+        }
+        free(interpCodeRow);
       }
 
       for (j = 0; j < data_control[i].files; j++)
@@ -487,7 +520,7 @@ int main(int argc, char **argv) {
 
     for (i = 0; i < dataControls; i++) {
       if (data_control[i].hasdata) {
-        if (!SDDS_SetColumnFromDoubles(&SDDSout, SDDS_SET_BY_NAME, out_depenValue[pages],
+        if (!SDDS_SetColumnFromDoubles(&SDDSout, SDDS_SET_BY_NAME, out_depenValue[pages][i],
                                        rows[pages], data_control[i].interpCol)) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         }
@@ -523,6 +556,8 @@ int main(int argc, char **argv) {
 
   if (out_depenValue) {
     for (i = 0; i < pages; i++) {
+      for (j = 0; j < dataControls; j++)
+        free(out_depenValue[i][j]);
       free(out_depenValue[i]);
       free(rowFlag[i]);
     }
@@ -539,6 +574,81 @@ int main(int argc, char **argv) {
 
   free_scanargs(&s_arg, argc);
   return EXIT_SUCCESS;
+}
+
+static long interpolateDataFile(char *filename, DATA_CONTROL *control, double atValue,
+                                OUTRANGE_CONTROL *belowRange, OUTRANGE_CONTROL *aboveRange,
+                                long order, double *result, unsigned long *interpCode,
+                                char *errorMessage, long errorMessageSize) {
+  SDDS_DATASET SDDSdata;
+  double *indepValue = NULL, *depenValue = NULL;
+  int64_t datarows;
+  long monotonicity;
+  int initialized = 0;
+
+  if (!SDDS_InitializeInput(&SDDSdata, filename)) {
+    snprintf(errorMessage, errorMessageSize, "Error: unable to open input data file '%s'.", filename);
+    return 0;
+  }
+  initialized = 1;
+
+  if (SDDS_CheckColumn(&SDDSdata, control->interpCol, NULL, SDDS_ANY_NUMERIC_TYPE, NULL) != SDDS_CHECK_OKAY) {
+    snprintf(errorMessage, errorMessageSize, "Error: Column '%s' missing or invalid in file '%s'.",
+             control->interpCol, filename);
+    SDDS_Terminate(&SDDSdata);
+    return 0;
+  }
+  if (SDDS_CheckColumn(&SDDSdata, control->funcOfCol, NULL, SDDS_ANY_NUMERIC_TYPE, NULL) != SDDS_CHECK_OKAY) {
+    snprintf(errorMessage, errorMessageSize, "Error: Column '%s' missing or invalid in file '%s'.",
+             control->funcOfCol, filename);
+    SDDS_Terminate(&SDDSdata);
+    return 0;
+  }
+  if (SDDS_ReadPage(&SDDSdata) <= 0) {
+    snprintf(errorMessage, errorMessageSize, "Error: unable to read data page from file '%s'.", filename);
+    SDDS_Terminate(&SDDSdata);
+    return 0;
+  }
+  datarows = SDDS_CountRowsOfInterest(&SDDSdata);
+  if (datarows <= 0) {
+    snprintf(errorMessage, errorMessageSize, "Error: No data found in file '%s'.", filename);
+    SDDS_Terminate(&SDDSdata);
+    return 0;
+  }
+  if (!(indepValue = SDDS_GetColumnInDoubles(&SDDSdata, control->funcOfCol))) {
+    snprintf(errorMessage, errorMessageSize, "Error: problem getting column '%s' from file '%s'.",
+             control->funcOfCol, filename);
+    SDDS_Terminate(&SDDSdata);
+    return 0;
+  }
+  if (!(depenValue = SDDS_GetColumnInDoubles(&SDDSdata, control->interpCol))) {
+    snprintf(errorMessage, errorMessageSize, "Error: problem getting column '%s' from file '%s'.",
+             control->interpCol, filename);
+    free(indepValue);
+    SDDS_Terminate(&SDDSdata);
+    return 0;
+  }
+  if (initialized && !SDDS_Terminate(&SDDSdata)) {
+    snprintf(errorMessage, errorMessageSize, "Error: problem closing data file '%s'.", filename);
+    free(indepValue);
+    free(depenValue);
+    return 0;
+  }
+  initialized = 0;
+
+  if (!(monotonicity = checkMonotonicity(indepValue, datarows))) {
+    snprintf(errorMessage, errorMessageSize, "Error: Independent (%s) data in file '%s' is not monotonic.",
+             control->funcOfCol, filename);
+    free(indepValue);
+    free(depenValue);
+    return 0;
+  }
+
+  *result = interpolate(depenValue, indepValue, datarows, atValue,
+                        belowRange, aboveRange, order, interpCode, monotonicity);
+  free(depenValue);
+  free(indepValue);
+  return 1;
 }
 
 long checkMonotonicity(double *indepValue, int64_t rows) {

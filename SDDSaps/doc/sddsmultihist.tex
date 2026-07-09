@@ -16,6 +16,7 @@ sddsmultihist [-pipe=[input][,output]] [inputFile] [outputFile]
   [{-bins=integer | -sizeOfBins=value | -autobins=target=number[,minimum=integer][,maximum=integer]}]
   [-lowerLimit=value] [-upperLimit=value]
   [-sides]
+  [-threads=number]
     \end{verbatim}
   \item \textbf{files:} \emph{inputFile} is the name of an SDDS file containing data to be histogrammed. If \emph{inputFile}
     contains multiple data pages, each is treated separately. The histograms are placed in \emph{outputFile}, which has one
@@ -47,6 +48,7 @@ sddsmultihist [-pipe=[input][,output]] [inputFile] [outputFile]
         value in the data.
       \item \verb|-sides| --- Specifies that zero-height bins should be attached to the lower and upper ends of the histogram.
         Many prefer the way this looks on a graph.
+      \item \verb|-threads=number| --- Specifies the number of threads for regular histogram binning. The default is 1.
     \end{itemize}
   \item \textbf{see also:}
     \begin{itemize}
@@ -56,4 +58,3 @@ sddsmultihist [-pipe=[input][,output]] [inputFile] [outputFile]
     \end{itemize}
   \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
-

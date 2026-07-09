@@ -112,6 +112,7 @@ def test_overwrite(tmp_path):
       str(EXAMPLE),
       str(output),
       "-overWrite",
+      "-threads=2",
     ],
     check=True,
   )
@@ -240,6 +241,7 @@ def test_sparse(tmp_path):
       str(output),
       "-overWrite",
       "-sparse=2",
+      "-threads=2",
     ],
     check=True,
   )

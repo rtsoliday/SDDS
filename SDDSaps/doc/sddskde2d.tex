@@ -11,6 +11,7 @@ sddskde2d data.sdds kde.sdds -column=x,y -samescales -margin=0.1
     \begin{verbatim}
 sddskde2d [<inputfile>] [<outputfile>] [-pipe=[input][,output]]
   -column=<column1,column2> [-samescales] [-margin=<value>]
+  [-threads=<number>]
     \end{verbatim}
 
   \item \textbf{switches:}
@@ -18,6 +19,7 @@ sddskde2d [<inputfile>] [<outputfile>] [-pipe=[input][,output]]
       \item \verb|-column=<column1,column2>| --- Specify column names for KDE.
       \item \verb|-samescales| --- Use identical scales for both axes.
       \item \verb|-margin=<value>| --- Add a fractional margin around the data range.
+      \item \verb|-threads=<number>| --- Specify the number of threads for grid PDF evaluation. SDDS output operations are performed serially. The default is 1.
       \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
     \end{itemize}
 
@@ -27,4 +29,3 @@ sddskde2d [<inputfile>] [<outputfile>] [-pipe=[input][,output]]
 
   \item \textbf{author:} Yipeng Sun, M. Borland, R. Soliday, ANL/APS.
 \end{sddsprog}
-

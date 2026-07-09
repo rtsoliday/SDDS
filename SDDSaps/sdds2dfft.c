@@ -24,6 +24,7 @@
  *           [-suppressaverage]
  *           [-noWarnings]
  *           [-majorOrder=row|column]
+ *           [-threads=<number>]
  * ```
  *
  * @section Options
@@ -46,6 +47,7 @@
  * | `-suppressaverage`  | Suppress the average value before FFT.                         |
  * | `-noWarnings`       | Suppress warning messages.                                     |
  * | `-majorOrder`       | Specify output file's data order (row or column).              |
+ * | `-threads`          | Number of threads for row-wise FFT work.                       |
  *
  * @subsection Incompatibilities
  * - `-inverse` is incompatible with:
@@ -89,6 +91,7 @@ enum option_type {
   SET_COMPLEXINPUT,
   SET_INVERSE,
   SET_MAJOR_ORDER,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -107,6 +110,7 @@ char *option[N_OPTIONS] = {
   "complexinput",
   "inverse",
   "majorOrder",
+  "threads",
 };
 
 #define FL_TRUNCATE 0x0001
@@ -140,6 +144,7 @@ static char *USAGE1 =
   "          [-suppressaverage]\n"
   "          [-noWarnings]\n"
   "          [-majorOrder=row|column]\n"
+  "          [-threads=<number>]\n"
   "Options:\n"
   "  -pipe=[input][,output]\n"
   "    The standard SDDS Toolkit pipe option.\n"
@@ -186,7 +191,9 @@ static char *USAGE2 =
   "  -majorOrder=row|column\n"
   "    Specifies the output file's data order.\n"
   "      row    - Row-major order.\n"
-  "      column - Column-major order.\n\n"
+  "      column - Column-major order.\n"
+  "  -threads=<number>\n"
+  "    Number of threads for row-wise FFT work.\n\n"
   "Program by Hairong Shang. (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
 
 int64_t greatestProductOfSmallPrimes(int64_t rows);
@@ -217,6 +224,7 @@ int main(int argc, char **argv) {
   double *tdata, rintegCutOffFreq, unwrapLimit = 0;
   long padFactor;
   short columnMajorOrder = -1;
+  int threads = 1;
   double length, *real_imag = NULL, **real = NULL, **imag = NULL, *real_imag1 = NULL, *fdata = NULL, df, t0, factor;
   double dtf_real, dtf_imag, *arg = NULL, *magData = NULL;
   char str[256], *tempStr = NULL;
@@ -339,6 +347,11 @@ int main(int argc, char **argv) {
           columnMajorOrder = 1;
         else if (majorOrderFlag & SDDS_ROW_MAJOR_ORDER)
           columnMajorOrder = 0;
+        break;
+      case SET_THREADS:
+        if (scanned[iArg].n_items != 2 ||
+            sscanf(scanned[iArg].list[1], "%d", &threads) != 1 || threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
         break;
       default:
         fprintf(stderr, "error: unknown/ambiguous option: %s\n", scanned[iArg].list[0]);
@@ -523,21 +536,48 @@ int main(int argc, char **argv) {
         fdata[i] = i * df;
       }
       /* First perform FFT per row */
-      for (i = 0; i < rows; i++) {
-        for (j = 0; j < colsToUse; j++) {
-          real_imag[2 * j] = real_imag[2 * j + 1] = 0;
-          if (j < depenQuantities) {
-            real_imag[2 * j] = real[j][i];
-            if (imag[j])
-              real_imag[2 * j + 1] = imag[j][i];
-            else
-              real_imag[2 * j + 1] = 0;
+      if (threads <= 1) {
+        for (i = 0; i < rows; i++) {
+          for (j = 0; j < colsToUse; j++) {
+            real_imag[2 * j] = real_imag[2 * j + 1] = 0;
+            if (j < depenQuantities) {
+              real_imag[2 * j] = real[j][i];
+              if (imag[j])
+                real_imag[2 * j + 1] = imag[j][i];
+              else
+                real_imag[2 * j + 1] = 0;
+            }
+          }
+          complexFFT(real_imag, colsToUse, inverse);
+          for (j = 0; j < colsToUse; j++) {
+            real[j][i] = real_imag[2 * j];
+            imag[j][i] = real_imag[2 * j + 1];
           }
         }
-        complexFFT(real_imag, colsToUse, inverse);
-        for (j = 0; j < colsToUse; j++) {
-          real[j][i] = real_imag[2 * j];
-          imag[j][i] = real_imag[2 * j + 1];
+      } else {
+#pragma omp parallel if (threads > 1) num_threads(threads)
+        {
+          double *real_imag_thread = tmalloc(sizeof(*real_imag_thread) * (2 * colsToUse + 2));
+          int64_t row;
+#pragma omp for private(j)
+          for (row = 0; row < rows; row++) {
+            for (j = 0; j < colsToUse; j++) {
+              real_imag_thread[2 * j] = real_imag_thread[2 * j + 1] = 0;
+              if (j < depenQuantities) {
+                real_imag_thread[2 * j] = real[j][row];
+                if (imag[j])
+                  real_imag_thread[2 * j + 1] = imag[j][row];
+                else
+                  real_imag_thread[2 * j + 1] = 0;
+              }
+            }
+            complexFFT(real_imag_thread, colsToUse, inverse);
+            for (j = 0; j < colsToUse; j++) {
+              real[j][row] = real_imag_thread[2 * j];
+              imag[j][row] = real_imag_thread[2 * j + 1];
+            }
+          }
+          free(real_imag_thread);
         }
       }
       /* Then perform FFT by column */

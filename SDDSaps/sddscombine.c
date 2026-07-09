@@ -21,6 +21,7 @@
  *             [-recover[=clip]]
  *             [-majorOrder=row|column]
  *             [-xzLevel=<0-9>]
+ *             [-threads=<number>]
  * ```
  *
  * @section Options
@@ -37,6 +38,7 @@
  * | `-recover`                           | Recover incomplete or corrupted data, optionally clipping incomplete pages.                    |
  * | `-majorOrder`                        | Specify row-major or column-major order for output.                                             |
  * | `-xzLevel`                           | Set LZMA compression level when writing .xz files.                                               |
+ * | `-threads`                           | Number of input files to read concurrently in ordinary combine mode.                             |
  *
  * @subsection Incompatibilities
  *   - `-collapse` is incompatible with:
@@ -76,6 +78,7 @@ enum option_type {
   SET_MAJOR_ORDER,
   SET_APPEND,
   SET_XZLEVEL,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -90,7 +93,8 @@ static char *option[N_OPTIONS] = {
   "recover",
   "majorOrder",
   "append",
-  "xzlevel"
+  "xzlevel",
+  "threads"
 };
 
 char *USAGE =
@@ -106,7 +110,8 @@ char *USAGE =
   "    [-collapse]\n"
   "    [-recover[=clip]]\n"
   "    [-majorOrder=row|column]\n"
-  "    [-xzLevel=<0-9>]\n\n"
+  "    [-xzLevel=<0-9>]\n"
+  "    [-threads=<number>]\n\n"
   "Options:\n"
   "  -pipe=input,output      Enable piping for input and/or output.\n"
   "  -delete=type,pattern    Delete columns, parameters, or arrays matching the pattern.\n"
@@ -119,6 +124,7 @@ char *USAGE =
   "  -recover=clip           Recover incomplete/corrupted data, optionally clipping incomplete pages.\n"
   "  -majorOrder=row|column  Specify data write order: row-major or column-major.\n"
   "  -xzLevel=<0-9>          Set LZMA compression level when writing .xz files.\n\n"
+  "  -threads=<number>       Read this many input files concurrently in ordinary combine mode. The default is 1.\n\n"
   "Description:\n"
   "  sddscombine combines data from a series of SDDS files into a single SDDS file, usually with one page for each page in each file. "
   "Data is added from files in the order that they are listed on the command line. A new parameter ('Filename') is added to show the source of each page.\n\n"
@@ -127,6 +133,8 @@ char *USAGE =
 long SDDS_CompareParameterValues(void *param1, void *param2, long type);
 long keep_element(char *name, char **delete, long deletions, char **retain, long retentions);
 void *SDDS_GetParameterMod(SDDS_DATASET *SDDS_dataset, SDDS_DATASET *SDDS_output, char *parameter_name, void *memory);
+static void WriteStandardPage(SDDS_DATASET *SDDS_output, SDDS_DATASET *SDDS_input, char *inputfile, long inputfiles);
+static void CombineStandardInputThreaded(SDDS_DATASET *SDDS_output, char **inputfile, long inputfiles, long sparse, int32_t sparse_statistics, long nColumns, int threads);
 
 #define COLUMN_MODE 0
 #define PARAMETER_MODE 1
@@ -176,6 +184,7 @@ int main(int argc, char **argv) {
   long retain_arrays, delete_arrays;
   long nColumns, recover, recovered;
   short columnMajorOrder = -1;
+  int threads = 1;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&s_arg, argc, argv);
@@ -224,6 +233,12 @@ int main(int argc, char **argv) {
         if (s_arg[i_arg].n_items != 2 || sscanf(s_arg[i_arg].list[1], "%ld", &xzLevel) != 1 || xzLevel < 0 || xzLevel > 9)
           SDDS_Bomb("invalid -xzLevel syntax");
         SDDS_SetLZMACompressionLevel(xzLevel);
+        break;
+      case SET_THREADS:
+        if (s_arg[i_arg].n_items != 2 ||
+            sscanf(s_arg[i_arg].list[1], "%d", &threads) != 1 ||
+            threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
         break;
       case SET_MERGE:
         if (s_arg[i_arg].n_items > 2)
@@ -551,6 +566,16 @@ int main(int argc, char **argv) {
     }
   }
   nColumns = SDDS_ColumnCount(&SDDS_output);
+  if (threads > inputfiles)
+    threads = inputfiles;
+  if (threads > 1 && inputfiles > 1 && !append && !merge && !collapse && !recover) {
+    CombineStandardInputThreaded(&SDDS_output, inputfile, inputfiles, sparse, sparse_statistics, nColumns, threads);
+    if (!SDDS_Terminate(&SDDS_output)) {
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      exit(EXIT_FAILURE);
+    }
+    return EXIT_SUCCESS;
+  }
   if (append) {
     iFile = 1;
     first_data = 0;
@@ -770,6 +795,96 @@ int main(int argc, char **argv) {
   }
 
   return EXIT_SUCCESS;
+}
+
+static void WriteStandardPage(SDDS_DATASET *SDDS_output, SDDS_DATASET *SDDS_input, char *inputfile, long inputfiles) {
+  if (!SDDS_ClearPage(SDDS_output) ||
+      !SDDS_CopyPage(SDDS_output, SDDS_input)) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    exit(EXIT_FAILURE);
+  }
+  if (SDDS_GetParameterIndex(SDDS_output, "Filename") >= 0) {
+    if (!SDDS_SetParameters(SDDS_output, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, "Filename", inputfile ? inputfile : "stdin", NULL)) {
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (SDDS_GetParameterIndex(SDDS_output, "NumberCombined") >= 0) {
+    if (!SDDS_SetParameters(SDDS_output, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, "NumberCombined", inputfiles, NULL)) {
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (!SDDS_WritePage(SDDS_output)) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    exit(EXIT_FAILURE);
+  }
+}
+
+static void CombineStandardInputThreaded(SDDS_DATASET *SDDS_output, char **inputfile, long inputfiles, long sparse, int32_t sparse_statistics, long nColumns, int threads) {
+  long batchStart;
+  int activeThreads;
+  int64_t sparseInterval;
+
+  if (threads < 1)
+    threads = 1;
+  if (threads > inputfiles)
+    threads = inputfiles;
+  sparseInterval = nColumns ? sparse : INT64_MAX - 1;
+
+  for (batchStart = 0; batchStart < inputfiles; batchStart += threads) {
+    SDDS_DATASET *SDDS_input;
+    int *initialized;
+    int32_t *readCode;
+    char (*errorMessage)[1024];
+    int batchSize, slot;
+
+    batchSize = threads;
+    if (batchStart + batchSize > inputfiles)
+      batchSize = inputfiles - batchStart;
+    activeThreads = batchSize;
+    SDDS_input = calloc(batchSize, sizeof(*SDDS_input));
+    initialized = calloc(batchSize, sizeof(*initialized));
+    readCode = calloc(batchSize, sizeof(*readCode));
+    errorMessage = calloc(batchSize, sizeof(*errorMessage));
+    if (!SDDS_input || !initialized || !readCode || !errorMessage)
+      SDDS_Bomb("memory allocation failure");
+
+#pragma omp parallel for if (activeThreads > 1) num_threads(activeThreads) schedule(dynamic)
+    for (slot = 0; slot < batchSize; slot++) {
+      if (SDDS_InitializeInput(&SDDS_input[slot], inputfile[batchStart + slot])) {
+        initialized[slot] = 1;
+        readCode[slot] = SDDS_ReadPageSparse(&SDDS_input[slot], 0, sparseInterval, 0, sparse_statistics);
+        if (readCode[slot] == 0)
+          snprintf(errorMessage[slot], sizeof(*errorMessage), "Error: unable to read '%s'.", inputfile[batchStart + slot]);
+      } else {
+        initialized[slot] = 0;
+        readCode[slot] = 0;
+        snprintf(errorMessage[slot], sizeof(*errorMessage), "Error: unable to open '%s'.", inputfile[batchStart + slot]);
+      }
+    }
+
+    for (slot = 0; slot < batchSize; slot++) {
+      if (!initialized[slot] || readCode[slot] == 0) {
+        fprintf(stderr, "%s\n", errorMessage[slot]);
+        exit(EXIT_FAILURE);
+      }
+      while (readCode[slot] > 0) {
+        WriteStandardPage(SDDS_output, &SDDS_input[slot], inputfile[batchStart + slot], inputfiles);
+        readCode[slot] = SDDS_ReadPageSparse(&SDDS_input[slot], 0, sparseInterval, 0, sparse_statistics);
+      }
+      if (readCode[slot] == 0 || !SDDS_Terminate(&SDDS_input[slot])) {
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+        exit(EXIT_FAILURE);
+      }
+      initialized[slot] = 0;
+    }
+
+    free(SDDS_input);
+    free(initialized);
+    free(readCode);
+    free(errorMessage);
+  }
 }
 
 void *SDDS_GetParameterMod(SDDS_DATASET *SDDS_dataset, SDDS_DATASET *SDDS_output, char *parameter_name, void *memory) {

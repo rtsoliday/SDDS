@@ -6,7 +6,7 @@ sddsmatrixmult response correctorChange bpmExpectedChange
     \end{verbatim}
   \item \textbf{synopsis:}
     \begin{verbatim}
-sddsmatrixmult [-pipe=[input][,output]] [file1] file2 [output] [-commute] [-reuse] [-verbose] [-ascii]
+    sddsmatrixmult [-pipe=[input][,output]] [file1] file2 [output] [-commute] [-reuse] [-threads=number] [-verbose] [-ascii]
     \end{verbatim}
   \item \textbf{files:} The first file (\emph{file1}) is the SDDS file for the left-hand matrix of the product. The second file (\emph{file2}) is the SDDS file for the right-hand matrix. The third file contains the product matrix data.
   \item \textbf{switches:}
@@ -14,10 +14,10 @@ sddsmatrixmult [-pipe=[input][,output]] [file1] file2 [output] [-commute] [-reus
       \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
       \item \verb|-commute| --- Use \emph{file1} for the right-hand matrix and \emph{file2} for the left-hand matrix. Useful with \verb|-pipe|.
       \item \verb|-reuse| --- If one file runs out of data pages, reuse the last one.
+      \item \verb|-threads=number| --- Specifies the number of threads for matrix multiplication. SDDS page I/O is performed serially. The default is 1.
       \item \verb|-ascii| --- Produce output in ASCII mode. Default is binary.
       \item \verb|-verbose| --- Write diagnostic messages to stderr.
     \end{itemize}
   \item \textbf{see also:} \progref{sddsmatrixop}
   \item \textbf{author:} L. Emery, ANL/APS.
 \end{sddsprog}
-

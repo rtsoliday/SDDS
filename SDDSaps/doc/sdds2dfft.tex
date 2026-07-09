@@ -22,8 +22,12 @@ sdds2dfft [-pipe=[input][,output]] [inputFile] [outputFile]
   [-truncate]
   [-suppressaverage]
   [-noWarnings]
+  [-threads=number]
   [-majorOrder=row|column]
     \end{verbatim}
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-threads=number| --- Specifies the number of threads for row-wise FFT work. SDDS input and output operations are performed serially. The default is 1.
+    \end{itemize}
   \item \textbf{author:} H. Shang and R. Soliday, ANL/APS.
 \end{sddsprog}
-

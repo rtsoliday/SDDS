@@ -63,7 +63,7 @@
 #  define SDDSCHECK_USE_DIRENT 0
 #endif
 
-#if defined(linux) || (defined(_WIN32) && !defined(_MINGW))
+#if defined(_OPENMP)
 #  include <omp.h>
 #  define SDDSCHECK_USE_OPENMP 1
 #else

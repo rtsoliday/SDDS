@@ -25,6 +25,7 @@
  *         [-suppressaverage]
  *         [-noWarnings]
  *         [-majorOrder=row|column]
+ *         [-threads=<number>]
  * ```
  *
  * @section Options
@@ -48,6 +49,7 @@
  * | `-suppressaverage`   | Remove average value from data before FFT.                                  |
  * | `-noWarnings`        | Suppress warning messages.                                                  |
  * | `-majorOrder`        | Specify row or column major order for output.                               |
+ * | `-threads`           | Number of threads for per-column FFT preparation and result calculations.   |
  *
  * @subsection Incompatibilities
  *   - `-truncate` is incompatible with:
@@ -92,6 +94,7 @@ enum option_type {
   SET_COMPLEXINPUT,
   SET_INVERSE,
   SET_MAJOR_ORDER,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -111,6 +114,7 @@ char *option[N_OPTIONS] = {
   "complexinput",
   "inverse",
   "majorOrder",
+  "threads",
 };
 
 #define FL_TRUNCATE 0x0001
@@ -156,7 +160,8 @@ static char *USAGE1 =
   "          [-padwithzeroes[=exponent] | -truncate]\n"
   "          [-suppressaverage]\n"
   "          [-noWarnings]\n"
-  "          [-majorOrder=row|column]\n\n";
+  "          [-majorOrder=row|column]\n"
+  "          [-threads=<number>]\n\n";
 
 static char *USAGE2 =
   "Options:\n"
@@ -213,6 +218,8 @@ static char *USAGE2 =
   "        Specify the output file's data order:\n"
   "          row     : Row-major order.\n"
   "          column  : Column-major order.\n\n"
+  "  -threads\n"
+  "        Number of threads for per-column FFT preparation and result calculations.\n\n"
   "Program by Michael Borland.  (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
 
 /* Rest of the code remains unchanged */
@@ -222,7 +229,8 @@ static char *USAGE2 =
 int64_t greatestProductOfSmallPrimes(int64_t rows);
 long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, int64_t rows, int64_t rowsToUse,
                   char *depenQuantity, char *depenQuantity2, unsigned long flags, long windowType,
-                  int64_t sampleInterval, long correctWindowEffects, long inverse, double rintegCutOffFreq, double unwrapLimit);
+                  int64_t sampleInterval, long correctWindowEffects, long inverse, double rintegCutOffFreq, double unwrapLimit,
+                  int threads);
 long create_fft_frequency_column(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, char *timeName, char *freqUnits, long inverse);
 
 long create_fft_columns(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, char *origName, char *indepName,
@@ -248,6 +256,7 @@ int main(int argc, char **argv) {
   double *tdata, rintegCutOffFreq, unwrapLimit = 0;
   long padFactor, correctWindowEffects = 0;
   short columnMajorOrder = -1;
+  int threads = 1;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&scanned, argc, argv);
@@ -379,6 +388,11 @@ int main(int argc, char **argv) {
           columnMajorOrder = 1;
         else if (majorOrderFlag & SDDS_ROW_MAJOR_ORDER)
           columnMajorOrder = 0;
+        break;
+      case SET_THREADS:
+        if (scanned[iArg].n_items != 2 ||
+            sscanf(scanned[iArg].list[1], "%d", &threads) != 1 || threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
         break;
       default:
         fprintf(stderr, "error: unknown/ambiguous option: %s\n", scanned[iArg].list[0]);
@@ -515,7 +529,7 @@ int main(int argc, char **argv) {
                           complexInput ? imagQuan[i] : NULL,
                           flags | (i == 0 ? FL_MAKEFREQDATA : 0),
                           windowType, sampleInterval, correctWindowEffects, inverse,
-                          rintegCutOffFreq, unwrapLimit)) {
+                          rintegCutOffFreq, unwrapLimit, threads)) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
           exit(EXIT_FAILURE);
         }
@@ -544,7 +558,8 @@ static long psdOffset, argOffset, realOffset, imagOffset, fftOffset = -1, psdInt
 
 long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, int64_t rows,
                   int64_t rowsToUse, char *depenQuantity, char *imagQuantity, unsigned long flags, long windowType,
-                  int64_t sampleInterval, long correctWindowEffects, long inverse, double rintegCutOffFreq, double unwrapLimit) {
+                  int64_t sampleInterval, long correctWindowEffects, long inverse, double rintegCutOffFreq, double unwrapLimit,
+                  int threads) {
   long offset, index, unfold = 0;
   int64_t n_freq, i, fftrows = 0;
   double r, r1, r2, length, factor, df, min, max, delta;
@@ -561,10 +576,12 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
     return 0;
   if (flags & FL_SUPPRESSAVERAGE) {
     compute_average(&r, data, rows);
+#pragma omp parallel for if (threads > 1) num_threads(threads)
     for (i = 0; i < rows; i++)
       data[i] -= r;
     if (imagData) {
       compute_average(&r, imagData, rows);
+#pragma omp parallel for if (threads > 1) num_threads(threads)
       for (i = 0; i < rows; i++)
         imagData[i] -= r;
     }
@@ -593,6 +610,7 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
   switch (windowType) {
   case WINDOW_HANNING:
     r = PIx2 / (rows - 1);
+#pragma omp parallel for private(factor) reduction(+ : windowCorrectionFactor) if (threads > 1) num_threads(threads)
     for (i = 0; i < rows; i++) {
       factor = (1 - cos(i * r)) / 2;
       data[i] *= factor;
@@ -603,6 +621,7 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
     break;
   case WINDOW_HAMMING:
     r = PIx2 / (rows - 1);
+#pragma omp parallel for private(factor) reduction(+ : windowCorrectionFactor) if (threads > 1) num_threads(threads)
     for (i = 0; i < rows; i++) {
       factor = 0.54 - 0.46 * cos(i * r);
       data[i] *= factor;
@@ -611,12 +630,14 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
         imagData[i] *= factor;
     }
     if (imagData)
+#pragma omp parallel for if (threads > 1) num_threads(threads)
       for (i = 0; i < rows; i++)
         imagData[i] *= (1 - cos(i * r)) / 2;
     break;
   case WINDOW_WELCH:
     r1 = (rows - 1) / 2.0;
     r2 = sqr((rows + 1) / 2.0);
+#pragma omp parallel for private(factor) reduction(+ : windowCorrectionFactor) if (threads > 1) num_threads(threads)
     for (i = 0; i < rows; i++) {
       factor = 1 - sqr(i - r1) / r2;
       data[i] *= factor;
@@ -627,6 +648,7 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
     break;
   case WINDOW_PARZEN:
     r = (rows - 1) / 2.0;
+#pragma omp parallel for private(factor) reduction(+ : windowCorrectionFactor) if (threads > 1) num_threads(threads)
     for (i = 0; i < rows; i++) {
       factor = 1 - FABS((i - r) / r);
       data[i] *= factor;
@@ -636,6 +658,7 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
     }
     break;
   case WINDOW_FLATTOP:
+#pragma omp parallel for private(r, factor) reduction(+ : windowCorrectionFactor) if (threads > 1) num_threads(threads)
     for (i = 0; i < rows; i++) {
       r = i * PIx2 / (rows - 1);
       factor = 1 - 1.93 * cos(r) + 1.29 * cos(2 * r) - 0.388 * cos(3 * r) + 0.032 * cos(4 * r);
@@ -646,6 +669,7 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
     }
     break;
   case WINDOW_GAUSSIAN:
+#pragma omp parallel for private(r, factor) reduction(+ : windowCorrectionFactor) if (threads > 1) num_threads(threads)
     for (i = 0; i < rows; i++) {
       r = sqr((i - (rows - 1) / 2.) / (0.4 * (rows - 1) / 2.)) / 2;
       factor = exp(-r);
@@ -664,10 +688,14 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
   if (correctWindowEffects) {
     /* Add correction factor to make the integrated PSD come out right. */
     windowCorrectionFactor = 1 / sqrt(windowCorrectionFactor / rows);
+#pragma omp parallel for if (threads > 1) num_threads(threads)
     for (i = 0; i < rows; i++)
       data[i] *= windowCorrectionFactor;
-    if (imagData)
-      imagData[i] *= windowCorrectionFactor;
+    if (imagData) {
+#pragma omp parallel for if (threads > 1) num_threads(threads)
+      for (i = 0; i < rows; i++)
+        imagData[i] *= windowCorrectionFactor;
+    }
   }
   if (imagData && flags & FL_COMPLEXINPUT_FOLDED) {
     double min, max, max1;
@@ -713,6 +741,7 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
   /* compute FFT */
 
   real_imag = tmalloc(sizeof(double) * (2 * fftrows + 2));
+#pragma omp parallel for if (threads > 1) num_threads(threads)
   for (i = 0; i < fftrows; i++) {
     real_imag[2 * i] = data[i];
     if (imagData)
@@ -755,6 +784,7 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
     }
   }
 
+#pragma omp parallel for private(dtf_real, dtf_imag) if (threads > 1) num_threads(threads)
   for (i = 0; i < n_freq; i++) {
     fdata[i] = i * df;
     dtf_real = cos(-2 * PI * fdata[i] * t0);
@@ -798,6 +828,7 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
 
   if (flags & FL_FULLOUTPUT) {
     arg = tmalloc(sizeof(*arg) * n_freq);
+#pragma omp parallel for if (threads > 1) num_threads(threads)
     for (i = 0; i < n_freq; i++) {
       if (real[i] || imag[i])
         arg[i] = 180.0 / PI * atan2(imag[i], real[i]);

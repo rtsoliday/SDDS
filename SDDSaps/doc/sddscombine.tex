@@ -14,6 +14,7 @@
                [-delete={columns | parameters | arrays},matchingString[,...]]
                [-retain={columns | parameters | arrays},matchingString[,...]]
                [-xzLevel=integer]
+               [-threads=number]
     \end{verbatim}
 
   \item \textbf{files:} \verb|inputFileList| is a list of space-separated filenames to be combined. \verb|outputFile| is a filename into which the combined data is placed. If no \verb|-pipe| options are given, the \emph{outputFile} is taken as the last filename on the command line. To specify an output file with input from a pipe, one uses \verb|sddscombine| \verb|-pipe=input| \emph{outputFile}. Similarly, to specify output to a pipe with many input files, use \verb|sddscombine| \verb|-pipe=output| \emph{inputFileList}. Since accidentally leaving off the \verb|-pipe=output| option for the last command might result in replacement of an intended input file, the program refuses to overwrite an existing file unless the \verb|-overWrite| option is given. A string parameter (\verb|Filename|) is included in \emph{outputFile} to show the source of each page.
@@ -26,6 +27,7 @@
       \item \verb|-sparse=integer| --- Specifies sparsing the tabular data in the input to retain only every \emph{integer}-th row.
       \item \verb|-collapse| --- Specifies collapsing the data, as done by \verb|sddscollapse|.
       \item \verb|-xzLevel=integer| --- Sets the LZMA compression level when writing \verb|.xz| files.
+      \item \verb|-threads=number| --- Specifies the number of input files to read concurrently in ordinary combine mode. The default is 1. At most this many input files have a page loaded at one time, and output pages are still written serially in command-line order. Merge, collapse, append, and recover modes are processed serially.
       \item {\tt -delete=\{columns | parameters | arrays\},matchingString[,...]},\\
             {\tt -retain=\{columns | parameters | arrays\},matchingString[,...]} --- These options specify wildcard strings to select entities (i.e., columns, parameters, or arrays) that will respectively be deleted or retained. The selection is performed by determining which input entities have names matching any of the strings. If \verb|retain| is given but \verb|delete| is not, only those entities matching one of the \verb|retain| strings are retained. If both \verb|delete| and \verb|retain| are given, then all entities are retained except those that match a \verb|delete| string without matching any of the \verb|retain| strings.
     \end{itemize}
@@ -38,4 +40,3 @@
 
   \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
-

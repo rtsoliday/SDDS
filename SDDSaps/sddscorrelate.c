@@ -18,6 +18,7 @@
  *               [-rankOrder]
  *               [-stDevOutlier[=limit=<factor>][,passes=<integer>]]
  *               [-majorOrder=row|column]
+ *               [-threads=<number>]
  * ```
  *
  * @section Options
@@ -30,6 +31,7 @@
  * | `-rankOrder`                      | Use rank-order (Spearman) correlation instead of linear (Pearson).          |
  * | `-stDevOutlier`                   | Remove outliers based on standard deviation.                                |
  * | `-majorOrder`                     | Set data ordering to row-major or column-major.                             |
+ * | `-threads`                        | Set the number of threads for rank and correlation computation.             |
  *
  * @subsection Incompatibilities
  *   - `-columns` and `-excludeColumns` cannot be used together.
@@ -74,6 +76,7 @@ enum option_type {
   SET_RANKORDER,
   SET_STDEVOUTLIER,
   SET_MAJOR_ORDER,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -85,6 +88,7 @@ char *option[N_OPTIONS] = {
   "rankorder",
   "stdevoutlier",
   "majorOrder",
+  "threads",
 };
 
 #define USAGE "sddscorrelate [<inputfile>] [<outputfile>]\n\
@@ -95,6 +99,7 @@ char *option[N_OPTIONS] = {
                      [-rankOrder]\n\
                      [-stDevOutlier[=limit=<factor>][,passes=<integer>]]\n\
                      [-majorOrder=row|column]\n\
+                     [-threads=<number>]\n\
 \n\
 Compute and evaluate correlations among columns of data.\n\
 \n\
@@ -107,12 +112,14 @@ Options:\n\
   -stDevOutlier[=limit=<factor>][,passes=<integer>]\n\
                                   Remove outliers based on standard deviation.\n\
   -majorOrder=row|column          Set data ordering to row-major or column-major.\n\
+  -threads=<number>               Number of threads for rank and correlation computation.\n\
 \n\
 Program by Michael Borland. ("__DATE__ " "__TIME__ ", SVN revision: " SVN_VERSION ")\n"
 
 void replaceWithRank(double *data, int64_t n);
 double *findRank(double *data, int64_t n);
 void markStDevOutliers(double *data, double limit, long passes, short *keep, int64_t n);
+static long correlationPairIndex(long i, long j, long columns);
 
 int main(int argc, char **argv) {
   int iArg;
@@ -122,14 +129,18 @@ int main(int argc, char **argv) {
   SCANNED_ARG *scanned;
   SDDS_DATASET SDDSin, SDDSout;
   long i, j, row, count, readCode, rankOrder, iName1, iName2;
+  long pairCount, pairIndex;
   int64_t rows;
   int32_t outlierStDevPasses;
   double **data, correlation, significance, outlierStDevLimit;
+  double *correlationValue, *significanceValue;
+  long *correlationPoints;
   double **rank;
   short **accept;
   char s[SDDS_MAXLINE];
   unsigned long pipeFlags, dummyFlags, majorOrderFlag;
   short columnMajorOrder = -1;
+  int threads = 1;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&scanned, argc, argv);
@@ -201,6 +212,11 @@ int main(int argc, char **argv) {
             outlierStDevPasses <= 0 || outlierStDevLimit <= 0.0)
           SDDS_Bomb("invalid -stdevOutlier syntax/values");
         break;
+      case SET_THREADS:
+        if (scanned[iArg].n_items != 2 ||
+            sscanf(scanned[iArg].list[1], "%d", &threads) != 1 || threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
+        break;
       default:
         fprintf(stderr, "Error: unknown or ambiguous option: %s\n", scanned[iArg].list[0]);
         exit(EXIT_FAILURE);
@@ -255,7 +271,12 @@ int main(int argc, char **argv) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   data = malloc(sizeof(*data) * columns);
+  pairCount = columns * (columns - 1) / 2;
+  correlationValue = pairCount ? malloc(sizeof(*correlationValue) * pairCount) : NULL;
+  significanceValue = pairCount ? malloc(sizeof(*significanceValue) * pairCount) : NULL;
+  correlationPoints = pairCount ? malloc(sizeof(*correlationPoints) * pairCount) : NULL;
   if (!data ||
+      (pairCount && (!correlationValue || !significanceValue || !correlationPoints)) ||
       (rankOrder && !(rank = malloc(sizeof(*rank) * columns))) ||
       !(accept = malloc(sizeof(*accept) * columns))) {
     SDDS_Bomb("allocation failure");
@@ -273,18 +294,53 @@ int main(int argc, char **argv) {
       if (!data[i])
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       if (rankOrder)
-        rank[i] = findRank(data[i], rows);
+        rank[i] = NULL;
+      accept[i] = NULL;
       if (outlierStDevPasses) {
         accept[i] = malloc(sizeof(**accept) * rows);
         if (!accept[i])
           SDDS_Bomb("allocation failure");
+      }
+    }
+#pragma omp parallel for if (threads > 1) num_threads(threads)
+    for (i = 0; i < columns; i++) {
+      if (rankOrder)
+        rank[i] = findRank(data[i], rows);
+      if (outlierStDevPasses)
         markStDevOutliers(data[i], outlierStDevLimit, outlierStDevPasses, accept[i], rows);
-      } else {
-        accept[i] = NULL;
+    }
+#pragma omp parallel for private(j, iName1, iName2, count, correlation, significance, pairIndex) if (threads > 1) num_threads(threads)
+    for (i = 0; i < columns; i++) {
+      for (j = i + 1; j < columns; j++) {
+        pairIndex = correlationPairIndex(i, j, columns);
+        iName1 = i;
+        iName2 = j;
+        if (withOnly) {
+          if (strcmp(withOnly, column[i]) == 0) {
+            iName1 = j;
+            iName2 = i;
+          } else if (strcmp(withOnly, column[j]) == 0) {
+            iName1 = i;
+            iName2 = j;
+          } else {
+            correlationValue[pairIndex] = 0;
+            significanceValue[pairIndex] = 0;
+            correlationPoints[pairIndex] = 0;
+            continue;
+          }
+        }
+        correlation = linearCorrelationCoefficient(rankOrder ? rank[i] : data[i],
+                                                   rankOrder ? rank[j] : data[j],
+                                                   accept[i], accept[j], rows, &count);
+        significance = linearCorrelationSignificance(correlation, count);
+        correlationValue[pairIndex] = correlation;
+        significanceValue[pairIndex] = significance;
+        correlationPoints[pairIndex] = count;
       }
     }
     for (i = row = 0; i < columns; i++) {
       for (j = i + 1; j < columns; j++) {
+        pairIndex = correlationPairIndex(i, j, columns);
         iName1 = i;
         iName2 = j;
         if (withOnly) {
@@ -298,18 +354,14 @@ int main(int argc, char **argv) {
             continue;
           }
         }
-        correlation = linearCorrelationCoefficient(rankOrder ? rank[i] : data[i],
-                                                   rankOrder ? rank[j] : data[j],
-                                                   accept[i], accept[j], rows, &count);
-        significance = linearCorrelationSignificance(correlation, count);
         snprintf(s, sizeof(s), "%s.%s", column[iName1], column[iName2]);
         if (!SDDS_SetRowValues(&SDDSout, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE, row++,
                                0, column[iName1],
                                1, column[iName2],
                                2, s,
-                               3, correlation,
-                               4, significance,
-                               5, count,
+                               3, correlationValue[pairIndex],
+                               4, significanceValue[pairIndex],
+                               5, correlationPoints[pairIndex],
                                -1)) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         }
@@ -327,6 +379,9 @@ int main(int argc, char **argv) {
   }
 
   free(data);
+  free(correlationValue);
+  free(significanceValue);
+  free(correlationPoints);
   if (rankOrder)
     free(rank);
   free(accept);
@@ -341,6 +396,10 @@ int main(int argc, char **argv) {
   }
 
   return EXIT_SUCCESS;
+}
+
+static long correlationPairIndex(long i, long j, long columns) {
+  return i * (2 * columns - i - 1) / 2 + (j - i - 1);
 }
 
 void markStDevOutliers(double *data, double limit, long passes, short *keep, int64_t n) {
@@ -407,10 +466,10 @@ double *findRank(double *data, int64_t n) {
 }
 
 void replaceWithRank(double *data, int64_t n) {
-  static DATAnINDEX *indexedData = NULL;
+  DATAnINDEX *indexedData = NULL;
   int64_t i, j, iStart, iEnd;
 
-  indexedData = SDDS_Realloc(indexedData, sizeof(*indexedData) * n);
+  indexedData = SDDS_Malloc(sizeof(*indexedData) * n);
   for (i = 0; i < n; i++) {
     indexedData[i].data = data[i];
     indexedData[i].originalIndex = i;
@@ -432,4 +491,5 @@ void replaceWithRank(double *data, int64_t n) {
       i = iEnd;
     }
   }
+  free(indexedData);
 }

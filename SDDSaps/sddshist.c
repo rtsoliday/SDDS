@@ -167,6 +167,10 @@ static short cdfOnly, freOnly;
 
 int64_t readRegionFile(SDDS_DATASET *SDDSin, char *filename, char *positionColumn, char *nameColumn, double **regionPosition, char ***regionName);
 void classifyByRegion(double *data, double *weight, int64_t points, double *histogram, double *regionPosition, int64_t bins);
+static long make_histogram_threaded(double *hist, long n_bins, double lo, double hi, double *data,
+                                    int64_t n_pts, long new_start, int threads);
+static long make_histogram_weighted_threaded(double *hist, long n_bins, double lo, double hi, double *data,
+                                             int64_t n_pts, long new_start, double *weight, int threads);
 
 int main(int argc, char **argv) {
   /* Flags to keep track of what is set in command line */
@@ -479,9 +483,9 @@ int main(int argc, char **argv) {
         }
 
         if (!weightColumn)
-          pointsBinned = make_histogram(hist1, bins, lowerLimit, upperLimit, data, points, 1);
+          pointsBinned = make_histogram_threaded(hist1, bins, lowerLimit, upperLimit, data, points, 1, threads);
         else
-          pointsBinned = make_histogram_weighted(hist1, bins, lowerLimit, upperLimit, data, points, 1, weightData);
+          pointsBinned = make_histogram_weighted_threaded(hist1, bins, lowerLimit, upperLimit, data, points, 1, weightData, threads);
       }
 
       sum = 0;
@@ -767,4 +771,114 @@ void classifyByRegion(double *data, double *weight, int64_t points, double *hist
       histogram[iBin] += 1;
     }
   }
+}
+
+static long make_histogram_threaded(double *hist, long n_bins, double lo, double hi, double *data,
+                                    int64_t n_pts, long new_start, int threads) {
+  double bin_size, *partial;
+  long *counts, count = 0;
+  int activeThreads, thread;
+  int64_t i;
+
+  if (threads <= 1 || n_pts <= 0 || n_bins <= 0)
+    return make_histogram(hist, n_bins, lo, hi, data, n_pts, new_start);
+
+  activeThreads = threads;
+  if (activeThreads > n_pts)
+    activeThreads = (int)n_pts;
+  if (activeThreads <= 1)
+    return make_histogram(hist, n_bins, lo, hi, data, n_pts, new_start);
+
+  if (new_start)
+    for (i = 0; i < n_bins; i++)
+      hist[i] = 0;
+  bin_size = (hi - lo) / n_bins;
+  partial = calloc((size_t)activeThreads * n_bins, sizeof(*partial));
+  counts = calloc(activeThreads, sizeof(*counts));
+  if (!partial || !counts)
+    SDDS_Bomb("memory allocation failure");
+
+#pragma omp parallel for if (activeThreads > 1) num_threads(activeThreads)
+  for (thread = 0; thread < activeThreads; thread++) {
+    int64_t start = thread * (n_pts / activeThreads);
+    int64_t end = (thread == activeThreads - 1) ? n_pts : (thread + 1) * (n_pts / activeThreads);
+    double *local = partial + (size_t)thread * n_bins;
+    long localCount = 0;
+    for (int64_t point = start; point < end; point++) {
+      double dbin = (data[point] - lo) / bin_size;
+      long bin = dbin;
+      if (dbin < 0)
+        continue;
+      if (bin < 0 || bin >= n_bins)
+        continue;
+      local[bin] += 1;
+      localCount++;
+    }
+    counts[thread] = localCount;
+  }
+
+  for (thread = 0; thread < activeThreads; thread++) {
+    double *local = partial + (size_t)thread * n_bins;
+    count += counts[thread];
+    for (i = 0; i < n_bins; i++)
+      hist[i] += local[i];
+  }
+  free(partial);
+  free(counts);
+  return count;
+}
+
+static long make_histogram_weighted_threaded(double *hist, long n_bins, double lo, double hi, double *data,
+                                             int64_t n_pts, long new_start, double *weight, int threads) {
+  double bin_size, *partial;
+  long *counts, count = 0;
+  int activeThreads, thread;
+  int64_t i;
+
+  if (threads <= 1 || n_pts <= 0 || n_bins <= 0)
+    return make_histogram_weighted(hist, n_bins, lo, hi, data, n_pts, new_start, weight);
+
+  activeThreads = threads;
+  if (activeThreads > n_pts)
+    activeThreads = (int)n_pts;
+  if (activeThreads <= 1)
+    return make_histogram_weighted(hist, n_bins, lo, hi, data, n_pts, new_start, weight);
+
+  if (new_start)
+    for (i = 0; i < n_bins; i++)
+      hist[i] = 0;
+  bin_size = (hi - lo) / n_bins;
+  partial = calloc((size_t)activeThreads * n_bins, sizeof(*partial));
+  counts = calloc(activeThreads, sizeof(*counts));
+  if (!partial || !counts)
+    SDDS_Bomb("memory allocation failure");
+
+#pragma omp parallel for if (activeThreads > 1) num_threads(activeThreads)
+  for (thread = 0; thread < activeThreads; thread++) {
+    int64_t start = thread * (n_pts / activeThreads);
+    int64_t end = (thread == activeThreads - 1) ? n_pts : (thread + 1) * (n_pts / activeThreads);
+    double *local = partial + (size_t)thread * n_bins;
+    long localCount = 0;
+    for (int64_t point = start; point < end; point++) {
+      double dbin = (data[point] - lo) / bin_size;
+      long bin = dbin;
+      if (dbin < 0)
+        continue;
+      if (bin < 0 || bin >= n_bins)
+        continue;
+      local[bin] += weight[point];
+      localCount++;
+    }
+    counts[thread] = localCount;
+  }
+
+  for (thread = 0; thread < activeThreads; thread++) {
+    double *local = partial + (size_t)thread * n_bins;
+    count += counts[thread];
+    for (i = 0; i < n_bins; i++)
+      hist[i] += local[i];
+  }
+  free(partial);
+  free(counts);
+  return count;
 }

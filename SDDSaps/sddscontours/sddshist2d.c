@@ -17,7 +17,7 @@
 #include "table.h"
 #include "scan.h"
 
-#if defined(linux) || (defined(_WIN32) && !defined(_MINGW))
+#if defined(_OPENMP)
 #  include <omp.h>
 #else
 #  define NOTHREADS 1
@@ -1013,4 +1013,3 @@ PARAM_STORE *setParameters(PARAM_STORE *context, SDDS_DATASET *SDDSout)
   context = context->next;
   return context;
 }
-

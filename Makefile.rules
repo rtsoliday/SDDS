@@ -5,6 +5,25 @@ ifeq ($(findstring CYGWIN, $(OS)),CYGWIN)
     OS := Windows
 endif
 
+# Apple Clang does not ship an OpenMP runtime.  Enable OpenMP on macOS when
+# a MacPorts or Homebrew libomp installation is available, and otherwise
+# leave the existing serial fallback in place.
+DARWIN_OPENMP_INCLUDE := $(firstword $(wildcard \
+    /opt/local/include/libomp \
+    /opt/homebrew/opt/libomp/include \
+    /usr/local/opt/libomp/include))
+DARWIN_OPENMP_LIBRARY := $(firstword $(wildcard \
+    /opt/local/lib/libomp/libomp.dylib \
+    /opt/homebrew/opt/libomp/lib/libomp.dylib \
+    /usr/local/opt/libomp/lib/libomp.dylib))
+ifneq ($(DARWIN_OPENMP_INCLUDE),)
+ifneq ($(DARWIN_OPENMP_LIBRARY),)
+  DARWIN_OPENMP_LIBDIR := $(patsubst %/,%,$(dir $(DARWIN_OPENMP_LIBRARY)))
+  DARWIN_OPENMP_CFLAGS := -Xpreprocessor -fopenmp -I$(DARWIN_OPENMP_INCLUDE)
+  DARWIN_OPENMP_LDFLAGS := -L$(DARWIN_OPENMP_LIBDIR) -Wl,-rpath,$(DARWIN_OPENMP_LIBDIR) -lomp
+endif
+endif
+
 OBJ_DIR = O.$(OS)-$(ARCH)
 BIN_DIR = $(DD)../bin/$(OS)-$(ARCH)
 LIB_DIR = $(DD)../lib/$(OS)-$(ARCH)
@@ -356,11 +375,11 @@ ifeq ($(OS), Darwin)
   AR = libtool -static -o
   RANLIB = ranlib
   #MAC_VERSION = -mmacosx-version-min=10.13
-  CFLAGS = -Wno-deprecated-non-prototype -m64 -O3 -g -Wall -fPIC -fno-common $(MAC_VERSION) $(EXTRA_INC_DIRS)
-  CCFLAGS = -Wno-deprecated-non-prototype -m64 -O3 -g -Wall -fPIC -fno-common -std=c++11 $(MAC_VERSION) $(EXTRA_INC_DIRS)
+  CFLAGS = -Wno-deprecated-non-prototype -m64 -O3 -g -Wall -fPIC -fno-common $(DARWIN_OPENMP_CFLAGS) $(MAC_VERSION) $(EXTRA_INC_DIRS)
+  CCFLAGS = -Wno-deprecated-non-prototype -m64 -O3 -g -Wall -fPIC -fno-common -std=c++11 $(DARWIN_OPENMP_CFLAGS) $(MAC_VERSION) $(EXTRA_INC_DIRS)
   LDFLAGS = $(MAC_VERSION) -std=c++11
-  LIBRARY_SYS_LIBS = -lm
-  PROD_SYS_LIBS = -lm
+  LIBRARY_SYS_LIBS = $(DARWIN_OPENMP_LDFLAGS) -lm
+  PROD_SYS_LIBS = $(DARWIN_OPENMP_LDFLAGS) -lm
   OBJEXT = o
   LIBEXT = a
   LIBPRE = lib

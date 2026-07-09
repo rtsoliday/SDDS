@@ -20,6 +20,7 @@
  *          [-truncate]
  *          [-noWarnings]
  *          [-majorOrder=row|column]
+ *          [-threads=<number>]
  * ```
 
  * @section Options
@@ -37,6 +38,7 @@
  * | `-truncate`                           | Truncate data for FFT optimization.                                                  |
  * | `-noWarnings`                         | Suppress warning messages.                                                           |
  * | `-majorOrder`                         | Define the output format: row-major or column-major.                                 |
+ * | `-threads`                            | Number of threads for independent dependent-column NAFF runs.                        |
 
  * @subsection Incompatibilities
  * - `-columns` and `-pair` cannot be used simultaneously to specify dependent quantities.
@@ -80,6 +82,7 @@ enum option_type {
   SET_ITERATE_FREQ,
   SET_PAIR,
   SET_MAJOR_ORDER,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -93,6 +96,7 @@ char *option[N_OPTIONS] = {
   "iteratefrequency",
   "pair",
   "majorOrder",
+  "threads",
 };
 
 static char *USAGE1 =
@@ -105,7 +109,8 @@ static char *USAGE1 =
   "       [-iterateFrequency=[cycleLimit=<number>][,accuracyLimit=<fraction>]]\n"
   "       [-truncate]\n"
   "       [-noWarnings]\n"
-  "       [-majorOrder=row|column]\n\n"
+  "       [-majorOrder=row|column]\n"
+  "       [-threads=<number>]\n\n"
   "Determines frequency components of signals using Laskar's NAFF method.\n"
   "FFTs are involved in this process, hence some parameters refer to FFT configurations.\n\n"
   "Options:\n"
@@ -119,7 +124,8 @@ static char *USAGE1 =
   "  -iterateFrequency Configure iteration parameters for frequency determination.\n"
   "  -truncate         Truncate data to optimize FFT performance.\n"
   "  -noWarnings       Suppress warning messages.\n"
-  "  -majorOrder       Specify output file's data order as row-major or column-major.\n\n";
+  "  -majorOrder       Specify output file's data order as row-major or column-major.\n"
+  "  -threads          Number of threads for independent dependent-column NAFF runs.\n\n";
 
 static char *USAGE2 =
   "Program by Michael Borland.  (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
@@ -148,7 +154,8 @@ int main(int argc, char **argv) {
   unsigned long flags, pairFlags, tmpFlags, pipeFlags, majorOrderFlag;
   SCANNED_ARG *scArg;
   SDDS_DATASET SDDSin, SDDSout;
-  double *tdata, *data, t0, dt;
+  double *tdata, t0, dt;
+  double **dataArray = NULL, **pairDataArray = NULL;
   double fracRMSChangeLimit, fracFreqAccuracyLimit;
   int32_t frequenciesDesired, maxFrequencies, freqCycleLimit;
   short truncate;
@@ -156,6 +163,7 @@ int main(int argc, char **argv) {
   long *frequencyIndex, *amplitudeIndex, *phaseIndex, *significanceIndex, pairs;
   long *amplitudeIndex1, *phaseIndex1, *significanceIndex1;
   short columnMajorOrder = -1;
+  int threads = 1;
 
   SDDS_RegisterProgramName(argv[0]);
 
@@ -213,6 +221,12 @@ int main(int argc, char **argv) {
           columnMajorOrder = 1;
         else if (majorOrderFlag & SDDS_ROW_MAJOR_ORDER)
           columnMajorOrder = 0;
+        break;
+
+      case SET_THREADS:
+        if (scArg[iArg].n_items != 2 ||
+            sscanf(scArg[iArg].list[1], "%d", &threads) != 1 || threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
         break;
 
       case SET_TRUNCATE:
@@ -340,16 +354,16 @@ int main(int argc, char **argv) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
 
-  if (!(frequency = SDDS_Malloc(sizeof(*frequency) * maxFrequencies)) ||
-      !(amplitude = SDDS_Malloc(sizeof(*amplitude) * maxFrequencies)) ||
-      !(phase = SDDS_Malloc(sizeof(*phase) * maxFrequencies)) ||
-      !(significance = SDDS_Malloc(sizeof(*significance) * maxFrequencies))) {
+  if (!(frequency = SDDS_Malloc(sizeof(*frequency) * depenQuantities * maxFrequencies)) ||
+      !(amplitude = SDDS_Malloc(sizeof(*amplitude) * depenQuantities * maxFrequencies)) ||
+      !(phase = SDDS_Malloc(sizeof(*phase) * depenQuantities * maxFrequencies)) ||
+      !(significance = SDDS_Malloc(sizeof(*significance) * depenQuantities * maxFrequencies))) {
     SDDS_Bomb("Memory allocation failure");
   }
   if (pairs) {
-    if (!(amplitude1 = SDDS_Malloc(sizeof(*amplitude1) * maxFrequencies)) ||
-        !(phase1 = SDDS_Malloc(sizeof(*phase1) * maxFrequencies)) ||
-        !(significance1 = SDDS_Malloc(sizeof(*significance1) * maxFrequencies))) {
+    if (!(amplitude1 = SDDS_Malloc(sizeof(*amplitude1) * depenQuantities * maxFrequencies)) ||
+        !(phase1 = SDDS_Malloc(sizeof(*phase1) * depenQuantities * maxFrequencies)) ||
+        !(significance1 = SDDS_Malloc(sizeof(*significance1) * depenQuantities * maxFrequencies))) {
       SDDS_Bomb("Memory allocation failure");
     }
   }
@@ -382,44 +396,67 @@ int main(int argc, char **argv) {
       t0 = tdata[0];
       free(tdata);
       tdata = NULL;
+      dataArray = SDDS_Malloc(sizeof(*dataArray) * depenQuantities);
+      if (pairs)
+        pairDataArray = SDDS_Malloc(sizeof(*pairDataArray) * depenQuantities);
       for (i = 0; i < depenQuantities; i++) {
-        if (!(data = SDDS_GetColumnInDoubles(&SDDSin, depenQuantity[i])))
+        if (!(dataArray[i] = SDDS_GetColumnInDoubles(&SDDSin, depenQuantity[i])))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+        if (pairs && !(pairDataArray[i] = SDDS_GetColumnInDoubles(&SDDSin, depenQuantityPair[i])))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      }
+#pragma omp parallel for private(j) if (threads > 1) num_threads(threads)
+      for (i = 0; i < depenQuantities; i++) {
+        double *frequency1 = frequency + i * maxFrequencies;
+        double *amplitude0 = amplitude + i * maxFrequencies;
+        double *phase0 = phase + i * maxFrequencies;
+        double *significance0 = significance + i * maxFrequencies;
+        double *amplitude1p = pairs ? amplitude1 + i * maxFrequencies : NULL;
+        double *phase1p = pairs ? phase1 + i * maxFrequencies : NULL;
+        double *significance1p = pairs ? significance1 + i * maxFrequencies : NULL;
+
         for (j = 0; j < maxFrequencies; j++)
-          frequency[j] = amplitude[j] = phase[j] = significance[j] = -1;
-        PerformNAFF(frequency, amplitude, phase, significance, t0, dt, data, rowsToUse, flags,
+          frequency1[j] = amplitude0[j] = phase0[j] = significance0[j] = -1;
+        PerformNAFF(frequency1, amplitude0, phase0, significance0, t0, dt, dataArray[i], rowsToUse, flags,
                     fracRMSChangeLimit, maxFrequencies, freqCycleLimit, fracFreqAccuracyLimit, 0, 0);
 #ifdef DEBUG
         fprintf(stderr, "Column %s: ", depenQuantity[i]);
-        fprintf(stderr, "f=%10.3e  a=%10.3e  p=%10.3e  s=%10.3e\n", frequency[0], amplitude[0], phase[0], significance[0]);
+        fprintf(stderr, "f=%10.3e  a=%10.3e  p=%10.3e  s=%10.3e\n", frequency1[0], amplitude0[0], phase0[0], significance0[0]);
 #endif
-        free(data);
-        data = NULL;
         if (pairs) {
-          if (!(data = SDDS_GetColumnInDoubles(&SDDSin, depenQuantityPair[i])))
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-          PerformNAFF(frequency, amplitude1, phase1, significance1, t0, dt, data, rowsToUse,
+          for (j = 0; j < maxFrequencies; j++)
+            amplitude1p[j] = phase1p[j] = significance1p[j] = -1;
+          PerformNAFF(frequency1, amplitude1p, phase1p, significance1p, t0, dt, pairDataArray[i], rowsToUse,
                       pairFlags, fracRMSChangeLimit, maxFrequencies, freqCycleLimit, fracFreqAccuracyLimit, 0, 0);
 
           for (j = 0; j < maxFrequencies; j++)
-            if (frequency[j] != -1)
-              frequency[j] = adjustFrequencyHalfPlane(frequency[j], phase[j], phase1[j], dt);
-          free(data);
-          data = NULL;
+            if (frequency1[j] != -1)
+              frequency1[j] = adjustFrequencyHalfPlane(frequency1[j], phase0[j], phase1p[j], dt);
         }
-        if (!SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, frequency, maxFrequencies, frequencyIndex[i]) ||
-            !SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, amplitude, maxFrequencies, amplitudeIndex[i]) ||
-            !SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, phase, maxFrequencies, phaseIndex[i]) ||
-            !SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, significance, maxFrequencies, significanceIndex[i])) {
+      }
+      for (i = 0; i < depenQuantities; i++) {
+        if (!SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, frequency + i * maxFrequencies, maxFrequencies, frequencyIndex[i]) ||
+            !SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, amplitude + i * maxFrequencies, maxFrequencies, amplitudeIndex[i]) ||
+            !SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, phase + i * maxFrequencies, maxFrequencies, phaseIndex[i]) ||
+            !SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, significance + i * maxFrequencies, maxFrequencies, significanceIndex[i])) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         }
         if (pairs) {
-          if (!SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, amplitude1, maxFrequencies, amplitudeIndex1[i]) ||
-              !SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, phase1, maxFrequencies, phaseIndex1[i]) ||
-              !SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, significance1, maxFrequencies, significanceIndex1[i])) {
+          if (!SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, amplitude1 + i * maxFrequencies, maxFrequencies, amplitudeIndex1[i]) ||
+              !SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, phase1 + i * maxFrequencies, maxFrequencies, phaseIndex1[i]) ||
+              !SDDS_SetColumn(&SDDSout, SDDS_SET_BY_INDEX, significance1 + i * maxFrequencies, maxFrequencies, significanceIndex1[i])) {
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
           }
         }
+        free(dataArray[i]);
+        if (pairs)
+          free(pairDataArray[i]);
+      }
+      free(dataArray);
+      dataArray = NULL;
+      if (pairs) {
+        free(pairDataArray);
+        pairDataArray = NULL;
       }
     } else {
       if (!SDDS_StartPage(&SDDSout, 0) || !SDDS_CopyParameters(&SDDSout, &SDDSin)) {

@@ -17,6 +17,7 @@
  *                [-reuse]
  *                [-verbose]
  *                [-ascii]
+ *                [-threads=<number>]
  * ```
  *
  * @section Options
@@ -28,6 +29,7 @@
  * | `-reuse`               | Reuse the last data page if a file runs out of pages.          |
  * | `-ascii`               | Output file in ASCII mode.                                     |
  * | `-verbose`             | Enable detailed output for diagnostics.                       |
+ * | `-threads`             | Number of threads for matrix multiplication.                   |
  *
  * @copyright
  *   - (c) 2002 The University of Chicago, as Operator of Argonne National Laboratory.
@@ -55,6 +57,7 @@ enum option_type {
   CLO_REUSE,
   CLO_COMMUTE,
   CLO_MAJOR_ORDER,
+  CLO_THREADS,
   N_OPTIONS
 };
 
@@ -65,6 +68,7 @@ char *commandline_option[N_OPTIONS] = {
   "reuse",
   "commute",
   "majorOrder",
+  "threads",
 };
 
 static char *USAGE =
@@ -75,6 +79,7 @@ static char *USAGE =
   "               [-reuse]\n"
   "               [-verbose]\n"
   "               [-ascii]\n"
+  "               [-threads=<number>]\n"
   "Options:\n"
   "  -pipe=[input][,output]       Read input from and/or write output to a pipe.\n"
   "  -majorOrder=row|column       Specify output in row or column major order.\n"
@@ -82,6 +87,7 @@ static char *USAGE =
   "  -reuse                       Reuse the last data page if a file runs out of data pages.\n"
   "  -verbose                     Write diagnostic messages to stderr.\n"
   "  -ascii                       Output the file in ASCII mode.\n\n"
+  "  -threads=<number>            Number of threads for matrix multiplication.\n\n"
   "Description:\n"
   "  Multiplies matrices from SDDS files file1 and file2.\n"
   "  - file1: SDDS file for the left-hand matrix of the product.\n"
@@ -89,6 +95,8 @@ static char *USAGE =
   "  - output: SDDS file for the resulting product matrix.\n\n"
   "Author:\n"
   "  L. Emery ANL (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
+
+static int threaded_matrix_mult(MATRIX *C, MATRIX *A, MATRIX *B, int threads);
 
 int main(int argc, char **argv) {
   SCANNED_ARG *s_arg;
@@ -111,6 +119,7 @@ int main(int argc, char **argv) {
   unsigned long pipeFlags, majorOrderFlag;
   long tmpfile_used, noWarnings;
   long reuse;
+  int threads;
   short columnMajorOrder = -1;
 
   SDDS_RegisterProgramName(argv[0]);
@@ -126,6 +135,7 @@ int main(int argc, char **argv) {
   pipeFlags = 0;
   noWarnings = 0;
   reuse = commute = ascii = 0;
+  threads = 1;
 
   for (i_arg = 1; i_arg < argc; i_arg++) {
     if (s_arg[i_arg].arg_type == OPTION) {
@@ -159,6 +169,11 @@ int main(int argc, char **argv) {
         break;
       case CLO_COMMUTE:
         commute = 1;
+        break;
+      case CLO_THREADS:
+        if (s_arg[i_arg].n_items != 2 ||
+            sscanf(s_arg[i_arg].list[1], "%d", &threads) != 1 || threads < 1)
+          SDDS_Bomb("Invalid -threads syntax");
         break;
       default:
         bomb("Unrecognized option given", USAGE);
@@ -334,7 +349,8 @@ int main(int argc, char **argv) {
         m_alloc(&R3, OutputDoubleColumns, OutputRows);
       if (verbose)
         fprintf(stderr, "Multiplying %d x %d matrix by %d x %d matrix\n", R2->m, R2->n, R1->m, R1->n);
-      m_mult(R3, R2, R1);
+      if (!threaded_matrix_mult(R3, R2, R1, threads))
+        SDDS_Bomb("Matrix multiplication failed");
       if (verbose) {
         m_alloc(&R3Trans, OutputRows, OutputDoubleColumns);
         m_trans(R3Trans, R3);
@@ -380,4 +396,27 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
 
   return EXIT_SUCCESS;
+}
+
+static int threaded_matrix_mult(MATRIX *C, MATRIX *A, MATRIX *B, int threads) {
+  long i, j, k;
+  long n, m, p;
+
+  if ((m = A->m) != B->n || (n = A->n) != C->n || (p = B->m) != C->m)
+    return 0;
+  if (threads <= 1)
+    return m_mult(C, A, B);
+
+#pragma omp parallel for private(j, k) if (threads > 1) num_threads(threads)
+  for (i = 0; i < n; i++) {
+    double *a_i = A->a[i];
+    double *c_i = C->a[i];
+    for (j = 0; j < p; j++) {
+      double sum = 0;
+      for (k = 0; k < m; k++)
+        sum += a_i[k] * B->a[k][j];
+      c_i[j] = sum;
+    }
+  }
+  return 1;
 }

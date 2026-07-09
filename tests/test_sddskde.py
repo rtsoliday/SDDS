@@ -101,7 +101,7 @@ def test_gaussian_kernel(tmp_path):
   data = [0.0, 1.0, 2.0]
   inp = create_sdds(data, tmp_path)
   out = tmp_path / "output.sdds"
-  subprocess.run([str(SDDSKDE), str(inp), str(out), "-column=x"], check=True)
+  subprocess.run([str(SDDSKDE), str(inp), str(out), "-column=x", "-threads=2"], check=True)
   x, pdf, cdf = read_output(out, tmp_path)
   exp_x, exp_pdf, exp_cdf = expected_distribution(data)
   assert x == pytest.approx(exp_x)

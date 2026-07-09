@@ -140,6 +140,38 @@ static MESCHACH_THREAD_LOCAL long mrand_list[56];
 static MESCHACH_THREAD_LOCAL int  started = FALSE;
 static MESCHACH_THREAD_LOCAL int  inext = 0, inextp = 31;
 
+/* mrand_seed_step -- reproduce the historical two's-complement seed
+   sequence without relying on undefined signed-overflow behaviour */
+static long mrand_seed_step(value)
+long value;
+{
+    unsigned long product, magnitude;
+
+    product = 123413UL * (unsigned long)value;
+    if ( product <= (unsigned long)LONG_MAX )
+	return (long)(product % (unsigned long)MODULUS);
+
+    magnitude = ULONG_MAX - product + 1UL;
+    return -(long)(magnitude % (unsigned long)MODULUS);
+}
+
+/* mrand_subtract -- make the generator's historical wrapping subtraction
+   explicit so optimization level cannot change the sequence */
+static long mrand_subtract(left, right)
+long left, right;
+{
+    unsigned long difference, magnitude;
+
+    difference = (unsigned long)left - (unsigned long)right;
+    if ( difference <= (unsigned long)LONG_MAX )
+	return (long)difference;
+
+    magnitude = ULONG_MAX - difference + 1UL;
+    if ( magnitude == (unsigned long)LONG_MAX + 1UL )
+	return LONG_MIN;
+    return -(long)magnitude;
+}
+
 
 /* mrand -- pseudo-random number generator */
 #ifdef ANSI_C
@@ -157,7 +189,7 @@ double mrand()
     inext = (inext >= 54) ? 0 : inext+1;
     inextp = (inextp >= 54) ? 0 : inextp+1;
 
-    lval = mrand_list[inext]-mrand_list[inextp];
+    lval = mrand_subtract(mrand_list[inext],mrand_list[inextp]);
     if ( lval < 0L )
 	lval += MODULUS;
     mrand_list[inext] = lval;
@@ -182,7 +214,7 @@ int	len;
 	inext = (inext >= 54) ? 0 : inext+1;
 	inextp = (inextp >= 54) ? 0 : inextp+1;
 	
-	lval = mrand_list[inext]-mrand_list[inextp];
+	lval = mrand_subtract(mrand_list[inext],mrand_list[inextp]);
 	if ( lval < 0L )
 	    lval += MODULUS;
 	mrand_list[inext] = lval;
@@ -198,9 +230,11 @@ int	seed;
 {
     int		i;
 
-    mrand_list[0] = (123413*seed) % MODULUS;
+    inext = 0;
+    inextp = 31;
+    mrand_list[0] = mrand_seed_step((long)seed);
     for ( i = 1; i < 55; i++ )
-	mrand_list[i] = (123413*mrand_list[i-1]) % MODULUS;
+	mrand_list[i] = mrand_seed_step(mrand_list[i-1]);
 
     started = TRUE;
 

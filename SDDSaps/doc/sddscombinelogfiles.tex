@@ -7,12 +7,15 @@
   \end{verbatim}
   \item \textbf{synopsis:}
   \begin{verbatim}
-  sddscombinelogfiles [SDDSinputfilelist] [SDDSoutputfile] [-pipe[=output]] [-overwrite]
+  sddscombinelogfiles [SDDSinputfilelist] [SDDSoutputfile] [-pipe[=output]] [-overwrite] [-threads=number]
   \end{verbatim}
   \item \textbf{switches:}
     \begin{itemize}
       \item \verb|-pipe[=output]| --- Writes output to a pipe.
       \item \verb|-overwrite| --- Replaces the output file if it exists.
+      \item \verb|-threads=number| --- Specifies the number of input log files to load concurrently.
+        The default is 1. Combining common timestamps and writing the output file are performed
+        serially after input loading.
     \end{itemize}
   \item \textbf{files:} Input is one or more SDDS log files containing a single process variable each. Output is a single SDDS file with only timestamps common to all inputs.
   \item \textbf{author:} R. Soliday and L. Emery, ANL/APS.

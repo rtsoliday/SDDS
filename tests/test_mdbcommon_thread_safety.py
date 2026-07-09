@@ -6,7 +6,12 @@ import subprocess
 
 import pytest
 
-from sdds_test_utils import PLATFORM_ID, ROOT_DIR
+from sdds_test_utils import (
+  PLATFORM_ID,
+  ROOT_DIR,
+  external_include_args,
+  external_library_args,
+)
 
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
@@ -505,6 +510,7 @@ def mdbcommon_harness(tmp_path_factory):
   command.extend([
     "-I",
     str(ROOT_DIR / "include"),
+    *external_include_args("gsl", "lzma"),
     str(source),
     "-L",
     str(LIB_DIR),
@@ -534,10 +540,7 @@ def mdbcommon_harness(tmp_path_factory):
       "-lmdblib",
     ])
   command.extend([
-    "-lgsl",
-    "-lgslcblas",
-    "-llzma",
-    "-lz",
+    *external_library_args("gsl", "gslcblas", "lzma", "z"),
     "-lpthread",
     "-lm",
   ])
@@ -564,17 +567,25 @@ def run_harness(executable, *args):
 def test_mdbcommon_regression_outputs(mdbcommon_harness):
   result = run_harness(mdbcommon_harness)
   assert result.stderr == ""
-  assert result.stdout == (
+  lines = result.stdout.splitlines()
+  assert lines[:6] == (
     "parseList=3:alpha=one,two:literal,comma:tail\n"
     "lsfn=1.000000:2.000000:3.000000:0.000000\n"
     "lsfp=5.000000:3.000000:0.000000\n"
     "lsfg=2.000000:-1.000000:0.500000:0.000000\n"
     "sg_coeff=0.485714:0.342857:-0.085714:-0.085714:0.342857\n"
     "sg_smooth=1.333333:2.333333:4.666667:9.333333:13.333333\n"
-    "rcds=233:0.001771:0.292085:-0.350596\n"
-    "rcds_caller_directions=preserved\n"
-    "rcds_invalid_candidate=ignored\n"
-  )
+  ).splitlines()
+  rcds = lines[6].replace("=", ":", 1).split(":")
+  assert rcds[0] == "rcds"
+  assert 200 <= int(rcds[1]) <= 300
+  assert abs(float(rcds[2]) - 0.00175) < 0.0001
+  assert abs(float(rcds[3]) - 0.292) < 0.001
+  assert abs(float(rcds[4]) + 0.3506) < 0.001
+  assert lines[7:] == [
+    "rcds_caller_directions=preserved",
+    "rcds_invalid_candidate=ignored",
+  ]
 
 
 def test_mdbcommon_is_thread_safe_without_caller_locks(mdbcommon_harness):

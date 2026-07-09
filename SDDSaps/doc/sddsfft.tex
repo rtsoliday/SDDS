@@ -11,6 +11,7 @@ sddsfft [-pipe=[input][,output]] [inputFile] [outputFile]
   [-padWithZeroes | -truncate] [-sparse=integer]
   [-window={hanning | welch | parzen}] [-complexInput[=folded|unfolded]]
   [-normalize] [-suppressAverage] [-fullOutput[=folded|unfolded]] [-psdOutput] [-inverse]
+  [-threads=number]
     \end{verbatim}
   \item \textbf{files:} \emph{inputFile} contains the data to be FFT'd. One column from this file must be chosen as the independent variable. By default, all other columns are taken as dependent variables. If \emph{inputFile} contains multiple pages, each is treated separately and is delivered to a separate page of \emph{outputFile}. \emph{outputFile} contains a column \verb|f| for the frequency, along with one or more columns for each independent variable. By default, \emph{outputFile} has one column named \verb|FFT|\emph{indepName} containing the magnitude of the FFT for each independent variable. If \verb|-fullOutput| is specified, \emph{outputFile} contains additional columns for, respectively, the phase (or argument), real part, and imaginary part of the FFT: \verb|Arg|\emph{indepName}, \verb|Real|\emph{indepName}, and \verb|Imag|\emph{indepName}. If power-spectral-density output is requested, then a column \verb|PSD|\emph{indepName} is also created. \emph{outputFile} also contains two parameters, \verb|fftFrequencies| and \verb|fftFrequencySpacing|, giving the number of frequencies and the frequency spacing, respectively.
   \item \textbf{switches:}
@@ -28,6 +29,7 @@ sddsfft [-pipe=[input][,output]] [inputFile] [outputFile]
       \item \verb|fullOutput| --- Specifies that in addition to the magnitude, the phase, real part, and imaginary part of each FFT will be included in the output. It also has \verb|folded| and \verb|unfolded| options, while the \verb|unfold| option outputs the unfolded frequency-space (full FFT spectrum), but the \verb|folded| option outputs the folded spectrum (half FFT).
       \item \verb|inverse| --- Produce inverse Fourier transform. When it is given, the output is always unfolded spectrum and it only works with \verb|complexInput| that has imaginary data.
       \item \verb|psdOutput| --- Specifies that in addition to ordinary FFT data, the power-spectral-densities will also be included in the output. The units of the PSD are of the form ${\rm x^2/t}$, where x (t) represents the units of the independent (dependent) variable. These units are conventional with PSDs, which are normalized to the frequency spacing so that integrating the PSD gives the signal power.
+      \item \verb|-threads=number| --- Specifies the number of threads for per-column FFT preparation and result calculations. SDDS output operations are performed serially. The default is 1.
     \end{itemize}
   \item \textbf{folded and unfolded options:} There are three cases as listed in the following:
     \begin{itemize}
@@ -82,4 +84,3 @@ sddsfft [-pipe=[input][,output]] [inputFile] [outputFile]
     \end{itemize}
   \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
-

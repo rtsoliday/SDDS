@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sdds_test_utils import PLATFORM_ID, ROOT_DIR
+from sdds_test_utils import PLATFORM_ID, ROOT_DIR, external_library_args
 
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
@@ -389,7 +389,7 @@ static void *csh_thread_worker(void *arg)
   rpn(NULL);
   for (i = 0; i < CSH_ITERATIONS; i++) {
     rpn_clear_error();
-    push_string("/bin/true");
+    push_string("true");
     rpn_csh_str();
     if (rpn_check_error()) {
       snprintf(worker->error, sizeof(worker->error), "rpn_csh_str failed");
@@ -597,9 +597,7 @@ def rpn_harness(tmp_path_factory):
     "-lrpnlib",
     "-lmdbmth",
     "-lmdblib",
-    "-lgsl",
-    "-lgslcblas",
-    "-lz",
+    *external_library_args("gsl", "gslcblas", "z"),
     "-lpthread",
     "-lm",
     "-o",
@@ -674,9 +672,7 @@ def test_rpn_legacy_stackptr_data_symbols_still_link(tmp_path):
     "-lrpnlib",
     "-lmdbmth",
     "-lmdblib",
-    "-lgsl",
-    "-lgslcblas",
-    "-lz",
+    *external_library_args("gsl", "gslcblas", "z"),
     "-lpthread",
     "-lm",
     "-o",

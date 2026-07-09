@@ -77,6 +77,7 @@ class TestSddsrunstats:
                 "-sigma=y",
                 "-sample=y",
                 "-slope=independent=x,y",
+                "-threads=2",
             ],
             check=True,
         )

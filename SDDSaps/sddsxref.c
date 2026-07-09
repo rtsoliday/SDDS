@@ -26,6 +26,7 @@
  *          [-editnames={column|parameter|array},<wildcard-string>,<edit-string>]
  *          [-equate=<column-name>[=<column-name>]]
  *          [-majorOrder=row|column]
+ *          [-threads=<number>]
  * ```
  *
  * @section Options
@@ -50,6 +51,7 @@
  * | `-editnames`                          | Edits names of specified entities.                   |
  * | `-equate`                             | Matches columns based on equality conditions.                                         |
  * | `-majorOrder`                         | Specifies the major order of data in the output. Defaults to the input's order.       |
+ * | `-threads`                            | Number of reference files to read concurrently.                                       |
  *
  * @subsection Incompatibilities
  *   - `-equate` is incompatible with:
@@ -100,6 +102,7 @@ enum option_type {
   SET_MAJOR_ORDER,
   SET_REPLACE,
   SET_HASH_LOOKUP,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -172,7 +175,7 @@ typedef char *STRING_PAIR[2];
 
 char *option[N_OPTIONS] = {
   "take", "leave", "match", "equate", "transfer", "reuse", "ifnot",
-  "nowarnings", "ifis", "pipe", "fillin", "rename", "editnames", "wildmatch", "majorOrder", "replace", "hashlookup"};
+  "nowarnings", "ifis", "pipe", "fillin", "rename", "editnames", "wildmatch", "majorOrder", "replace", "hashlookup", "threads"};
 
 char *USAGE =
   "Usage:\n"
@@ -211,6 +214,8 @@ char *USAGE =
   "      Specify the major order of data in the output (row or column). Defaults to the order of <input1>.\n"
   "  -hashLookup\n"
   "      Use a hash table for key lookups instead of sorted key groups. Applies to -match and -equate (non-wildcard).\n"
+  "  -threads=<number>\n"
+  "      Number of reference files to read concurrently. The default is 1.\n"
   "Program by Michael Borland. (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ")\n";
 
 int main(int argc, char **argv) {
@@ -246,6 +251,8 @@ int main(int argc, char **argv) {
   long matched;
   short columnMajorOrder = -1;
   long useHashLookup = 0;
+  int threads = 1;
+  long *refReadCode = NULL;
 
   EDIT_NAME_REQUEST *edit_column_request, *edit_parameter_request, *edit_array_request;
   long edit_column_requests, edit_parameter_requests, edit_array_requests;
@@ -515,6 +522,11 @@ int main(int argc, char **argv) {
       case SET_HASH_LOOKUP:
         useHashLookup = 1;
         break;
+      case SET_THREADS:
+        if (s_arg[i_arg].n_items != 2 ||
+            sscanf(s_arg[i_arg].list[1], "%d", &threads) != 1 || threads < 1)
+          SDDS_Bomb("invalid -threads syntax");
+        break;
       default:
         fprintf(stderr, "error: unknown switch: %s\n", s_arg[i_arg].list[0]);
         SDDS_Bomb(NULL);
@@ -581,6 +593,8 @@ int main(int argc, char **argv) {
 
   if (equate_columns && match_columns)
     SDDS_Bomb("only one of -equate or -match may be given");
+  if (threads > referfiles)
+    threads = referfiles;
 
   if (!SDDS_InitializeInput(&SDDS_1, input1)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
@@ -979,6 +993,10 @@ int main(int argc, char **argv) {
   if (!SDDS_WriteLayout(&SDDS_output))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
+  refReadCode = malloc(sizeof(*refReadCode) * referfiles);
+  if (!refReadCode)
+    SDDS_Bomb("memory allocation failure");
+
   free(leave_column);
   if (take_columns) {
     SDDS_FreeStringArray(take_column, take_columns);
@@ -1004,16 +1022,25 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
 
+    if (!reusePage || retval1 == 1) {
+#pragma omp parallel for if (threads > 1 && referfiles > 1) num_threads(threads) schedule(dynamic)
+      for (z = 0; z < referfiles; z++)
+        refReadCode[z] = SDDS_ReadPage(&SDDS_ref[z]);
+    } else {
+      for (z = 0; z < referfiles; z++)
+        refReadCode[z] = 1;
+    }
+
     for (z = 0; z < referfiles; z++) {
       input2 = referfile[z];
       if (!reusePage) {
-        if ((retval2 = SDDS_ReadPage(&SDDS_ref[z])) <= 0 && !endWarning) {
+        if ((retval2 = refReadCode[z]) <= 0 && !endWarning) {
           if (warnings)
             fprintf(stderr, "warning: %s ends prematurely\n", input2 ? input2 : "stdin");
           endWarning = 1;
         }
       } else {
-        if (retval1 == 1 && (retval2 = SDDS_ReadPage(&SDDS_ref[z])) <= 0) {
+        if (retval1 == 1 && (retval2 = refReadCode[z]) <= 0) {
           if (!endWarning && warnings)
             fprintf(stderr, "warning: %s has no data\n", input2 ? input2 : "stdin");
           endWarning = 1;
@@ -1481,6 +1508,7 @@ int main(int argc, char **argv) {
   free(take_RefData);
   if (replace_RefData)
     free(replace_RefData);
+  free(refReadCode);
   free(referfile);
   free(inputfile);
 

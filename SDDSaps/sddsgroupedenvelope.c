@@ -26,7 +26,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#if defined(linux) || (defined(_WIN32) && !defined(_MINGW))
+#if defined(_OPENMP)
 #  include <omp.h>
 #  define SDDSGROUPEDENVELOPE_USE_OPENMP 1
 #else
@@ -964,6 +964,7 @@ static void free_group_value(void *value, int32_t type) {
   free(value);
 }
 
+#if SDDSGROUPEDENVELOPE_USE_OPENMP
 static void *duplicate_group_value(const void *value, int32_t type) {
   void *copy;
   int32_t size;
@@ -985,6 +986,7 @@ static void *duplicate_group_value(const void *value, int32_t type) {
   memcpy(copy, value, (size_t)size);
   return copy;
 }
+#endif
 
 static void free_group_list(GROUP_LIST *groups, const OPTIONS *opts) {
   long i, j, iStat;
@@ -1005,9 +1007,11 @@ static void free_group_list(GROUP_LIST *groups, const OPTIONS *opts) {
   groups->groups = groups->groupsAllocated = 0;
 }
 
+#if SDDSGROUPEDENVELOPE_USE_OPENMP
 static void copy_double_array(double *target, const double *source, int64_t rows) {
   memcpy(target, source, sizeof(*target) * (size_t)rows);
 }
+#endif
 
 static ENVELOPE_GROUP *find_group(GROUP_LIST *groups, const char *groupName) {
   long i;
@@ -1353,6 +1357,7 @@ static int accumulate_stat(SDDS_DATASET *input, ROW_ACCUMULATOR *rowData, const 
   return 1;
 }
 
+#if SDDSGROUPEDENVELOPE_USE_OPENMP
 static void merge_stat_accumulator(STAT_ACCUMULATOR *target, STAT_ACCUMULATOR *source,
                                    const STAT_DEFINITION *stat, int64_t rows) {
   int64_t i;
@@ -1503,6 +1508,7 @@ static void merge_group_list(GROUP_LIST *target, GROUP_LIST *source, const OPTIO
     }
   }
 }
+#endif
 
 static int define_stat_column(SDDS_DATASET *output, SDDS_DATASET *input, const STAT_DEFINITION *stat) {
   char *symbol = NULL;

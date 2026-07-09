@@ -15,6 +15,7 @@
  *         [-pipe=[input][,output]] 
  *          -column=<list of columns>
  *         [-margin=<value>]
+ *         [-threads=<number>]
  * ```
  *
  * @section Options
@@ -26,6 +27,7 @@
  * |---------------------|-----------------------------------------------------------------|
  * | `-pipe`             | Enable SDDS Toolkit piping for input/output.                   |
  * | `-margin`           | Set the margin as a ratio to extend data range (default 0.3).   |
+ * | `-threads`          | Set the number of threads for PDF sample evaluation.            |
  *
  * @copyright
  *   - (c) 2002 The University of Chicago, as Operator of Argonne National Laboratory.
@@ -48,9 +50,9 @@
 #include "scan.h"
 #include "SDDSutils.h"
 
-double bandwidth(double data[], int M);
+double bandwidth(double data[], int64_t M);
 double gaussiankernelfunction(double sample);
-double kerneldensityestimate(double *trainingdata, double sample, int64_t n);
+double kerneldensityestimate(double *trainingdata, double sample, int64_t n, double h);
 double *linearspace(double initial, double final, int N);
 
 /* Enumeration for option types */
@@ -58,6 +60,7 @@ enum option_type {
   SET_COLUMN,
   SET_PIPE,
   SET_MARGIN,
+  SET_THREADS,
   N_OPTIONS
 };
 
@@ -65,6 +68,7 @@ static char *option[N_OPTIONS] = {
   "column",
   "pipe",
   "margin",
+  "threads",
 };
 
 static const char *usage =
@@ -72,9 +76,11 @@ static const char *usage =
   "        [-pipe=[input][,output]]\n"
   "         -column=<list of columns>\n"
   "        [-margin=<value>]\n"
+  "        [-threads=<number>]\n"
   "Options:\n"
   "-column         provide column names separated by commas, wild card accepted.\n"
   "-margin         provide the ratio to extend the original data, default 0.3.\n"
+  "-threads        number of threads to use for PDF sample evaluation.\n"
   "-pipe           The standard SDDS Toolkit pipe option.\n\n"
   "sddskde performs kernel density estimation for one-dimensional data.\n"
   "Program by Yipeng Sun and Hairong Shang (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSION ").\n";
@@ -82,7 +88,7 @@ static const char *usage =
 int main(int argc, char **argv) {
   int n_test = 100;
   double min_temp, max_temp;
-  double gap, lower, upper;
+  double bwidth, gap, h, lower, upper;
   double margin = 0.3;
   SDDS_DATASET sdds_in, sdds_out;
   char *input_file = NULL, *output_file = NULL, **column = NULL;
@@ -93,6 +99,7 @@ int main(int argc, char **argv) {
   double *column_data = NULL, *pdf = NULL, *cdf = NULL;
   char buffer_pdf[1024], buffer_cdf[1024], buffer_pdf_units[1024];
   int64_t rows;
+  int threads = 1;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&s_arg, argc, argv);
@@ -120,6 +127,12 @@ int main(int argc, char **argv) {
         }
         if (!get_double(&margin, s_arg[i_arg].list[1])) {
           SDDS_Bomb("Invalid -margin value provided!");
+        }
+        break;
+      case SET_THREADS:
+        if (s_arg[i_arg].n_items != 2 ||
+            sscanf(s_arg[i_arg].list[1], "%d", &threads) != 1 || threads < 1) {
+          SDDS_Bomb("invalid -threads syntax");
         }
         break;
       case SET_PIPE:
@@ -216,9 +229,12 @@ int main(int argc, char **argv) {
         upper = max_temp + gap * margin;
 
         double *x_array = linearspace(lower, upper, n_test);
+        bwidth = bandwidth(column_data, rows);
+        h = GSL_MAX(bwidth, 2e-6);
 
+#pragma omp parallel for if (threads > 1) num_threads(threads)
         for (j = 0; j < n_test; j++) {
-          pdf[j] = kerneldensityestimate(column_data, x_array[j], rows);
+          pdf[j] = kerneldensityestimate(column_data, x_array[j], rows, h);
           cdf[j] = pdf[j];
         }
 
@@ -265,7 +281,7 @@ int main(int argc, char **argv) {
   return EXIT_SUCCESS;
 }
 
-double bandwidth(double data[], int M) {
+double bandwidth(double data[], int64_t M) {
   double sigma, min_val, bwidth, interquartile_range;
   double hspread_three, hspread_one;
 
@@ -288,12 +304,9 @@ double gaussiankernelfunction(double sample) {
   return k;
 }
 
-double kerneldensityestimate(double *trainingdata, double sample, int64_t n) {
+double kerneldensityestimate(double *trainingdata, double sample, int64_t n, double h) {
   int64_t i;
-  double pdf = 0.0, h, bwidth;
-
-  bwidth = bandwidth(trainingdata, n);
-  h = GSL_MAX(bwidth, 2e-6);
+  double pdf = 0.0;
 
   for (i = 0; i < n; i++) {
     pdf += gaussiankernelfunction((trainingdata[i] - sample) / h);

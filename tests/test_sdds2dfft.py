@@ -38,6 +38,7 @@ EXPECTED_OPTIONS = {
   "complexinput",
   "inverse",
   "majorOrder",
+  "threads",
 }
 
 def make_matrix(tmp_path):
@@ -99,6 +100,7 @@ BASIC_OPTIONS = [
   "-suppressAverage",
   "-nowarnings",
   "-majorOrder=column",
+  "-threads=2",
 ]
 
 @pytest.mark.skipif(

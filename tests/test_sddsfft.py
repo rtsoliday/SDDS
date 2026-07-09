@@ -38,6 +38,7 @@ EXPECTED_OPTIONS = {
   "complexinput",
   "inverse",
   "majorOrder",
+  "threads",
 }
 
 def test_option_list():
@@ -52,6 +53,7 @@ BASIC_OPTIONS = [
   "-sampleInterval=2",
   "-nowarnings",
   "-majorOrder=column",
+  "-threads=2",
 ]
 
 @pytest.mark.skipif(not (SDDSFFT.exists() and SDDSCHECK.exists()), reason="tools not built")

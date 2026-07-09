@@ -22,7 +22,8 @@
     [-standardDeviation=[limitOps],columnNameList] \\
     [-sigma=[limitOps],columnNameList] \\
     [-sum=[limitOps][,power=integer],columnNameList] \\
-    [-sample=[limitOps],columnNameList]
+    [-sample=[limitOps],columnNameList] \\
+    [-threads=number]
   \end{verbatim}
   where \emph{columnNameList} is a comma-separated list of one or more optionally wildcarded names and \emph{limitOps} is of the form \verb|[topLimit=value,][bottomLimit=value]|.
 
@@ -40,6 +41,7 @@
       {\tt -sigma=[\emph{limitOps}],\emph{columnNameList}} --- Specifies computation of the indicated statistic for the columns matching \emph{columnNameList} (see above). The standard deviation is N-1 weighted. Sigma is the standard deviation of the sample mean. \emph{limitOps} (see above for syntax) allows filtering the points in each window to exclude values above the \verb|topLimit| or below the \verb|bottomLimit|.
     \item {\tt -sum=[\emph{limitOps}][,power=\emph{integer}],\emph{columnNameList}} --- Specifies computation of a general sum of powers of values. For example, to get the sum of squares you'd use \verb|power=2|. \emph{columnNameList} and \emph{limitOps} are as for the last item.
     \item {\tt -sample=[\emph{limitOps}],\emph{columnNameList}} --- Results in extraction of a single set of values per group, namely, the first value in the group that passes the \emph{limitOps} criteria.
+    \item {\tt -threads=\emph{number}} --- Specifies the number of threads for per-column running-statistic calculations. The default is 1. SDDS input and output operations are performed serially.
     \end{itemize}
 
   \item \textbf{see also:}
@@ -50,4 +52,3 @@
 
   \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
-

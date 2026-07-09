@@ -75,7 +75,7 @@
 #include <gsl/gsl_sort.h>
 #include <gsl/gsl_math.h>
 
-#if defined(linux) || (defined(_WIN32) && !defined(_MINGW))
+#if defined(_OPENMP)
 #  include <omp.h>
 #else
 #  define NOTHREADS 1

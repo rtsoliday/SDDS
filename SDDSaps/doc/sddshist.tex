@@ -12,7 +12,7 @@ sddshist [-pipe=[input][,output]] [inputFile] [outputFile] \
   -dataColumn=columnName [-bins=number | -sizeOfBins=value] \
   [-lowerLimit=value] [-upperLimit=value] [-filter=columnName,lowerLimit,upperLimit] \
   [-weightColumn=columnName] [-sides] [-normalize={sum | area | peak}] \
-  [-statistics] [-verbose]
+  [-statistics] [-threads=number] [-verbose]
     \end{verbatim}
   \item \textbf{files:}
     \emph{inputFile} is the name of an SDDS file containing data to be histogrammed, along with optional weight data. If \emph{inputFile} contains multiple data pages, each is treated separately. The histogram or histograms are placed in \emph{outputFile}, which has two columns. One column has the same name as the histogrammed variable, and consists of equispaced values giving the centers of the bins. The other column, named \verb|frequency|, contains the histogram frequencies. Its precise meaning is dependent on normalization modes and weighting. By default, it contains the number of data points in the corresponding bin.
@@ -31,6 +31,7 @@ sddshist [-pipe=[input][,output]] [inputFile] [outputFile] \
       \item \verb|-sides| --- Specifies that zero-height bins should be attached to the lower and upper ends of the histogram. Many prefer the way this looks on a graph.
       \item \verb!-normalize[={sum | area | peak}]! --- Specifies that the histogram should be normalized, and how. The default is \verb|sum|. \verb|sum| normalization means that the sum of the heights will be 1. \verb|area| normalization means that the area under the histogram will be 1. \verb|peak| normalization means that the maximum height will be 1.
       \item \verb|-statistics| --- Specifies that statistics should be computed for the data and placed in \emph{outputFile}. These presently include arithmetic mean, rms, and standard deviation. The parameters are named by appending the strings \verb|Mean|, \verb|RMS|, and \verb|StDev| to the name of the data column. If \verb|-weightColumn| is given, the statistics are weighted.
+      \item \verb|-threads=number| --- Specifies the number of threads for histogram binning and statistics calculations where applicable. The default is 1.
     \end{itemize}
   \item \textbf{see also:}
     \begin{itemize}
@@ -40,4 +41,3 @@ sddshist [-pipe=[input][,output]] [inputFile] [outputFile] \
     \end{itemize}
   \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
-

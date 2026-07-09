@@ -93,7 +93,7 @@ class TestSDDSKDE2D:
   def test_basic(self, tmp_path):
     sdds = self.create_sdds(tmp_path)
     out = tmp_path / "out.sdds"
-    subprocess.run([str(SDDSKDE2D), str(sdds), str(out), "-column=x,y"], check=True)
+    subprocess.run([str(SDDSKDE2D), str(sdds), str(out), "-column=x,y", "-threads=2"], check=True)
     x, y, pdf = self.read_grid(out)
     assert x == pytest.approx(EXPECTED_X)
     assert y == pytest.approx(EXPECTED_Y)

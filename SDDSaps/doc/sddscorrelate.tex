@@ -23,6 +23,7 @@
     [-columns=columnNames] [-excludeColumns=columnNames]
     [-withOnly=columnName] [-rankOrder]
     [-stDevOutlier[=limit=factor][,passes=integer]]
+    [-threads=number]
 \end{verbatim}
 \item \textbf{files:}
   {\em inputFile} is an SDDS file containing two or more columns of data. For each page of
@@ -48,6 +49,8 @@
     The {\tt limit} qualifier specifies the allowed deviation from the mean in standard deviations; the
     default is 1. The {\tt passes} qualifier specifies how many times the outlier elimination (including
     recomputation of the mean and standard deviation) is performed; the default is 1.
+  \item {\tt -threads={\em number}} --- Specifies the number of threads for rank preprocessing and pairwise
+    correlation computation. SDDS output row writes are performed serially. The default is 1.
   \end{itemize}
 \item \textbf{see also:}
   \begin{itemize}
@@ -56,4 +59,3 @@
   \end{itemize}
 \item \textbf{author:} M. Borland, ANL/APS.
 \end{sddsprog}
-

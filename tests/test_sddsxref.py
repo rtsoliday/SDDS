@@ -133,6 +133,34 @@ def test_equate(tmp_path, sample_data):
   ]
 
 @pytest.mark.skipif(not all(x.exists() for x in REQUIRED), reason="tools not built")
+def test_threads_with_multiple_reference_files(tmp_path):
+  in1 = create_sdds(tmp_path, "thread_in", [("id", "long")], [(1,), (2,), (3,)])
+  ref1 = create_sdds(tmp_path, "thread_ref1", [("id", "long"), ("valueA", "double")], [(1, 10), (2, 20)])
+  ref2 = create_sdds(tmp_path, "thread_ref2", [("id", "long"), ("valueB", "double")], [(2, 200), (3, 300)])
+  out = tmp_path / "threaded.sdds"
+  subprocess.run(
+    [
+      str(SDDSXREF),
+      str(in1),
+      str(ref1),
+      str(ref2),
+      str(out),
+      "-equate=id",
+      "-reuse=rows",
+      "-fillIn",
+      "-nowarnings",
+      "-threads=2",
+    ],
+    check=True,
+  )
+  data = read_columns(out, ["id", "valueA", "valueB"])
+  assert data == [
+    [1.0, 10.0, 0.0],
+    [2.0, 20.0, 200.0],
+    [3.0, 0.0, 300.0],
+  ]
+
+@pytest.mark.skipif(not all(x.exists() for x in REQUIRED), reason="tools not built")
 def test_ifis_ifnot(tmp_path, sample_data):
   in1, in2 = sample_data
   out = tmp_path / "ok.sdds"

@@ -1,0 +1,30 @@
+\begin{sddsprog}{sddskde}
+  \item \textbf{description:} \verb|sddskde| performs one-dimensional kernel density estimation (KDE) on one or more columns of an SDDS file. For each selected input column, it writes the sample positions, estimated probability density function (PDF), and cumulative distribution function (CDF). Bandwidth selection uses Silverman's rule of thumb.
+
+  \item \textbf{examples:}
+    \begin{verbatim}
+sddskde input.sdds output.sdds -column=x
+sddskde data.sdds kde.sdds -column=x,y -margin=0.2 -threads=4
+    \end{verbatim}
+
+  \item \textbf{synopsis:}
+    \begin{verbatim}
+sddskde [<inputfile>] [<outputfile>] [-pipe=[input][,output]]
+  -column=<list of columns> [-margin=<value>] [-threads=<number>]
+    \end{verbatim}
+
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-column=<list of columns>| --- Specifies the columns for KDE calculation. Column names may be comma-separated and may contain wildcards.
+      \item \verb|-margin=<value>| --- Specifies the fractional margin added to the data range before generating PDF and CDF samples. The default is 0.3.
+      \item \verb|-threads=<number>| --- Specifies the number of threads for PDF sample evaluation. SDDS output operations are performed serially. The default is 1.
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+    \end{itemize}
+
+  \item \textbf{files:} \emph{inputfile} is an SDDS file supplying one or more numeric columns. \emph{outputfile} is an SDDS file containing a sampled copy of each selected column, a \verb|PDF| column named by appending \verb|PDF| to the input column name, and a \verb|CDF| column named by appending \verb|CDF| to the input column name.
+
+  \item \textbf{see also:} \progref{sddskde2d}, \progref{sddshist}, \progref{sddslocaldensity}
+
+  \item \textbf{author:} Yipeng Sun, H. Shang, M. Borland, R. Soliday, ANL/APS.
+\end{sddsprog}
+

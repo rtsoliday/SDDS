@@ -119,6 +119,7 @@ def test_weighted_histogram_and_filter(tmp_path):
             "-bins=2",
             "-weightColumn=weight",
             "-filter=gate,1,1",
+            "-threads=2",
         ],
         check=True,
     )
@@ -168,4 +169,3 @@ def test_cdf_only_pipe_output_and_major_order(tmp_path):
     assert "frequency" not in columns
     assert b"column_major_order=1" in result.stdout
     assert b"histogrammed" in result.stderr
-

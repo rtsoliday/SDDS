@@ -80,6 +80,7 @@ def test_multiple_histograms(tmp_path):
         "-separate",
         "-lowerLimit=0,0",
         "-upperLimit=4,3",
+        "-threads=2",
     ], stdout=subprocess.PIPE, check=True)
     output.write_bytes(result.stdout)
     values = [float(x) for x in subprocess.run([
@@ -119,6 +120,7 @@ def test_cdf_only_weighted_and_major_order(tmp_path):
         "-cdf=only",
         "-majorOrder=column",
         "-normalize=sum",
+        "-threads=2",
     ], check=True)
     columns = subprocess.run([str(SDDSQUERY), str(output), "-columnlist"], capture_output=True, text=True, check=True)
     assert "xCdf" in columns.stdout
@@ -221,4 +223,3 @@ def test_expand_and_no_normalize(tmp_path):
     ], check=True)
     lines = stream_columns(output, "xFrequency,yFrequency")
     assert len(lines) == 3
-

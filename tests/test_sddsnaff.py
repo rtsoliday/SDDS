@@ -37,6 +37,7 @@ EXPECTED_OPTIONS = {
   "iteratefrequency",
   "pair",
   "majorOrder",
+  "threads",
 }
 
 
@@ -81,6 +82,7 @@ BASIC_OPTIONS = [
   "-noWarnings",
   "-iterateFrequency=cycleLimit=10,accuracyLimit=0.01",
   "-majorOrder=column",
+  "-threads=2",
 ]
 
 

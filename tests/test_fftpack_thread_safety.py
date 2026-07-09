@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from sdds_test_utils import PLATFORM_ID, ROOT_DIR
+from sdds_test_utils import PLATFORM_ID, ROOT_DIR, openmp_link_args
 
 
 LIB_DIR = ROOT_DIR / "lib" / PLATFORM_ID
@@ -329,6 +329,7 @@ def fftpack_harness(tmp_path_factory):
   ])
   if platform.system() == "Linux":
     command.extend(["-lrt", "-ldl", "-lgcc"])
+  command.extend(openmp_link_args())
   command.extend(["-o", str(executable)])
 
   subprocess.run(command, check=True)
