@@ -234,7 +234,7 @@ int main(int argc, char **argv) {
             count2++;
           }
         }
-        if (!count1 || !count2) {
+        if (count1 < half_pattern_length || count2 < half_pattern_length) {
           fprintf(stderr, "Error: page has too few head rows to determine both commutation offsets for column %s\n", input_column[i]);
           free(data);
           exit(EXIT_FAILURE);
