@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
         if (s_arg[i_arg].n_items != 2)
           bomb("invalid -fhead syntax", NULL);
         if (sscanf(s_arg[i_arg].list[1], "%lf", &fhead) != 1 || fhead <= 0 || fhead > 1)
-          fprintf(stderr, "Error: invalid -fhead syntax\n");
+          SDDS_Bomb("invalid -fhead syntax/value");
         break;
       case CLO_PIPE:
         if (!processPipeOption(s_arg[i_arg].list + 1, s_arg[i_arg].n_items - 1, &pipe_flags))
@@ -199,15 +199,11 @@ int main(int argc, char **argv) {
   if (!columns)
     SDDS_Bomb("no columns selected for offset removal");
 
-  if (!SDDS_InitializeCopy(&sdds_out, &sdds_in, output, "w"))
-    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-
   output_column = tmalloc(sizeof(*output_column) * columns);
   for (i = 0; i < columns; i++)
     output_column[i] = input_column[i];
 
-  if (!SDDS_InitializeOutput(&sdds_out, SDDS_BINARY, 1, "Remove offset from BPM waveforms", "Modified data", output) ||
-      !SDDS_InitializeCopy(&sdds_out, &sdds_in, output, "w"))
+  if (!SDDS_InitializeCopy(&sdds_out, &sdds_in, output, "w"))
     SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
   if (column_major_order != -1)
     sdds_out.layout.data_mode.column_major = column_major_order;
@@ -224,7 +220,7 @@ int main(int argc, char **argv) {
         if (!(data = SDDS_GetColumnInDoubles(&sdds_in, input_column[i])))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-        long repeat_offset = (data[0] == data[1]) ? 0 : 1;
+        long repeat_offset = rows > 1 && data[0] != data[1] ? 1 : 0;
 
         double sum1 = 0, sum2 = 0;
         unsigned long count1 = 0, count2 = 0;
@@ -237,6 +233,11 @@ int main(int argc, char **argv) {
             sum2 += data[j];
             count2++;
           }
+        }
+        if (!count1 || !count2) {
+          fprintf(stderr, "Error: page has too few head rows to determine both commutation offsets for column %s\n", input_column[i]);
+          free(data);
+          exit(EXIT_FAILURE);
         }
         offset1 = sum1 / count1;
         offset2 = sum2 / count2;

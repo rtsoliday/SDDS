@@ -307,6 +307,8 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Warning (sddsconvolve): Skipping page due to no signal rows.\n");
       continue;
     }
+    if (rows1 < 2)
+      SDDS_Bomb("sddsconvolve requires at least two rows on each nonempty signal page");
     if (reuse) {
       if (code2 == -1) {
         if ((code2 = SDDS_ReadPage(&SDDS2)) <= 0) {

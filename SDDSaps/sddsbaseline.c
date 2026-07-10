@@ -447,8 +447,11 @@ void fitAndRemoveBaseline(double *data0, double *indepData0, short *selected, in
   for (i = count = 0; i < rows; i++)
     if (selected[i])
       count++;
-  if (count < 3)
+  if (count < 3) {
+    free(coef);
+    free(sCoef);
     return;
+  }
   if (!(data = malloc(sizeof(*data) * count)) || !(indepData = malloc(sizeof(*indepData) * count)))
     SDDS_Bomb("memory allocation failure");
   for (i = j = 0; i < rows; i++) {
@@ -459,8 +462,13 @@ void fitAndRemoveBaseline(double *data0, double *indepData0, short *selected, in
     }
   }
 
-  if (!lsfn(indepData, data, NULL, (long)count, fitTerms - 1, coef, sCoef, &chi, NULL))
+  if (!lsfn(indepData, data, NULL, (long)count, fitTerms - 1, coef, sCoef, &chi, NULL)) {
+    free(data);
+    free(indepData);
+    free(coef);
+    free(sCoef);
     return;
+  }
 
   for (i = 0; i < rows; i++) {
     double term;

@@ -139,3 +139,46 @@ class TestSddsRemoveOffsets:
     assert "offset1" in result.stdout
     assert "New average" in result.stdout
     assert self.read_sdds(out) == pytest.approx([0] * 8)
+
+  @pytest.mark.parametrize("fhead", ["0", "-0.1", "1.1", "invalid"])
+  def test_invalid_fhead_is_rejected(self, fhead, tmp_path):
+    inp = self.create_sdds([10, 10, 20, 20], tmp_path)
+    out = tmp_path / "invalid.sdds"
+    result = subprocess.run(
+      [
+        str(SDDSREMOVE),
+        str(inp),
+        str(out),
+        "-columns=Wave",
+        f"-fhead={fhead}",
+      ],
+      capture_output=True,
+      text=True,
+    )
+    assert result.returncode != 0
+    assert "fhead" in result.stderr.lower()
+
+  @pytest.mark.parametrize(
+    "values, fhead",
+    [
+      ([10], "1"),
+      ([10, 20], "1"),
+      ([10, 10, 20, 20], "0.25"),
+    ],
+  )
+  def test_too_few_head_rows_are_rejected(self, values, fhead, tmp_path):
+    inp = self.create_sdds(values, tmp_path)
+    out = tmp_path / "short.sdds"
+    result = subprocess.run(
+      [
+        str(SDDSREMOVE),
+        str(inp),
+        str(out),
+        "-columns=Wave",
+        f"-fhead={fhead}",
+      ],
+      capture_output=True,
+      text=True,
+    )
+    assert result.returncode != 0
+    assert "too few head rows" in result.stderr.lower()

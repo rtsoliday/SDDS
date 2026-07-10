@@ -41,6 +41,7 @@ HARNESS_SOURCE = r"""
 #include "rpn.h"
 
 extern void SDDS_FreePointerArray(void **data, int32_t dimensions, int32_t *dimension);
+extern int32_t SDDS_UpdateNonNativeBinaryPage(SDDS_DATASET *dataset, uint32_t mode);
 
 #define THREADS 8
 #define ITERATIONS 500
@@ -663,9 +664,61 @@ static int run_thread_test(void)
   return 0;
 }
 
+static int check_nonnative_fixed_row_update(void)
+{
+  SDDS_DATASET dataset;
+  FILE *fp;
+  uint32_t marker = 0x11223344u;
+  uint32_t observed = 0;
+  COLUMN_DEFINITION column;
+  void *data[1];
+  int32_t values[10];
+  int32_t row_flag[10];
+  int i;
+  int result;
+
+  memset(&dataset, 0, sizeof(dataset));
+  memset(&column, 0, sizeof(column));
+  for (i = 0; i < 10; i++) {
+    row_flag[i] = 1;
+    values[i] = i;
+  }
+  column.type = SDDS_LONG;
+  data[0] = values;
+
+  fp = tmpfile();
+  if (!fp || fwrite(&marker, sizeof(marker), 1, fp) != 1) {
+    if (fp)
+      fclose(fp);
+    return 1;
+  }
+
+  dataset.layout.fp = fp;
+  dataset.layout.n_columns = 1;
+  dataset.layout.column_definition = &column;
+  dataset.data = data;
+  dataset.layout.data_mode.fixed_row_count = 1;
+  dataset.layout.data_mode.fixed_row_increment = 500;
+  dataset.writing_page = 1;
+  dataset.rowcount_offset = 0;
+  dataset.n_rows = 10;
+  dataset.n_rows_written = 5;
+  dataset.last_row_written = 4;
+  dataset.row_flag = row_flag;
+
+  result = SDDS_UpdateNonNativeBinaryPage(&dataset, 0);
+  fflush(fp);
+  rewind(fp);
+  if (fread(&observed, sizeof(observed), 1, fp) != 1)
+    result = 0;
+  fclose(fp);
+
+  return !result || observed != marker;
+}
 static int run_regression(void)
 {
   char **messages;
+  FILE *fp;
   int32_t count = 0;
   int32_t previous_buffer;
   int64_t previous_limit;
@@ -723,6 +776,18 @@ static int run_regression(void)
   SDDS_FreePointerArray((void **)pointer, 2, dimensions);
 
   printf("match_helpers=%d\n", check_match_helpers_clear_reused_state());
+
+  SDDS_ClearErrors();
+  printf("null_data_mode=%" PRId32 "\n", SDDS_SetDataMode(NULL, SDDS_BINARY));
+  SDDS_ClearErrors();
+  printf("nonnative_fixed_rows=%d\n", check_nonnative_fixed_row_update());
+
+  fp = tmpfile();
+  if (!fp)
+    return 1;
+  printf("null_flush_buffer=%" PRId32 "\n", SDDS_FlushBuffer(fp, NULL));
+  fclose(fp);
+  SDDS_ClearErrors();
 
   return 0;
 }
@@ -806,6 +871,9 @@ def test_sddslib_regression_outputs(sddslib_harness):
     "autocheck=0:4660\n"
     "pointer=2.0:5.0\n"
     "match_helpers=0\n"
+    "null_data_mode=0\n"
+    "nonnative_fixed_rows=0\n"
+    "null_flush_buffer=0\n"
   )
 
 

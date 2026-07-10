@@ -138,3 +138,23 @@ def test_correlate(tmp_path):
   out = tmp_path / "out_corr.sdds"
   run_convolve(sig, res, out, "corr", extra=["-correlate"])
   assert read_column(out, "corr") == [1.0, 2.0, 3.0, 4.0]
+
+@pytest.mark.skipif(not all(x.exists() for x in REQUIRED), reason="tools not built")
+def test_one_row_pages_are_rejected(tmp_path):
+  sig = create_sdds(tmp_path, "sig", [0], [1], "signal")
+  res = create_sdds(tmp_path, "res", [0], [1], "response")
+  result = subprocess.run(
+    [
+      str(SDDSCONVOLVE),
+      str(sig),
+      str(res),
+      str(tmp_path / "out.sdds"),
+      "-signalColumns=t,signal",
+      "-responseColumns=t,response",
+      "-outputColumns=t,conv",
+    ],
+    capture_output=True,
+    text=True,
+  )
+  assert result.returncode != 0
+  assert "at least two rows" in result.stderr.lower()

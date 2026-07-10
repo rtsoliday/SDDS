@@ -505,6 +505,8 @@ int main(int argc, char **argv) {
     }
     if (rows) {
       int64_t primeRows, pow2Rows;
+      if (rows < 2)
+        SDDS_Bomb("sddsfft requires at least two rows on each nonempty page");
       rowsToUse = rows;
       primeRows = greatestProductOfSmallPrimes(rows);
       if (rows != primeRows || padFactor) {
@@ -593,9 +595,8 @@ long process_data(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, double *tdata, in
     if (!(data = SDDS_Realloc(data, sizeof(*data) * rowsToUse)))
       SDDS_Bomb("memory allocation failure");
     if (imagData && !(imagData = SDDS_Realloc(imagData, sizeof(*imagData) * rowsToUse)))
-      length = ((double)rows) * (tdata[rows - 1] - tdata[0]) / ((double)rows - 1.0);
-    else
-      length = tdata[rows - 1] - tdata[0];
+      SDDS_Bomb("memory allocation failure");
+    length = tdata[rows - 1] - tdata[0];
     for (i = rows; i < rowsToUse; i++) {
       tDataStore[i] = tDataStore[i - 1] + length / ((double)rows - 1);
       data[i] = 0;

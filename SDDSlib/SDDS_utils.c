@@ -5021,6 +5021,10 @@ int32_t SDDS_DeleteParameterFixedValues(SDDS_DATASET *SDDS_dataset) {
  * @sa SDDS_SetError, SDDS_IsBigEndianMachine, SDDS_BINARY, SDDS_ASCII
  */
 int32_t SDDS_SetDataMode(SDDS_DATASET *SDDS_dataset, int32_t newmode) {
+  if (!SDDS_dataset) {
+    SDDS_SetError("NULL page pointer (SDDS_SetDataMode)");
+    return 0;
+  }
   if (newmode == -SDDS_BINARY) {
     /* will write with bytes swapped.
        * provided for compatibility with sddsendian program, which writes the
@@ -5035,10 +5039,6 @@ int32_t SDDS_SetDataMode(SDDS_DATASET *SDDS_dataset, int32_t newmode) {
   }
   if (newmode == SDDS_dataset->layout.data_mode.mode)
     return 1;
-  if (!SDDS_dataset) {
-    SDDS_SetError("NULL page pointer (SDDS_SetDataMode)");
-    return 0;
-  }
   if (SDDS_dataset->page_number != 0 && (SDDS_dataset->page_number > 1 || SDDS_dataset->n_rows_written != 0)) {
     SDDS_SetError("Can't change the mode of a file that's been written to (SDDS_SetDataMode)");
     return 0;

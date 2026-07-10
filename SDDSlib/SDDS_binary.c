@@ -653,6 +653,10 @@ int32_t SDDS_FlushBuffer(FILE *fp, SDDS_FILEBUFFER *fBuffer) {
     SDDS_SetError("Unable to flush buffer: file pointer is NULL. (SDDS_FlushBuffer)");
     return 0;
   }
+  if (!fBuffer) {
+    SDDS_SetError("Unable to flush buffer: buffer pointer is NULL. (SDDS_FlushBuffer)");
+    return 0;
+  }
   if (!fBuffer->bufferSize) {
     if (fflush(fp)) {
       SDDS_SetError("Problem flushing file (SDDS_FlushBuffer.1)");
@@ -660,10 +664,6 @@ int32_t SDDS_FlushBuffer(FILE *fp, SDDS_FILEBUFFER *fBuffer) {
       return 0;
     }
     return 1;
-  }
-  if (!fBuffer) {
-    SDDS_SetError("Unable to flush buffer: buffer pointer is NULL. (SDDS_FlushBuffer)");
-    return 0;
   }
   if ((writeBytes = fBuffer->bufferSize - fBuffer->bytesLeft)) {
     if (writeBytes < 0) {
@@ -1190,7 +1190,7 @@ int32_t SDDS_UpdateBinaryPage(SDDS_DATASET *SDDS_dataset, uint32_t mode) {
         }
       } else {
         rows32 = (int32_t)fixed_rows;
-        if (fwrite(&fixed_rows, sizeof(rows32), 1, fp) != 1) {
+        if (fwrite(&rows32, sizeof(rows32), 1, fp) != 1) {
           SDDS_SetError("Unable to update page--failure writing number of rows (SDDS_UpdateBinaryPage)");
           return (0);
         }
@@ -5902,7 +5902,7 @@ int32_t SDDS_UpdateNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset, uint32_t mode
     return (0);
   }
   SDDS_SwapLong(&min32);
-  if ((!SDDS_dataset->layout.data_mode.fixed_row_count) || (((rows + rows - SDDS_dataset->n_rows_written / SDDS_dataset->layout.data_mode.fixed_row_increment)) != (rows / SDDS_dataset->layout.data_mode.fixed_row_increment))) {
+  if ((!SDDS_dataset->layout.data_mode.fixed_row_count) || (((rows + rows - SDDS_dataset->n_rows_written) / SDDS_dataset->layout.data_mode.fixed_row_increment) != (rows / SDDS_dataset->layout.data_mode.fixed_row_increment))) {
     if (SDDS_fseek(fp, SDDS_dataset->rowcount_offset, 0) == -1) {
       SDDS_SetError("Unable to update page--failure doing fseek (SDDS_UpdateNonNativeBinaryPage)");
       return (0);

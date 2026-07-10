@@ -169,6 +169,7 @@ def test_complex_input(tmp_path):
       "-column=ImagSignal,double",
       "-inputMode=ascii",
       "-outputMode=ascii",
+      "-noRowCount",
     ],
     check=True,
   )
@@ -201,6 +202,7 @@ def test_inverse(tmp_path):
       "-column=ImagSignal,double",
       "-inputMode=ascii",
       "-outputMode=ascii",
+      "-noRowCount",
     ],
     check=True,
   )
@@ -218,3 +220,35 @@ def test_inverse(tmp_path):
   )
   result = subprocess.run([str(SDDSCHECK), str(output)], capture_output=True, text=True)
   assert result.stdout.strip() == "ok"
+
+@pytest.mark.skipif(not (SDDSFFT.exists() and PLAINDATA2SDDS.exists()), reason="tools not built")
+def test_one_row_page_is_rejected(tmp_path):
+  plain = tmp_path / "one.txt"
+  plain.write_text("0 1\n")
+  input_file = tmp_path / "one.sdds"
+  subprocess.run(
+    [
+      str(PLAINDATA2SDDS),
+      str(plain),
+      str(input_file),
+      "-column=t,double",
+      "-column=signal,double",
+      "-inputMode=ascii",
+      "-outputMode=ascii",
+      "-noRowCount",
+    ],
+    check=True,
+  )
+
+  result = subprocess.run(
+    [
+      str(SDDSFFT),
+      str(input_file),
+      str(tmp_path / "one-fft.sdds"),
+      "-columns=t,signal",
+    ],
+    capture_output=True,
+    text=True,
+  )
+  assert result.returncode != 0
+  assert "at least two rows" in result.stderr.lower()

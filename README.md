@@ -36,16 +36,25 @@ sudo port install zlib zstd xz hdf5 libaec gsl libpng gd2 lerc libdeflate tiff q
 ```
 
 ### Windows with Cygwin and MSVC
+- Install Visual Studio 2022 with the **Desktop development with C++** workload.
+- Install 64-bit Cygwin in `C:\cygwin64`; the build uses its `sh`, `uname`,
+  `cp`, `rm`, and `mkdir` commands.
+- Install GNU Make through Cygwin or Strawberry Perl. The launcher checks
+  `C:\cygwin64\bin\make.exe` and `C:\Strawberry\c\bin\make.exe`.
 - Install [Microsoft MPI](https://learn.microsoft.com/en-us/message-passing-interface/microsoft-mpi)
-- Install [Qt5](https://doc.qt.io/qt-5/qt5-introduction.html)
-- Install and build GNU Scientific Library
+  if MPI support is needed.
+- Install Qt 6.8.2 for MSVC 2022 in `C:\Qt\6.8.2\msvc2022_64`.
+- Install and build GNU Scientific Library:
+
 ```bash
 git clone https://github.com/rtsoliday/gsl.git
 cd gsl
 make -f Makefile.MSVC all
 cd ..
 ```
-- Download the HDF5 libraries
+
+- Download the HDF5 libraries:
+
 ```bash
 wget https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6-win-vs2022_cl.zip
 unzip hdf5-1.14.6-win-vs2022_cl.zip
@@ -53,6 +62,42 @@ cd hdf5
 unzip HDF5-1.14.6-win64.zip
 cd ..
 ```
+
+The repositories should have this sibling layout:
+
+```text
+parent\
+  SDDS\
+  gsl\
+  hdf5\HDF5-1.14.6-win64\
+```
+
+After installing the prerequisites, build from an ordinary Command Prompt,
+PowerShell terminal, IDE terminal, or Explorer without setting environment
+variables manually:
+
+```bat
+build-windows.bat
+```
+
+The launcher discovers Visual Studio, initializes the x64 MSVC environment,
+adds Qt and the POSIX tools to the child process's `PATH`, and runs the build
+from the repository root. It supports these commands:
+
+```bat
+build-windows.bat build
+build-windows.bat clean
+build-windows.bat rebuild
+build-windows.bat test
+build-windows.bat build 8
+```
+
+The default is an incremental parallel build using the machine's logical
+processor count. The optional second argument sets the job count. Set
+`SDDS_CYGWIN_ROOT` or `SDDS_MAKE_EXE` before invoking the
+launcher to override the default tool locations. Cygwin remains a build-tool
+dependency because the existing make recipes use POSIX shell commands, but it
+is no longer necessary to enter a configured Cygwin terminal.
 
 ## Repository Structure
 ```

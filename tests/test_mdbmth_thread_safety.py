@@ -124,6 +124,9 @@ static int check_statistics(Worker *worker, long iteration)
   double offset = worker->id * 1000.0 + iteration;
   double data[5] = {offset + 5, offset + 1, offset + 3, offset + 2, offset + 4};
   double value;
+  double percent;
+  double position;
+  int32_t keep[5] = {0, 0, 0, 0, 0};
   long index;
 
   if (!compute_median(&value, data, 5) || !nearly_equal(value, offset + 3)) {
@@ -134,6 +137,22 @@ static int check_statistics(Worker *worker, long iteration)
   index = find_median(&value, data, 5);
   if (index != 2 || !nearly_equal(value, offset + 3)) {
     set_error(worker, "find_median scratch state interleaved");
+    return 1;
+  }
+
+  percent = -1;
+  if (compute_percentiles(&position, &percent, 1, data, 5)) {
+    set_error(worker, "compute_percentiles accepted a negative percentile");
+    return 1;
+  }
+  percent = 101;
+  if (approximate_percentiles(&position, &percent, 1, data, 5, 10)) {
+    set_error(worker, "approximate_percentiles accepted a percentile over 100");
+    return 1;
+  }
+  percent = 50;
+  if (compute_percentiles_flagged(&position, &percent, 1, data, keep, 5)) {
+    set_error(worker, "compute_percentiles_flagged accepted an empty selection");
     return 1;
   }
 
@@ -176,6 +195,11 @@ static int check_halton(Worker *worker)
       !nearly_equal(h1, 0.5) || !nearly_equal(h2, 0.25) ||
       !nearly_equal(h3, 0.75)) {
     set_error(worker, "Halton sequence state interleaved");
+    return 1;
+  }
+  if (restartHaltonSequence(id + 1, 0.0) != -1 ||
+      nextHaltonSequencePoint(id + 1) != -1) {
+    set_error(worker, "Halton sequence accepted an ID past the allocation");
     return 1;
   }
 

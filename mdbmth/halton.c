@@ -88,7 +88,7 @@ int32_t startHaltonSequence(int32_t *radix, double value) {
 int32_t restartHaltonSequence(long ID, double value) {
   ID -= 1;
 
-  if (ID > sequencesInUse || ID < 0)
+  if (ID >= sequencesInUse || ID < 0)
     return -1;
 
   lastPointValue[ID] = value;
@@ -109,7 +109,7 @@ double nextHaltonSequencePoint(long ID) {
 
   ID -= 1;
 
-  if (ID > sequencesInUse || ID < 0)
+  if (ID >= sequencesInUse || ID < 0)
     return -1;
 
   f = 1 - lastPointValue[ID];

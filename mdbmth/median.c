@@ -88,6 +88,9 @@ long compute_percentiles(double *position, double *percent, long positions, doub
 
   if (n <= 0 || positions <= 0)
     return 0;
+  for (ip = 0; ip < positions; ip++)
+    if (percent[ip] < 0 || percent[ip] > 100)
+      return 0;
   if (n > last_n) {
     data = trealloc(data, sizeof(*data) * n);
     last_n = n;
@@ -117,9 +120,14 @@ long compute_percentiles_flagged(double *position, double *percent, long positio
 
   if (n <= 0 || positions <= 0)
     return 0;
+  for (ip = 0; ip < positions; ip++)
+    if (percent[ip] < 0 || percent[ip] > 100)
+      return 0;
   for (ip=count=0; ip<n; ip++) 
     if (keep[ip])
       count++;
+  if (!count)
+    return 0;
   if (count > last_n) {
     data = trealloc(data, sizeof(*data) * count);
     last_n = count;
@@ -190,6 +198,9 @@ long approximate_percentiles(double *position, double *percent, long positions, 
   long i, j, k;
   if (bins < 2 || positions <= 0 || n <= 0)
     return 0;
+  for (i = 0; i < positions; i++)
+    if (percent[i] < 0 || percent[i] > 100)
+      return 0;
   if (!(hist = malloc(sizeof(*hist) * bins)))
     return 0;
   find_min_max(&xMin, &xMax, x, n);
