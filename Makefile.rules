@@ -130,6 +130,13 @@ CRYPTO_LIB = $(firstword $(wildcard \
              $(addsuffix /libcrypto.dylib, $(LIB_DIRS)) \
              $(addsuffix /libcrypto.so, $(LIB_DIRS)) \
              $(addsuffix /libcrypto.a, $(LIB_DIRS))))
+# Preserve the OpenSSL 1.1 runtime used by RHEL8 builds when they run on RHEL9.
+OPENSSL_COMPAT_LIB_DIR = /usr/local/oag/apps/lib/linux-x86_64
+ifneq ($(wildcard $(OPENSSL_COMPAT_LIB_DIR)/libcrypto.so.1.1),)
+ifneq ($(wildcard $(OPENSSL_COMPAT_LIB_DIR)/libssl.so.1.1),)
+  OPENSSL_COMPAT_RPATH = -Wl,-rpath=$(OPENSSL_COMPAT_LIB_DIR)
+endif
+endif
 XM_LIB = $(firstword $(wildcard \
          $(addsuffix /libXm.dylib, $(LIB_DIRS)) \
          $(addsuffix /libXm.so, $(LIB_DIRS)) \
