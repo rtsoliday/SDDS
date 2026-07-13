@@ -6,6 +6,11 @@ mpl_qt_SRC = mpl_qt.cc mpl_qt_utils.cc mpl_qt_zoom.cc mpl_qt_print_save.cc mpl_q
 bely_upload_SRC = bely_upload.cc
 
 ifeq ($(OS), Linux)
+  # Preserve the Qt 5 Data Visualization runtime used by RHEL8 builds on RHEL9.
+  QT5_DATAVISUALIZATION_COMPAT_LIB = /usr/local/oag/apps/lib/linux-x86_64/libQt5DataVisualization.so.5
+  ifneq ($(wildcard $(QT5_DATAVISUALIZATION_COMPAT_LIB)),)
+    QT5_DATAVISUALIZATION_COMPAT_RPATH = -Wl,-rpath=/usr/local/oag/apps/lib/linux-x86_64
+  endif
   MOC = $(firstword $(wildcard \
           /usr/lib64/qt6/libexec/moc \
           /usr/lib/qt6/libexec/moc \
@@ -32,7 +37,7 @@ ifeq ($(OS), Linux)
         PROD :=
       else
         CCFLAGS += -I../../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)Network Qt$(MOC_VER_DIGIT)DataVisualization)
-        LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport Qt$(MOC_VER_DIGIT)Network Qt$(MOC_VER_DIGIT)DataVisualization)
+        LDFLAGS += $(shell pkg-config --libs Qt$(MOC_VER_DIGIT)Widgets Qt$(MOC_VER_DIGIT)PrintSupport Qt$(MOC_VER_DIGIT)Network Qt$(MOC_VER_DIGIT)DataVisualization) $(QT5_DATAVISUALIZATION_COMPAT_RPATH)
         PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
         PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
       endif
