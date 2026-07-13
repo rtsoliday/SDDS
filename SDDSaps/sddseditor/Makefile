@@ -56,7 +56,7 @@ ifeq ($(OS), Linux)
       CCFLAGS += -I../../include -I$(OBJ_DIR) $(shell pkg-config --cflags Qt$(QT_PKG_MAJOR)Widgets) $(H5_API_FLAG) $(HDF5_CFLAGS)
       LDFLAGS += $(shell pkg-config --libs Qt$(QT_PKG_MAJOR)Widgets Qt$(QT_PKG_MAJOR)PrintSupport)
       PROD_LIBS = -lSDDS1 -lrpnlib -lmdbmth -lmdblib
-      PROD_SYS_LIBS = $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm -ldl $(CURL_LIB) $(CRYPTO_LIB)
+      PROD_SYS_LIBS = $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm -ldl $(CURL_LIB) $(OPENSSL_COMPAT_RPATH) $(CRYPTO_LIB)
     endif
   endif
 endif
