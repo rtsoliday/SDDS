@@ -909,7 +909,7 @@ extern int find_min_max_2d(double *min, double *max, double **value,
 extern int find_min_max_2d_float(float *min, float *max, float **value,
     long n1, long n2);
 extern int find_min(double *min, double *loc, double *c1, double *c2, long n);
-extern int find_max(double *max, double *loc, double *c1, double *c2, long n);
+epicsShareFuncMDBMTH extern int find_max(double *max, double *loc, double *c1, double *c2, long n);
 epicsShareFuncMDBMTH extern double max_double(int num_args, ...);
 epicsShareFuncMDBMTH extern double min_double(int num_args, ...);
 
