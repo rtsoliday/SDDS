@@ -81,7 +81,6 @@ static bool isEqualAspectArgument(const char *arg) {
 #include <algorithm>
 #include <cctype>
 #include <limits>
-#include <string>
 
 #ifndef SDDS_LINETYPE_SUBTYPE_MULT
 #define SDDS_LINETYPE_SUBTYPE_MULT 1000
@@ -89,7 +88,6 @@ static bool isEqualAspectArgument(const char *arg) {
 #endif
 #ifdef _WIN32
 #  include <windows.h>
-#  include <process.h>
 #elif defined(__APPLE__)
 #  include <ApplicationServices/ApplicationServices.h>
 #  include <objc/objc.h>
@@ -2648,51 +2646,7 @@ static void customMessageHandler(QtMsgType type, const QMessageLogContext &conte
  * @param argv Command line arguments.
  * @return int Exit status.
  */
-#if !defined(MPL_QT_ENABLE_3D)
-static void forward3DInvocation(int argc, char *argv[]) {
-  bool has3DArgument = false;
-  for (int i = 1; i < argc; i++) {
-    if (!strncmp(argv[i], "-3d", 3)) {
-      has3DArgument = true;
-      break;
-    }
-  }
-  if (!has3DArgument)
-    return;
-
-#if defined(_WIN32)
-  const char *driverName = "mpl_qt_3d.exe";
-#else
-  const char *driverName = "mpl_qt_3d";
-#endif
-  std::string driverPath = driverName;
-  std::string invokedAs = argv[0] ? argv[0] : "";
-  size_t separator = invokedAs.find_last_of("/\\");
-  if (separator != std::string::npos)
-    driverPath = invokedAs.substr(0, separator + 1) + driverName;
-
-#if defined(_WIN32)
-  intptr_t status = _spawnv(_P_OVERLAY, driverPath.c_str(), argv);
-  if (status == -1 && separator != std::string::npos)
-    status = _spawnvp(_P_OVERLAY, driverName, argv);
-  if (status == -1) {
-    fprintf(stderr, "Unable to start %s\n", driverName);
-    exit(1);
-  }
-#else
-  if (separator != std::string::npos)
-    execv(driverPath.c_str(), argv);
-  execvp(driverName, argv);
-  perror(driverName);
-  exit(1);
-#endif
-}
-#endif
-
 int main(int argc, char *argv[]) {
-#if !defined(MPL_QT_ENABLE_3D)
-  forward3DInvocation(argc, argv);
-#endif
   qInstallMessageHandler(customMessageHandler);
   lineTypeTable.nEntries = 0;
   lineTypeTable.typeFlag = 0x0000;
@@ -2717,7 +2671,11 @@ int main(int argc, char *argv[]) {
       }
       i = savedIndex;
     }
-    if (!strncmp(argv[i], "-3d", 3) && i + 1 < argc) {
+    if (!strncmp(argv[i], "-3d", 3)) {
+      if (i + 1 >= argc) {
+        fprintf(stderr, "The -3d option requires an SDDS input file\n");
+        return 1;
+      }
       if (in3d)
         plots.append(current);
       current = Plot3DArgs();
@@ -3228,8 +3186,4 @@ int main(int argc, char *argv[]) {
   return app.exec();
 }
 
-#if defined(MPL_QT_ENABLE_3D)
-#  include "mpl_qt_3d_moc.h"
-#else
-#  include "mpl_qt_moc.h"
-#endif
+#include "mpl_qt_moc.h"

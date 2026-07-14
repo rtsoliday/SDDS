@@ -40,11 +40,6 @@ class Toolchain:
   def mpl_qt(self):
     return self.executable("mpl_qt")
 
-  @property
-  def mpl_qt_3d(self):
-    return self.executable("mpl_qt_3d")
-
-
 def _discover_toolchains():
   directories = [("current", Path(os.fspath(BIN_DIR)))]
   configured = os.environ.get("SDDS_TEST_COMPAT_BIN_DIRS", "")
@@ -526,26 +521,17 @@ def test_large_protocol_cross_version_compatibility(tmp_path, ten_large_files):
 
 
 @requires_plot_tools
-@pytest.mark.parametrize("toolchain", TOOLCHAINS, ids=lambda item: item.name)
-def test_3d_dispatch_matches_companion_when_split(toolchain):
-  if not toolchain.mpl_qt_3d.exists():
-    pytest.skip("this build uses the older integrated mpl_qt 3D implementation")
+def test_3d_support_is_integrated_into_mpl_qt():
+  toolchain = TOOLCHAINS[0]
+  assert not toolchain.executable("mpl_qt_3d").exists()
   environment = os.environ.copy()
   environment.setdefault("QT_QPA_PLATFORM", "offscreen")
-  forwarded = subprocess.run(
+  completed = subprocess.run(
     [str(toolchain.mpl_qt), "-3d"],
     stdout=subprocess.PIPE,
     stderr=subprocess.PIPE,
     env=environment,
     timeout=10,
   )
-  direct = subprocess.run(
-    [str(toolchain.mpl_qt_3d), "-3d"],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-    env=environment,
-    timeout=10,
-  )
-  assert forwarded.returncode == direct.returncode == 1
-  assert forwarded.stdout == direct.stdout
-  assert forwarded.stderr == direct.stderr
+  assert completed.returncode == 1
+  assert b"requires an SDDS input file" in completed.stderr
