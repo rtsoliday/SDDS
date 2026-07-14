@@ -6,6 +6,7 @@
  */
 
 #include "mpl_qt.h"
+#if defined(MPL_QT_ENABLE_3D)
 static bool isEqualAspectArgument(const char *arg) {
   if (!arg)
     return false;
@@ -17,6 +18,7 @@ static bool isEqualAspectArgument(const char *arg) {
   }
   return false;
 }
+#endif
 
 #include <unistd.h>
 #ifndef _WIN32
@@ -26,6 +28,7 @@ static bool isEqualAspectArgument(const char *arg) {
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QPainterPath>
+#if defined(MPL_QT_ENABLE_3D)
 #include <QtDataVisualization/Q3DSurface>
 #include <QtDataVisualization/QSurface3DSeries>
 #include <QtDataVisualization/QSurfaceDataArray>
@@ -49,6 +52,7 @@ static bool isEqualAspectArgument(const char *arg) {
 #include <QtDataVisualization/QValue3DAxis>
 #include <QtDataVisualization/QLogValue3DAxisFormatter>
 #include <QtDataVisualization/QValue3DAxisFormatter>
+#endif
 #include <QLinearGradient>
 #include <QCursor>
 #include <QColor>
@@ -77,6 +81,7 @@ static bool isEqualAspectArgument(const char *arg) {
 #include <algorithm>
 #include <cctype>
 #include <limits>
+#include <string>
 
 #ifndef SDDS_LINETYPE_SUBTYPE_MULT
 #define SDDS_LINETYPE_SUBTYPE_MULT 1000
@@ -84,6 +89,7 @@ static bool isEqualAspectArgument(const char *arg) {
 #endif
 #ifdef _WIN32
 #  include <windows.h>
+#  include <process.h>
 #elif defined(__APPLE__)
 #  include <ApplicationServices/ApplicationServices.h>
 #  include <objc/objc.h>
@@ -91,7 +97,9 @@ static bool isEqualAspectArgument(const char *arg) {
 #  include <objc/message.h>
 #endif
 
+#if defined(MPL_QT_ENABLE_3D)
 using QT_DATAVIS_NAMESPACE::Q3DInputHandler;
+#endif
 
 double scalex, scaley;
 #define Xpixel(value) (int)(((value) - userx0) * scalex)
@@ -167,6 +175,7 @@ QAction *mouseTrackerAction = nullptr;
 QAction *whiteThemeAction = nullptr;
 QWidget *canvas;
 QMainWindow *mainWindowPointer;
+#if defined(MPL_QT_ENABLE_3D)
 QT_DATAVIS_NAMESPACE::QAbstract3DGraph *surfaceGraph = nullptr;
 QWidget *surfaceContainer = nullptr;
 QStackedWidget *plotStack = nullptr;
@@ -1680,6 +1689,7 @@ static QWidget *run3d(const char *filename, const char *xlabel,
   graph->addSeries(series);
   return widget;
 }
+#endif
 
 /**
  * @brief Ensure the window is visible and active.
@@ -1735,10 +1745,8 @@ public:
   void setEnabled(bool enable) { notifier->setEnabled(enable); }
 public slots:
   void handleActivated(int) {
-    if (domovie)
-      notifier->setEnabled(false);
+    notifier->setEnabled(false);
     if (readdata() == 1) {
-      notifier->setEnabled(false);
       if (ifp && ifp != stdin) {
         fclose(ifp);
         ifp = NULL;
@@ -1755,7 +1763,10 @@ public slots:
     } else if (keep > 0) {
       QString wtitle = QString("MPL Outboard Driver (Plot %1 of %2)").arg(cur->nplot).arg(nplots);
       mainWindowPointer->setWindowTitle(wtitle);
+      notifier->setEnabled(true);
     }
+    if (notifier->isEnabled() && readdataBufferHasData())
+      QTimer::singleShot(0, this, [this]() { handleActivated(0); });
   }
 private:
   QSocketNotifier *notifier;
@@ -1781,6 +1792,7 @@ static void startReader(int fd) {
     ifp = stdin;
   else
     ifp = fdopen(fd, "rb");
+  resetReaddataBuffer();
   stdinReader = new StdinReader(fd);
 }
 
@@ -1986,15 +1998,62 @@ private:
     static const int BATCH_SIZE = 4096;
     QVector<QLine> lineBatch;
     QVector<QPoint> pointBatch;
+    QBitArray pointPixels;
     lineBatch.reserve(BATCH_SIZE);
     pointBatch.reserve(BATCH_SIZE);
 
-    /* Lambda to flush accumulated lines */
-    auto flushLines = [&]() {
+    auto drawLineBatch = [&]() {
       if (!lineBatch.isEmpty()) {
         bufferPainter.drawLines(lineBatch);
         lineBatch.clear();
       }
+    };
+
+    auto appendSolidLine = [&](const QPoint &from, const QPoint &to) {
+      lineBatch.append(QLine(from, to));
+      if (lineBatch.size() >= BATCH_SIZE)
+        drawLineBatch();
+    };
+
+    /* Consecutive samples often map to one screen column.  Preserve the
+     * entry, exit, minimum, and maximum of such runs, which produces the
+     * same solid-pixel envelope without asking QPainter to rasterize every
+     * source sample. */
+    bool solidGroupActive = false;
+    bool solidGroupHadVector = false;
+    QPoint solidGroupFirst, solidGroupLast, solidGroupMin, solidGroupMax;
+    auto startSolidGroup = [&](const QPoint &point) {
+      solidGroupActive = true;
+      solidGroupHadVector = false;
+      solidGroupFirst = solidGroupLast = solidGroupMin = solidGroupMax = point;
+    };
+    auto flushSolidGroup = [&](bool preserveIsolatedPoint) {
+      if (!solidGroupActive)
+        return;
+      QPoint cursor = solidGroupFirst;
+      bool emitted = false;
+      if (solidGroupMin != cursor) {
+        appendSolidLine(cursor, solidGroupMin);
+        cursor = solidGroupMin;
+        emitted = true;
+      }
+      if (solidGroupMax != cursor) {
+        appendSolidLine(cursor, solidGroupMax);
+        cursor = solidGroupMax;
+        emitted = true;
+      }
+      if (solidGroupLast != cursor) {
+        appendSolidLine(cursor, solidGroupLast);
+        emitted = true;
+      }
+      if (!emitted && solidGroupHadVector && preserveIsolatedPoint)
+        appendSolidLine(solidGroupFirst, solidGroupFirst);
+      solidGroupActive = false;
+    };
+
+    auto flushLines = [&]() {
+      flushSolidGroup(true);
+      drawLineBatch();
     };
 
     /* Lambda to flush accumulated points */
@@ -2009,6 +2068,8 @@ private:
     auto flushBatches = [&]() {
       flushLines();
       flushPoints();
+      if (!pointPixels.isEmpty())
+        pointPixels.fill(false);
     };
 
     QPainterPath dashedPath;
@@ -2069,6 +2130,7 @@ private:
 
     int targetW = std::max(1, targetSize.width());
     int targetH = std::max(1, targetSize.height());
+    qint64 targetPixels = static_cast<qint64>(targetW) * targetH;
 
     W = targetW;
     H = targetH;
@@ -2091,14 +2153,28 @@ private:
           }
           dashedPath.lineTo(Xpixel(x), Ypixel(y));
         } else {
-          lineBatch.append(QLine(Xpixel(cx), Ypixel(cy), Xpixel(x), Ypixel(y)));
-          if (lineBatch.size() >= BATCH_SIZE)
-            flushLines();
+          QPoint from(Xpixel(cx), Ypixel(cy));
+          QPoint to(Xpixel(x), Ypixel(y));
+          if (!solidGroupActive)
+            startSolidGroup(from);
+          if (to.x() == solidGroupLast.x()) {
+            solidGroupHadVector = true;
+            solidGroupLast = to;
+            if (to.y() < solidGroupMin.y())
+              solidGroupMin = to;
+            if (to.y() > solidGroupMax.y())
+              solidGroupMax = to;
+          } else {
+            flushSolidGroup(false);
+            appendSolidLine(from, to);
+            startSolidGroup(to);
+          }
         }
         cx = x;
         cy = y;
         break;
       case 'M':
+        flushSolidGroup(true);
         memcpy((char *)&cx, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         memcpy((char *)&cy, bufptr, sizeof(VTYPE));
@@ -2111,6 +2187,7 @@ private:
         }
         break;
       case 'P':
+        flushSolidGroup(true);
         if (dashActive)
           flushDashedPath();
         memcpy((char *)&cx, bufptr, sizeof(VTYPE));
@@ -2118,9 +2195,24 @@ private:
         memcpy((char *)&cy, bufptr, sizeof(VTYPE));
         bufptr += sizeof(VTYPE);
         n += sizeof(char) + 2 * sizeof(VTYPE);
-        pointBatch.append(QPoint(Xpixel(cx), Ypixel(cy)));
-        if (pointBatch.size() >= BATCH_SIZE)
-          flushPoints();
+        {
+          QPoint point(Xpixel(cx), Ypixel(cy));
+          bool duplicate = false;
+          if (pointPixels.isEmpty() && targetPixels <= 64 * 1024 * 1024)
+            pointPixels.resize(static_cast<int>(targetPixels));
+          if (!pointPixels.isEmpty() && point.x() >= 0 && point.x() < targetW &&
+              point.y() >= 0 && point.y() < targetH) {
+            int pixelIndex = point.y() * targetW + point.x();
+            duplicate = pointPixels.testBit(pixelIndex);
+            if (!duplicate)
+              pointPixels.setBit(pixelIndex);
+          }
+          if (!duplicate) {
+            pointBatch.append(point);
+            if (pointBatch.size() >= BATCH_SIZE)
+              flushPoints();
+          }
+        }
         cx++;
         cy++;
         break;
@@ -2556,12 +2648,57 @@ static void customMessageHandler(QtMsgType type, const QMessageLogContext &conte
  * @param argv Command line arguments.
  * @return int Exit status.
  */
+#if !defined(MPL_QT_ENABLE_3D)
+static void forward3DInvocation(int argc, char *argv[]) {
+  bool has3DArgument = false;
+  for (int i = 1; i < argc; i++) {
+    if (!strncmp(argv[i], "-3d", 3)) {
+      has3DArgument = true;
+      break;
+    }
+  }
+  if (!has3DArgument)
+    return;
+
+#if defined(_WIN32)
+  const char *driverName = "mpl_qt_3d.exe";
+#else
+  const char *driverName = "mpl_qt_3d";
+#endif
+  std::string driverPath = driverName;
+  std::string invokedAs = argv[0] ? argv[0] : "";
+  size_t separator = invokedAs.find_last_of("/\\");
+  if (separator != std::string::npos)
+    driverPath = invokedAs.substr(0, separator + 1) + driverName;
+
+#if defined(_WIN32)
+  intptr_t status = _spawnv(_P_OVERLAY, driverPath.c_str(), argv);
+  if (status == -1 && separator != std::string::npos)
+    status = _spawnvp(_P_OVERLAY, driverName, argv);
+  if (status == -1) {
+    fprintf(stderr, "Unable to start %s\n", driverName);
+    exit(1);
+  }
+#else
+  if (separator != std::string::npos)
+    execv(driverPath.c_str(), argv);
+  execvp(driverName, argv);
+  perror(driverName);
+  exit(1);
+#endif
+}
+#endif
+
 int main(int argc, char *argv[]) {
+#if !defined(MPL_QT_ENABLE_3D)
+  forward3DInvocation(argc, argv);
+#endif
   qInstallMessageHandler(customMessageHandler);
   lineTypeTable.nEntries = 0;
   lineTypeTable.typeFlag = 0x0000;
 
   QApplication app(argc, argv);
+#if defined(MPL_QT_ENABLE_3D)
   QVector<Plot3DArgs> plots;
   Plot3DArgs current;
   bool in3d = false;
@@ -2719,6 +2856,7 @@ int main(int argc, char *argv[]) {
   }
   if (in3d)
     plots.append(current);
+#endif
 
   // Create main window
   QMainWindow mainWindow;
@@ -2729,8 +2867,12 @@ int main(int argc, char *argv[]) {
   QMenu *fileMenu = mainWindow.menuBar()->addMenu("File");
   QMenu *navigateMenu = mainWindow.menuBar()->addMenu("Navigate");
   QMenu *optionsMenu = nullptr;
+#if defined(MPL_QT_ENABLE_3D)
   if (plots.isEmpty())
     optionsMenu = mainWindow.menuBar()->addMenu("Options");
+#else
+  optionsMenu = mainWindow.menuBar()->addMenu("Options");
+#endif
   QMenu *helpMenu = mainWindow.menuBar()->addMenu("Help");
 
   QAction *printAction = new QAction("Print...", &mainWindow);
@@ -2860,6 +3002,7 @@ int main(int argc, char *argv[]) {
   QVBoxLayout *layout = new QVBoxLayout(centralWidget);
   layout->setContentsMargins(2, 2, 2, 2);
 
+#if defined(MPL_QT_ENABLE_3D)
   if (!plots.isEmpty()) {
     plotStack = new QStackedWidget;
     for (int i = 0; i < plots.size(); ++i) {
@@ -2894,6 +3037,7 @@ int main(int argc, char *argv[]) {
     mainWindow.show();
     return app.exec();
   }
+#endif
 
   QString shareName;
   for (int i = 1; i < argc; i++) {
@@ -3084,4 +3228,8 @@ int main(int argc, char *argv[]) {
   return app.exec();
 }
 
-#include "mpl_qt_moc.h"
+#if defined(MPL_QT_ENABLE_3D)
+#  include "mpl_qt_3d_moc.h"
+#else
+#  include "mpl_qt_moc.h"
+#endif

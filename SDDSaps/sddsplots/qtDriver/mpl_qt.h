@@ -16,6 +16,7 @@
 #include <QTimer>
 #include <QObject>
 #include <QVector>
+#include <QBitArray>
 #include <QSocketNotifier>
 #include <QShortcut>
 #include <QRubberBand>
@@ -33,12 +34,14 @@
 //#include <QTest>
 #include <QDebug>    // for qDebug()
 #include <cmath>
-#include <QtDataVisualization/Q3DSurface>
-#include <QtDataVisualization/QAbstract3DGraph>
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-#  define QT_DATAVIS_NAMESPACE
-#else
-#  define QT_DATAVIS_NAMESPACE QtDataVisualization
+#if defined(MPL_QT_ENABLE_3D)
+#  include <QtDataVisualization/Q3DSurface>
+#  include <QtDataVisualization/QAbstract3DGraph>
+#  if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#    define QT_DATAVIS_NAMESPACE
+#  else
+#    define QT_DATAVIS_NAMESPACE QtDataVisualization
+#  endif
 #endif
 #include "mdb.h"
 
@@ -113,6 +116,7 @@ extern QWidget *canvas;
 extern QAction *replotZoomAction;
 extern QAction *mouseTrackerAction;
 extern QAction *whiteThemeAction;
+#if defined(MPL_QT_ENABLE_3D)
 extern QT_DATAVIS_NAMESPACE::QAbstract3DGraph *surfaceGraph;
 extern QWidget *surfaceContainer;
 extern QStackedWidget *plotStack;
@@ -120,6 +124,7 @@ extern int current3DPlot;
 extern int total3DPlots;
 extern QVector<QT_DATAVIS_NAMESPACE::QAbstract3DGraph *> surfaceGraphs;
 extern QVector<QWidget *> surfaceContainers;
+#endif
 
 #define RGB_QT(r, g, b) (                                              \
                       ((static_cast<uint32_t>(r) & 0xFF) << 16) |   \
@@ -140,6 +145,8 @@ void apply_theme();
 void newzoom();
 bool replotCurrentData();
 long readdata();
+void resetReaddataBuffer();
+bool readdataBufferHasData();
 void print();
 void save();
 void savePdfOrEps();

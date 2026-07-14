@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <limits.h>
+#include <string.h>
 #include "graph.h"
 
 #ifndef SDDS_LINETYPE_SUBTYPE_MULT
@@ -37,6 +38,44 @@ static int qt_last_linetype = -1;
 int qt_color_index = 0;
 int qt_color_maxindex = 0;
 MotifColor *qt_colors = NULL;
+
+#define QT_OUTPUT_BUFFER_SIZE (256 * 1024)
+
+static unsigned char qt_output_buffer[QT_OUTPUT_BUFFER_SIZE];
+static size_t qt_output_used = 0;
+static short qt_last_x = 0, qt_last_y = 0;
+static enum { QT_COORD_NONE, QT_COORD_MOVE, QT_COORD_VECTOR, QT_COORD_POINT } qt_coordinate_state = QT_COORD_NONE;
+
+static void QT_reset_coordinate_filter(void) {
+  qt_coordinate_state = QT_COORD_NONE;
+}
+
+static int QT_flush_output(void) {
+  if (qt_output_used) {
+    if (fwrite(qt_output_buffer, 1, qt_output_used, QT_pipe) != qt_output_used)
+      return 0;
+    qt_output_used = 0;
+  }
+  return fflush(QT_pipe) == 0;
+}
+
+static int QT_write_record(char command, const void *values, size_t valueBytes) {
+  size_t recordBytes = sizeof(command) + valueBytes;
+
+  if (recordBytes > sizeof(qt_output_buffer)) {
+    if (!QT_flush_output() || fwrite(&command, sizeof(command), 1, QT_pipe) != 1)
+      return 0;
+    return !valueBytes || fwrite(values, 1, valueBytes, QT_pipe) == valueBytes;
+  }
+  if (qt_output_used + recordBytes > sizeof(qt_output_buffer) && !QT_flush_output())
+    return 0;
+  qt_output_buffer[qt_output_used++] = command;
+  if (valueBytes) {
+    memcpy(qt_output_buffer + qt_output_used, values, valueBytes);
+    qt_output_used += valueBytes;
+  }
+  return 1;
+}
 
 int contains_whitespace(char *s) {
   while (*s)
@@ -275,8 +314,9 @@ int QT_init(void) {
 
 int QT_reset(void) {
   static char value = 'R';
-  fwrite(&value, sizeof(value), 1, QT_pipe);
-  fflush(QT_pipe);
+  QT_write_record(value, NULL, 0);
+  QT_flush_output();
+  QT_reset_coordinate_filter();
   qt_last_linetype = -1;
   return 0;
 }
@@ -295,61 +335,68 @@ int QT_sendCoordinates(void) {
   conversion[1] = xmin - conversion[0] * pmin * QT_XMAX;
   conversion[3] = ymin - conversion[2] * qmin * QT_YMAX;
 
-  fwrite(&valueU, sizeof(valueU), 1, QT_pipe);
-  fwrite(conversion, sizeof(*conversion), 4, QT_pipe);
-  fflush(QT_pipe);
+  QT_write_record(valueU, conversion, sizeof(*conversion) * 4);
+  QT_flush_output();
   return 0;
 }
 
 int QT_text(void) {
   static char valueE = 'E';
   QT_sendCoordinates();
-  fwrite(&valueE, sizeof(valueE), 1, QT_pipe);
-  fflush(QT_pipe);
+  QT_write_record(valueE, NULL, 0);
+  QT_flush_output();
+  QT_reset_coordinate_filter();
   qt_last_linetype = -1;
   return 0;
 }
 
 int QT_graphics(void) {
   static char value = 'G';
-  fwrite(&value, sizeof(value), 1, QT_pipe);
-  fflush(QT_pipe);
+  QT_write_record(value, NULL, 0);
+  QT_flush_output();
+  QT_reset_coordinate_filter();
   return 0;
 }
 
 int QT_move(int x, int y) {
   static char value = 'M';
   static short buffer[2];
-  fwrite(&value, sizeof(value), 1, QT_pipe);
   buffer[0] = x;
   buffer[1] = y;
-  fwrite(buffer, sizeof(buffer[0]), 2, QT_pipe);
+  QT_write_record(value, buffer, sizeof(buffer));
+  qt_last_x = buffer[0];
+  qt_last_y = buffer[1];
+  qt_coordinate_state = QT_COORD_MOVE;
   return 0;
 }
 
 int QT_vector(int x, int y) {
   static char value = 'V';
   static short buffer[2];
-  fwrite(&value, sizeof(value), 1, QT_pipe);
   buffer[0] = x;
   buffer[1] = y;
-  fwrite(buffer, sizeof(buffer[0]), 2, QT_pipe);
+  if (qt_coordinate_state == QT_COORD_VECTOR &&
+      qt_last_x == buffer[0] && qt_last_y == buffer[1])
+    return 0;
+  QT_write_record(value, buffer, sizeof(buffer));
+  qt_last_x = buffer[0];
+  qt_last_y = buffer[1];
+  qt_coordinate_state = QT_COORD_VECTOR;
   return 0;
 }
 
 int QT_line_thickness(int lt) {
   static char value = 'W';
   static short buffer;
-  fwrite(&value, sizeof(value), 1, QT_pipe);
   buffer = lt;
-  fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
+  QT_write_record(value, &buffer, sizeof(buffer));
+  QT_reset_coordinate_filter();
   return 0;
 }
 
 int QT_spectral(long num, int spec, unsigned short red0, unsigned short green0, unsigned short blue0, unsigned short red1, unsigned short green1, unsigned short blue1) {
   static char value = 'S';
   static unsigned short buffer[8];
-  fwrite(&value, sizeof(value), 1, QT_pipe);
   buffer[0] = num > 101 ? 101 : num;
   buffer[1] = spec;
   buffer[2] = red0;
@@ -358,7 +405,8 @@ int QT_spectral(long num, int spec, unsigned short red0, unsigned short green0, 
   buffer[5] = red1;
   buffer[6] = green1;
   buffer[7] = blue1;
-  fwrite(buffer, sizeof(*buffer), 8, QT_pipe);
+  QT_write_record(value, buffer, sizeof(buffer));
+  QT_reset_coordinate_filter();
   return 0;
 }
 
@@ -366,26 +414,24 @@ int QT_linetype(int lt) {
   static char value = 'L';
   static short buffer;
   if ((qt_color_index == 0) || (lt < 1000)) {
-    fwrite(&value, sizeof(value), 1, QT_pipe);
     buffer = lt;
-    fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
+    QT_write_record(value, &buffer, sizeof(buffer));
   } else {
     if (lt >= SDDS_LINETYPE_SUBTYPE_FLAG && lt > SHRT_MAX) {
       int type = (lt - SDDS_LINETYPE_SUBTYPE_FLAG) % SDDS_LINETYPE_SUBTYPE_MULT;
       int subtype = (lt - SDDS_LINETYPE_SUBTYPE_FLAG) / SDDS_LINETYPE_SUBTYPE_MULT;
       QT_color(qt_colors[type % qt_color_index].red, qt_colors[type % qt_color_index].green, qt_colors[type % qt_color_index].blue);
-      fwrite(&value, sizeof(value), 1, QT_pipe);
       buffer = -(short)(subtype + 1);
-      fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
+      QT_write_record(value, &buffer, sizeof(buffer));
       lt = type;
     } else {
-      fwrite(&value, sizeof(value), 1, QT_pipe);
       buffer = lt;
-      fwrite(&buffer, sizeof(buffer), 1, QT_pipe);
+      QT_write_record(value, &buffer, sizeof(buffer));
       lt = (lt % SDDS_LINETYPE_SUBTYPE_MULT) % qt_color_index;
       QT_color(qt_colors[lt].red, qt_colors[lt].green, qt_colors[lt].blue);
     }
   }
+  QT_reset_coordinate_filter();
   qt_last_linetype = lt;
   return 0;
 }
@@ -393,13 +439,13 @@ int QT_linetype(int lt) {
 int QT_fill_box(int shade, int xl, int xh, int yl, int yh) {
   static char value = 'B';
   static short buffer[5];
-  fwrite(&value, sizeof(value), 1, QT_pipe);
   buffer[0] = shade;
   buffer[1] = xl;
   buffer[2] = xh;
   buffer[3] = yl;
   buffer[4] = yh;
-  fwrite(buffer, sizeof(*buffer), 5, QT_pipe);
+  QT_write_record(value, buffer, sizeof(buffer));
+  QT_reset_coordinate_filter();
   qt_last_linetype = -1;
   return 0;
 }
@@ -407,21 +453,26 @@ int QT_fill_box(int shade, int xl, int xh, int yl, int yh) {
 int QT_dot(int x, int y, int number) {
   static char value = 'P';
   static short buffer[2];
-  fwrite(&value, sizeof(value), 1, QT_pipe);
   buffer[0] = x;
   buffer[1] = y;
-  fwrite(buffer, sizeof(*buffer), 2, QT_pipe);
+  if (qt_coordinate_state == QT_COORD_POINT &&
+      qt_last_x == buffer[0] && qt_last_y == buffer[1])
+    return 0;
+  QT_write_record(value, buffer, sizeof(buffer));
+  qt_last_x = buffer[0];
+  qt_last_y = buffer[1];
+  qt_coordinate_state = QT_COORD_POINT;
   return 0;
 }
 
 int QT_color(unsigned short red, unsigned short green, unsigned short blue) {
   static char value = 'C';
   static unsigned short buffer[3];
-  fwrite(&value, sizeof(value), 1, QT_pipe);
   buffer[0] = red;
   buffer[1] = green;
   buffer[2] = blue;
-  fwrite(buffer, sizeof(*buffer), 3, QT_pipe);
+  QT_write_record(value, buffer, sizeof(buffer));
+  QT_reset_coordinate_filter();
   return 0;
 }
 

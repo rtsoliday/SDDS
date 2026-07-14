@@ -616,28 +616,28 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                     split[i] = splitparam;
                   }
                 }
-              append_to_dataset(requestData[ireq].dataset+iset+inewdata, x, enumerate, y, x1, y1, split, sortKey,
-                                graphicType, graphicSubtype, pointLabel, points);
-              				
-              if (x)
-                free(x);
-              if (enumerate)
-                free(enumerate);
-              free(y);
-              if (x1)
-                free(x1);
-              if (y1)
-                free(y1);
-              if (split)
-                free(split);
-              if (sortKey)
-                free(sortKey);
-              if (pointLabel)
-                free(pointLabel);
-              if (graphicType)
-                free(graphicType);
-              if (graphicSubtype)
-                free(graphicSubtype);
+              if (!append_to_dataset(requestData[ireq].dataset+iset+inewdata, x, enumerate, y, x1, y1, split, sortKey,
+                                     graphicType, graphicSubtype, pointLabel, points, 1)) {
+                if (x)
+                  free(x);
+                if (enumerate)
+                  free(enumerate);
+                free(y);
+                if (x1)
+                  free(x1);
+                if (y1)
+                  free(y1);
+                if (split)
+                  free(split);
+                if (sortKey)
+                  free(sortKey);
+                if (pointLabel)
+                  free(pointLabel);
+                if (graphicType)
+                  free(graphicType);
+                if (graphicSubtype)
+                  free(graphicSubtype);
+              }
               break;
             case PARAMETER_DATA:
 	    
@@ -670,10 +670,10 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                 }
               */
 
-              append_to_dataset(requestData[ireq].dataset+iset+inewdata, &xparam, NULL, &yparam, 
+              append_to_dataset(requestData[ireq].dataset+iset+inewdata, &xparam, NULL, &yparam,
                                 (plreq->x1name[idata]?&x1param:NULL),
                                 (plreq->y1name[idata]?&y1param:NULL), ((plreq->split.flags&SPLIT_PARAMETERCHANGE)?&splitparam:NULL),
-                                NULL, NULL, NULL, NULL, 1);
+                                NULL, NULL, NULL, NULL, 1, 0);
               break;
             case ARRAY_DATA:
               
@@ -716,8 +716,15 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                 }
                 SDDS_Bomb(s);
               }
-              append_to_dataset(requestData[ireq].dataset+iset+inewdata, x, NULL, y, x1, y1, NULL, NULL,
-                                NULL, NULL, NULL, nx);
+              if (!append_to_dataset(requestData[ireq].dataset+iset+inewdata, x, NULL, y, x1, y1, NULL, NULL,
+                                     NULL, NULL, NULL, nx, 1)) {
+                free(x);
+                free(y);
+                if (x1)
+                  free(x1);
+                if (y1)
+                  free(y1);
+              }
               break;
             }
             inewdata++;

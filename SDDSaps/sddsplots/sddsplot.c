@@ -3405,19 +3405,15 @@ PLOT_DATA *add_dataset_slots(PLOT_DATA *dataset, long datasets, long datanames)
   return (dataset);
 }
 
-void append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate,
+long append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate,
                        double *y, double *x1, double *y1, double *split_data,
-                       double *sortKey, int32_t *graphicType, int32_t *graphicSubtype, char **pointLabel, long points)
+                       double *sortKey, int32_t *graphicType, int32_t *graphicSubtype,
+                       char **pointLabel, long points, long transferOwnership)
 {
-  long i;
-  dataset->x = trealloc(dataset->x, sizeof(*dataset->x) * (dataset->points + points));
-  dataset->y = trealloc(dataset->y, sizeof(*dataset->y) * (dataset->points + points));
+  long i, required, newCapacity;
+
   if (!x && !y)
     bomb("NULL x and y pointers seen (append_to_dataset)", NULL);
-  if (x1)
-    dataset->x1 = trealloc(dataset->x1, sizeof(*dataset->x1) * (dataset->points + points));
-  if (enumerate)
-    dataset->enumerate = trealloc(dataset->enumerate, sizeof(*dataset->enumerate) * (dataset->points + points));
   if (!x)
     {
       if (!enumerate)
@@ -3434,56 +3430,123 @@ void append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate,
         SDDS_Bomb("Internal error: enumerate plane switched (append_to_dataset)");
       dataset->enumPlane = 1;
     }
-  if (pointLabel)
-    dataset->pointLabel = trealloc(dataset->pointLabel, sizeof(*dataset->pointLabel) * (dataset->points + points));
-  if (y1)
-    dataset->y1 = trealloc(dataset->y1, sizeof(*dataset->y1) * (dataset->points + points));
-  if (split_data)
-    dataset->split_data = trealloc(dataset->split_data, sizeof(*dataset->split_data) * (dataset->points + points));
-  if (sortKey)
-    dataset->sort_key = trealloc(dataset->sort_key, sizeof(*dataset->sort_key) * (dataset->points + points));
-  if (graphicType)
-    dataset->graphicType = trealloc(dataset->graphicType, sizeof(*dataset->graphicType) * (dataset->points + points));
-  if (graphicSubtype)
-    dataset->graphicSubtype = trealloc(dataset->graphicSubtype, sizeof(*dataset->graphicSubtype) * (dataset->points + points));
-  for (i = 0; i < points; i++)
+
+  /* SDDS accessors return caller-owned arrays.  Retain the first page's
+   * arrays directly instead of allocating and copying them. */
+  if (transferOwnership && dataset->points == 0 && points > 0)
     {
-      if (enumerate && !x)
-        {
-          dataset->x[i + dataset->points] = i + dataset->points;
-          dataset->enumerate[i + dataset->points] = enumerate[i];
-        }
+      if (x)
+        dataset->x = x;
       else
-        dataset->x[i + dataset->points] = x[i];
-      if (enumerate && !y)
         {
-          dataset->y[i + dataset->points] = i + dataset->points;
-          dataset->enumerate[i + dataset->points] = enumerate[i];
+          dataset->x = tmalloc(sizeof(*dataset->x) * points);
+          for (i = 0; i < points; i++)
+            dataset->x[i] = i;
         }
+      if (y)
+        dataset->y = y;
       else
-        dataset->y[i + dataset->points] = y[i];
-      if (x1)
-        dataset->x1[i + dataset->points] = x1[i];
-      if (y1)
-        dataset->y1[i + dataset->points] = y1[i];
+        {
+          dataset->y = tmalloc(sizeof(*dataset->y) * points);
+          for (i = 0; i < points; i++)
+            dataset->y[i] = i;
+        }
+      dataset->x1 = x1;
+      dataset->y1 = y1;
+      dataset->enumerate = enumerate;
+      dataset->pointLabel = pointLabel;
+      dataset->split_data = split_data;
+      dataset->sort_key = sortKey;
+      dataset->graphicType = graphicType;
+      dataset->graphicSubtype = graphicSubtype;
       if (split_data)
-        {
-          dataset->split_data[i + dataset->points] = split_data[i];
-          if (dataset->split_min > split_data[i])
-            dataset->split_min = split_data[i];
-          if (dataset->split_max < split_data[i])
-            dataset->split_max = split_data[i];
-        }
-      if (sortKey)
-        dataset->sort_key[i + dataset->points] = sortKey[i];
-      if (graphicType)
-        dataset->graphicType[i + dataset->points] = graphicType[i];
-      if (graphicSubtype)
-        dataset->graphicSubtype[i + dataset->points] = graphicSubtype[i];
-      if (pointLabel)
-        dataset->pointLabel[i + dataset->points] = pointLabel[i];
+        for (i = 0; i < points; i++)
+          {
+            if (dataset->split_min > split_data[i])
+              dataset->split_min = split_data[i];
+            if (dataset->split_max < split_data[i])
+              dataset->split_max = split_data[i];
+          }
+      dataset->points = dataset->pointsAllocated = points;
+      return 1;
     }
+
+  if (points < 0 || dataset->points > LONG_MAX - points)
+    SDDS_Bomb("Too many points in append_to_dataset");
+  required = dataset->points + points;
+  newCapacity = dataset->pointsAllocated;
+  if (newCapacity < dataset->points)
+    newCapacity = dataset->points;
+  if (newCapacity < required)
+    {
+      if (newCapacity < 16)
+        newCapacity = 16;
+      while (newCapacity < required)
+        {
+          long increment = newCapacity / 2 + 1;
+          if (newCapacity > LONG_MAX - increment)
+            {
+              newCapacity = required;
+              break;
+            }
+          newCapacity += increment;
+        }
+      dataset->x = trealloc(dataset->x, sizeof(*dataset->x) * newCapacity);
+      dataset->y = trealloc(dataset->y, sizeof(*dataset->y) * newCapacity);
+      if (dataset->x1 || x1)
+        dataset->x1 = trealloc(dataset->x1, sizeof(*dataset->x1) * newCapacity);
+      if (dataset->y1 || y1)
+        dataset->y1 = trealloc(dataset->y1, sizeof(*dataset->y1) * newCapacity);
+      if (dataset->enumerate || enumerate)
+        dataset->enumerate = trealloc(dataset->enumerate, sizeof(*dataset->enumerate) * newCapacity);
+      if (dataset->pointLabel || pointLabel)
+        dataset->pointLabel = trealloc(dataset->pointLabel, sizeof(*dataset->pointLabel) * newCapacity);
+      if (dataset->split_data || split_data)
+        dataset->split_data = trealloc(dataset->split_data, sizeof(*dataset->split_data) * newCapacity);
+      if (dataset->sort_key || sortKey)
+        dataset->sort_key = trealloc(dataset->sort_key, sizeof(*dataset->sort_key) * newCapacity);
+      if (dataset->graphicType || graphicType)
+        dataset->graphicType = trealloc(dataset->graphicType, sizeof(*dataset->graphicType) * newCapacity);
+      if (dataset->graphicSubtype || graphicSubtype)
+        dataset->graphicSubtype = trealloc(dataset->graphicSubtype, sizeof(*dataset->graphicSubtype) * newCapacity);
+      dataset->pointsAllocated = newCapacity;
+    }
+
+  if (x)
+    memcpy(dataset->x + dataset->points, x, sizeof(*x) * points);
+  else
+    for (i = 0; i < points; i++)
+      dataset->x[i + dataset->points] = i + dataset->points;
+  if (y)
+    memcpy(dataset->y + dataset->points, y, sizeof(*y) * points);
+  else
+    for (i = 0; i < points; i++)
+      dataset->y[i + dataset->points] = i + dataset->points;
+  if (x1)
+    memcpy(dataset->x1 + dataset->points, x1, sizeof(*x1) * points);
+  if (y1)
+    memcpy(dataset->y1 + dataset->points, y1, sizeof(*y1) * points);
+  if (enumerate)
+    memcpy(dataset->enumerate + dataset->points, enumerate, sizeof(*enumerate) * points);
+  if (pointLabel)
+    memcpy(dataset->pointLabel + dataset->points, pointLabel, sizeof(*pointLabel) * points);
+  if (sortKey)
+    memcpy(dataset->sort_key + dataset->points, sortKey, sizeof(*sortKey) * points);
+  if (graphicType)
+    memcpy(dataset->graphicType + dataset->points, graphicType, sizeof(*graphicType) * points);
+  if (graphicSubtype)
+    memcpy(dataset->graphicSubtype + dataset->points, graphicSubtype, sizeof(*graphicSubtype) * points);
+  if (split_data)
+    for (i = 0; i < points; i++)
+      {
+        dataset->split_data[i + dataset->points] = split_data[i];
+        if (dataset->split_min > split_data[i])
+          dataset->split_min = split_data[i];
+        if (dataset->split_max < split_data[i])
+          dataset->split_max = split_data[i];
+      }
   dataset->points += points;
+  return 0;
 }
 
 void show_plot_spec(PLOT_SPEC *plspec, FILE *fp)

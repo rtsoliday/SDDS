@@ -1504,6 +1504,7 @@ static QImage buildExportImage(const QSize &exportSize) {
     plotImage = pixmap.toImage().scaled(exportSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
                       .convertToFormat(QImage::Format_ARGB32);
   }
+#if defined(MPL_QT_ENABLE_3D)
   if (surfaceGraph && surfaceContainer && surfaceContainer->isVisible()) {
     QRect containerGeom = surfaceContainer->geometry();
     double scaleX = (exportSize.width() > 0 && canvas->width() > 0)
@@ -1522,6 +1523,7 @@ static QImage buildExportImage(const QSize &exportSize) {
       painter.end();
     }
   }
+#endif
   return plotImage;
 }
 
@@ -1595,6 +1597,7 @@ static bool renderPlotWithPrinter(const QString &fileName,
     canvas->render(&painter);
     painter.restore();
   }
+#if defined(MPL_QT_ENABLE_3D)
   if (surfaceGraph && surfaceContainer && surfaceContainer->isVisible()) {
     QRect containerGeom = surfaceContainer->geometry();
     double scaleX = (target.width() > 0 && canvas->width() > 0)
@@ -1609,6 +1612,7 @@ static bool renderPlotWithPrinter(const QString &fileName,
     QPoint scaledTopLeft(std::lround(containerGeom.x() * scaleX), std::lround(containerGeom.y() * scaleY));
     painter.drawImage(QRect(scaledTopLeft, scaledSize), graphImage);
   }
+#endif
   painter.end();
   onBlack();
   return true;
@@ -1742,6 +1746,7 @@ void print() {
       QCoreApplication::processEvents();
       canvas->render(&painter);
       painter.restore();
+#if defined(MPL_QT_ENABLE_3D)
       if (surfaceGraph && surfaceContainer && surfaceContainer->isVisible()) {
         QRect containerGeom = surfaceContainer->geometry();
         QSize scaledSize(std::lround(containerGeom.width() * scaleX),
@@ -1750,6 +1755,7 @@ void print() {
         QPoint scaledTopLeft(std::lround(containerGeom.x() * scaleX), std::lround(containerGeom.y() * scaleY));
         painter.drawImage(QRect(scaledTopLeft, scaledSize), graphImage);
       }
+#endif
     }
     painter.end();
     onBlack();

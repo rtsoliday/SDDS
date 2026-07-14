@@ -1,5 +1,7 @@
 #include "mpl_qt.h"
+#if defined(MPL_QT_ENABLE_3D)
 #include <QtDataVisualization/Q3DTheme>
+#endif
 #include <QColor>
 #include <QGuiApplication>
 #include <QLabel>
@@ -342,6 +344,7 @@ void quit() {
 }
 
 void apply_theme() {
+#if defined(MPL_QT_ENABLE_3D)
   if (surfaceGraph) {
     QT_DATAVIS_NAMESPACE::Q3DTheme *theme = surfaceGraph->activeTheme();
     QColor bg = whiteTheme ? Qt::white : Qt::black;
@@ -368,7 +371,9 @@ void apply_theme() {
         }
       }
     }
-  } else {
+  } else
+#endif
+  {
     if (whiteTheme)
       onWhite();
     else
@@ -377,6 +382,7 @@ void apply_theme() {
 }
 
 void nav_next(QMainWindow *mainWindow) {
+#if defined(MPL_QT_ENABLE_3D)
   if (plotStack) {
     if (current3DPlot >= total3DPlots - 1) {
       QApplication::beep();
@@ -393,6 +399,7 @@ void nav_next(QMainWindow *mainWindow) {
     }
     return;
   }
+#endif
   if (cur == (struct PLOTREC *)NULL) {
     QApplication::beep();
   } else if (cur == last) {
@@ -406,6 +413,7 @@ void nav_next(QMainWindow *mainWindow) {
 }
 
 void nav_previous(QMainWindow *mainWindow) {
+#if defined(MPL_QT_ENABLE_3D)
   if (plotStack) {
     if (current3DPlot == 0) {
       QApplication::beep();
@@ -422,6 +430,7 @@ void nav_previous(QMainWindow *mainWindow) {
     }
     return;
   }
+#endif
   if (cur == (struct PLOTREC *)NULL) {
     QApplication::beep();
   } else if (cur->prev == (struct PLOTREC *)NULL) {
@@ -435,10 +444,12 @@ void nav_previous(QMainWindow *mainWindow) {
 }
 
 void delete_current(QMainWindow *mainWindow) {
+#if defined(MPL_QT_ENABLE_3D)
   if (plotStack) {
     QApplication::beep();
     return;
   }
+#endif
   if (cur == (struct PLOTREC *)NULL) {
     QApplication::beep();
   } else {
@@ -575,6 +586,7 @@ void toggleFullScreen(QMainWindow *mainWindow) {
 }
 
 void to_number(QMainWindow *mainWindow) {
+#if defined(MPL_QT_ENABLE_3D)
   if (plotStack) {
     bool ok;
     int number = QInputDialog::getInt(mainWindow, "Enter a Plot Number",
@@ -595,6 +607,7 @@ void to_number(QMainWindow *mainWindow) {
     }
     return;
   }
+#endif
   bool ok;
   int number = QInputDialog::getInt(
                                     mainWindow,

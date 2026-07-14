@@ -718,6 +718,7 @@ typedef struct {
   double split_min,split_max;
   DATA_INFO info[2]; /* x, y */
   long points, pointsStored;   /* If scrollParent is non-zero, then points and pointsStored may be different */
+  long pointsAllocated;       /* Capacity used while pages are appended during input */
   GRAPHIC_SPEC graphic;
   char *legend, *label[4];
   STRING_LABEL_SPEC *string_label;
@@ -897,8 +898,9 @@ void read_sddsplot_data(PLOT_SPEC *plspec);
 void assign_enumerate_values(PLOT_SPEC *plspec);
 void columnbin_sddsplot_data(PLOT_SPEC *plspec);
 PLOT_DATA *add_dataset_slots(PLOT_DATA *dataset, long datasets, long datanames);
-void append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate, double *y, double *x1, double *y1, 
-                       double *split, double *sortKey, int32_t *graphicType, int32_t *graphicSubtype, char **pointLabel, long points);
+long append_to_dataset(PLOT_DATA *dataset, double *x, char **enumerate, double *y, double *x1, double *y1,
+                       double *split, double *sortKey, int32_t *graphicType, int32_t *graphicSubtype,
+                       char **pointLabel, long points, long transferOwnership);
 void determine_panel_assignments(PLOT_SPEC *plspec);
 long datanameCompare(PLOT_REQUEST *plreq1, long index1, PLOT_REQUEST *plreq2, long index2, long invertString);
 void perform_dataset_sort(PLOT_SPEC *plspec);
