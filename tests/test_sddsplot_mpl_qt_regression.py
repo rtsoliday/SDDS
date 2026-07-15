@@ -4,6 +4,11 @@ The normal test run exercises the binaries in ``bin/<platform>``.  To run the
 same tests against older builds as well, set ``SDDS_TEST_COMPAT_BIN_DIRS`` to a
 path-separator-delimited list of additional binary directories.  Protocol tests
 also cross-feed every sddsplot producer into every mpl_qt consumer.
+
+The Linux UI-event integration test uses runtime symbol interposition and is
+therefore disabled by default.  It may run only on an approved host with
+``SDDS_RUN_SECURITY_SENSITIVE_TESTS=1``; executable artifacts are then built
+under ``tests/.security-sensitive-artifacts`` and removed after the test.
 """
 
 from dataclasses import dataclass
@@ -14,6 +19,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -26,6 +32,10 @@ SDDSCONVERT = BIN_DIR / "sddsconvert"
 SDDSMAKEDATASET = BIN_DIR / "sddsmakedataset"
 SDDSSEQUENCE = BIN_DIR / "sddssequence"
 ZOOM_PROBE_SOURCE = ROOT_DIR / "tests" / "mpl_qt_zoom_probe.cc"
+ZOOM_WRAPPER_SOURCE = ROOT_DIR / "tests" / "sddsplot_zoom_wrapper.py"
+SECURITY_SENSITIVE_TESTS_ENABLED = (
+  os.environ.get("SDDS_RUN_SECURITY_SENSITIVE_TESTS") == "1"
+)
 
 
 @dataclass(frozen=True)
@@ -222,6 +232,22 @@ def _read_zoom_calls(path):
   return calls
 
 
+def _fixed_zoom_scales(toolchain, limits, transforms=(1, 1, 0, 0), logs=(0, 0)):
+  completed = _run(
+    [
+      str(toolchain.mpl_qt),
+      "-testZoomScales",
+      *(str(value) for value in (*limits, *transforms, *logs)),
+    ],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+  )
+  argument = completed.stdout.strip()
+  assert argument.startswith("-scales=")
+  return [float(value) for value in argument[8:].split(",")]
+
+
 def _traces(document):
   return [
     trace
@@ -250,11 +276,40 @@ def _create_sequence(path, rows, pages=1, major_order="column"):
 
 
 @requires_plot_tools
+def test_fixed_zoom_scales_keep_narrowing_with_one_visible_x_sample():
+  toolchain = TOOLCHAINS[0]
+  x_values = [index * 0.25 for index in range(17)]
+  selections = [
+    (1.875, 2.125, -1.0, 1.0),
+    (1.95, 2.05, -0.5, 0.5),
+    (1.98, 2.02, -0.25, 0.25),
+  ]
+  ranges = [_fixed_zoom_scales(toolchain, selection) for selection in selections]
+
+  assert [values[:2] for values in ranges] == [
+    list(selection[:2]) for selection in selections
+  ]
+  assert all(
+    sum(minimum <= value <= maximum for value in x_values) == 1
+    for minimum, maximum, *_ in ranges
+  )
+  spans = [maximum - minimum for minimum, maximum, *_ in ranges]
+  assert all(later < earlier for earlier, later in zip(spans, spans[1:]))
+
+
+@requires_plot_tools
+@pytest.mark.skipif(
+  not SECURITY_SENSITIVE_TESTS_ENABLED,
+  reason=(
+    "requires explicitly authorized runtime interposition; set "
+    "SDDS_RUN_SECURITY_SENSITIVE_TESTS=1 on an approved test host"
+  ),
+)
 @pytest.mark.skipif(
   not sys.platform.startswith("linux"),
   reason="the mpl_qt event probe uses Linux symbol interposition",
 )
-def test_replot_zoom_keeps_narrowing_with_one_visible_x_sample(tmp_path):
+def test_security_sensitive_replot_zoom_event_path(tmp_path):
   toolchain = TOOLCHAINS[0]
   data = tmp_path / "zoom.sdds"
   _create_sequence(data, rows=17)
@@ -270,50 +325,53 @@ def test_replot_zoom_keeps_narrowing_with_one_visible_x_sample(tmp_path):
     "zoom-initial",
   )
 
-  probe = tmp_path / "mpl_qt_zoom_probe.so"
-  _compile_zoom_probe(toolchain, probe)
-  log = tmp_path / "zoom-calls.log"
-  wrapper = tmp_path / "sddsplot-zoom-wrapper"
-  wrapper.write_text(
-    "#!/bin/sh\n"
-    "{\n"
-    "  printf '%s\\n' CALL\n"
-    "  for argument do printf 'ARG=%s\\n' \"$argument\"; done\n"
-    f"}} >> {shlex.quote(str(log))}\n"
-    f"exec {shlex.quote(str(toolchain.sddsplot))} \"$@\"\n"
-  )
-  wrapper.chmod(0o755)
-  original_command = " ".join([
-    str(wrapper),
-    f"'{data}'",
-    *(f"'{argument}'" for argument in plot_args),
-    "'-device=qt'",
-  ])
+  artifact_root = ROOT_DIR / "tests" / ".security-sensitive-artifacts"
+  artifact_root.mkdir(exist_ok=True)
+  artifact_dir = Path(tempfile.mkdtemp(prefix="zoom-", dir=artifact_root))
+  try:
+    probe = artifact_dir / "mpl_qt_zoom_probe.so"
+    _compile_zoom_probe(toolchain, probe)
+    log = artifact_dir / "zoom-calls.log"
+    original_command = " ".join([
+      shlex.quote(sys.executable),
+      shlex.quote(str(ZOOM_WRAPPER_SOURCE)),
+      shlex.quote(str(log)),
+      shlex.quote(str(toolchain.sddsplot)),
+      shlex.quote(str(data)),
+      *(shlex.quote(argument) for argument in plot_args),
+      shlex.quote("-device=qt"),
+    ])
 
-  environment = os.environ.copy()
-  environment["QT_QPA_PLATFORM"] = "offscreen"
-  previous_preload = environment.get("LD_PRELOAD")
-  environment["LD_PRELOAD"] = (
-    f"{probe}:{previous_preload}" if previous_preload else str(probe)
-  )
-  completed = subprocess.run(
-    [
-      str(toolchain.mpl_qt),
-      "-command",
-      original_command,
-      "-timeoutHours",
-      "0.01",
-    ],
-    input=stream,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-    env=environment,
-    timeout=30,
-  )
+    environment = os.environ.copy()
+    environment["QT_QPA_PLATFORM"] = "offscreen"
+    previous_preload = environment.get("LD_PRELOAD")
+    environment["LD_PRELOAD"] = (
+      f"{probe}:{previous_preload}" if previous_preload else str(probe)
+    )
+    completed = subprocess.run(
+      [
+        str(toolchain.mpl_qt),
+        "-command",
+        original_command,
+        "-timeoutHours",
+        "0.01",
+      ],
+      input=stream,
+      stdout=subprocess.PIPE,
+      stderr=subprocess.PIPE,
+      env=environment,
+      timeout=30,
+    )
+    calls = _read_zoom_calls(log)
+  finally:
+    shutil.rmtree(artifact_dir)
+    try:
+      artifact_root.rmdir()
+    except OSError:
+      pass
+
   diagnostics = completed.stderr.decode(errors="replace")
   assert completed.returncode == 0, diagnostics
-
-  calls = _read_zoom_calls(log)
   assert len(calls) == 6
   ranges = []
   for call in calls:

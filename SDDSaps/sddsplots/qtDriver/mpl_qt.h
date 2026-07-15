@@ -34,6 +34,7 @@
 //#include <QTest>
 #include <QDebug>    // for qDebug()
 #include <cmath>
+#include <string>
 #if defined(MPL_QT_ENABLE_3D)
 #  include <QtDataVisualization/Q3DSurface>
 #  include <QtDataVisualization/QAbstract3DGraph>
@@ -142,6 +143,11 @@ void quit(void);
 void onBlack();
 void onWhite();
 void apply_theme();
+std::string formatFixedZoomScales(double xminLimit, double xmaxLimit,
+                                  double yminLimit, double ymaxLimit,
+                                  double xmult, double ymult,
+                                  double xoff, double yoff,
+                                  bool xlog, bool ylog);
 void newzoom();
 bool replotCurrentData();
 long readdata();

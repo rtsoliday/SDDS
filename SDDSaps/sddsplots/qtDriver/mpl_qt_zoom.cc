@@ -2,6 +2,21 @@
 #include <cstring>
 #include <string>
 
+std::string formatFixedZoomScales(double xminLimit, double xmaxLimit,
+                                  double yminLimit, double ymaxLimit,
+                                  double xmult, double ymult,
+                                  double xoff, double yoff,
+                                  bool xlog, bool ylog) {
+  char buffer[512];
+  snprintf(buffer, sizeof(buffer),
+           "-scales=%.10g,%.10g,%.10g,%.10g ",
+           xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+           xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+           ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+           ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+  return buffer;
+}
+
 void newzoom() {
   char *original = NULL;
   char *op = NULL;
@@ -61,14 +76,9 @@ void newzoom() {
      * one sample.  Autoscaling limits expand a one-sample range and prevent
      * subsequent zoom operations from narrowing the view. */
     auto updateScalesString = [&]() {
-      char buffer[512];
-      snprintf(buffer, sizeof(buffer),
-               "-scales=%.10g,%.10g,%.10g,%.10g ",
-               xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-               xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-               ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-               ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-      scalesString = buffer;
+      scalesString = formatFixedZoomScales(
+          xminLimit, xmaxLimit, yminLimit, ymaxLimit,
+          xmult, ymult, xoff, yoff, xlog, ylog);
     };
 
     auto ensureScalesString = [&]() {

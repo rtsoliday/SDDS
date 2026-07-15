@@ -2647,6 +2647,33 @@ static void customMessageHandler(QtMsgType type, const QMessageLogContext &conte
  * @return int Exit status.
  */
 int main(int argc, char *argv[]) {
+  /* Narrow non-GUI interface for direct regression testing of zoom scale
+   * calculation.  Keeping this before QApplication also permits headless test
+   * execution without display wrappers or runtime injection. */
+  if (argc == 12 && !strcmp(argv[1], "-testZoomScales")) {
+    double values[8];
+    for (int i = 0; i < 8; ++i) {
+      char *end = nullptr;
+      values[i] = strtod(argv[i + 2], &end);
+      if (!end || end == argv[i + 2] || *end) {
+        fprintf(stderr, "Invalid numeric value for -testZoomScales: %s\n",
+                argv[i + 2]);
+        return 2;
+      }
+    }
+    if ((strcmp(argv[10], "0") && strcmp(argv[10], "1")) ||
+        (strcmp(argv[11], "0") && strcmp(argv[11], "1"))) {
+      fprintf(stderr, "Log flags for -testZoomScales must be 0 or 1\n");
+      return 2;
+    }
+    const std::string scales = formatFixedZoomScales(
+        values[0], values[1], values[2], values[3],
+        values[4], values[5], values[6], values[7],
+        argv[10][0] == '1', argv[11][0] == '1');
+    fprintf(stdout, "%s\n", scales.c_str());
+    return 0;
+  }
+
   qInstallMessageHandler(customMessageHandler);
   lineTypeTable.nEntries = 0;
   lineTypeTable.typeFlag = 0x0000;
