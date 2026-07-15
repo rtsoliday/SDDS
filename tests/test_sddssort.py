@@ -9,6 +9,8 @@ SDDSPRINTOUT = BIN_DIR / "sddsprintout"
 SDDSPROCESS = BIN_DIR / "sddsprocess"
 SDDSCOMBINE = BIN_DIR / "sddscombine"
 SDDSCHECK = BIN_DIR / "sddscheck"
+SDDSMAKEDATASET = BIN_DIR / "sddsmakedataset"
+SDDS2STREAM = BIN_DIR / "sdds2stream"
 
 TOOLS = [
     SDDSSORT,
@@ -17,6 +19,8 @@ TOOLS = [
     SDDSPROCESS,
     SDDSCOMBINE,
     SDDSCHECK,
+    SDDSMAKEDATASET,
+    SDDS2STREAM,
 ]
 
 
@@ -214,6 +218,83 @@ def test_numeric_high(tmp_path):
     )
     values = [line.strip().strip('"') for line in result.stdout.strip().splitlines()]
     assert values == ["A", "B", "2", "10"]
+
+
+@pytest.mark.skipif(not all(tool.exists() for tool in TOOLS), reason="tools not built")
+def test_extreme_integer_and_nan_ordering(tmp_path):
+    integers = tmp_path / "extreme-integers.sdds"
+    subprocess.run(
+        [
+            str(SDDSMAKEDATASET),
+            str(integers),
+            "-column=x,type=long64",
+            "-data=-8000000000000000000,8000000000000000000",
+        ],
+        check=True,
+    )
+    sorted_integers = tmp_path / "sorted-extreme-integers.sdds"
+    subprocess.run(
+        [str(SDDSSORT), str(integers), str(sorted_integers), "-column=x"],
+        check=True,
+    )
+    result = subprocess.run(
+        [str(SDDS2STREAM), str(sorted_integers), "-column=x"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert [int(value) for value in result.stdout.split()] == [
+        -8000000000000000000,
+        8000000000000000000,
+    ]
+
+    absolute_values = tmp_path / "absolute-extreme-integers.sdds"
+    subprocess.run(
+        [
+            str(SDDSMAKEDATASET),
+            str(absolute_values),
+            "-column=x,type=long64",
+            "-data=-9223372036854775808,0",
+        ],
+        check=True,
+    )
+    sorted_absolute = tmp_path / "sorted-absolute-extreme-integers.sdds"
+    subprocess.run(
+        [str(SDDSSORT), str(absolute_values), str(sorted_absolute), "-column=x,absolute"],
+        check=True,
+    )
+    result = subprocess.run(
+        [str(SDDS2STREAM), str(sorted_absolute), "-column=x"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert [int(value) for value in result.stdout.split()] == [0, -9223372036854775808]
+
+    floating_point = tmp_path / "nan-values.sdds"
+    subprocess.run(
+        [
+            str(SDDSMAKEDATASET),
+            str(floating_point),
+            "-column=x,type=double",
+            "-data=nan,2,-1,nan",
+        ],
+        check=True,
+    )
+    sorted_floating_point = tmp_path / "sorted-nan-values.sdds"
+    subprocess.run(
+        [str(SDDSSORT), str(floating_point), str(sorted_floating_point), "-column=x"],
+        check=True,
+    )
+    result = subprocess.run(
+        [str(SDDS2STREAM), str(sorted_floating_point), "-column=x"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    values = [float(value) for value in result.stdout.split()]
+    assert values[:2] == [-1.0, 2.0]
+    assert all(value != value for value in values[2:])
 
 
 @pytest.mark.skipif(not all(tool.exists() for tool in TOOLS), reason="tools not built")

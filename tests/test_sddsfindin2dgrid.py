@@ -62,6 +62,36 @@ def values_file(tmp_path):
   return vals
 
 
+@pytest.fixture
+def nonuniform_grid_file(tmp_path):
+  plain = tmp_path / "nonuniform-plain.txt"
+  plain.write_text(
+    "0 0 0 0\n"
+    "0 2 2 -4\n"
+    "1 0 10 1\n"
+    "1 2 12 -3\n"
+    "4 0 40 4\n"
+    "4 2 42 0\n"
+  )
+  grid = tmp_path / "nonuniform-grid.sdds"
+  subprocess.run(
+    [
+      str(PLAINDATA2SDDS),
+      str(plain),
+      str(grid),
+      "-column=x,double",
+      "-column=y,double",
+      "-column=a,double",
+      "-column=b,double",
+      "-inputMode=ascii",
+      "-outputMode=ascii",
+      "-noRowCount",
+    ],
+    check=True,
+  )
+  return grid
+
+
 def stream_columns(path):
   result = subprocess.run(
     [str(SDDS2STREAM), str(path), "-columns=x,y,a,b", "-page=1"],
@@ -223,3 +253,21 @@ def test_inverse(grid_file, tmp_path):
     "2.000000000000000e-01 8.000000000000000e-01\n"
   )
   assert stream_columns(out) == expected
+
+
+def test_inverse_nonuniform_grid(nonuniform_grid_file, tmp_path):
+  out = tmp_path / "nonuniform-out.sdds"
+  subprocess.run(
+    [
+      str(SDDSFINDIN2DGRID),
+      str(nonuniform_grid_file),
+      str(out),
+      "-gridVariables=x,y",
+      "-findLocationOf=a,b",
+      "-atValues=2,1",
+      "-inverse",
+    ],
+    check=True,
+  )
+  result = [float(value) for value in stream_columns(out).split()]
+  assert result == pytest.approx([2, 1, 21, 0])

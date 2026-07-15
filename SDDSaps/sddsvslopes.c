@@ -450,14 +450,14 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (!SDDS_WriteTable(&outputPage) || SDDS_Terminate(&inputPage))
+  if (!SDDS_WriteTable(&outputPage) || !SDDS_Terminate(&inputPage))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   for (iPage = 0; iPage < copiedPages; iPage++) {
     if (!SDDS_Terminate(&copiedPage[iPage]))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
 
-  if (SDDS_Terminate(&outputPage))
+  if (!SDDS_Terminate(&outputPage))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (tmpfile_used && !replaceFileAndBackUp(inputfile, outputfile))
     exit(EXIT_FAILURE);

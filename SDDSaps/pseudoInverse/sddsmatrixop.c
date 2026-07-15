@@ -551,7 +551,7 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
     matrix_free(temp[j]);
   }
-  if (!!SDDS_Terminate(&outputPage))
+  if (!SDDS_Terminate(&outputPage))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (tmpfile_used && !replaceFileAndBackUp(inputFile, outputFile))
     exit(1);

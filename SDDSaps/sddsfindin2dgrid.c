@@ -132,12 +132,13 @@ static uint64_t ng[2] = {0, 0};
 /* Function prototypes */
 void gridifyData(char *gridVariable[2], uint64_t gridPoints, short presorted);
 int findLocationInGrid(double at1, double at2, double *location, double *value, short interpolate);
+uint64_t findGridInterval(double value, short dimension);
 
 int main(int argc, char **argv) {
   long iArg;
   SDDS_DATASET SDDSin, SDDSout, SDDSvalues;
   SCANNED_ARG *scanned;
-  unsigned long pipeFlags;
+  unsigned long pipeFlags = 0;
   uint64_t gridPoints = 0, atValues = 0, iv = 0, irow = 0;
   char *input = NULL, *output = NULL, *fileForValues = NULL;
   char *findLocationOf[2] = {NULL, NULL}, *gridVariable[2] = {NULL, NULL};
@@ -362,34 +363,20 @@ int main(int argc, char **argv) {
 
     if (inverse) {
       /* Perform ordinary 2D interpolation on the grid */
-      double xmin, ymin, xmax, ymax, dx, dy, v1, v2, fx, fy;
+      double x0, x1, y0, y1, v1, v2, fx, fy;
       double x, y;
-      int64_t ix, iy, ig;
+      uint64_t ix, iy, ig;
 
-      xmin = gridValue[0][0];
-      ymin = gridValue[1][0];
-      xmax = gridValue[0][gridPoints - 1];
-      ymax = gridValue[1][gridPoints - 1];
-      dx = (xmax - xmin) / (ng[0] - 1);
-      dy = (ymax - ymin) / (ng[1] - 1);
       x = atValue[0][iv];
       y = atValue[1][iv];
-      ix = (x - xmin) / dx;
-      if (ix < 0) {
-        ix = 0;
-      }
-      if (ix >= (int64_t)(ng[0] - 1)) {
-        ix = ng[0] - 2;
-      }
-      iy = (y - ymin) / dy;
-      if (iy < 0) {
-        iy = 0;
-      }
-      if (iy >= (int64_t)(ng[1] - 1)) {
-        iy = ng[1] - 2;
-      }
-      fx = (x - (ix * dx + xmin)) / dx;
-      fy = (y - (iy * dy + ymin)) / dy;
+      ix = findGridInterval(x, 0);
+      iy = findGridInterval(y, 1);
+      x0 = gridValue[0][ix * ng[1]];
+      x1 = gridValue[0][(ix + 1) * ng[1]];
+      y0 = gridValue[1][iy];
+      y1 = gridValue[1][iy + 1];
+      fx = (x - x0) / (x1 - x0);
+      fy = (y - y0) / (y1 - y0);
 
       ig = ix * ng[1] + iy;
       v1 = valueAtLocation[0][ig] * (1 - fx) + valueAtLocation[0][ig + ng[1]] * fx;
@@ -430,7 +417,7 @@ int main(int argc, char **argv) {
   }
 
   if (!SDDS_WritePage(&SDDSout) || !SDDS_Terminate(&SDDSout) ||
-      SDDS_Terminate(&SDDSin)) {
+      !SDDS_Terminate(&SDDSin)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
   if (gridValue[0]) {
@@ -440,6 +427,9 @@ int main(int argc, char **argv) {
     free(valueAtLocation[1]);
     gridValue[0] = gridValue[1] = valueAtLocation[0] = valueAtLocation[1] = NULL;
   }
+  free(atValue[0]);
+  free(atValue[1]);
+  free_scanargs(&scanned, argc);
   return EXIT_SUCCESS;
 }
 
@@ -483,7 +473,9 @@ double distance(double *position, long *invalid) {
     achieved[i] = v[i];
   }
 
-  return pow(target[0] - v[0], 2) + pow(target[1] - v[1], 2);
+  v[0] = target[0] - v[0];
+  v[1] = target[1] - v[1];
+  return v[0] * v[0] + v[1] * v[1];
 }
 
 int findLocationInGrid(double at1, double at2, double *location, double *value, short interpolate) {
@@ -495,7 +487,9 @@ int findLocationInGrid(double at1, double at2, double *location, double *value, 
   for (ix = 0; ix < ng[0]; ix++) {
     for (iy = 0; iy < ng[1]; iy++) {
       j = ix * ng[1] + iy;
-      delta = pow(valueAtLocation[0][j] - at1, 2) + pow(valueAtLocation[1][j] - at2, 2);
+      double delta0 = valueAtLocation[0][j] - at1;
+      double delta1 = valueAtLocation[1][j] - at2;
+      delta = delta0 * delta0 + delta1 * delta1;
       if (delta < bestDelta) {
         location[0] = gridValue[0][j];
         location[1] = gridValue[1][j];
@@ -521,24 +515,20 @@ int findLocationInGrid(double at1, double at2, double *location, double *value, 
     if (simplexMin(&result, start, step, lower, upper, NULL, 2, 0, 1e-14, distance,
                    NULL, 1500, 3, 12, 3, 1, 0) >= 0) {
       double a00, a01, a10, a11, a0, a1, fx, fy;
-      ix = start[0];
-      iy = start[1];
-      if (start[0] < 0)
-        ix = 0;
-      if (ix >= (int64_t)(ng[0] - 1))
-        ix = ng[0] - 2;
-      if (start[1] < 0)
-        iy = 0;
-      if (iy >= (int64_t)(ng[1] - 1))
-        iy = ng[1] - 2;
-      fx = start[0] - ix;
-      fy = start[1] - iy;
+      int64_t cellX = start[0] < 0 ? 0 : (int64_t)start[0];
+      int64_t cellY = start[1] < 0 ? 0 : (int64_t)start[1];
+      if (cellX >= (int64_t)(ng[0] - 1))
+        cellX = ng[0] - 2;
+      if (cellY >= (int64_t)(ng[1] - 1))
+        cellY = ng[1] - 2;
+      fx = start[0] - cellX;
+      fy = start[1] - cellY;
 
       for (i = 0; i < 2; i++) {
-        a00 = gridValue[i][(ix + 0) * ng[1] + (iy + 0)];
-        a10 = gridValue[i][(ix + 1) * ng[1] + (iy + 0)];
-        a01 = gridValue[i][(ix + 0) * ng[1] + (iy + 1)];
-        a11 = gridValue[i][(ix + 1) * ng[1] + (iy + 1)];
+        a00 = gridValue[i][(cellX + 0) * ng[1] + (cellY + 0)];
+        a10 = gridValue[i][(cellX + 1) * ng[1] + (cellY + 0)];
+        a01 = gridValue[i][(cellX + 0) * ng[1] + (cellY + 1)];
+        a11 = gridValue[i][(cellX + 1) * ng[1] + (cellY + 1)];
         a0 = a00 + (a10 - a00) * fx;
         a1 = a01 + (a11 - a01) * fx;
         location[i] = a0 + (a1 - a0) * fy;
@@ -548,6 +538,28 @@ int findLocationInGrid(double at1, double at2, double *location, double *value, 
   }
 
   return 1;
+}
+
+uint64_t findGridInterval(double value, short dimension) {
+  uint64_t lower = 0, upper = ng[dimension] - 1, middle;
+  double coordinate;
+
+  coordinate = dimension == 0 ? gridValue[0][0] : gridValue[1][0];
+  if (value <= coordinate)
+    return 0;
+  coordinate = dimension == 0 ? gridValue[0][upper * ng[1]] : gridValue[1][upper];
+  if (value >= coordinate)
+    return upper - 1;
+
+  while (upper - lower > 1) {
+    middle = lower + (upper - lower) / 2;
+    coordinate = dimension == 0 ? gridValue[0][middle * ng[1]] : gridValue[1][middle];
+    if (value < coordinate)
+      upper = middle;
+    else
+      lower = middle;
+  }
+  return lower;
 }
 
 int compareGridLocations(const void *data1, const void *data2) {

@@ -140,6 +140,8 @@ typedef struct
   long index, type;
   short decreasing_order, maximize_order, absolute;
   double *data;
+  void *column_data;
+  int32_t element_size;
 } SORT_REQUEST;
 
 static char *order_mode[5] = {
@@ -420,52 +422,55 @@ static long sort_requests;
 static int64_t *sort_row_index;
 
 int SDDS_CompareData(SDDS_DATASET *SDDS_dataset, short type, short absolute, void *data1, void *data2) {
-  double ldouble_diff;
-  double double_diff;
-  float float_diff;
-  int32_t long_diff;
-  int64_t long64_diff;
-  short short_diff;
-  int char_diff;
+  long double ldouble1, ldouble2;
+  double double1, double2;
+  float float1, float2;
+  int64_t long64_1, long64_2;
+  int32_t long1, long2;
+  int16_t short1, short2;
+  char char1, char2;
+  uint64_t magnitude1, magnitude2;
+
+  (void)SDDS_dataset;
 
   if (!absolute) {
     switch (type) {
     case SDDS_LONGDOUBLE:
-      if ((ldouble_diff = *(long double *)data1 - *(long double *)data2) > 0)
-        return (1);
-      else if (ldouble_diff < 0)
-        return (-1);
-      return (0);
+      ldouble1 = *(long double *)data1;
+      ldouble2 = *(long double *)data2;
+      if (isnan(ldouble1))
+        return isnan(ldouble2) ? 0 : 1;
+      if (isnan(ldouble2))
+        return -1;
+      return ldouble1 > ldouble2 ? 1 : (ldouble1 < ldouble2 ? -1 : 0);
     case SDDS_DOUBLE:
-      if ((double_diff = *(double *)data1 - *(double *)data2) > 0)
-        return (1);
-      else if (double_diff < 0)
-        return (-1);
-      return (0);
+      double1 = *(double *)data1;
+      double2 = *(double *)data2;
+      if (isnan(double1))
+        return isnan(double2) ? 0 : 1;
+      if (isnan(double2))
+        return -1;
+      return double1 > double2 ? 1 : (double1 < double2 ? -1 : 0);
     case SDDS_FLOAT:
-      if ((float_diff = *(float *)data1 - *(float *)data2) > 0)
-        return (1);
-      else if (float_diff < 0)
-        return (-1);
-      return (0);
+      float1 = *(float *)data1;
+      float2 = *(float *)data2;
+      if (isnan(float1))
+        return isnan(float2) ? 0 : 1;
+      if (isnan(float2))
+        return -1;
+      return float1 > float2 ? 1 : (float1 < float2 ? -1 : 0);
     case SDDS_LONG64:
-      if ((long64_diff = *(int64_t *)data1 - *(int64_t *)data2) > 0)
-        return (1);
-      else if (long64_diff < 0)
-        return (-1);
-      return (0);
+      long64_1 = *(int64_t *)data1;
+      long64_2 = *(int64_t *)data2;
+      return long64_1 > long64_2 ? 1 : (long64_1 < long64_2 ? -1 : 0);
     case SDDS_LONG:
-      if ((long_diff = *(int32_t *)data1 - *(int32_t *)data2) > 0)
-        return (1);
-      else if (long_diff < 0)
-        return (-1);
-      return (0);
+      long1 = *(int32_t *)data1;
+      long2 = *(int32_t *)data2;
+      return long1 > long2 ? 1 : (long1 < long2 ? -1 : 0);
     case SDDS_SHORT:
-      if ((short_diff = *(short *)data1 - *(short *)data2) > 0)
-        return (1);
-      else if (short_diff < 0)
-        return (-1);
-      return (0);
+      short1 = *(short *)data1;
+      short2 = *(short *)data2;
+      return short1 > short2 ? 1 : (short1 < short2 ? -1 : 0);
     case SDDS_ULONG64:
       if (*(uint64_t *)data1 > *(uint64_t *)data2)
         return 1;
@@ -485,11 +490,9 @@ int SDDS_CompareData(SDDS_DATASET *SDDS_dataset, short type, short absolute, voi
         return -1;
       return 0;
     case SDDS_CHARACTER:
-      if ((char_diff = *(char *)data1 - *(char *)data2) > 0)
-        return (1);
-      else if (char_diff < 0)
-        return (-1);
-      return (0);
+      char1 = *(char *)data1;
+      char2 = *(char *)data2;
+      return char1 > char2 ? 1 : (char1 < char2 ? -1 : 0);
     case SDDS_STRING:
       if (numericHigh)
         return (strcmp_nh(*(char **)data1, *(char **)data2));
@@ -503,41 +506,47 @@ int SDDS_CompareData(SDDS_DATASET *SDDS_dataset, short type, short absolute, voi
   } else {
     switch (type) {
     case SDDS_LONGDOUBLE:
-      if ((ldouble_diff = fabsl(*(long double *)data1) - fabsl(*(long double *)data2)) > 0)
-        return (1);
-      else if (ldouble_diff < 0)
-        return (-1);
-      return (0);
+      ldouble1 = fabsl(*(long double *)data1);
+      ldouble2 = fabsl(*(long double *)data2);
+      if (isnan(ldouble1))
+        return isnan(ldouble2) ? 0 : 1;
+      if (isnan(ldouble2))
+        return -1;
+      return ldouble1 > ldouble2 ? 1 : (ldouble1 < ldouble2 ? -1 : 0);
     case SDDS_DOUBLE:
-      if ((double_diff = fabs(*(double *)data1) - fabs(*(double *)data2)) > 0)
-        return (1);
-      else if (double_diff < 0)
-        return (-1);
-      return (0);
+      double1 = fabs(*(double *)data1);
+      double2 = fabs(*(double *)data2);
+      if (isnan(double1))
+        return isnan(double2) ? 0 : 1;
+      if (isnan(double2))
+        return -1;
+      return double1 > double2 ? 1 : (double1 < double2 ? -1 : 0);
     case SDDS_FLOAT:
-      if ((float_diff = fabsf(*(float *)data1) - fabsf(*(float *)data2)) > 0)
-        return (1);
-      else if (float_diff < 0)
-        return (-1);
-      return (0);
+      float1 = fabsf(*(float *)data1);
+      float2 = fabsf(*(float *)data2);
+      if (isnan(float1))
+        return isnan(float2) ? 0 : 1;
+      if (isnan(float2))
+        return -1;
+      return float1 > float2 ? 1 : (float1 < float2 ? -1 : 0);
     case SDDS_LONG64:
-      if ((long64_diff = llabs(*(int64_t *)data1) - llabs(*(int64_t *)data2)) > 0)
-        return (1);
-      else if (long64_diff < 0)
-        return (-1);
-      return (0);
+      long64_1 = *(int64_t *)data1;
+      long64_2 = *(int64_t *)data2;
+      magnitude1 = long64_1 < 0 ? -(uint64_t)long64_1 : (uint64_t)long64_1;
+      magnitude2 = long64_2 < 0 ? -(uint64_t)long64_2 : (uint64_t)long64_2;
+      return magnitude1 > magnitude2 ? 1 : (magnitude1 < magnitude2 ? -1 : 0);
     case SDDS_LONG:
-      if ((long_diff = labs(*(int32_t *)data1) - labs(*(int32_t *)data2)) > 0)
-        return (1);
-      else if (long_diff < 0)
-        return (-1);
-      return (0);
+      long1 = *(int32_t *)data1;
+      long2 = *(int32_t *)data2;
+      magnitude1 = long1 < 0 ? (uint64_t)(-(int64_t)long1) : (uint64_t)long1;
+      magnitude2 = long2 < 0 ? (uint64_t)(-(int64_t)long2) : (uint64_t)long2;
+      return magnitude1 > magnitude2 ? 1 : (magnitude1 < magnitude2 ? -1 : 0);
     case SDDS_SHORT:
-      if ((short_diff = abs(*(short *)data1) - abs(*(short *)data2)) > 0)
-        return (1);
-      else if (short_diff < 0)
-        return (-1);
-      return (0);
+      short1 = *(short *)data1;
+      short2 = *(short *)data2;
+      magnitude1 = short1 < 0 ? (uint64_t)(-(int32_t)short1) : (uint64_t)short1;
+      magnitude2 = short2 < 0 ? (uint64_t)(-(int32_t)short2) : (uint64_t)short2;
+      return magnitude1 > magnitude2 ? 1 : (magnitude1 < magnitude2 ? -1 : 0);
     case SDDS_ULONG64:
       if (*(uint64_t *)data1 > *(uint64_t *)data2)
         return (1);
@@ -557,11 +566,11 @@ int SDDS_CompareData(SDDS_DATASET *SDDS_dataset, short type, short absolute, voi
         return (-1);
       return (0);
     case SDDS_CHARACTER:
-      if ((char_diff = *(char *)data1 - *(char *)data2) > 0)
-        return (1);
-      else if (char_diff < 0)
-        return (-1);
-      return (0);
+      char1 = *(char *)data1;
+      char2 = *(char *)data2;
+      magnitude1 = char1 < 0 ? (uint64_t)(-(int16_t)char1) : (uint64_t)char1;
+      magnitude2 = char2 < 0 ? (uint64_t)(-(int16_t)char2) : (uint64_t)char2;
+      return magnitude1 > magnitude2 ? 1 : (magnitude1 < magnitude2 ? -1 : 0);
     case SDDS_STRING:
       if (numericHigh)
         return (strcmp_nh(*(char **)data1, *(char **)data2));
@@ -576,43 +585,19 @@ int SDDS_CompareData(SDDS_DATASET *SDDS_dataset, short type, short absolute, voi
 }
 
 int SDDS_CompareRows(const void *vrow1, const void *vrow2) {
-  /* I'm assuming that a double is large enough to store any of the data types,
-   * including a pointer
-   */
-  static double data1, data2;
-  static int64_t row1, row2;
+  int64_t row1, row2;
   long i;
   int comparison;
-  void *p1, *p2;
+  void *data1, *data2;
   row1 = *(int64_t *)vrow1;
   row2 = *(int64_t *)vrow2;
 
   for (i = 0; i < sort_requests; i++) {
-    if (!SDDS_GetValueByAbsIndex(SDDS_sort, sort_request[i].index, row1, &data1) ||
-        !SDDS_GetValueByAbsIndex(SDDS_sort, sort_request[i].index, row2, &data2)) {
-      SDDS_SetError("Problem getting value for sort (SDDS_CompareRows)");
-      SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
-      exit(EXIT_FAILURE);
-    }
+    data1 = (char *)sort_request[i].column_data + row1 * sort_request[i].element_size;
+    data2 = (char *)sort_request[i].column_data + row2 * sort_request[i].element_size;
     if ((comparison = SDDS_CompareData(SDDS_sort, sort_request[i].type, sort_request[i].absolute,
-                                       (void *)&data1, (void *)&data2))) {
-      if (sort_request[i].type == SDDS_STRING) {
-        p1 = &data1;
-        p2 = &data2;
-        free(*((char **)p1));
-        free(*((char **)p2));
-        // free(*((char**)&data1));
-        // free(*((char**)&data2));
-      }
+                                       data1, data2))) {
       return (sort_request[i].decreasing_order ? -comparison : comparison);
-    }
-    if (sort_request[i].type == SDDS_STRING) {
-      p1 = &data1;
-      p2 = &data2;
-      free(*((char **)p1));
-      free(*((char **)p2));
-      // free(*((char**)&data1));
-      // free(*((char**)&data2));
     }
   }
   return (0);
@@ -667,6 +652,12 @@ long SDDS_SortRows(SDDS_DATASET *SDDS_dataset, SORT_REQUEST *xsort_request, long
       return (0);
     }
     sort_request[i].type = SDDS_GetColumnType(SDDS_sort, sort_request[i].index);
+    sort_request[i].element_size = SDDS_GetTypeSize(sort_request[i].type);
+    if (sort_request[i].element_size <= 0 ||
+        !(sort_request[i].column_data = SDDS_GetInternalColumn(SDDS_sort, sort_request[i].name))) {
+      SDDS_SetError("Problem getting internal column data for sort (SDDS_SortRows)");
+      return 0;
+    }
   }
   if (non_dominate_sort) {
     data = (double **)malloc(sizeof(*data) * sort_requests);
@@ -816,11 +807,18 @@ long SDDS_UnsetDuplicateRows(SDDS_DATASET *SDDS_dataset, SORT_REQUEST *xsort_req
       }
     }
   }
-  if (!SDDS_AssertRowFlags(SDDS_sort, SDDS_FLAG_ARRAY, rowFlag, rows))
+  if (!SDDS_AssertRowFlags(SDDS_sort, SDDS_FLAG_ARRAY, rowFlag, rows)) {
+    free(rowFlag);
+    free(identicalCount);
     return 0;
-  if (provideIdenticalCount && !SDDS_SetColumn(SDDS_sort, SDDS_SET_BY_NAME, identicalCount, rows, "IdenticalCount"))
+  }
+  if (provideIdenticalCount && !SDDS_SetColumn(SDDS_sort, SDDS_SET_BY_NAME, identicalCount, rows, "IdenticalCount")) {
+    free(rowFlag);
+    free(identicalCount);
     return 0;
+  }
   free(rowFlag);
+  free(identicalCount);
   return 1;
 }
 
