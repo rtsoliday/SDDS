@@ -10,7 +10,10 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import shlex
+import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -22,6 +25,7 @@ EXAMPLE = ROOT_DIR / "SDDSlib" / "demo" / "example.sdds"
 SDDSCONVERT = BIN_DIR / "sddsconvert"
 SDDSMAKEDATASET = BIN_DIR / "sddsmakedataset"
 SDDSSEQUENCE = BIN_DIR / "sddssequence"
+ZOOM_PROBE_SOURCE = ROOT_DIR / "tests" / "mpl_qt_zoom_probe.cc"
 
 
 @dataclass(frozen=True)
@@ -169,6 +173,55 @@ def _run_mpl_qt(toolchain, stream, extra_args=(), timeout=30):
   return completed
 
 
+def _compile_zoom_probe(toolchain, output):
+  linked_libraries = _run(
+    ["ldd", str(toolchain.mpl_qt)],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+  ).stdout
+  qt_package = "Qt6Widgets" if "libQt6Widgets" in linked_libraries else "Qt5Widgets"
+  if not shutil.which("pkg-config"):
+    pytest.skip("pkg-config is required for the mpl_qt zoom probe")
+  if subprocess.run(
+    ["pkg-config", "--exists", qt_package],
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+  ).returncode:
+    pytest.skip(f"{qt_package} development files are unavailable")
+
+  compiler = shlex.split(os.environ.get("CXX", "g++"))
+  if not compiler or not shutil.which(compiler[0]):
+    pytest.skip("a C++ compiler is required for the mpl_qt zoom probe")
+  qt_flags = shlex.split(subprocess.check_output(
+    ["pkg-config", "--cflags", "--libs", qt_package],
+    text=True,
+  ))
+  _run([
+    *compiler,
+    "-std=c++17",
+    "-fPIC",
+    "-shared",
+    str(ZOOM_PROBE_SOURCE),
+    "-o",
+    str(output),
+    *qt_flags,
+    "-ldl",
+  ])
+
+
+def _read_zoom_calls(path):
+  calls = []
+  current = None
+  for line in path.read_text().splitlines():
+    if line == "CALL":
+      current = []
+      calls.append(current)
+    elif line.startswith("ARG=") and current is not None:
+      current.append(line.removeprefix("ARG="))
+  return calls
+
+
 def _traces(document):
   return [
     trace
@@ -194,6 +247,98 @@ def _create_sequence(path, rows, pages=1, major_order="column"):
     f"-majorOrder={major_order}",
   ])
   _run(command)
+
+
+@requires_plot_tools
+@pytest.mark.skipif(
+  not sys.platform.startswith("linux"),
+  reason="the mpl_qt event probe uses Linux symbol interposition",
+)
+def test_replot_zoom_keeps_narrowing_with_one_visible_x_sample(tmp_path):
+  toolchain = TOOLCHAINS[0]
+  data = tmp_path / "zoom.sdds"
+  _create_sequence(data, rows=17)
+  plot_args = [
+    "-columnNames=Time,y",
+    "-graphic=symbol,type=1,subtype=0",
+  ]
+  stream = _run_qt_producer(
+    toolchain,
+    tmp_path,
+    [data],
+    plot_args,
+    "zoom-initial",
+  )
+
+  probe = tmp_path / "mpl_qt_zoom_probe.so"
+  _compile_zoom_probe(toolchain, probe)
+  log = tmp_path / "zoom-calls.log"
+  wrapper = tmp_path / "sddsplot-zoom-wrapper"
+  wrapper.write_text(
+    "#!/bin/sh\n"
+    "{\n"
+    "  printf '%s\\n' CALL\n"
+    "  for argument do printf 'ARG=%s\\n' \"$argument\"; done\n"
+    f"}} >> {shlex.quote(str(log))}\n"
+    f"exec {shlex.quote(str(toolchain.sddsplot))} \"$@\"\n"
+  )
+  wrapper.chmod(0o755)
+  original_command = " ".join([
+    str(wrapper),
+    f"'{data}'",
+    *(f"'{argument}'" for argument in plot_args),
+    "'-device=qt'",
+  ])
+
+  environment = os.environ.copy()
+  environment["QT_QPA_PLATFORM"] = "offscreen"
+  previous_preload = environment.get("LD_PRELOAD")
+  environment["LD_PRELOAD"] = (
+    f"{probe}:{previous_preload}" if previous_preload else str(probe)
+  )
+  completed = subprocess.run(
+    [
+      str(toolchain.mpl_qt),
+      "-command",
+      original_command,
+      "-timeoutHours",
+      "0.01",
+    ],
+    input=stream,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    env=environment,
+    timeout=30,
+  )
+  diagnostics = completed.stderr.decode(errors="replace")
+  assert completed.returncode == 0, diagnostics
+
+  calls = _read_zoom_calls(log)
+  assert len(calls) == 6
+  ranges = []
+  for call in calls:
+    scale_arguments = [
+      argument for argument in call if argument.startswith("-scales=")
+    ]
+    assert len(scale_arguments) == 1, call
+    values = [float(value) for value in scale_arguments[0][8:].split(",")]
+    assert len(values) == 4
+    ranges.append(values[:2])
+
+  spans = [maximum - minimum for minimum, maximum in ranges]
+  assert all(later < earlier for earlier, later in zip(spans, spans[1:]))
+  x_values = [index * 0.25 for index in range(17)]
+  visible_counts = [
+    sum(minimum <= value <= maximum for value in x_values)
+    for minimum, maximum in ranges
+  ]
+  one_sample_zoom = visible_counts.index(1)
+  assert one_sample_zoom < len(spans) - 1
+  assert visible_counts[one_sample_zoom + 1] == 1
+  assert all(
+    later < earlier
+    for earlier, later in zip(spans[one_sample_zoom:], spans[one_sample_zoom + 1:])
+  )
 
 
 @pytest.fixture(scope="module")

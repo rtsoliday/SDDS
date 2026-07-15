@@ -9,21 +9,10 @@ void newzoom() {
   char *_tmp1 = NULL;
   char *_tmp2 = NULL;
   long is_global;
-  int useScales = 0;
-  int limitAdded = 0;
-  char *clcopy = NULL;
+  int scalesAdded = 0;
   std::string prefix;
-  std::string postLimit;
-  std::string limitString;
-
-  if (sddsplotCommandline2) {
-    clcopy = (char*)malloc(sizeof(char) * (strlen(sddsplotCommandline2) + 1));
-    strcpy(clcopy, sddsplotCommandline2);
-    char *first = strtok(clcopy, " ");
-    if (first && strstr(first, "sddscontour"))
-      useScales = 1;
-    free(clcopy);
-  }
+  std::string postScales;
+  std::string scalesString;
 
   if (!(userx0 == 0 && userx1 == 0 && usery0 == 0 && usery1 == 0)) {
     double xminLimit, xmaxLimit, yminLimit, ymaxLimit, xmult, ymult, xoff, yoff;
@@ -62,35 +51,30 @@ void newzoom() {
         entry += token;
         entry += " ";
       }
-      if (limitAdded)
-        postLimit += entry;
+      if (scalesAdded)
+        postScales += entry;
       else
         prefix += entry;
     };
 
-    auto updateLimitString = [&]() {
+    /* Fixed scales preserve the selected rectangle even when it contains only
+     * one sample.  Autoscaling limits expand a one-sample range and prevent
+     * subsequent zoom operations from narrowing the view. */
+    auto updateScalesString = [&]() {
       char buffer[512];
-      if (useScales)
-        snprintf(buffer, sizeof(buffer),
-                 "-scales=%.10g,%.10g,%.10g,%.10g ",
-                 xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                 xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                 ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                 ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-      else
-        snprintf(buffer, sizeof(buffer),
-                 "-limit=xMin=%.10g,xMax=%.10g,yMin=%.10g,yMax=%.10g,autoscaling ",
-                 xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
-                 xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
-                 ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
-                 ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
-      limitString = buffer;
+      snprintf(buffer, sizeof(buffer),
+               "-scales=%.10g,%.10g,%.10g,%.10g ",
+               xlog ? pow(10, xminLimit / xmult - xoff) : xminLimit / xmult - xoff,
+               xlog ? pow(10, xmaxLimit / xmult - xoff) : xmaxLimit / xmult - xoff,
+               ylog ? pow(10, yminLimit / ymult - yoff) : yminLimit / ymult - yoff,
+               ylog ? pow(10, ymaxLimit / ymult - yoff) : ymaxLimit / ymult - yoff);
+      scalesString = buffer;
     };
 
-    auto ensureLimitString = [&]() {
-      if (!limitAdded)
-        limitAdded = 1;
-      updateLimitString();
+    auto ensureScalesString = [&]() {
+      if (!scalesAdded)
+        scalesAdded = 1;
+      updateScalesString();
     };
 
     while ((op = get_token_t(original, (char*)"'"))) {
@@ -130,12 +114,12 @@ void newzoom() {
               xlog_global = 1;
           }
 
-          ensureLimitString();
+          ensureScalesString();
         }
       }
 
       if ((strncmp(tmp, "-col", 4) == 0) || (strncmp(tmp, "-par", 4) == 0)) {
-        ensureLimitString();
+        ensureScalesString();
         if (is_global)
           is_global = 0;
         xmult = xmult_global;
@@ -144,7 +128,7 @@ void newzoom() {
         xoff = xoff_global;
         xlog = xlog_global;
         ylog = ylog_global;
-        updateLimitString();
+        updateScalesString();
       }
 
       if (strncmp(tmp, "-fa", 3) == 0) {
@@ -160,7 +144,7 @@ void newzoom() {
           if (is_global)
             xmult_global = atof(_tmp2 + 1);
         }
-        ensureLimitString();
+        ensureScalesString();
       }
 
       if (strncmp(tmp, "-of", 3) == 0) {
@@ -176,7 +160,7 @@ void newzoom() {
           if (is_global)
             xoff_global = atof(_tmp2 + 1);
         }
-        ensureLimitString();
+        ensureScalesString();
       }
 
       appendToken(op);
@@ -185,8 +169,8 @@ void newzoom() {
     }
 
     free(original);
-    if (!limitAdded)
-      ensureLimitString();
+    if (!scalesAdded)
+      ensureScalesString();
   } else {
     prefix = sddsplotCommandline2;
     userx1 = XMAX;
@@ -199,9 +183,9 @@ void newzoom() {
   std::string finalCommand;
   if (!(userx0 == 0 && userx1 == 0 && usery0 == 0 && usery1 == 0)) {
     finalCommand = prefix;
-    if (limitAdded)
-      finalCommand += limitString;
-    finalCommand += postLimit;
+    if (scalesAdded)
+      finalCommand += scalesString;
+    finalCommand += postScales;
   } else {
     finalCommand = prefix;
   }
