@@ -3851,11 +3851,6 @@ long add_filename(PLOT_SPEC *plotspec, char *filename)
       if (strcmp(filename, plreq->filename[i]) == 0)
         return 1;
     }
-  if (plreq->defines && plreq->filenames >= 1)
-    {
-      fprintf(stderr, "error: -define is only supported for plot requests with a single data file\n");
-      return 0;
-    }
   plreq->filename = SDDS_Realloc(plreq->filename, sizeof(*plreq->filename) * (plreq->filenames + 1));
   SDDS_CopyString(&plreq->filename[plreq->filenames], filename);
   plreq->filenames += 1;

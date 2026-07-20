@@ -306,8 +306,8 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
 
           if (plreq->defines) {
-            if (plreq->filenames != 1)
-              SDDS_Bomb("-define is only supported for plot requests with a single data file");
+            /* Definitions are applied to the current file's table; this loop runs
+               once per file of the request, so multiple files are handled. */
             apply_plot_definitions(&table, plreq);
           }
 

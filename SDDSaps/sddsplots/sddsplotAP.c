@@ -2374,8 +2374,9 @@ long define_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
   PLOT_REQUEST *plreq;
   plreq = &plotspec->plot_request[plotspec->plot_requests-1];
-  if (plreq->filenames > 1)
-    return bombre("invalid -define syntax (multiple files)", define_usage, 0);
+  /* -define applies its equation(s) to each data file of the plot request in
+     turn (see apply_plot_definitions in sddsplotRead.c), so multiple files are
+     fine; there is no reason to restrict a request to a single file here. */
   plreq->define = (EQUATION_DEFINITION**)SDDS_Realloc(plreq->define,
                              sizeof(*plreq->define)*(plreq->defines+1));
   if (!(plreq->define[plreq->defines]=process_new_equation_definition(item, items)))
