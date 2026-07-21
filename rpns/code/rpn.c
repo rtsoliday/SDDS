@@ -115,9 +115,9 @@ int main(int argc, char **argv)
 #ifdef DEBUG
         fprintf(stderr, "istackptr = %ld\n", istackptr);
 #endif
-        while (prompt("rpn> ", !(istackptr-1)),
-                ptr=fgets((code_ptr->text=input), CODE_LEN,
-                input_stack[istackptr-1].fp)) {
+        while ((ptr=rpn_getline("rpn> ", !(istackptr-1),
+                code_ptr->text=input, CODE_LEN,
+                input_stack[istackptr-1].fp))) {
             /* Loop while there's still data in the (istackptr-1)th file. *
              * The data is put in the code list.                          */
 #ifdef DEBUG
