@@ -93,6 +93,8 @@ void set_ptrs(char **text, char **buffer, char **token);
 long is_func(char *string);
 void quit(void);
 void rpn_help(void);
+void rpn_hlist(void);
+void rpn_hrec(void);
 long stack_test(long stackptr, long numneeded, char *stackname, char *caller);
 void stop(void);
 void ttrace(void);
@@ -211,6 +213,9 @@ epicsShareFuncRPNLIB long prompt(char *prompt_s, long do_prompt);
 
 /* prototypes for code in file rpn_readline.c */
 epicsShareFuncRPNLIB char *rpn_getline(char *prompt_s, long do_prompt, char *buf, long buflen, FILE *fp);
+epicsShareFuncRPNLIB long rpn_history_count_get(void);
+epicsShareFuncRPNLIB char *rpn_history_get(long n);
+epicsShareFuncRPNLIB long rpn_history_recall_set(long n);
 
 /* prototypes for code in file rpn_io.c */
 void open_cominp(void);

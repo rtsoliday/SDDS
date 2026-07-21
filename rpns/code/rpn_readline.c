@@ -50,6 +50,7 @@
 static char **rpn_history = NULL;
 static long rpn_history_count = 0;  /* number of stored entries */
 static long rpn_history_loaded = 0; /* history file loaded + save handler set */
+static long rpn_history_recall = 0; /* 1-based entry to preload at next prompt; 0 = none */
 
 static char *rpn_history_filename(void) {
   static char buffer[1024];
@@ -92,6 +93,30 @@ static void rpn_history_add(const char *line) {
     rpn_history = grown;
   }
   rpn_history[rpn_history_count++] = copy;
+}
+
+/* Number of command-history entries currently held (for the hlist/hrec commands). */
+long rpn_history_count_get(void) {
+    return rpn_history_count;
+}
+
+/* Return command-history entry number n (1-based, as shown by hlist), or NULL if n is
+ * out of range.  The returned string is owned by the history store; copy it to keep it. */
+char *rpn_history_get(long n) {
+    if (n < 1 || n > rpn_history_count)
+        return NULL;
+    return rpn_history[n - 1];
+}
+
+/* Request that command-history entry number n (1-based, as shown by hlist) be loaded
+ * into the line editor at the next interactive prompt, ready to review/edit---as if the
+ * user had navigated to it with the up-arrow.  Returns 1 if n is a valid entry number,
+ * 0 otherwise.  Used by the hrec command. */
+long rpn_history_recall_set(long n) {
+    if (n < 1 || n > rpn_history_count)
+        return 0;
+    rpn_history_recall = n;
+    return 1;
 }
 
 /* Registered via atexit(): rewrite the history file.  Errors are ignored so a
@@ -254,6 +279,14 @@ static char *rpn_edit_line(const char *prompt_s, char *buf, long buflen) {
   buf[0] = 0;
   len = pos = 0;
   histindex = rpn_history_count;
+  /* Honor a pending 'hrec' recall: start positioned on that history entry (as if the
+   * user had arrowed up to it), with the empty in-progress line saved so Down returns
+   * to it. */
+  if (rpn_history_recall >= 1 && rpn_history_recall <= rpn_history_count) {
+    histindex = rpn_history_recall - 1;
+    rpn_set_line(buf, buflen, &len, &pos, rpn_history[histindex]);
+  }
+  rpn_history_recall = 0;
   rpn_refresh(prompt_s, buf, len, pos);
 
   for (;;) {

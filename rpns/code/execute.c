@@ -227,8 +227,56 @@ void rpn_help(void)
   
   if (i%2)
     fputc('\n', stderr);
-  
+
   fputs(additional_help, stderr);
+}
+
+/* routine: rpn_hlist()
+ * purpose: implement user's 'hlist' command---list the command history with
+ *          numbers (1-based, matching what 'hrec' expects).
+ */
+
+void rpn_hlist(void)
+{
+  long i, n;
+  char *entry;
+
+  n = rpn_history_count_get();
+  if (n<=0) {
+    fputs("no command history available\n", stdout);
+    return;
+  }
+  for (i=1; i<=n; i++) {
+    if ((entry = rpn_history_get(i)))
+      printf("%3ld: %s\n", i, entry);
+  }
+  fflush(stdout);
+}
+
+/* routine: rpn_hrec()
+ * purpose: implement user's 'hrec' command---recall the numbered command-history
+ *          entry given by the top of the numeric stack into the line editor for
+ *          the next prompt, ready to review/edit (as if the user had navigated to
+ *          it with the up-arrow).  It does not re-execute the entry.
+ */
+
+void rpn_hrec(void)
+{
+  long n;
+
+  if (stackptr<1) {
+    fputs("too few items on numeric stack (hrec)\n", stderr);
+    stop();
+    rpn_set_error();
+    return;
+  }
+  n = (long)(pop_num()+0.5);
+  if (!rpn_history_recall_set(n)) {
+    fprintf(stderr, "no command-history entry number %ld (hrec)\n", n);
+    stop();
+    rpn_set_error();
+    return;
+  }
 }
 
 /* routine: stack_test()

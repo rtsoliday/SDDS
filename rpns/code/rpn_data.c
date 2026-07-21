@@ -219,6 +219,8 @@ struct FUNCTION funcRPN[NFUNCS] = {
        { "quit", "quit                                ", quit       , OTHER_FUNC  },
        { "@"   , "push command input file             ", open_cominp, OTHER_FUNC  },
        { "help", "help                                ", rpn_help   , OTHER_FUNC  },
+       {"hlist", "list command history with numbers   ", rpn_hlist  , OTHER_FUNC  },
+       { "hrec", "recall numbered history entry (n hrec) into the editor", rpn_hrec, OTHER_FUNC  },
        { "ttr" , "toggle trace mode                   ", ttrace     , OTHER_FUNC  },
        {"sleep", "sleep for number of seconds         ", rpn_sleep  , OTHER_FUNC  },
 /* mathematical operations: */

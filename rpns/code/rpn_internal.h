@@ -54,12 +54,12 @@ struct FUNCTION {
 /* array of function structures */
 #ifdef USE_GSL
  #ifdef USE_GSL_FRESNEL
-  #define NFUNCS (108+2)
+  #define NFUNCS (110+2)
  #else
-  #define NFUNCS (106+2)
+  #define NFUNCS (108+2)
  #endif
 #else
- #define NFUNCS (104+2)
+ #define NFUNCS (106+2)
 #endif
 /*it was 88 before, added ssto and streq, strlt, strgt, and strmatch */
 epicsShareFuncRPNLIB struct FUNCTION funcRPN[NFUNCS];
