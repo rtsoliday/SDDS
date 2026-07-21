@@ -209,6 +209,9 @@ void push_code(char *code, long mode);
 /* prototypes for code in file prompt.c */
 epicsShareFuncRPNLIB long prompt(char *prompt_s, long do_prompt);
 
+/* prototypes for code in file rpn_readline.c */
+epicsShareFuncRPNLIB char *rpn_getline(char *prompt_s, long do_prompt, char *buf, long buflen, FILE *fp);
+
 /* prototypes for code in file rpn_io.c */
 void open_cominp(void);
 void open_io(void);
