@@ -306,7 +306,7 @@ MPI_CC = $(firstword $(wildcard \
            /opt/local/bin/mpicc \
            /opt/homebrew/bin/mpicc \
            /lustre/3rdPartySoftware/mpich-4.1.1/bin/mpicc \
-	         $(MPI_BIN)/mpicc ))
+           $(MPI_BIN)/mpicc ))
 MPI_CCC = $(firstword $(wildcard \
            /usr/bin/mpic++ \
            /usr/bin/mpicxx \
@@ -325,7 +325,7 @@ MPI_CCC = $(firstword $(wildcard \
            /opt/homebrew/bin/mpic++ \
            /opt/homebrew/bin/mpicxx \
            /lustre/3rdPartySoftware/mpich-4.1.1/bin/mpicxx \
-	         $(MPI_BIN)/mpicxx ))
+           $(MPI_BIN)/mpicxx ))
 WIN_MPI = $(firstword $(wildcard \
            C:/Program\ Files/Microsoft\ MPI \
            C:/Program\ Files\ (x86)/Microsoft\ SDKs/MPI \
