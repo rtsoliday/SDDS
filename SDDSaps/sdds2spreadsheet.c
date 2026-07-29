@@ -129,9 +129,11 @@ int main(int argc, char **argv) {
   SDDS_TABLE SDDS_table;
   SDDS_LAYOUT *layout;
   COLUMN_DEFINITION *coldef;
+  COLUMN_DEFINITION **columnDefinition;
   PARAMETER_DEFINITION *pardef;
   ARRAY_DEFINITION *arraydef;
   char **columnRequestList, **columnList;
+  int32_t *columnIndex;
   long nColumnsRequested, nColumns;
   char *input, *output;
   long i, i_arg, ntable;
@@ -154,6 +156,8 @@ int main(int argc, char **argv) {
   delimiter = DELIMITER;
   pipeFlags = 0;
   columnRequestList = columnList = NULL;
+  columnDefinition = NULL;
+  columnIndex = NULL;
   nColumnsRequested = nColumns = 0;
   sheetNameParameter = NULL;
 
@@ -315,9 +319,18 @@ int main(int argc, char **argv) {
 
       if ((columnName = SDDS_GetColumnNames(&SDDS_table, &nc)) && nc != 0) {
         columnList = SDDS_Realloc(columnList, sizeof(*columnList) * (nColumns + nc));
+        columnDefinition = SDDS_Realloc(columnDefinition, sizeof(*columnDefinition) * (nColumns + nc));
+        columnIndex = SDDS_Realloc(columnIndex, sizeof(*columnIndex) * (nColumns + nc));
         for (i = 0; i < nc; i++) {
+          int32_t index;
+
           columnList[i + nColumns] = columnName[i];
-          coldef = SDDS_GetColumnDefinition(&SDDS_table, columnName[i]);
+          if ((index = SDDS_GetColumnIndex(&SDDS_table, columnName[i])) < 0) {
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+            exit(EXIT_FAILURE);
+          }
+          columnIndex[i + nColumns] = index;
+          columnDefinition[i + nColumns] = coldef = layout->column_definition + index;
 
           if (verbose) {
             fprintf(stderr, "%-15s %-15s %-15s %-15s %-7s %-7" PRId32 " %s\n",
@@ -341,6 +354,7 @@ int main(int argc, char **argv) {
                     coldef->description ? coldef->description : "", delimiter);
           }
         }
+        free(columnName);
         nColumns += nc;
       }
     }
@@ -476,7 +490,7 @@ int main(int argc, char **argv) {
         if (pardef->fixed_value)
           continue;
 
-        data = SDDS_GetParameter(&SDDS_table, pardef->name, NULL);
+        data = SDDS_table.parameter[i];
         if (!data) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
           exit(EXIT_FAILURE);
@@ -538,15 +552,10 @@ int main(int argc, char **argv) {
 
     /* Columns */
     if (nColumns) {
-      SDDS_SetRowFlags(&SDDS_table, 1);
-      nrows = SDDS_CountRowsOfInterest(&SDDS_table);
-      if (nrows < 0) {
-        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-        exit(EXIT_FAILURE);
-      }
+      nrows = SDDS_table.n_rows;
 
       for (i = 0; i < nColumns; i++) {
-        coldef = SDDS_GetColumnDefinition(&SDDS_table, columnList[i]);
+        coldef = columnDefinition[i];
 #ifdef USE_XLS
         if (excel) {
           xlsWorksheetLabel(ws, line, i, coldef->name, NULL);
@@ -563,7 +572,7 @@ int main(int argc, char **argv) {
 
       if (units) {
         for (i = 0; i < nColumns; i++) {
-          coldef = SDDS_GetColumnDefinition(&SDDS_table, columnList[i]);
+          coldef = columnDefinition[i];
 #ifdef USE_XLS
           if (excel) {
             xlsWorksheetLabel(ws, line, i, coldef->units ? coldef->units : "", NULL);
@@ -582,8 +591,8 @@ int main(int argc, char **argv) {
       if (nrows) {
         for (j = 0; j < nrows; j++) {
           for (i = 0; i < nColumns; i++) {
-            coldef = SDDS_GetColumnDefinition(&SDDS_table, columnList[i]);
-            data = SDDS_GetValue(&SDDS_table, coldef->name, j, NULL);
+            coldef = columnDefinition[i];
+            data = SDDS_table.data[columnIndex[i]];
             if (!data) {
               SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
               exit(EXIT_FAILURE);
@@ -593,37 +602,37 @@ int main(int argc, char **argv) {
             if (excel) {
               switch (coldef->type) {
               case SDDS_LONGDOUBLE:
-                xlsWorksheetNumberDbl(ws, line, i, *((long double *)data), NULL);
+                xlsWorksheetNumberDbl(ws, line, i, ((long double *)data)[j], NULL);
                 break;
               case SDDS_DOUBLE:
-                xlsWorksheetNumberDbl(ws, line, i, *((double *)data), NULL);
+                xlsWorksheetNumberDbl(ws, line, i, ((double *)data)[j], NULL);
                 break;
               case SDDS_FLOAT:
-                xlsWorksheetNumberDbl(ws, line, i, *((float *)data), NULL);
+                xlsWorksheetNumberDbl(ws, line, i, ((float *)data)[j], NULL);
                 break;
               case SDDS_ULONG64:
-                xlsWorksheetNumberInt(ws, line, i, *((uint64_t *)data), NULL);
+                xlsWorksheetNumberInt(ws, line, i, ((uint64_t *)data)[j], NULL);
                 break;
               case SDDS_LONG64:
-                xlsWorksheetNumberInt(ws, line, i, *((int64_t *)data), NULL);
+                xlsWorksheetNumberInt(ws, line, i, ((int64_t *)data)[j], NULL);
                 break;
               case SDDS_ULONG:
-                xlsWorksheetNumberInt(ws, line, i, *((uint32_t *)data), NULL);
+                xlsWorksheetNumberInt(ws, line, i, ((uint32_t *)data)[j], NULL);
                 break;
               case SDDS_LONG:
-                xlsWorksheetNumberInt(ws, line, i, *((int32_t *)data), NULL);
+                xlsWorksheetNumberInt(ws, line, i, ((int32_t *)data)[j], NULL);
                 break;
               case SDDS_USHORT:
-                xlsWorksheetNumberInt(ws, line, i, *((unsigned short *)data), NULL);
+                xlsWorksheetNumberInt(ws, line, i, ((unsigned short *)data)[j], NULL);
                 break;
               case SDDS_SHORT:
-                xlsWorksheetNumberInt(ws, line, i, *((short *)data), NULL);
+                xlsWorksheetNumberInt(ws, line, i, ((short *)data)[j], NULL);
                 break;
               case SDDS_STRING:
-                xlsWorksheetLabel(ws, line, i, *((char **)data), NULL);
+                xlsWorksheetLabel(ws, line, i, ((char **)data)[j], NULL);
                 break;
               case SDDS_CHARACTER:
-                sprintf(buffer, "%c", *((char *)data));
+                sprintf(buffer, "%c", ((char *)data)[j]);
                 xlsWorksheetLabel(ws, line, i, buffer, NULL);
                 break;
               default:
@@ -633,13 +642,13 @@ int main(int argc, char **argv) {
 #endif
               switch (coldef->type) {
               case SDDS_DOUBLE:
-                fprintf(outfile, "%.*g", DBL_DIG, *((double *)data));
+                fprintf(outfile, "%.*g", DBL_DIG, ((double *)data)[j]);
                 break;
               case SDDS_FLOAT:
-                fprintf(outfile, "%.*g", FLT_DIG, *((float *)data));
+                fprintf(outfile, "%.*g", FLT_DIG, ((float *)data)[j]);
                 break;
               default:
-                SDDS_PrintTypedValue(data, 0, coldef->type, NULL, outfile, 0);
+                SDDS_PrintTypedValue(data, j, coldef->type, NULL, outfile, 0);
                 break;
               }
               fprintf(outfile, "%s", delimiter);
@@ -661,6 +670,12 @@ int main(int argc, char **argv) {
     xlsDeleteWorkbook(w);
   }
 #endif
+
+  for (i = 0; i < nColumns; i++)
+    free(columnList[i]);
+  free(columnList);
+  free(columnDefinition);
+  free(columnIndex);
 
   /* Terminate program */
   fflush(stdout);
