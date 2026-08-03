@@ -46,7 +46,7 @@ ifeq ($(OS), Windows)
   PLOT_DRIVER = SDDSaps/sddsplots/winMotifDriver
 endif
 
-SDDSPP_DIR = SDDS3lib
+SDDSPP_DIR = SDDSlib++
 
 DIRS = $(GSL_REPO)
 DIRS += $(GSL_LOCAL)
@@ -62,7 +62,7 @@ DIRS += rpns/code
 DIRS += namelist
 DIRS += SDDSlib
 DIRS += SDDSlib/demo
-DIRS += SDDS3lib/demo
+DIRS += SDDSlib++/demo
 DIRS += fftpack
 DIRS += matlib
 DIRS += mdbcommon
@@ -134,7 +134,7 @@ SDDSlib: namelist
 endif
 SDDSlib/demo: SDDSlib
 	$(MAKE) -C $@
-SDDS3lib/demo: $(SDDSPP_DIR)
+SDDSlib++/demo: $(SDDSPP_DIR)
 	$(MAKE) -C $@
 fftpack: SDDSlib/demo
 	$(MAKE) -C $@
@@ -190,7 +190,7 @@ clean:
 	$(MAKE) -C namelist clean
 	$(MAKE) -C SDDSlib clean
 	$(MAKE) -C SDDSlib/demo clean
-	$(MAKE) -C SDDS3lib/demo clean
+	$(MAKE) -C SDDSlib++/demo clean
 	$(MAKE) -C fftpack clean
 	$(MAKE) -C matlib clean
 	$(MAKE) -C mdbcommon clean
@@ -220,5 +220,5 @@ distclean: clean
 	rm -rf lib/$(OS)-$(ARCH)
 
 test: all
-	$(MAKE) -C SDDS3lib test
+	$(MAKE) -C SDDSlib++ test
 	$(PYTEST)
