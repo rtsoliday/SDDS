@@ -79,6 +79,24 @@ while (auto page = reader.next(request)) {
 }
 ```
 
+## Demos
+
+The C examples in `SDDSlib/demo` have C++ counterparts in `SDDS3lib/demo`:
+
+- `sddspp_write_demo` writes two ASCII pages containing every SDDS scalar type.
+- `sddspp_read_demo` generically prints parameters, arrays, and columns from an
+  input file using its immutable layout.
+- `sddsppdemo` writes and reads a compact binary file using typed accessors and
+  zero-copy row views.
+
+They are built by the repository's top-level `make`, or directly with:
+
+```sh
+make -C SDDS3lib/demo
+SDDS3lib/demo/O.$(uname -s)-$(uname -m)/sddspp_write_demo example.sdds
+SDDS3lib/demo/O.$(uname -s)-$(uname -m)/sddspp_read_demo example.sdds
+```
+
 ## Build and test
 
 From the repository root:

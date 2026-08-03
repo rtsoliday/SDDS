@@ -62,6 +62,7 @@ DIRS += rpns/code
 DIRS += namelist
 DIRS += SDDSlib
 DIRS += SDDSlib/demo
+DIRS += SDDS3lib/demo
 DIRS += fftpack
 DIRS += matlib
 DIRS += mdbcommon
@@ -133,6 +134,8 @@ SDDSlib: namelist
 endif
 SDDSlib/demo: SDDSlib
 	$(MAKE) -C $@
+SDDS3lib/demo: $(SDDSPP_DIR)
+	$(MAKE) -C $@
 fftpack: SDDSlib/demo
 	$(MAKE) -C $@
 matlib: fftpack
@@ -187,6 +190,7 @@ clean:
 	$(MAKE) -C namelist clean
 	$(MAKE) -C SDDSlib clean
 	$(MAKE) -C SDDSlib/demo clean
+	$(MAKE) -C SDDS3lib/demo clean
 	$(MAKE) -C fftpack clean
 	$(MAKE) -C matlib clean
 	$(MAKE) -C mdbcommon clean
