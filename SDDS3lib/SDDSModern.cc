@@ -392,7 +392,7 @@ class FileStream final : public Stream {
 
   void flush() override {
     if (writable_ && std::fflush(file_) != 0)
-      throwIo("flush failure", path_);
+      throwIo("flush failure: " + std::string(std::strerror(errno)), path_);
   }
 
   void sync() override {
@@ -872,14 +872,24 @@ struct FileIdentity {
 FileIdentity fileIdentity(const std::filesystem::path &path) {
   if (path.empty()) return {};
 #if defined(_WIN32)
-  struct _stat64 status{};
-  if (_stat64(path.string().c_str(), &status) != 0) return {};
+  const HANDLE handle = CreateFileW(path.wstring().c_str(), FILE_READ_ATTRIBUTES,
+                                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (handle == INVALID_HANDLE_VALUE) return {};
+  BY_HANDLE_FILE_INFORMATION information{};
+  const bool found = GetFileInformationByHandle(handle, &information) != 0;
+  CloseHandle(handle);
+  if (!found) return {};
+  return {static_cast<std::uint64_t>(information.dwVolumeSerialNumber),
+          (static_cast<std::uint64_t>(information.nFileIndexHigh) << 32U) |
+              information.nFileIndexLow,
+          true};
 #else
   struct stat status{};
   if (stat(path.c_str(), &status) != 0) return {};
-#endif
   return {static_cast<std::uint64_t>(status.st_dev),
           static_cast<std::uint64_t>(status.st_ino), true};
+#endif
 }
 
 bool sameFile(const FileIdentity &left, const FileIdentity &right) {
@@ -914,9 +924,11 @@ class PathLock {
     if (handle_ == INVALID_HANDLE_VALUE)
       throwIo("unable to open file for advisory locking", path);
     OVERLAPPED overlapped{};
+    overlapped.Offset = MAXDWORD;
+    overlapped.OffsetHigh = 0x7FFFFFFFU;
     const DWORD flags = LOCKFILE_FAIL_IMMEDIATELY |
                         (mode == LockMode::Exclusive ? LOCKFILE_EXCLUSIVE_LOCK : 0U);
-    if (!LockFileEx(handle_, flags, 0, MAXDWORD, MAXDWORD, &overlapped)) {
+    if (!LockFileEx(handle_, flags, 0, 1, 0, &overlapped)) {
       CloseHandle(handle_);
       handle_ = INVALID_HANDLE_VALUE;
       throwIo("unable to acquire advisory file lock", path);
@@ -940,7 +952,9 @@ class PathLock {
 #if defined(_WIN32)
     if (handle_ != INVALID_HANDLE_VALUE) {
       OVERLAPPED overlapped{};
-      UnlockFileEx(handle_, 0, MAXDWORD, MAXDWORD, &overlapped);
+      overlapped.Offset = MAXDWORD;
+      overlapped.OffsetHigh = 0x7FFFFFFFU;
+      UnlockFileEx(handle_, 0, 1, 0, &overlapped);
       CloseHandle(handle_);
     }
 #else
@@ -3406,6 +3420,9 @@ struct Writer::Impl {
         source.close();
         writePageData(output, *current, outputLayout, options, ++number);
         output.close();
+#if defined(_WIN32)
+        lock.reset();
+#endif
         replaceFile(temporary, path);
         identity = fileIdentity(path);
         if (options.lockMode != LockMode::None)

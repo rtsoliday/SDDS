@@ -210,7 +210,7 @@ extern LZMA_API(lzma_ret) lzma_stream_encoder(lzma_stream *strm,
  *              - LZMA_OPTIONS_ERROR
  *              - LZMA_PROG_ERROR
  */
-extern LZMA_API(lzma_ret) lzma_alone_encoder(
+epicsShareFuncLZMA extern LZMA_API(lzma_ret) lzma_alone_encoder(
 		lzma_stream *strm, const lzma_options_lzma *options)
 		lzma_nothrow lzma_attr_warn_unused_result;
 

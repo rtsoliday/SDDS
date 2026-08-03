@@ -12,6 +12,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -113,7 +114,11 @@ void cWrite(const std::filesystem::path &path) {
 }
 
 void cppRead(const std::filesystem::path &path) {
-  auto reader = sdds::Reader::open(path);
+  sdds::ReaderOptions options;
+#if defined(_WIN32)
+  options.longDoubleEncoding = sdds::LongDoubleEncoding::LegacyFloat64;
+#endif
+  auto reader = sdds::Reader::open(path, options);
   auto page = reader.next();
   assert(page && page->rowCount() == 2);
   assert(page->parameterAs<std::int64_t>("p64") == INT64_C(1234567890123));
@@ -131,6 +136,9 @@ void cppWrite(const std::filesystem::path &path, sdds::DataMode mode,
   const auto layout = allTypesLayout(mode, major, order);
   sdds::WriterOptions options;
   options.compression = compression;
+#if defined(_WIN32)
+  options.longDoubleEncoding = sdds::LongDoubleEncoding::LegacyFloat64;
+#endif
   auto writer = sdds::Writer::create(path, layout, options);
   writer.write(allTypesPage(std::make_shared<const sdds::Layout>(layout)));
   writer.close();
@@ -295,6 +303,9 @@ void includeMatrix(const std::filesystem::path &directory) {
 }  // namespace
 
 int main(int argc, char **argv) {
+#if defined(_WIN32)
+  _putenv_s("SDDS_LONGDOUBLE_64BITS", "1");
+#endif
   if (argc != 2) return 2;
   const std::filesystem::path directory(argv[1]);
   std::filesystem::create_directories(directory);

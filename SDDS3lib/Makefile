@@ -8,28 +8,36 @@ LIBRARY_SRC = SDDSModern.cc \
               SDDSTransform.cc \
               SDDSLegacy.cc
 
-CCFLAGS += -std=c++17 -I../include -DEXPORT_SDDSPP
-
 ifeq ($(OS), Windows)
-CCFLAGS += -I../zlib -I../lzma
+CCFLAGS += /std:c++17 /wd4251 /wd4275 /wd4996 -I../include -I../zlib -I../lzma
+LIBRARY_CCFLAGS += -DEXPORT_SDDSPP
+COMPRESSION_LIBS = $(LIB_DIR)/z.lib $(LIB_DIR)/lzma.lib
+TEST_OBJECT_OUTPUT = /Fo$(OBJ_DIR)/$(@F).obj
+TEST_EXECUTABLE_OUTPUT = /Fe$@
+LIBRARY_LIBS = lzma.lib z.lib
+else
+CCFLAGS += -std=c++17 -I../include
+LIBRARY_CCFLAGS += -DEXPORT_SDDSPP
+COMPRESSION_LIBS = -lz -llzma
+TEST_EXECUTABLE_OUTPUT = -o $@
 endif
 
 include ../Makefile.build
 
-TEST_PROGRAM = $(OBJ_DIR)/test_sddspp
-ADVANCED_TEST_PROGRAM = $(OBJ_DIR)/test_sddspp_advanced
-DIFFERENTIAL_TEST_PROGRAM = $(OBJ_DIR)/test_sddspp_differential
-FUZZ_SMOKE_PROGRAM = $(OBJ_DIR)/fuzz_sddspp_smoke
+TEST_PROGRAM = $(OBJ_DIR)/test_sddspp$(EXEEXT)
+ADVANCED_TEST_PROGRAM = $(OBJ_DIR)/test_sddspp_advanced$(EXEEXT)
+DIFFERENTIAL_TEST_PROGRAM = $(OBJ_DIR)/test_sddspp_differential$(EXEEXT)
+FUZZ_SMOKE_PROGRAM = $(OBJ_DIR)/fuzz_sddspp_smoke$(EXEEXT)
 FUZZ_PROGRAM = $(OBJ_DIR)/fuzz_sddspp
-SANITIZER_TEST_PROGRAM = $(OBJ_DIR)/test_sddspp_sanitized
-BENCHMARK_PROGRAM = $(OBJ_DIR)/benchmark_sddspp
+SANITIZER_TEST_PROGRAM = $(OBJ_DIR)/test_sddspp_sanitized$(EXEEXT)
+BENCHMARK_PROGRAM = $(OBJ_DIR)/benchmark_sddspp$(EXEEXT)
 TEST_ARTIFACTS = $(OBJ_DIR)/test-artifacts
 FUZZ_CXX ?= clang++
 SANITIZER_CXX ?= clang++
 
 ifeq ($(OS), Windows)
 DIFFERENTIAL_LIBS = $(LIB_DIR)/SDDS1.lib $(LIB_DIR)/rpnlib.lib \
-                    $(LIB_DIR)/mdbmth.lib $(LIB_DIR)/mdblib.lib lzma.lib z.lib
+                    $(LIB_DIR)/mdbmth.lib $(LIB_DIR)/mdblib.lib $(COMPRESSION_LIBS)
 else
 DIFFERENTIAL_LIBS = $(LIB_DIR)/libSDDS1.a $(LIB_DIR)/librpnlib.a \
                     $(LIB_DIR)/libmdbmth.a $(LIB_DIR)/libmdblib.a \
@@ -41,19 +49,19 @@ $(TEST_PROGRAM) $(ADVANCED_TEST_PROGRAM) $(DIFFERENTIAL_TEST_PROGRAM) \
   $(FUZZ_SMOKE_PROGRAM) $(FUZZ_PROGRAM) $(SANITIZER_TEST_PROGRAM) \
   $(BENCHMARK_PROGRAM): | $(OBJ_DIR)
 $(TEST_PROGRAM): test_sdds3.cc $(LIBRARY)
-	$(CCC) $(CCFLAGS) -std=c++17 -I../include -o $@ test_sdds3.cc $(LIBRARY) -lz -llzma
+	$(CCC) $(CCFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds3.cc $(LIBRARY) $(COMPRESSION_LIBS)
 
 $(ADVANCED_TEST_PROGRAM): test_sdds3_advanced.cc $(LIBRARY)
-	$(CCC) $(CCFLAGS) -std=c++17 -I../include -o $@ test_sdds3_advanced.cc $(LIBRARY) -lz -llzma
+	$(CCC) $(CCFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds3_advanced.cc $(LIBRARY) $(COMPRESSION_LIBS)
 
 $(DIFFERENTIAL_TEST_PROGRAM): test_sdds3_differential.cc $(LIBRARY)
-	$(CCC) $(CCFLAGS) -std=c++17 -I../include -o $@ test_sdds3_differential.cc $(LIBRARY) $(DIFFERENTIAL_LIBS)
+	$(CCC) $(CCFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds3_differential.cc $(LIBRARY) $(DIFFERENTIAL_LIBS)
 
 $(BENCHMARK_PROGRAM): benchmark_sdds3.cc $(LIBRARY)
-	$(CCC) $(CCFLAGS) -std=c++17 -I../include -o $@ benchmark_sdds3.cc $(LIBRARY) $(DIFFERENTIAL_LIBS) $(if $(filter Windows,$(OS)),psapi.lib,)
+	$(CCC) $(CCFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) benchmark_sdds3.cc $(LIBRARY) $(DIFFERENTIAL_LIBS) $(if $(filter Windows,$(OS)),psapi.lib,)
 
 $(FUZZ_SMOKE_PROGRAM): fuzz_sdds3.cc $(LIBRARY)
-	$(CCC) $(CCFLAGS) -std=c++17 -DSDDSPP_FUZZ_STANDALONE -I../include -o $@ fuzz_sdds3.cc $(LIBRARY) -lz -llzma
+	$(CCC) $(CCFLAGS) -DSDDSPP_FUZZ_STANDALONE -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) fuzz_sdds3.cc $(LIBRARY) $(COMPRESSION_LIBS)
 
 .PHONY: test differential-test
 test: $(TEST_PROGRAM) $(ADVANCED_TEST_PROGRAM) differential-test
