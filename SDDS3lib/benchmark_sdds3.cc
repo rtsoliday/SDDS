@@ -236,6 +236,12 @@ double cMixedRead(const std::filesystem::path &path, bool strings) {
   SDDS_DATASET dataset{};
   auto filename = mutablePath(path);
   if (!SDDS_InitializeInput(&dataset, filename.data())) return NAN;
+  if (!SDDS_SetColumnFlags(&dataset, 0)) return NAN;
+  if (strings) {
+    char text[] = "text";
+    char *names[] = {text};
+    if (!SDDS_SetColumnsOfInterest(&dataset, SDDS_NAME_ARRAY, 1, names)) return NAN;
+  }
   double checksum = 0;
   while (SDDS_ReadPage(&dataset) > 0) {
     if (strings) {
@@ -324,9 +330,12 @@ double cUpdate(const std::filesystem::path &path) {
   std::int64_t rowsPresent = 0;
   if (!SDDS_InitializeAppendToPage(&dataset, path.string().c_str(), 1, &rowsPresent)) return NAN;
   if (!SDDS_LengthenTable(&dataset, 1)) return NAN;
-  if (!SDDS_SetRowValues(&dataset, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, rowsPresent,
-                         "c0", 0.0, "c1", 1.0, nullptr))
-    return NAN;
+  for (std::int32_t column = 0; column < columns; ++column) {
+    const std::string name = "c" + std::to_string(column);
+    if (!SDDS_SetRowValues(&dataset, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, rowsPresent,
+                           name.c_str(), static_cast<double>(column), nullptr))
+      return NAN;
+  }
   if (!SDDS_UpdatePage(&dataset, FLUSH_TABLE) || !SDDS_Terminate(&dataset)) return NAN;
   return static_cast<double>(std::filesystem::file_size(path));
 }

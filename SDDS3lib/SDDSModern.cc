@@ -1046,13 +1046,32 @@ class BufferedStream {
       *static_cast<unsigned char *>(data) = *pushback_;
       pushback_.reset();
       total = 1;
+      ++offset_;
     }
     while (total < size) {
       if (offset_ >= maxReadBytes_)
         throwLimit("decompressed input exceeds configured limit", path_);
+      if (readPosition_ < readSize_) {
+        const std::size_t count = std::min(size - total, readSize_ - readPosition_);
+        std::memcpy(static_cast<unsigned char *>(data) + total,
+                    readBuffer_.data() + readPosition_, count);
+        readPosition_ += count;
+        offset_ += count;
+        total += count;
+        continue;
+      }
       const std::size_t allowed = static_cast<std::size_t>(std::min<std::uint64_t>(
           size - total, maxReadBytes_ - offset_));
-      const std::size_t count = stream_->read(static_cast<char *>(data) + total, allowed);
+      if (allowed < readBuffer_.size()) {
+        readPosition_ = 0;
+        readSize_ = stream_->read(readBuffer_.data(), static_cast<std::size_t>(
+            std::min<std::uint64_t>(readBuffer_.size(), maxReadBytes_ - offset_)));
+        if (!readSize_)
+          break;
+        continue;
+      }
+      const std::size_t count = stream_->read(static_cast<unsigned char *>(data) + total,
+                                              allowed);
       offset_ += count;
       if (!count)
         break;
@@ -1085,7 +1104,8 @@ class BufferedStream {
   void skip(std::uint64_t size, const std::filesystem::path &path,
             std::int64_t page = 0) {
     if (!size) return;
-    if (!pushback_ && stream_->seekable()) {
+    constexpr std::uint64_t seekThreshold = 64U * 1024U;
+    if (size >= seekThreshold && !pushback_ && stream_->seekable()) {
       if (size > UINT64_MAX - tell()) throwLimit("file offset overflow", path, page);
       const std::uint64_t destination = tell() + size;
       if (destination > maxReadBytes_)
@@ -1100,7 +1120,7 @@ class BufferedStream {
         return;
       }
     }
-    std::array<unsigned char, 65536> discard{};
+    std::array<unsigned char, 65536> discard;
     while (size) {
       const std::size_t amount = static_cast<std::size_t>(
           std::min<std::uint64_t>(size, discard.size()));
@@ -1128,17 +1148,25 @@ class BufferedStream {
   }
 
   void write(const void *data, std::size_t size) {
+    if (readPosition_ < readSize_ || pushback_) {
+      if (!stream_->seekable())
+        throwState("cannot write after buffered input on a sequential stream");
+      stream_->seek(offset_);
+      readPosition_ = readSize_ = 0;
+      pushback_.reset();
+    }
     stream_->write(data, size);
     offset_ += size;
   }
   void write(std::string_view text) { write(text.data(), text.size()); }
-  bool eof() const { return !pushback_ && stream_->eof(); }
+  bool eof() const { return !pushback_ && readPosition_ == readSize_ && stream_->eof(); }
   bool seekable() const noexcept { return stream_->seekable(); }
-  std::uint64_t tell() const { return pushback_ ? stream_->tell() - 1 : stream_->tell(); }
+  std::uint64_t tell() const noexcept { return offset_; }
   void seek(std::uint64_t offset) {
     if (offset > maxReadBytes_)
       throwLimit("decompressed input exceeds configured limit", path_);
     pushback_.reset();
+    readPosition_ = readSize_ = 0;
     stream_->seek(offset);
     offset_ = offset;
   }
@@ -1148,6 +1176,7 @@ class BufferedStream {
   void replace(std::unique_ptr<Stream> stream, std::uint64_t offset = 0) {
     stream_ = std::move(stream);
     pushback_.reset();
+    readPosition_ = readSize_ = 0;
     offset_ = 0;
     if (offset) seek(offset);
   }
@@ -1157,6 +1186,9 @@ class BufferedStream {
  private:
   std::unique_ptr<Stream> stream_;
   std::optional<unsigned char> pushback_;
+  std::array<unsigned char, 64U * 1024U> readBuffer_;
+  std::size_t readPosition_ = 0;
+  std::size_t readSize_ = 0;
   std::uint64_t offset_ = 0;
   std::uint64_t maxReadBytes_ = UINT64_MAX;
   std::filesystem::path path_;
@@ -3518,8 +3550,11 @@ Writer Writer::append(const std::filesystem::path &path, WriterOptions options) 
   auto lock = acquirePathLock(path, options.lockMode, false);
   Reader reader = Reader::open(path);
   Layout layout = reader.layout();
-  reader.buildPageIndex();
-  const std::int64_t pages = reader.indexedPageCount().value_or(0);
+  std::int64_t pages = 0;
+  if (layout.data.mode == DataMode::Ascii) {
+    reader.buildPageIndex();
+    pages = reader.indexedPageCount().value_or(0);
+  }
   reader.close();
   auto impl = std::make_unique<Impl>();
   impl->path = path;
