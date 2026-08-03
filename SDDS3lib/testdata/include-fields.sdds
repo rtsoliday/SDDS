@@ -1,2 +1,0 @@
-&parameter name=origin, type=string, fixed_value="included", &end
-&array name=shape, type=long, dimensions=1, &end

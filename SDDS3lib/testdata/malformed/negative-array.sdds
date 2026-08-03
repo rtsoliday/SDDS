@@ -1,4 +1,0 @@
-SDDS5
-&array name=a, type=double, dimensions=1, &end
-&data mode=ascii, &end
--1
