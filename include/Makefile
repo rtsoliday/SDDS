@@ -1,6 +1,9 @@
 include ../Makefile.rules
 
 INC = SDDS.h \
+      SDDS.hpp \
+      SDDS3.h \
+      SDDS3Legacy.h \
       SDDStypes.h \
       constants.h \
       contour.h \

@@ -46,6 +46,8 @@ ifeq ($(OS), Windows)
   PLOT_DRIVER = SDDSaps/sddsplots/winMotifDriver
 endif
 
+SDDSPP_DIR = SDDS3lib
+
 DIRS = $(GSL_REPO)
 DIRS += $(GSL_LOCAL)
 DIRS += $(HDF5_LOCAL)
@@ -82,9 +84,9 @@ ifneq ($(MPI_CC),)
 DIRS += pgapack
 endif
 
-.PHONY: all $(DIRS) clean distclean test
+.PHONY: all $(SDDSPP_DIR) $(DIRS) clean distclean test
 
-all: $(DIRS)
+all: $(SDDSPP_DIR) $(DIRS)
 
 ifneq ($(GSL_REPO),)
   GSL_CLEAN = $(MAKE) -C $(GSL_REPO) -f Makefile.MSVC clean
@@ -111,7 +113,9 @@ zlib: xlslib
 	$(MAKE) -C $@
 lzma: zlib
 	$(MAKE) -C $@
-mdblib: lzma
+$(SDDSPP_DIR): lzma
+	$(MAKE) -C $@ all
+mdblib: $(SDDSPP_DIR)
 	$(MAKE) -C $@
 mdbmth: mdblib
 	$(MAKE) -C $@
@@ -176,6 +180,7 @@ clean:
 	$(MAKE) -C xlslib clean
 	$(MAKE) -C zlib clean
 	$(MAKE) -C lzma clean
+	$(MAKE) -C $(SDDSPP_DIR) clean
 	$(MAKE) -C mdblib clean
 	$(MAKE) -C mdbmth clean
 	$(MAKE) -C rpns/code clean
@@ -211,4 +216,5 @@ distclean: clean
 	rm -rf lib/$(OS)-$(ARCH)
 
 test: all
+	$(MAKE) -C SDDS3lib test
 	$(PYTEST)
