@@ -877,6 +877,950 @@ using its layout definitions.
 accessors and zero-copy row views.
 \end{itemize}
 
+\section{C++ Library Manual Pages}
+\label{CppManualPages}
+
+This section is a reference for the public C++17 interface declared in
+\verb|SDDS.hpp|.  Closely related overloads and class methods are grouped on a
+single manual page.  Unless stated otherwise, page numbers are one-based, row
+and field indices are zero-based, and failures are reported with an exception
+derived from {\tt sdds::Error}.
+
+\subsection{sdds::typeOf and sdds::typeName}
+\label{CppTypeInspection}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::typeOf}, {\tt sdds::typeName}
+\item {\bf description:}\newline
+Inspect the active alternative of an SDDS scalar or homogeneous values variant,
+or obtain the lowercase protocol name for an SDDS type.
+\item {\bf synopsis:}
+\begin{verbatim}
+#include "SDDS.hpp"
+
+sdds::Type sdds::typeOf(const sdds::Scalar &value) noexcept;
+sdds::Type sdds::typeOf(const sdds::Values &values) noexcept;
+std::string_view sdds::typeName(sdds::Type type) noexcept;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt value} --- A scalar variant.
+\item {\tt values} --- A homogeneous vector variant.
+\item {\tt type} --- An SDDS type identifier.
+\end{itemize}
+\item {\bf return value:}\newline
+{\tt typeOf} returns the corresponding {\tt sdds::Type}.  {\tt typeName}
+returns the stable SDDS type name, or an empty view for an invalid value.
+\item {\bf see also:}\newline
+Section~\ref{CppConversions}.
+\end{itemize}
+
+\subsection{sdds::convertScalar and sdds::convertValues}
+\label{CppConversions}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::convertScalar}, {\tt sdds::convertValues}
+\item {\bf description:}\newline
+Convert values between SDDS types with range and narrowing checks.  Numeric
+overflow and invalid narrowing are rejected.  Floating-point-to-integer
+conversion requires a rounding policy other than {\tt Reject} unless the value
+is already an exact integer.
+\item {\bf synopsis:}
+\begin{verbatim}
+sdds::Scalar sdds::convertScalar(
+    const sdds::Scalar &value, sdds::Type target,
+    sdds::RoundingMode rounding = sdds::RoundingMode::Reject);
+
+sdds::Values sdds::convertValues(
+    const sdds::Values &values, sdds::Type target,
+    sdds::RoundingMode rounding = sdds::RoundingMode::Reject);
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt value}, {\tt values} --- Source scalar or homogeneous values.
+\item {\tt target} --- Destination SDDS type.
+\item {\tt rounding} --- {\tt Reject}, {\tt TowardZero}, {\tt Nearest},
+{\tt Down}, or {\tt Up}.
+\end{itemize}
+\item {\bf return value:}\newline
+A new scalar or homogeneous values variant containing the converted data.
+\item {\bf exceptions:}\newline
+{\tt sdds::TypeError} if a value cannot be represented or the requested
+conversion is invalid.
+\item {\bf see also:}\newline
+Sections~\ref{CppPageTypedAccess} and \ref{CppPageTransforms}.
+\end{itemize}
+
+\subsection{sdds::Layout}
+\label{CppLayout}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::Layout}
+\item {\bf description:}\newline
+Describe the complete SDDS header: description text, parameters, arrays,
+columns, associates, data-mode options, and protocol version.  Field
+definitions use {\tt ParameterDefinition}, {\tt ArrayDefinition},
+{\tt ColumnDefinition}, and {\tt AssociateDefinition}.  The layout retained by
+a reader or page is immutable from the caller's point of view.
+\item {\bf synopsis:}
+\begin{verbatim}
+std::size_t parameterIndex(std::string_view name) const;
+std::size_t arrayIndex(std::string_view name) const;
+std::size_t columnIndex(std::string_view name) const;
+std::size_t associateIndex(std::string_view name) const;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt name} --- Exact field or associate name.
+\end{itemize}
+\item {\bf return value:}\newline
+The zero-based definition index in file order.
+\item {\bf exceptions:}\newline
+{\tt sdds::StateError} if the requested name is absent.  Layout construction
+and validation may also report {\tt sdds::FormatError} or
+{\tt sdds::TypeError} for an invalid definition.
+\item {\bf see also:}\newline
+Sections~\ref{CppLayoutBuilder} and \ref{CppLayoutEditor}.
+\end{itemize}
+
+\subsection{sdds::LayoutBuilder}
+\label{CppLayoutBuilder}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::LayoutBuilder}
+\item {\bf description:}\newline
+Build and validate a new layout using a fluent interface.  Definitions are
+emitted in the order in which they are added.
+\item {\bf synopsis:}
+\begin{verbatim}
+sdds::LayoutBuilder();
+explicit sdds::LayoutBuilder(sdds::Layout layout);
+LayoutBuilder &setDescription(std::optional<std::string> text,
+                              std::optional<std::string> contents = {});
+LayoutBuilder &setDataOptions(sdds::DataOptions options);
+LayoutBuilder &addParameter(sdds::ParameterDefinition definition);
+LayoutBuilder &addArray(sdds::ArrayDefinition definition);
+LayoutBuilder &addColumn(sdds::ColumnDefinition definition);
+LayoutBuilder &addAssociate(sdds::AssociateDefinition definition);
+sdds::Layout build() const;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt layout} --- Optional initial layout to copy into the builder.
+\item {\tt text}, {\tt contents} --- Dataset description metadata.
+\item {\tt options} --- ASCII/binary mode, major order, byte order, row-count
+mode, and related header options.
+\item {\tt definition} --- Definition to append.
+\end{itemize}
+\item {\bf return value:}\newline
+Mutation methods return the builder for chaining.  {\tt build} returns a
+validated layout by value.
+\item {\bf exceptions:}\newline
+An {\tt sdds::Error}-derived exception for duplicate names, invalid dimensions,
+unsupported versions, or inconsistent data options.
+\item {\bf see also:}\newline
+Sections~\ref{CppLayout}, \ref{CppLayoutEditor}, and \ref{CppWriterCreate}.
+\end{itemize}
+
+\subsection{sdds::LayoutEditor}
+\label{CppLayoutEditor}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::LayoutEditor}
+\item {\bf description:}\newline
+Copy an existing layout and rename, drop, replace, or add parameter, array,
+column, and associate definitions.  Data is not transformed by the editor;
+page transformations must be made separately.
+\item {\bf synopsis:}
+\begin{verbatim}
+explicit sdds::LayoutEditor(sdds::Layout layout);
+LayoutEditor &renameParameter(std::string_view name, std::string newName);
+LayoutEditor &renameArray(std::string_view name, std::string newName);
+LayoutEditor &renameColumn(std::string_view name, std::string newName);
+LayoutEditor &renameAssociate(std::string_view name, std::string newName);
+LayoutEditor &dropParameter(std::string_view name);
+LayoutEditor &dropArray(std::string_view name);
+LayoutEditor &dropColumn(std::string_view name);
+LayoutEditor &dropAssociate(std::string_view name);
+LayoutEditor &replaceParameter(std::string_view name,
+                               sdds::ParameterDefinition definition);
+LayoutEditor &replaceArray(std::string_view name,
+                           sdds::ArrayDefinition definition);
+LayoutEditor &replaceColumn(std::string_view name,
+                            sdds::ColumnDefinition definition);
+LayoutEditor &replaceAssociate(std::string_view name,
+                               sdds::AssociateDefinition definition);
+LayoutEditor &addParameter(sdds::ParameterDefinition definition);
+LayoutEditor &addArray(sdds::ArrayDefinition definition);
+LayoutEditor &addColumn(sdds::ColumnDefinition definition);
+LayoutEditor &addAssociate(sdds::AssociateDefinition definition);
+const sdds::Layout &layout() const noexcept;
+sdds::Layout build() const;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt name} --- Existing definition name.
+\item {\tt newName} --- Replacement name.
+\item {\tt definition} --- New or replacement definition.
+\end{itemize}
+\item {\bf return value:}\newline
+Editing methods return the editor for chaining.  {\tt layout} returns the
+working layout and {\tt build} returns a validated copy.
+\item {\bf exceptions:}\newline
+An {\tt sdds::Error}-derived exception if a source definition is absent or the
+resulting layout is invalid.
+\item {\bf see also:}\newline
+Sections~\ref{CppLayoutBuilder} and \ref{CppCopyDataset}.
+\end{itemize}
+
+\subsection{sdds::FieldSelection, sdds::RowSlice, and sdds::ReadRequest}
+\label{CppReadRequest}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::FieldSelection}, {\tt sdds::RowSlice}, {\tt sdds::ReadRequest}
+\item {\bf description:}\newline
+Select parameter, array, and column fields independently and select rows from
+each page.  Projection is pushed into the decoder: unrequested fixed-width
+binary regions are skipped where possible and unrequested variable-width data
+is parsed and discarded.  A page still retains the complete layout, but access
+to an unloaded field throws {\tt sdds::StateError}.
+\item {\bf synopsis:}
+\begin{verbatim}
+static sdds::FieldSelection allFields();
+static sdds::FieldSelection noFields();
+static sdds::FieldSelection only(std::vector<std::string> names);
+
+struct sdds::RowSlice {
+  std::int64_t first = 0;
+  std::optional<std::int64_t> count;
+  std::int64_t stride = 1;
+  std::optional<std::int64_t> last;
+};
+
+struct sdds::ReadRequest {
+  FieldSelection parameters, arrays, columns;
+  RowSlice rows;
+};
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt names} --- Exact names to load for one field category.
+\item {\tt first} --- First source row considered.
+\item {\tt count} --- Optional maximum number of source rows considered.
+\item {\tt stride} --- Positive source-row interval.
+\item {\tt last} --- Optional trailing-row count, mutually exclusive with
+{\tt first} and {\tt count} selection.
+\end{itemize}
+\item {\bf return value:}\newline
+The factory methods return a field selection.  A default {\tt ReadRequest}
+loads all fields and all rows.
+\item {\bf exceptions:}\newline
+{\tt sdds::StateError} for an invalid slice or missing projected name, or
+{\tt sdds::LimitError} when projected-field limits are exceeded.
+\item {\bf see also:}\newline
+Sections~\ref{CppReaderRead} and \ref{CppPageAccess}.
+\end{itemize}
+
+\subsection{sdds::Page construction and field access}
+\label{CppPageAccess}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::Page}, field access and assignment
+\item {\bf description:}\newline
+Represent one complete or projected SDDS page.  A page shares an immutable
+layout and stores values using {\tt sdds::Scalar}, {\tt sdds::Values}, and
+{\tt sdds::ArrayData}.  A manually constructed page may begin with all fields
+loaded or unloaded.
+\item {\bf synopsis:}
+\begin{verbatim}
+explicit sdds::Page(std::shared_ptr<const sdds::Layout> layout,
+                    sdds::LoadMode load = sdds::LoadMode::All);
+std::int64_t number() const noexcept;
+std::int64_t rowCount() const noexcept;
+bool recovered() const noexcept;
+const sdds::Layout &layout() const;
+bool parameterLoaded(index-or-name) const;
+bool arrayLoaded(index-or-name) const;
+bool columnLoaded(index-or-name) const;
+bool allFieldsLoaded() const noexcept;
+const sdds::Scalar &parameter(index-or-name) const;
+const sdds::ArrayData &array(index-or-name) const;
+const sdds::Values &column(index-or-name) const;
+void setParameter(index-or-name, sdds::Scalar value);
+void setArray(index-or-name, sdds::ArrayData value);
+void setColumn(index-or-name, sdds::Values value);
+\end{verbatim}
+Here {\tt index-or-name} denotes the overload accepting either
+{\tt std::size\_t} or {\tt std::string\_view}.
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt layout} --- Shared layout that governs the page.
+\item {\tt load} --- Initial loaded-field state for a new page.
+\item {\tt index-or-name} --- Field index or exact name.
+\item {\tt value} --- Replacement value whose type must match the definition.
+\end{itemize}
+\item {\bf return value:}\newline
+Status and access methods return page metadata, load state, or a const reference
+to stored data.  Assignment methods have no return value and mark their fields
+loaded.
+\item {\bf exceptions:}\newline
+{\tt sdds::StateError} for an unloaded or absent field,
+{\tt sdds::TypeError} for a type mismatch, or {\tt sdds::FormatError} for
+invalid array dimensions or inconsistent column lengths.
+\item {\bf see also:}\newline
+Sections~\ref{CppPageTypedAccess}, \ref{CppPageTransforms}, and
+\ref{CppWriterPages}.
+\end{itemize}
+
+\subsection{sdds::Page typed access}
+\label{CppPageTypedAccess}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt parameterAs}, {\tt arrayAs}, {\tt columnAs},
+{\tt parameterConverted}, {\tt arrayConverted}, {\tt columnConverted}
+\item {\bf description:}\newline
+Read a named field either with an exact C++ type or by checked numeric
+conversion.  Exact access returns a reference for parameters, arrays, and
+columns.  Converted arrays and columns are returned as new vectors.
+\item {\bf synopsis:}
+\begin{verbatim}
+template<class T> const T &Page::parameterAs(std::string_view name) const;
+template<class T> T Page::parameterConverted(
+    std::string_view name, sdds::RoundingMode rounding = Reject) const;
+template<class T> const std::vector<T> &Page::arrayAs(
+    std::string_view name) const;
+template<class T> std::vector<T> Page::arrayConverted(
+    std::string_view name, sdds::RoundingMode rounding = Reject) const;
+template<class T> const std::vector<T> &Page::columnAs(
+    std::string_view name) const;
+template<class T> std::vector<T> Page::columnConverted(
+    std::string_view name, sdds::RoundingMode rounding = Reject) const;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt T} --- One of the C++ alternatives represented by the SDDS type.
+\item {\tt name} --- Field name.
+\item {\tt rounding} --- Floating-point-to-integer rounding policy.
+\end{itemize}
+\item {\bf return value:}\newline
+The exact stored value or a checked converted value.
+\item {\bf exceptions:}\newline
+{\tt std::bad\_variant\_access} for an inexact {\tt *As} request;
+{\tt sdds::TypeError} for a failed conversion; {\tt sdds::StateError} for an
+unloaded field; or {\tt sdds::LimitError} when transformation output exceeds
+the reader limit.
+\item {\bf see also:}\newline
+Sections~\ref{CppConversions} and \ref{CppRowView}.
+\end{itemize}
+
+\subsection{sdds::RowView and sdds::RowMask}
+\label{CppRowView}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::RowView}, {\tt sdds::RowMask}
+\item {\bf description:}\newline
+Access a row without copying column storage and compose row selections.  Masks
+support intersection, union, and inversion and can be produced by applying an
+untyped or exact-type predicate to a page column.
+\item {\bf synopsis:}
+\begin{verbatim}
+sdds::RowView Page::row(std::int64_t index) const;
+std::int64_t RowView::index() const noexcept;
+sdds::Scalar RowView::value(index-or-name) const;
+template<class T> T RowView::get(std::string_view column) const;
+template<class T> T RowView::getConverted(
+    std::string_view column, sdds::RoundingMode rounding = Reject) const;
+
+explicit sdds::RowMask(std::size_t rows, bool selected = false);
+static sdds::RowMask all(std::size_t rows);
+static sdds::RowMask none(std::size_t rows);
+std::size_t size() const noexcept;
+std::size_t count() const noexcept;
+bool test(std::size_t row) const;
+void set(std::size_t row, bool selected = true);
+RowMask &operator&=(const RowMask &other);
+RowMask &operator|=(const RowMask &other);
+RowMask operator~() const;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt index}, {\tt row} --- Zero-based row index.
+\item {\tt column} --- Column index or name.
+\item {\tt rows} --- Number of entries in a mask.
+\item {\tt selected} --- Initial or replacement selection state.
+\item {\tt other} --- Mask of identical size.
+\end{itemize}
+\item {\bf return value:}\newline
+A row view, cell value, converted cell, mask status, or composed mask as
+appropriate.  A {\tt RowView} remains valid only while its source page remains
+alive and unmodified.
+\item {\bf exceptions:}\newline
+{\tt sdds::StateError} for an unavailable column or mismatched mask sizes,
+or for an invalid row view; {\tt std::out\_of\_range} for an invalid mask
+index; and the conversion exceptions described in
+Section~\ref{CppConversions}.
+\item {\bf see also:}\newline
+Section~\ref{CppPageTransforms}.
+\end{itemize}
+
+\subsection{sdds::Page row and field transformations}
+\label{CppPageTransforms}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt Page::matchRows}, {\tt Page::filtered}, {\tt Page::projected},
+{\tt Page::matrix}
+\item {\bf description:}\newline
+Create immutable filtered or projected page copies and extract selected numeric
+columns as a contiguous row-major matrix.  {\tt matchRows} produces a mask by
+testing each value in a loaded column.
+\item {\bf synopsis:}
+\begin{verbatim}
+sdds::RowMask Page::matchRows(
+    std::string_view column,
+    const std::function<bool(const sdds::Scalar &)> &predicate) const;
+template<class T, class Predicate>
+sdds::RowMask Page::matchRows(std::string_view column,
+                              Predicate predicate) const;
+sdds::Page Page::filtered(const sdds::RowMask &mask) const;
+sdds::Page Page::projected(const sdds::ReadRequest &request) const;
+template<class T>
+sdds::DenseMatrix<T> Page::matrix(
+    const std::vector<std::string> &columns,
+    sdds::ConversionMode conversion = sdds::ConversionMode::Exact,
+    sdds::RoundingMode rounding = sdds::RoundingMode::Reject) const;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt column}, {\tt columns} --- Source column name or ordered names.
+\item {\tt predicate} --- Callable used to select rows.
+\item {\tt mask} --- Mask having one entry per page row.
+\item {\tt request} --- Field and row projection.
+\item {\tt conversion} --- Require exact types or use checked conversion.
+\item {\tt rounding} --- Rounding policy used by checked conversion.
+\end{itemize}
+\item {\bf return value:}\newline
+A mask, transformed page, or {\tt DenseMatrix<T>}.  A dense matrix exposes
+{\tt rows}, {\tt columns}, a row-major {\tt values} vector, and checked
+{\tt operator()(row,column)} access.
+\item {\bf exceptions:}\newline
+{\tt sdds::StateError}, {\tt sdds::TypeError}, or {\tt sdds::LimitError} for
+unavailable data, incompatible types, or excessive transformation output.
+\item {\bf see also:}\newline
+Sections~\ref{CppReadRequest}, \ref{CppRowView}, and \ref{CppConvertUnits}.
+\end{itemize}
+
+\subsection{sdds::ReaderOptions and sdds::ReaderLimits}
+\label{CppReaderOptions}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::ReaderOptions}, {\tt sdds::ReaderLimits}
+\item {\bf description:}\newline
+Configure one reader without process-global state.  Options select compression,
+truncation recovery, long-double encoding, advisory locking, buffer size, and
+resource limits.
+\item {\bf synopsis:}
+\begin{verbatim}
+struct sdds::ReaderOptions {
+  Compression compression = Compression::Auto;
+  RecoveryMode recovery = RecoveryMode::Automatic;
+  LongDoubleEncoding longDoubleEncoding = LongDoubleEncoding::Extended80;
+  LockMode lockMode = LockMode::None;
+  std::size_t bufferBytes = 256 * 1024;
+  ReaderLimits limits;
+};
+\end{verbatim}
+{\tt ReaderLimits} bounds rows per page, elements per field, string bytes,
+layout-command bytes, decompressed bytes, transformation output elements,
+include depth, projected fields, and page-index entries.
+\item {\bf arguments:}\newline
+These structures are passed by value to reader factory methods.  Set only the
+members that differ from the defaults.
+\item {\bf return value:}\newline
+Not applicable.
+\item {\bf exceptions:}\newline
+{\tt sdds::LimitError} is thrown when a configured limit is exceeded.
+\item {\bf see also:}\newline
+Sections~\ref{CppReaderCreate} and \ref{CppReaderRead}.
+\end{itemize}
+
+\subsection{sdds::Reader creation}
+\label{CppReaderCreate}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt Reader::open}, {\tt Reader::openHeaderless}, {\tt Reader::fromStdin},
+{\tt Reader::fromSource}, {\tt Reader::fromHeaderlessSource}
+\item {\bf description:}\newline
+Create a move-only streaming reader from a path, standard input, or caller
+supplied byte source.  Headerless input requires a validated layout describing
+the data bytes.  Path input with {\tt Compression::Auto} selects compression
+from the path; custom sources require an explicit compression choice.
+\item {\bf synopsis:}
+\begin{verbatim}
+static sdds::Reader open(const std::filesystem::path &path,
+                         sdds::ReaderOptions options = {});
+static sdds::Reader openHeaderless(const std::filesystem::path &path,
+                                   sdds::Layout layout,
+                                   sdds::ReaderOptions options = {});
+static sdds::Reader fromStdin(sdds::ReaderOptions options = {});
+static sdds::Reader fromSource(std::unique_ptr<sdds::InputSource> source,
+                               std::string sourceName = {},
+                               sdds::ReaderOptions options = {});
+static sdds::Reader fromHeaderlessSource(
+    std::unique_ptr<sdds::InputSource> source, sdds::Layout layout,
+    std::string sourceName = {}, sdds::ReaderOptions options = {});
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt path} --- Input path.
+\item {\tt source} --- Owned source adapter; ownership moves to the reader.
+\item {\tt layout} --- Validated headerless-data layout.
+\item {\tt sourceName} --- Diagnostic name included in error context.
+\item {\tt options} --- Per-reader configuration and limits.
+\end{itemize}
+\item {\bf return value:}\newline
+An open, move-only {\tt sdds::Reader}.  Its {\tt layout()} method returns the
+parsed or caller-supplied layout.
+\item {\bf exceptions:}\newline
+{\tt sdds::IoError} for source failures, {\tt sdds::FormatError} for malformed
+headers, or another {\tt sdds::Error}-derived exception with available path and
+byte-offset context.
+\item {\bf see also:}\newline
+Sections~\ref{CppReaderOptions}, \ref{CppReaderRead}, and \ref{CppSources}.
+\end{itemize}
+
+\subsection{sdds::Reader page reading}
+\label{CppReaderRead}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt Reader::next}, {\tt Reader::readAll}
+\item {\bf description:}\newline
+Decode the next page with optional field projection and row slicing, or
+materialize every remaining page.  Trailing-row selection uses bounded storage
+when the page row count is not known in advance.
+\item {\bf synopsis:}
+\begin{verbatim}
+std::optional<sdds::Page> next(sdds::ReadRequest request = {});
+sdds::MaterializedDataset readAll(sdds::ReadRequest request = {});
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt request} --- Independent parameter, array, column, and row
+selection.  The default loads the complete page.
+\end{itemize}
+\item {\bf return value:}\newline
+{\tt next} returns the next page or an empty optional at end of input.
+{\tt readAll} returns the complete layout and all remaining pages.
+\item {\bf exceptions:}\newline
+{\tt sdds::IoError}, {\tt sdds::FormatError}, {\tt sdds::StateError}, or
+{\tt sdds::LimitError}, with page, field, row, and byte-offset context when
+available.  Malformed content is fatal unless recovery was enabled and the
+failure is a recoverably truncated final page.
+\item {\bf see also:}\newline
+Sections~\ref{CppReadRequest}, \ref{CppReaderIndex}, and
+\ref{CppReaderLive}.
+\end{itemize}
+
+\subsection{sdds::Reader page indexing}
+\label{CppReaderIndex}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt Reader::gotoPage}, {\tt Reader::buildPageIndex},
+{\tt Reader::indexedPageCount}
+\item {\bf description:}\newline
+Seek among pages on a seekable input.  The reader lazily records page offsets
+during normal reads; {\tt gotoPage} resumes from the nearest cached offset.
+{\tt buildPageIndex} scans the input and eagerly caches every page offset.
+\item {\bf synopsis:}
+\begin{verbatim}
+void gotoPage(std::int64_t pageNumber);
+void buildPageIndex();
+std::optional<std::int64_t> indexedPageCount() const noexcept;
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt pageNumber} --- One-based page to return from the next read.
+\end{itemize}
+\item {\bf return value:}\newline
+{\tt indexedPageCount} returns the total count after complete indexing, or an
+empty optional while the count is not known.  The other methods return nothing.
+\item {\bf exceptions:}\newline
+{\tt sdds::StateError} for an unseekable source or invalid page number,
+{\tt sdds::LimitError} when the index-entry limit is exceeded, or an I/O or
+format exception encountered while scanning.
+\item {\bf see also:}\newline
+Section~\ref{CppReaderRead}.
+\end{itemize}
+
+\subsection{sdds::Reader live-file and lifecycle operations}
+\label{CppReaderLive}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt Reader::readNewRows}, {\tt Reader::disconnect},
+{\tt Reader::reconnect}, {\tt Reader::close}
+\item {\bf description:}\newline
+Poll an updateable final page without blocking, temporarily release a
+path-backed file handle, reopen it after identity checks, or close a reader.
+Live row polling is limited to uncompressed binary files with an updateable
+final page.
+\item {\bf synopsis:}
+\begin{verbatim}
+std::optional<sdds::PageDelta> readNewRows(
+    sdds::ReadRequest request = {});
+void disconnect();
+void reconnect();
+void close();
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt request} --- Projection applied to newly observed rows.
+\end{itemize}
+\item {\bf return value:}\newline
+{\tt readNewRows} returns an empty optional when the file has not grown.
+Otherwise it returns a {\tt PageDelta} containing the one-based page number,
+first new zero-based row, and a page containing only new rows.
+\item {\bf exceptions:}\newline
+{\tt sdds::StateError} for an unsupported source, compression, or page mode;
+{\tt sdds::IoError} if reopening fails or the file was replaced.
+\item {\bf see also:}\newline
+Sections~\ref{CppWriterUpdate} and \ref{CppSources}.
+\end{itemize}
+
+\subsection{sdds::InputSource, sdds::OutputSink, and adapters}
+\label{CppSources}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::InputSource}, {\tt sdds::OutputSink}, source and sink factories
+\item {\bf description:}\newline
+Provide byte-oriented I/O behind readers and writers.  Custom implementations
+advertise read, write, seek, truncate, flush, sync, and reopen support through
+{\tt SourceCapabilities}.  Built-in adapters support paths, standard streams,
+borrowed or owned {\tt FILE*}, borrowed C++ streams, and caller-owned memory.
+\item {\bf synopsis:}
+\begin{verbatim}
+std::unique_ptr<InputSource> inputFromPath(path);
+std::unique_ptr<InputSource> inputFromStdin();
+std::unique_ptr<InputSource> inputFromFile(FILE *file,
+                                           bool takeOwnership = false);
+std::unique_ptr<InputSource> inputFromStream(std::istream &stream);
+std::unique_ptr<InputSource> inputFromMemory(const void *data,
+                                             std::size_t size);
+std::unique_ptr<OutputSink> outputToPath(path, bool truncate = true);
+std::unique_ptr<OutputSink> outputToStdout();
+std::unique_ptr<OutputSink> outputToFile(FILE *file,
+                                         bool takeOwnership = false);
+std::unique_ptr<OutputSink> outputToStream(std::ostream &stream);
+std::unique_ptr<OutputSink> outputToMemory(
+    std::vector<std::uint8_t> &data);
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt path} --- Path opened by the adapter.
+\item {\tt file}, {\tt stream} --- Already-open stream to wrap.
+\item {\tt takeOwnership} --- Whether adapter closure also closes a
+{\tt FILE*}.
+\item {\tt data}, {\tt size} --- Caller-owned input or output memory.
+\item {\tt truncate} --- Whether path output replaces existing contents.
+\end{itemize}
+\item {\bf return value:}\newline
+An owned adapter suitable for {\tt Reader::fromSource} or
+{\tt Writer::toSink}.  The wrapped stream or memory must outlive a borrowed
+adapter.
+\item {\bf exceptions:}\newline
+{\tt sdds::IoError} for failed operations and {\tt sdds::StateError} when an
+optional operation is requested without the corresponding capability.
+\item {\bf see also:}\newline
+Sections~\ref{CppReaderCreate} and \ref{CppWriterCreate}.
+\end{itemize}
+
+\subsection{sdds::WriterOptions}
+\label{CppWriterOptions}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::WriterOptions}
+\item {\bf description:}\newline
+Configure one writer's compression, long-double encoding, advisory lock,
+last-page update strategy, buffer size, compression tuning, and minimum output
+version.  Path writers default to exclusive advisory locking.
+\item {\bf synopsis:}
+\begin{verbatim}
+struct sdds::WriterOptions {
+  Compression compression = Compression::Auto;
+  LongDoubleEncoding longDoubleEncoding = LongDoubleEncoding::Extended80;
+  LockMode lockMode = LockMode::Exclusive;
+  UpdateStrategy updateStrategy = UpdateStrategy::Automatic;
+  std::size_t bufferBytes = 256 * 1024;
+  int gzipLevel = -1;
+  std::uint32_t lzmaPreset = 6;
+  LzmaCheck lzmaCheck = LzmaCheck::Crc64;
+  std::int32_t minimumVersion = 1;
+};
+\end{verbatim}
+\item {\bf arguments:}\newline
+This structure is passed by value to writer factory methods.  Compression
+settings apply only to their corresponding wrapper.
+\item {\bf return value:}\newline
+Not applicable.
+\item {\bf exceptions:}\newline
+Invalid levels, presets, versions, or unsupported strategies are reported by
+an {\tt sdds::Error}-derived exception when the writer is opened or updated.
+\item {\bf see also:}\newline
+Sections~\ref{CppWriterCreate} and \ref{CppWriterUpdate}.
+\end{itemize}
+
+\subsection{sdds::Writer creation and append modes}
+\label{CppWriterCreate}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt Writer::create}, {\tt Writer::toStdout}, {\tt Writer::toSink},
+{\tt Writer::append}, {\tt Writer::appendToLastPage}
+\item {\bf description:}\newline
+Create a move-only streaming writer, append complete pages to an existing file,
+or reopen its final page for incremental updates.  A new writer owns a validated
+copy of the output layout.
+\item {\bf synopsis:}
+\begin{verbatim}
+static sdds::Writer create(const std::filesystem::path &path,
+                           sdds::Layout layout,
+                           sdds::WriterOptions options = {});
+static sdds::Writer toStdout(sdds::Layout layout,
+                             sdds::WriterOptions options = {});
+static sdds::Writer toSink(std::unique_ptr<sdds::OutputSink> sink,
+                           sdds::Layout layout,
+                           std::string sinkName = {},
+                           sdds::WriterOptions options = {});
+static sdds::Writer append(const std::filesystem::path &path,
+                           sdds::WriterOptions options = {});
+static sdds::Writer appendToLastPage(const std::filesystem::path &path,
+                                     std::int64_t updateInterval,
+                                     sdds::WriterOptions options = {});
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt path} --- New or existing output path.
+\item {\tt layout} --- Validated output layout.
+\item {\tt sink} --- Owned output sink.
+\item {\tt sinkName} --- Name used in diagnostic context.
+\item {\tt updateInterval} --- Row-count publication interval for a live page.
+\item {\tt options} --- Per-writer configuration.
+\end{itemize}
+\item {\bf return value:}\newline
+An open, move-only {\tt sdds::Writer}.  {\tt layout()} returns its immutable
+output layout and {\tt rowsPresent()} reports rows staged or present during an
+update.
+\item {\bf exceptions:}\newline
+{\tt sdds::IoError}, {\tt sdds::FormatError}, or {\tt sdds::StateError} for
+file, layout, locking, append, or update incompatibilities.
+\item {\bf see also:}\newline
+Sections~\ref{CppWriterOptions}, \ref{CppWriterPages}, and
+\ref{CppWriterUpdate}.
+\end{itemize}
+
+\subsection{sdds::Writer page output}
+\label{CppWriterPages}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt Writer::write}, {\tt Writer::beginPage}, field setters,
+{\tt Writer::commitPage}
+\item {\bf description:}\newline
+Write a complete page in one operation or construct a page incrementally inside
+the writer.  The rvalue {\tt write} overload consumes page storage and avoids a
+page copy.  {\tt setColumn} extends internal column storage in place and may be
+called repeatedly with increasing row ranges.
+\item {\bf synopsis:}
+\begin{verbatim}
+void write(const sdds::Page &page);
+void write(sdds::Page &&page);
+void beginPage(std::int64_t expectedRows);
+void setParameter(std::string_view name, sdds::Scalar value);
+void setArray(std::string_view name, sdds::ArrayData value);
+void setColumn(std::string_view name, sdds::Values value,
+               std::int64_t startRow = 0);
+void commitPage();
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt page} --- Complete page compatible with the writer layout.
+\item {\tt expectedRows} --- Expected final row count for staged construction.
+\item {\tt name} --- Destination field name.
+\item {\tt value} --- Field values, moved into staged storage when possible.
+\item {\tt startRow} --- First destination row for column values.
+\end{itemize}
+\item {\bf return value:}\newline
+None.
+\item {\bf exceptions:}\newline
+{\tt sdds::StateError} for an invalid call sequence or incomplete page,
+{\tt sdds::TypeError} for incompatible values, and {\tt sdds::IoError} for an
+output failure.
+\item {\bf see also:}\newline
+Sections~\ref{CppPageAccess} and \ref{CppWriterUpdate}.
+\end{itemize}
+
+\subsection{sdds::Writer update and lifecycle operations}
+\label{CppWriterUpdate}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt Writer::updatePage}, {\tt Writer::sync}, {\tt Writer::disconnect},
+{\tt Writer::reconnect}, {\tt Writer::close}
+\item {\bf description:}\newline
+Publish rows appended to an updateable final page, synchronize output,
+temporarily release a path handle, reopen it after file-identity checks, or
+finalize a writer.  Compatible uncompressed row-major files can be updated in
+place.  {\tt Automatic} uses an adjacent-file atomic rewrite for compressed or
+column-major files; {\tt InPlaceOnly} rejects them.
+\item {\bf synopsis:}
+\begin{verbatim}
+void updatePage(bool flushRows = false);
+void sync();
+void disconnect();
+void reconnect();
+void close();
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt flushRows} --- Flush newly written row data while publishing the
+updated row count.
+\end{itemize}
+\item {\bf return value:}\newline
+None.
+\item {\bf exceptions:}\newline
+{\tt sdds::StateError} for an unsupported strategy or call sequence and
+{\tt sdds::IoError} for flush, synchronization, reconnect, replacement, or
+atomic-rewrite failures.
+\item {\bf see also:}\newline
+Sections~\ref{CppWriterOptions} and \ref{CppReaderLive}.
+\end{itemize}
+
+\subsection{sdds::convertUnits}
+\label{CppConvertUnits}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::convertUnits}
+\item {\bf description:}\newline
+Multiply a numeric parameter, array, or column by a conversion factor and
+replace its unit metadata in one immutable operation.  Both layout and loaded
+data remain consistent in the returned page.
+\item {\bf synopsis:}
+\begin{verbatim}
+sdds::Page sdds::convertUnits(
+    const sdds::Page &page, sdds::FieldKind kind,
+    std::string_view name, std::optional<std::string> units,
+    long double factor);
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt page} --- Source page.
+\item {\tt kind} --- {\tt Parameter}, {\tt Array}, or {\tt Column}.
+\item {\tt name} --- Numeric field name.
+\item {\tt units} --- Replacement unit string, or no unit metadata.
+\item {\tt factor} --- Multiplicative conversion factor.
+\end{itemize}
+\item {\bf return value:}\newline
+A converted page that owns a correspondingly edited layout.
+\item {\bf exceptions:}\newline
+{\tt sdds::StateError} for an absent or unloaded field,
+{\tt sdds::TypeError} for nonnumeric data or overflow, and
+{\tt sdds::LimitError} for excessive transformation output.
+\item {\bf see also:}\newline
+Sections~\ref{CppLayoutEditor} and \ref{CppPageTransforms}.
+\end{itemize}
+
+\subsection{sdds::copyDataset}
+\label{CppCopyDataset}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::copyDataset}, {\tt sdds::CopyOptions}
+\item {\bf description:}\newline
+Stream the remaining pages of a reader to a path without materializing the
+whole data set.  The operation accepts a read projection, writer options, an
+optional layout transformation, and an optional move-based page transformation
+that may also reject a page.
+\item {\bf synopsis:}
+\begin{verbatim}
+struct sdds::CopyOptions {
+  sdds::ReadRequest read;
+  sdds::WriterOptions writer;
+  std::function<sdds::Layout(const sdds::Layout &)> transformLayout;
+  std::function<std::optional<sdds::Page>(
+      sdds::Page &&, std::shared_ptr<const sdds::Layout>)> transformPage;
+};
+
+void sdds::copyDataset(sdds::Reader &reader,
+                       const std::filesystem::path &output,
+                       sdds::CopyOptions options = {});
+\end{verbatim}
+\item {\bf arguments:}
+\begin{itemize}
+\item {\tt reader} --- Source reader positioned before the first page to copy.
+\item {\tt output} --- Destination path.
+\item {\tt options} --- Projection, writer configuration, and callbacks.
+The page callback receives the projected page and shared destination layout;
+an empty optional drops that page.
+\end{itemize}
+\item {\bf return value:}\newline
+None.
+\item {\bf exceptions:}\newline
+Reader, writer, validation, transformation, and callback exceptions propagate
+to the caller.  If an exception interrupts the operation, the destination may
+be incomplete.
+\item {\bf see also:}\newline
+Sections~\ref{CppLayoutEditor}, \ref{CppReadRequest}, and
+\ref{CppWriterCreate}.
+\end{itemize}
+
+\subsection{sdds::Error and derived exceptions}
+\label{CppErrors}
+
+\begin{itemize}
+\item {\bf name:}\newline
+{\tt sdds::Error}, {\tt sdds::IoError}, {\tt sdds::FormatError},
+{\tt sdds::TypeError}, {\tt sdds::StateError}, {\tt sdds::LimitError}
+\item {\bf description:}\newline
+Report SDDS++ failures using typed exceptions.  The base class carries a stable
+{\tt ErrorKind} and optional path, page, field, byte-offset, and row context in
+addition to the message returned by {\tt what()}.
+\item {\bf synopsis:}
+\begin{verbatim}
+sdds::ErrorKind kind() const noexcept;
+const std::filesystem::path &path() const noexcept;
+std::int64_t page() const noexcept;
+const std::optional<std::string> &field() const noexcept;
+const std::optional<std::uint64_t> &offset() const noexcept;
+const std::optional<std::int64_t> &row() const noexcept;
+\end{verbatim}
+\item {\bf arguments:}\newline
+No arguments are required to inspect a caught exception.
+\item {\bf return value:}\newline
+The error category and diagnostic context.  Page zero or an empty optional
+means that context was unavailable.
+\item {\bf exceptions:}\newline
+The accessors do not throw.  Catch a specific derived type when recovery depends
+on the category, or catch {\tt const sdds::Error\&} at an application boundary.
+\item {\bf see also:}\newline
+Section~\ref{CppReaderOptions} for recovery and resource-limit policies.
+\end{itemize}
+
 \section{Two Templates for C SDDS Application Organization}
 This section gives pseudo-code templates for two typical C SDDS applications. One shows how to access data stored in a SDDS file, while the other shows how to make an SDDS file from data generated internally (or read from another source).
 \subsection{Accessing Data Stored in an SDDS File}
