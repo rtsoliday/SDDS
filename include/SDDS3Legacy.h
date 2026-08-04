@@ -2,8 +2,16 @@
  * @file SDDS3Legacy.h
  * @brief Deprecated source-compatibility facade for the original SDDS3 C++ API.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Declares a limited SDDSFile adapter for common migration call sites.
+ * It intentionally omits public storage, raw allocation modes, and uncommon
+ * historical methods that have no safe modern equivalent.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #ifndef SDDS3_LEGACY_HPP
@@ -32,17 +40,33 @@
  */
 class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
  public:
+  /** @name Construction */
+  /** @{ */
+  /** @brief Creates an unconfigured compatibility object. */
   SDDSFile();
+  /** @brief Creates an object for a file. @param filename File path. */
   explicit SDDSFile(char *filename);
+  /** @brief Creates an object for a file. @param filename File path. */
   explicit SDDSFile(const char *filename);
+  /** @brief Creates an object with an initial data mode. @param binary True for binary data. */
   explicit SDDSFile(bool binary);
+  /** @brief Creates an object for a file and data mode. @param filename File path. @param binary True for binary data. */
   SDDSFile(char *filename, bool binary);
+  /** @brief Creates an object for a file and data mode. @param filename File path. @param binary True for binary data. */
   SDDSFile(const char *filename, bool binary);
+  /** @brief Closes any open reader or writer and destroys the object. */
   ~SDDSFile();
+  /** @} */
 
   SDDSFile(const SDDSFile &) = delete;
   SDDSFile &operator=(const SDDSFile &) = delete;
 
+  /**
+   * @name File lifecycle
+   * Functions returning int32_t use the historical convention of nonzero for
+   * success and zero for failure; failure details are retained by the adapter.
+   */
+  /** @{ */
   int32_t initializeInput(char *filename);
   int32_t initializeInput(const char *filename);
   int32_t initializeOutput(int32_t dataMode, int32_t linesPerRow,
@@ -59,14 +83,20 @@ class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
   int32_t writePage(uint32_t page);
   int32_t writePages();
   int32_t writePages(uint32_t startPage, uint32_t endPage);
+  /** @} */
 
+  /** @name Error handling */
+  /** @{ */
   int32_t checkForErrors();
   void clearErrors();
   void printErrors(FILE *file, int32_t mode);
   void printErrors();
   void setError(char *text);
   int32_t readRecoveryPossible() const;
+  /** @} */
 
+  /** @name Layout and encoding options */
+  /** @{ */
   void setFileName(char *filename);
   void setFileName(const char *filename);
   uint32_t getDataMode() const;
@@ -84,11 +114,21 @@ class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
   void setDescription(char *text, char *contents);
   int32_t getDescription(char **text, char **contents);
   int32_t readVersion() const;
+  /** @} */
 
+  /** @name Page information */
+  /** @{ */
   uint32_t pageCount() const;
   uint32_t rowCount(uint32_t page) const;
   void freePage();
+  /** @} */
 
+  /**
+   * @name Field definitions
+   * Overloads accept a numeric or textual SDDS type; detailed overloads also
+   * accept the metadata serialized in the corresponding namelist command.
+   */
+  /** @{ */
   int32_t defineParameter(char *name, int32_t type);
   int32_t defineParameter(char *name, char *type);
   int32_t defineParameter(char *name, char *symbol, char *units, char *description,
@@ -102,7 +142,10 @@ class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
   int32_t defineArray(char *name, char *symbol, char *units, char *description,
                       char *formatString, char *groupName, int32_t type,
                       uint32_t fieldLength, uint32_t dimensions);
+  /** @} */
 
+  /** @name Field inspection */
+  /** @{ */
   int32_t getParameterCount() const;
   int32_t getColumnCount() const;
   int32_t getArrayCount() const;
@@ -115,7 +158,13 @@ class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
   int32_t getParameterType(int32_t index) const;
   int32_t getColumnType(int32_t index) const;
   int32_t getArrayType(int32_t index) const;
+  /** @} */
 
+  /**
+   * @name Parameter assignment
+   * The page argument is one-based, and fields may be selected by index or name.
+   */
+  /** @{ */
   int32_t setParameter(uint32_t page, int32_t index, int32_t value);
   int32_t setParameter(uint32_t page, int32_t index, uint32_t value);
   int32_t setParameter(uint32_t page, int32_t index, double value);
@@ -124,7 +173,13 @@ class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
   int32_t setParameter(uint32_t page, char *name, uint32_t value);
   int32_t setParameter(uint32_t page, char *name, double value);
   int32_t setParameter(uint32_t page, char *name, char *value);
+  /** @} */
 
+  /**
+   * @name Column assignment
+   * Values are copied into the named or indexed column beginning at startRow.
+   */
+  /** @{ */
   int32_t setColumn(int32_t index, uint32_t page, uint32_t startRow,
                     int16_t *values, uint32_t rows);
   int32_t setColumn(int32_t index, uint32_t page, uint32_t startRow,
@@ -150,7 +205,14 @@ class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
                     double *values, uint32_t rows);
   int32_t setColumn(char *name, uint32_t page, uint32_t startRow,
                     char **values, uint32_t rows);
+  /** @} */
 
+  /**
+   * @name Value access
+   * The compatibility adapter owns returned strings and vectors; callers must
+   * not release them and should treat them as invalidated by later mutations.
+   */
+  /** @{ */
   int32_t getParameterInInt32(int32_t index, uint32_t page);
   int32_t getParameterInInt32(char *name, uint32_t page);
   uint32_t getParameterInUInt32(int32_t index, uint32_t page);
@@ -169,6 +231,7 @@ class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
   char **getColumnInString(char *name, uint32_t page);
   void *getInternalColumn(int32_t index, uint32_t page);
   void *getInternalColumn(char *name, uint32_t page);
+  /** @} */
 
  private:
   struct Impl;

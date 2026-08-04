@@ -5,8 +5,12 @@
  * This is the C++ counterpart of SDDSlib/demo/sdds_read_demo.c. It reads any
  * supported SDDS file and prints its parameters, arrays, and columns.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS.hpp"

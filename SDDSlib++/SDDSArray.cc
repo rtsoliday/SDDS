@@ -1,3 +1,21 @@
+/**
+ * @file SDDSArray.cc
+ * @brief Archived implementation of the original SDDS3 array class.
+ *
+ * @details Provides legacy array definition, conversion, and page-storage
+ * routines for builds that explicitly enable the unmodernized SDDS3 API.
+ *
+ * @note This source is retained for migration reference and is not compiled
+ * into libSDDSpp.
+ *
+ * @copyright
+ *   - (c) The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
+ */
+
 /* GUIDELINES
    Do not exit or print to stdout or stderr from any of the functions in this file
 */
@@ -17,8 +35,8 @@ fix nonnative in everything
 #include "SDDS3.h"
 
 
-/*
- * SDDSArray
+/**
+ * @brief SDDSArray
  *
  * C++ Arguments: none
  *
@@ -51,8 +69,8 @@ SDDSArray::SDDSArray() {
   sddsfile = NULL;
 }
 
-/*
- * ~SDDSArray
+/**
+ * @brief ~SDDSArray
  *
  * C++ Arguments: none
  *
@@ -158,8 +176,8 @@ SDDSArray::~SDDSArray() {
   }  
 }
 
-/*
- * freePage
+/**
+ * @brief freePage
  *
  * C++ Arguments: none
  *
@@ -284,8 +302,8 @@ void SDDSArray::freePage() {
   pageCount = 0;
 }
 
-/*
- * setupArray
+/**
+ * @brief setupArray
  *
  * C++ Arguments: char *name, char *symbol, char *units, char *description,
  *                char *format_string, char *group_name, int32_t type, 
@@ -348,8 +366,8 @@ void SDDSArray::setupArray(char *name, char *symbol, char *units, char *descript
   arrayDimensions = dimensions;
 }
 
-/*
- * informAboutParent
+/**
+ * @brief informAboutParent
  *
  * C++ Arguments: SDDSFile *parent
  *
@@ -359,8 +377,8 @@ void SDDSArray::informAboutParent(void *parent) {
   sddsfile = parent;
 }
 
-/*
- * getName
+/**
+ * @brief getName
  *
  * C++ Arguments: none
  *
@@ -370,8 +388,8 @@ char* SDDSArray::getName() {
   return(arrayName);
 }
 
-/*
- * setName
+/**
+ * @brief setName
  *
  * C++ Arguments: char *name
  *
@@ -388,8 +406,8 @@ void SDDSArray::setName(char *name) {
   }
 }
 
-/*
- * getSymbol
+/**
+ * @brief getSymbol
  *
  * C++ Arguments: none
  *
@@ -399,8 +417,8 @@ char* SDDSArray::getSymbol() {
   return(arraySymbol);
 }
 
-/*
- * setSymbol
+/**
+ * @brief setSymbol
  *
  * C++ Arguments: char *symbol
  *
@@ -417,8 +435,8 @@ void SDDSArray::setSymbol(char *symbol) {
   }
 }
 
-/*
- * getUnits
+/**
+ * @brief getUnits
  *
  * C++ Arguments: none
  * 
@@ -428,8 +446,8 @@ char* SDDSArray::getUnits() {
   return(arrayUnits);
 }
 
-/*
- * setUnits
+/**
+ * @brief setUnits
  *
  * C++ Arguments: char *units
  *
@@ -446,8 +464,8 @@ void SDDSArray::setUnits(char *units) {
   }
 }
 
-/*
- * getDescription
+/**
+ * @brief getDescription
  *
  * C++ Arguments: none
  *
@@ -457,8 +475,8 @@ char* SDDSArray::getDescription() {
   return(arrayDescription);
 }
 
-/*
- * setDescription
+/**
+ * @brief setDescription
  *
  * C++ Arguments: char *description
  *
@@ -475,8 +493,8 @@ void SDDSArray::setDescription(char *description) {
   }
 }
 
-/*
- * getFormatString
+/**
+ * @brief getFormatString
  *
  * C++ Arguments: none
  *
@@ -486,8 +504,8 @@ char* SDDSArray::getFormatString() {
   return(arrayFormatString);
 }
 
-/*
- * setFormatString
+/**
+ * @brief setFormatString
  *
  * C++ Arguments: char *format_string
  *
@@ -504,8 +522,8 @@ void SDDSArray::setFormatString(char *format_string) {
   }
 }
 
-/*
- * getGroupName
+/**
+ * @brief getGroupName
  *
  * C++ Arguments: none
  *
@@ -515,8 +533,8 @@ char* SDDSArray::getGroupName() {
   return(arrayGroupName);
 }
 
-/*
- * setGroupName
+/**
+ * @brief setGroupName
  *
  * C++ Arguments: char *fixed_value
  *
@@ -533,8 +551,8 @@ void SDDSArray::setGroupName(char *group_name) {
   }
 }
 
-/*
- * getType
+/**
+ * @brief getType
  *
  * C++ Arguments: none
  *
@@ -544,8 +562,8 @@ int32_t SDDSArray::getType() {
   return(arrayType);
 }
 
-/*
- * setType
+/**
+ * @brief setType
  *
  * C++ Arguments:int32_t type
  *
@@ -555,8 +573,8 @@ void SDDSArray::setType(int32_t type) {
   arrayType = type;
 }
 
-/*
- * getFieldLength
+/**
+ * @brief getFieldLength
  *
  * C++ Arguments: none
  *
@@ -566,8 +584,8 @@ uint32_t SDDSArray::getFieldLength() {
   return(arrayFieldLength);
 }
 
-/*
- * setFieldLength
+/**
+ * @brief setFieldLength
  *
  * C++ Arguments:int32_t field_length
  *
@@ -577,8 +595,8 @@ void SDDSArray::setFieldLength(uint32_t field_length) {
   arrayFieldLength = field_length;
 }
 
-/*
- * getDimensions
+/**
+ * @brief getDimensions
  *
  * C++ Arguments: none
  *
@@ -588,8 +606,8 @@ uint32_t SDDSArray::getDimensions() {
   return(arrayDimensions);
 }
 
-/*
- * setDimensions
+/**
+ * @brief setDimensions
  *
  * C++ Arguments: uint32_t dimensions
  *
@@ -599,8 +617,8 @@ void SDDSArray::setDimensions(uint32_t dimensions) {
   arrayDimensions = dimensions;
 }
 
-/*
- * getDim
+/**
+ * @brief getDim
  *
  * C++ Arguments: uint32_t page
  *
@@ -616,8 +634,8 @@ uint32_t* SDDSArray::getDim(uint32_t page) {
   return arrayDim[page-1];
 }
 
-/*
- * setDim
+/**
+ * @brief setDim
  *
  * C++ Arguments: uint32_t page, uint32_t *dimensions
  *
@@ -637,8 +655,8 @@ void SDDSArray::setDim(uint32_t page, uint32_t *dimensions) {
   }
 }
 
-/*
- * getPageCount
+/**
+ * @brief getPageCount
  *
  * C++ Arguments: none
  *
@@ -648,8 +666,8 @@ uint32_t SDDSArray::getPageCount() {
   return(pageCount);
 }
 
-/*
- * writeDefinition
+/**
+ * @brief writeDefinition
  *
  * C++ Arguments: FILE *fp
  *                voidp *gzfp
@@ -745,8 +763,8 @@ int32_t SDDSArray::writeDefinition(voidp *gzfp) {
   return(0);
 }
 
-/*
- * setValues
+/**
+ * @brief setValues
  *
  * C++ Arguments: int16_t *values, uint32_t page, uint32_t elements
  *                uint16_t *values, uint32_t page, uint32_t elements
@@ -1996,8 +2014,8 @@ int32_t SDDSArray::setValues(char *values, uint32_t page, uint32_t elements) {
   return(0);
 }
 
-/*
- * readAsciiValues
+/**
+ * @brief readAsciiValues
  *
  * C++ Arguments: char *value, uint32_t page
  *
@@ -2202,8 +2220,8 @@ int32_t SDDSArray::readAsciiValues(char **bigBuffer, int32_t *bigBufferSize, uin
   return(returnVal);
 }
 
-/*
- * readBinaryValues
+/**
+ * @brief readBinaryValues
  *
  * C++ Arguments: FILE *fp, SDDS_FILEBUFFER *fBuffer, uint32_t page, bool nonNativeEndian
  * C++ Arguments: voidp *gzfp, SDDS_FILEBUFFER *fBuffer, uint32_t page, bool nonNativeEndian
@@ -2417,8 +2435,8 @@ int32_t SDDSArray::readBinaryValues(voidp *gzfp, SDDS_FILEBUFFER *fBuffer, uint3
   return(0);
 }
 
-/*
- * getInteralValues
+/**
+ * @brief getInteralValues
  *
  * C++ Arguments: uint32_t page
  *
@@ -2458,8 +2476,8 @@ void* SDDSArray::getInternalValues(uint32_t page) {
   }
 }
 
-/*
- * getValuesInInt32
+/**
+ * @brief getValuesInInt32
  *
  * C++ Arguments: uint32_t page, int32_t *errorcode
  *
@@ -2530,8 +2548,8 @@ int32_t* SDDSArray::getValuesInInt32(uint32_t page, int32_t *errorcode) {
   }
 }
 
-/*
- * getValuesInUInt32
+/**
+ * @brief getValuesInUInt32
  *
  * C++ Arguments: uint32_t page, int32_t *errorcode
  *
@@ -2602,8 +2620,8 @@ uint32_t* SDDSArray::getValuesInUInt32(uint32_t page, int32_t *errorcode) {
   }
 }
 
-/*
- * getValuesInDouble
+/**
+ * @brief getValuesInDouble
  *
  * C++ Arguments: uint32_t page, int32_t *errorcode
  *
@@ -2674,8 +2692,8 @@ double* SDDSArray::getValuesInDouble(uint32_t page, int32_t *errorcode) {
   }
 }
 
-/*
- * getValuesInString
+/**
+ * @brief getValuesInString
  *
  * C++ Arguments: uint32_t page, int32_t *errorcode
  *
@@ -2761,8 +2779,8 @@ char** SDDSArray::getValuesInString(uint32_t page, int32_t *errorcode) {
   }
 }
 
-/*
- * writeAsciiValues
+/**
+ * @brief writeAsciiValues
  *
  * C++ Arguments: FILE *fp, uint32_t page
  * C++ Arguments: voidp *gzfp, uint32_t page
@@ -2958,8 +2976,8 @@ int32_t SDDSArray::writeAsciiValues(voidp *gzfp, uint32_t page) {
   return(0);
 }
 
-/*
- * writeBinaryValues
+/**
+ * @brief writeBinaryValues
  *
  * C++ Arguments: FILE *fp, SDDS_FILEBUFFER *fBuffer, uint32_t page, bool nonNativeEndian
  * C++ Arguments: voidp *gzfp, SDDS_FILEBUFFER *fBuffer, uint32_t page, bool nonNativeEndian

@@ -1,3 +1,21 @@
+/**
+ * @file SDDSUtil.cc
+ * @brief Archived utility functions for the original SDDS3 implementation.
+ *
+ * @details Contains legacy byte-order, type, string, buffering, and numeric
+ * conversion helpers used by the archived SDDS3 classes.
+ *
+ * @note This source is retained for migration reference and is not compiled
+ * into libSDDSpp.
+ *
+ * @copyright
+ *   - (c) The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

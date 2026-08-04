@@ -2,8 +2,16 @@
  * @file test_sdds3_advanced.cc
  * @brief Acceptance tests for selective I/O, custom streams, live files, and transformations.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Covers projection pushdown, row slicing, page indexes, headerless
+ * streams, reconnect, file replacement, locking, live reads, update strategies,
+ * checked conversions, row masks, matrices, and transformed copies.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS.hpp"

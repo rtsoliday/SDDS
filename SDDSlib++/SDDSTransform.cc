@@ -2,8 +2,16 @@
  * @file SDDSTransform.cc
  * @brief Typed layout and page transformations for the C++17 SDDS interface.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Implements checked scalar and vector conversions, layout editing,
+ * row masks and views, page filtering and projection, unit conversion, and
+ * streaming transformed copies.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS.hpp"

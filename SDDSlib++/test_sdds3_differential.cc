@@ -2,8 +2,15 @@
  * @file test_sdds3_differential.cc
  * @brief Differential serial-format tests between the C and C++ SDDS libraries.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Writes representative files with each implementation and verifies
+ * that the other implementation reads the same layout and values.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS.hpp"

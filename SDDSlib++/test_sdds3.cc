@@ -2,8 +2,15 @@
  * @file test_sdds3.cc
  * @brief Integration tests for the C++17 SDDS implementation.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Covers layouts, typed pages, ASCII and binary files, compression,
+ * compatibility includes, and the deprecated migration facade.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS.hpp"

@@ -2,8 +2,15 @@
  * @file fuzz_sdds3.cc
  * @brief In-process fuzz harness for the standalone C++ SDDS parser and decoders.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Exercises layout parsing and page decoding from caller-owned memory
+ * with conservative resource limits.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS.hpp"

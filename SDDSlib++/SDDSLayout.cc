@@ -2,8 +2,15 @@
  * @file SDDSLayout.cc
  * @brief Core type, error-context, and immutable layout lookup operations.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Defines type identification, protocol type names, contextual
+ * exceptions, and name-to-index lookup for immutable layouts.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS.hpp"

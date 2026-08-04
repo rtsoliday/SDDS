@@ -2,8 +2,16 @@
  * @file benchmark_sdds3.cc
  * @brief Comparable serial C and C++ SDDS benchmark workloads.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Measures full and selective reads, page seeks, writes, append and
+ * update operations, strings, arrays, and compressed streams using equivalent
+ * C and C++ workloads.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS.hpp"

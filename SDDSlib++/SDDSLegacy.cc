@@ -2,8 +2,15 @@
  * @file SDDSLegacy.cc
  * @brief Deprecated SDDSFile method facade implemented on the C++17 SDDS API.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Translates common historical SDDSFile calls into Layout, Page,
+ * Reader, and Writer operations without restoring the former public object ABI.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS3Legacy.h"

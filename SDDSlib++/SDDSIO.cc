@@ -2,8 +2,15 @@
  * @file SDDSIO.cc
  * @brief Public byte-source and byte-sink adapters for the C++17 SDDS interface.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Implements path, standard stream, borrowed or owned FILE, C++
+ * stream, and caller-owned memory adapters with explicit capability reporting.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS.hpp"

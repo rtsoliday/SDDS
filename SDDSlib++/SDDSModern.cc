@@ -2,8 +2,16 @@
  * @file SDDSModern.cc
  * @brief Standalone C++17 implementation of the serial SDDS protocol.
  *
- * @copyright Copyright (c) 2026 The University of Chicago
- * @license Distributed under the Software License Agreement in LICENSE.
+ * @details Implements header parsing and serialization, ASCII and binary page
+ * codecs, projection pushdown, compression, page indexing, append, update,
+ * locking, reconnect, and live-file reading.
+ *
+ * @copyright
+ *   - (c) 2026 The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
  */
 
 #include "SDDS.hpp"

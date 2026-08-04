@@ -1,3 +1,19 @@
+/**
+ * @file SDDS3.h
+ * @brief Compatibility selector for historical SDDS3 C++ source code.
+ *
+ * @details Includes the maintained SDDSFile facade by default. Defining
+ * SDDS3_ENABLE_UNMODERNIZED_API selects declarations for the archived original
+ * SDDS3 classes instead. New applications should include SDDS.hpp directly.
+ *
+ * @copyright
+ *   - (c) The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
+ */
+
 #if !defined(SDDS3_ENABLE_UNMODERNIZED_API)
 #include "SDDS3Legacy.h"
 #else
@@ -68,11 +84,16 @@ typedef unsigned __int64 uint64_t;
 
 #ifdef __cplusplus
 
+/** @brief Legacy buffered-file state used by the archived implementation. */
 typedef struct {
   char *data, *buffer;
   int32_t bytesLeft, bufferSize;
 } SDDS_FILEBUFFER ;
 
+/**
+ * @brief Archived array definition and page-storage class.
+ * @deprecated Include SDDS.hpp and use sdds::ArrayDefinition and sdds::ArrayData.
+ */
 class SDDSArray {
  public:
   SDDSArray();
@@ -157,6 +178,10 @@ class SDDSArray {
 
 };
 
+/**
+ * @brief Archived parameter definition and page-storage class.
+ * @deprecated Include SDDS.hpp and use sdds::ParameterDefinition and sdds::Scalar.
+ */
 class SDDSParameter {
  public:
   SDDSParameter();
@@ -228,6 +253,10 @@ class SDDSParameter {
 
 };
 
+/**
+ * @brief Archived column definition and page-storage class.
+ * @deprecated Include SDDS.hpp and use sdds::ColumnDefinition and sdds::Values.
+ */
 class SDDSColumn {
  public:
   SDDSColumn();
@@ -307,6 +336,11 @@ class SDDSColumn {
 };
 
 
+/**
+ * @brief Archived monolithic SDDS file class.
+ * @deprecated Include SDDS.hpp and use sdds::Reader or sdds::Writer. The
+ * maintained migration facade is available without SDDS3_ENABLE_UNMODERNIZED_API.
+ */
 class SDDSFile {
  public:
   SDDSFile();

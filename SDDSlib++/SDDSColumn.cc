@@ -1,3 +1,21 @@
+/**
+ * @file SDDSColumn.cc
+ * @brief Archived implementation of the original SDDS3 column class.
+ *
+ * @details Provides legacy column definition, conversion, and page-storage
+ * routines for builds that explicitly enable the unmodernized SDDS3 API.
+ *
+ * @note This source is retained for migration reference and is not compiled
+ * into libSDDSpp.
+ *
+ * @copyright
+ *   - (c) The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
+ */
+
 /* GUIDELINES
    Do not exit or print to stdout or stderr from any of the functions in this file
 */
@@ -3956,4 +3974,3 @@ int32_t SDDSColumn::readBinaryValues(voidp *gzfp, SDDS_FILEBUFFER *fBuffer, uint
   rowCount[p] = rows;
   return(0);
 }
-

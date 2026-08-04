@@ -1,3 +1,21 @@
+/**
+ * @file SDDSFile.cc
+ * @brief Archived implementation of the original SDDS3 file class.
+ *
+ * @details Provides the historical monolithic file, layout, page, and error
+ * handling implementation selected only by the unmodernized SDDS3 API.
+ *
+ * @note This source is retained for migration reference and is not compiled
+ * into libSDDSpp.
+ *
+ * @copyright
+ *   - (c) The University of Chicago
+ *
+ * @license
+ * This file is distributed under the terms of the Software License Agreement
+ * found in the file LICENSE included with this distribution.
+ */
+
 /* TODO
    Add fixed row count support
    Add ability to open .F and .Z files using freeze and uncompress
