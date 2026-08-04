@@ -35,7 +35,7 @@
 \author{Michael Borland and Robert Soliday\\Advanced Photon Source\\ \date{\today}}
 \maketitle
 
-SDDS is a file protocol for Self Describing Data Sets. This document describes Version 5 of the SDDS protocol and the function library that supports it. It is intended for those who wish to develop programs that use SDDS files.
+SDDS is a file protocol for Self Describing Data Sets. This document describes Version 5 of the SDDS protocol and the C and C++ libraries that support it. It is intended for those who wish to develop programs that use SDDS files.
 
 \section{Definition of SDDS Protocol}
 
@@ -312,7 +312,7 @@ order of the columns is the same as the order of the {\tt column} definitions
 in the header. If however {\tt column\_major\_order} is non-zero, then the 
 data for each column is stored in a single stream and not intermixed.
 
-\section{Overview of Library Routines}
+\section{Overview of C Library Routines}
 This section gives a brief description of the library routines grouped by functions. The reader should refer to the manual pages for more detailed information. 
 \subsection{Thread Safety}
 The SDDS libraries support concurrent use by multiple threads when each thread
@@ -477,8 +477,408 @@ protections and should be used only for explicit single-thread builds.
 \item \progref{Terminate} --- Terminates an SDDS data set, freeing all memory and closing the data set file. 
 \end{itemize}
 
-\section{Two Templates for SDDS Application Organization}
-This section gives pseudo-code templates for two typical SDDS applications. One shows how to access data stored in a SDDS file, while the other shows how to make an SDDS file from data generated internally (or read from another source).
+\section{The SDDS++ C++ Library}
+\label{sect:sddspp}
+
+SDDS++ is the modern C++17 interface for serial SDDS files.  It is a standalone
+implementation and does not call or link against the C SDDS library.  Files
+written by either implementation are intended to be readable by the other.
+The C library remains the format reference and should be used for existing C
+applications and for MPI I/O; MPI support is deliberately outside SDDS++.
+
+The public declarations are in \verb|SDDS.hpp|, all public names are in the
+{\tt sdds} namespace, and the link-library name is {\tt SDDSpp}.  The product
+name returned by {\tt sdds::libraryName} is ``SDDS++''.  The library supports
+SDDS protocol versions 1 through 5, all current SDDS types, ASCII and binary
+data, row-major and column-major data, both byte orders, arrays, associates,
+header includes, standard input and output, and gzip, XZ, and LZMA compression.
+
+\subsection{Building and Linking}
+
+The top-level SDDS {\tt make} command builds and installs SDDS++ along with the
+C library.  It may also be built and tested directly:
+
+\begin{verbatim}
+make -C SDDSlib++
+make -C SDDSlib++ test
+\end{verbatim}
+
+On Unix-like systems the static library is normally named
+{\tt libSDDSpp.a}; shared builds use {\tt libSDDSpp.so} or
+{\tt libSDDSpp.dylib}.  On Windows the corresponding import or static library
+is {\tt SDDSpp.lib}.  Applications must be compiled as C++17 or later.  A
+typical Unix command is:
+
+\begin{verbatim}
+g++ -std=c++17 -I/path/to/include example.cc \
+    -L/path/to/lib -lSDDSpp -llzma -lz -o example
+\end{verbatim}
+
+The public interface uses the C++ standard library, including
+{\tt std::string}, {\tt std::vector}, {\tt std::variant}, and
+{\tt std::filesystem}.  A stable C++ ABI across different compilers or
+standard-library implementations is not promised.  Applications should use a
+library built with a compatible C++ toolchain.
+
+\subsection{Object Model and Data Types}
+
+SDDS++ represents the header separately from page data and uses typed C++
+values instead of untyped allocation routines.  The principal types are:
+
+\begin{itemize}
+\item {\tt Layout} --- The complete immutable description of parameters,
+arrays, columns, associates, data mode, byte order, major order, and protocol
+version.
+\item {\tt LayoutBuilder} --- A validating fluent builder for a new layout.
+\item {\tt LayoutEditor} --- A fluent editor for copying, renaming, replacing,
+adding, and dropping definitions in an existing layout.
+\item {\tt Scalar} --- A {\tt std::variant} containing one parameter or cell
+value of any supported SDDS type.
+\item {\tt Values} --- A {\tt std::variant} containing a homogeneous
+{\tt std::vector} of any supported SDDS type.
+\item {\tt ArrayData} --- Array dimensions together with flattened values in
+SDDS storage order.
+\item {\tt Page} --- Parameter, array, and column values for one data page,
+together with its complete layout and field-loading state.
+\item {\tt Reader} and {\tt Writer} --- Move-only streaming objects for input,
+output, append, and update operations.
+\end{itemize}
+
+The relationship between SDDS types and exact C++ value types is shown below.
+
+\begin{center}
+\begin{tabular}{lll}
+SDDS type & {\tt sdds::Type} value & Exact C++ type \\
+\hline
+longdouble & {\tt Type::LongDouble} & {\tt long double} \\
+double & {\tt Type::Double} & {\tt double} \\
+float & {\tt Type::Float} & {\tt float} \\
+long64 & {\tt Type::Int64} & {\tt std::int64\_t} \\
+ulong64 & {\tt Type::UInt64} & {\tt std::uint64\_t} \\
+long & {\tt Type::Int32} & {\tt std::int32\_t} \\
+ulong & {\tt Type::UInt32} & {\tt std::uint32\_t} \\
+short & {\tt Type::Int16} & {\tt std::int16\_t} \\
+ushort & {\tt Type::UInt16} & {\tt std::uint16\_t} \\
+string & {\tt Type::String} & {\tt std::string} \\
+character & {\tt Type::Character} & {\tt char} \\
+\end{tabular}
+\end{center}
+
+{\tt typeOf} returns the SDDS type represented by a {\tt Scalar} or
+{\tt Values} object, and {\tt typeName} returns its protocol name.  Exact typed
+access is available through methods such as {\tt parameterAs<T>},
+{\tt columnAs<T>}, and {\tt arrayAs<T>}.  The corresponding
+{\tt parameterConverted<T>}, {\tt columnConverted<T>}, and
+{\tt arrayConverted<T>} methods perform checked numeric conversion.  Overflow
+or invalid narrowing throws {\tt TypeError}; floating-point-to-integer
+conversion requires an explicit {\tt RoundingMode} unless the value is already
+integral.
+
+\subsection{Input Routines}
+
+\subsubsection{Setup and Sequential Reading}
+
+\begin{itemize}
+\item {\tt Reader::open} --- Opens a path and reads its SDDS header.
+\item {\tt Reader::fromStdin} --- Reads an SDDS stream from standard input.
+\item {\tt Reader::fromSource} --- Reads from an application-provided
+{\tt InputSource}.
+\item {\tt Reader::openHeaderless} and
+{\tt Reader::fromHeaderlessSource} --- Read data without an SDDS header using a
+caller-supplied, validated {\tt Layout}.
+\item {\tt Reader::next} --- Returns the next page as
+{\tt std::optional<Page>}; an empty optional indicates end of input.
+\item {\tt Reader::readAll} --- Materializes all remaining pages when a
+streaming loop is not appropriate.
+\end{itemize}
+
+The layout is available immediately after the reader is opened and remains
+valid for the lifetime of the reader.  A minimal page loop is:
+
+\begin{verbatim}
+#include "SDDS.hpp"
+
+auto reader = sdds::Reader::open("input.sdds");
+const sdds::Layout &layout = reader.layout();
+
+while (auto page = reader.next()) {
+  const auto &x = page->columnAs<double>("x");
+  // Process x and other fields from this page.
+}
+reader.close();
+\end{verbatim}
+
+The destructor closes an open reader, so an explicit {\tt close} is not
+required during exception unwinding.  Calling it explicitly is useful when an
+application wants I/O errors reported before the object leaves scope.
+
+\subsubsection{Field and Row Selection}
+
+{\tt ReadRequest} independently selects parameter, array, and column fields.
+Each {\tt FieldSelection} may request all fields, no fields, or only named
+fields.  {\tt RowSlice} selects the first row, an optional count, and a positive
+stride.  Alternatively, {\tt last} requests a trailing number of rows and is
+mutually exclusive with {\tt first} and {\tt count}.
+
+\begin{verbatim}
+sdds::ReadRequest request;
+request.parameters = sdds::FieldSelection::only({"Step"});
+request.arrays = sdds::FieldSelection::noFields();
+request.columns = sdds::FieldSelection::only({"x", "xp"});
+request.rows.first = 100;
+request.rows.count = 1000;
+request.rows.stride = 10;
+
+while (auto page = reader.next(request)) {
+  const auto &x = page->columnAs<double>("x");
+  const auto &xp = page->columnAs<double>("xp");
+}
+\end{verbatim}
+
+Projection is applied by the ASCII and binary decoders.  Unrequested values are
+not retained, and fixed-width binary regions are skipped when possible.  Every
+{\tt Page} nevertheless retains the complete file layout.  The
+{\tt parameterLoaded}, {\tt arrayLoaded}, and {\tt columnLoaded} methods report
+whether values are present; attempting to access an unloaded field throws
+{\tt StateError}.  Trailing-row selection on input without a known row count
+uses bounded storage rather than materializing all rows.
+
+\subsubsection{Page Access and Indexing}
+
+Parameter, array, and column values may be selected by name or by layout index.
+{\tt Layout::parameterIndex}, {\tt arrayIndex}, and {\tt columnIndex} validate
+names and provide indexes for repeated access.  {\tt Page::row} returns a
+zero-copy {\tt RowView}; {\tt Page::matchRows} builds a composable
+{\tt RowMask}.  The {\tt filtered} and {\tt projected} methods return immutable
+page transformations.
+
+For seekable input, {\tt gotoPage} positions the next read at a one-based page
+number.  The reader lazily caches page offsets as it scans.  Calling
+{\tt buildPageIndex} eagerly indexes the complete file, and
+{\tt indexedPageCount} reports the count when known.  A page seek begins at the
+nearest cached offset rather than rescanning from the beginning.
+
+\subsection{Output Routines}
+
+\subsubsection{Defining a Layout}
+
+Definitions are ordinary value objects.  A {\tt LayoutBuilder} validates names,
+types, dimensions, fixed parameter values, data options, and the protocol
+version when {\tt build} is called.  For example:
+
+\begin{verbatim}
+sdds::DataOptions data;
+data.mode = sdds::DataMode::Binary;
+data.majorOrder = sdds::MajorOrder::Row;
+
+sdds::ParameterDefinition step;
+step.name = "Step";
+step.type = sdds::Type::Int32;
+
+sdds::ColumnDefinition position;
+position.name = "x";
+position.units = "m";
+position.type = sdds::Type::Double;
+
+sdds::LayoutBuilder builder;
+builder.setDescription("example data", "SDDS++ example")
+       .setDataOptions(data)
+       .addParameter(step)
+       .addColumn(position);
+sdds::Layout layout = builder.build();
+\end{verbatim}
+
+{\tt ParameterDefinition}, {\tt ArrayDefinition}, and
+{\tt ColumnDefinition} contain the metadata fields described in
+Section~\ref{sect:header}.  {\tt AssociateDefinition} represents an
+{\tt associate} header command.  SDDS++ selects an output protocol version that
+is at least {\tt WriterOptions::minimumVersion} and is sufficient for the
+features and types in the layout.
+
+\subsubsection{Writing Pages}
+
+\begin{itemize}
+\item {\tt Writer::create} --- Creates or replaces a path-backed data set.
+\item {\tt Writer::toStdout} --- Writes an SDDS stream to standard output.
+\item {\tt Writer::toSink} --- Writes to an application-provided
+{\tt OutputSink}.
+\item {\tt beginPage} --- Starts a page that will be populated field by field.
+\item {\tt setParameter}, {\tt setArray}, and {\tt setColumn} --- Set values on
+the active page with layout and type validation.
+\item {\tt commitPage} --- Validates and writes the active page.
+\item {\tt write} --- Writes a complete {\tt Page}; overloads permit copying or
+moving the page values.
+\end{itemize}
+
+A complete output loop has the following form:
+
+\begin{verbatim}
+auto writer = sdds::Writer::create("output.sdds", layout);
+
+for (std::int32_t stepNumber = 0; stepNumber != 10; ++stepNumber) {
+  std::vector<double> x = generatePositions(stepNumber);
+  writer.beginPage(static_cast<std::int64_t>(x.size()));
+  writer.setParameter("Step", stepNumber);
+  writer.setColumn("x", std::move(x));
+  writer.commitPage();
+}
+
+writer.close();
+\end{verbatim}
+
+{\tt setColumn} also accepts a starting row and can extend an internal column
+in place.  This is useful when data arrives in blocks.  All required page
+values and compatible row counts must be present when {\tt commitPage} is
+called.  As with {\tt Reader}, the {\tt Writer} destructor closes an open
+object, while explicit {\tt close} reports finalization errors directly.
+
+\subsection{Generalized I/O and Compression}
+
+The public {\tt InputSource} and {\tt OutputSink} interfaces describe their
+read, write, seek, truncate, flush, sync, and reopen capabilities.  Factory
+functions provide adapters for common sources and destinations:
+
+\begin{itemize}
+\item {\tt inputFromPath} and {\tt outputToPath} for filesystem paths.
+\item {\tt inputFromStdin} and {\tt outputToStdout} for standard streams.
+\item {\tt inputFromFile} and {\tt outputToFile} for borrowed or owned
+{\tt FILE*} streams.
+\item {\tt inputFromStream} and {\tt outputToStream} for C++ streams.
+\item {\tt inputFromMemory} and {\tt outputToMemory} for caller-owned memory.
+\end{itemize}
+
+{\tt ReaderOptions} and {\tt WriterOptions} keep buffer sizes, compression,
+locking, long-double encoding, and update settings local to each object.  Writer
+options additionally include the gzip level and LZMA preset and integrity
+check.  With path-backed objects, {\tt Compression::Auto} recognizes
+{\tt .gz}, {\tt .xz}, and {\tt .lzma} suffixes.  Compression for a custom
+source or sink must be selected explicitly because there may be no filename.
+Compression wrappers require only sequential I/O, but seeking, page indexing,
+live reads, and in-place updates have the restrictions described below.
+
+\subsection{Append, Update, and Live Files}
+
+{\tt Writer::append} opens an existing data set and appends complete pages.
+{\tt Writer::appendToLastPage} opens the final page for incremental column
+extension.  {\tt updatePage} publishes the currently available row count, and
+{\tt sync} flushes and requests durable synchronization.
+
+For compatible uncompressed row-major binary files, last-page updates are made
+in place.  Compressed or column-major data requires an adjacent-file atomic
+rewrite.  {\tt UpdateStrategy::InPlaceOnly} rejects an incompatible file
+instead of falling back, while {\tt AtomicRewrite} explicitly requests the
+rewrite strategy.
+
+{\tt Reader::readNewRows} is a nonblocking operation for following an
+updateable final page.  It returns an optional {\tt PageDelta} containing the
+one-based page number, first new row, and a page containing only newly observed
+rows.  This operation is limited to uncompressed binary files with an
+updateable final page.
+
+Path-backed readers and writers support {\tt disconnect} and {\tt reconnect}.
+The current offset is preserved, and reconnect verifies that the path still
+names the same file.  Readers default to {\tt LockMode::None}; path writers
+default to {\tt LockMode::Exclusive}.  Shared and exclusive locking is
+advisory and therefore requires cooperating applications.
+
+\subsection{Layout and Data Transformations}
+
+SDDS++ provides transformation operations without requiring an application to
+reimplement the SDDS type system:
+
+\begin{itemize}
+\item {\tt LayoutEditor} copies, renames, replaces, drops, or adds parameter,
+array, column, and associate definitions.
+\item {\tt RowView} reads an individual row without copying column data.
+\item {\tt RowMask} supports intersection, union, inversion, and typed row
+matching.  {\tt Page::filtered} applies a mask to a page.
+\item {\tt convertScalar} and {\tt convertValues} perform checked conversions
+with an explicit rounding policy where necessary.
+\item {\tt convertUnits} changes a field's units and multiplies its data in one
+operation, keeping metadata and values consistent.
+\item {\tt Page::matrix<T>} creates a contiguous row-major
+{\tt DenseMatrix<T>} from selected numeric columns using exact types or checked
+conversion.
+\item {\tt copyDataset} streams pages through optional layout and page
+transformations without materializing the complete input file.
+\end{itemize}
+
+Transformation output is governed by the originating reader's resource limits.
+Layout transformations supplied to {\tt copyDataset} should agree with the page
+transformations; the destination writer validates each resulting page against
+the transformed layout.
+
+\subsection{Error Handling and Resource Limits}
+
+SDDS++ reports failures with exceptions and does not maintain a process-global
+error stack.  All exceptions derive from {\tt sdds::Error}:
+
+\begin{itemize}
+\item {\tt IoError} --- Input, output, filesystem, seeking, or locking failure.
+\item {\tt FormatError} --- Malformed or unsupported SDDS content.
+\item {\tt TypeError} --- Type mismatch or invalid checked conversion.
+\item {\tt StateError} --- Operation incompatible with the current object state.
+\item {\tt LimitError} --- A configured resource limit was exceeded.
+\end{itemize}
+
+The base exception records an {\tt ErrorKind} and, when available, the path,
+one-based page number, field name, zero-based row, and byte offset.  A typical
+top-level handler is:
+
+\begin{verbatim}
+try {
+  auto reader = sdds::Reader::open(inputPath);
+  process(reader);
+} catch (const sdds::Error &error) {
+  std::cerr << error.what() << '\n';
+  return 1;
+}
+\end{verbatim}
+
+{\tt ReaderLimits} bounds rows per page, elements per field, string bytes,
+header-command bytes, include depth, projected fields, cached page-index
+entries, decompressed bytes, and transformation output.  Applications reading
+untrusted files should set limits appropriate to their workload.  Malformed
+content is fatal.  Recovery applies only to a recoverably truncated final page
+and must be selected through {\tt ReaderOptions::recovery}; a recovered page is
+identified by {\tt Page::recovered()}.
+
+\subsection{Thread Safety}
+
+Separate {\tt Reader}, {\tt Writer}, {\tt Layout}, and {\tt Page} objects may be
+used concurrently by different threads.  Options and limits are stored per
+object, and typed exceptions do not use shared error state.  Concurrent access
+to the same reader, writer, page, custom source, or custom sink must be
+serialized by the application.  Advisory file locking coordinates cooperating
+processes but does not make one object safe for simultaneous method calls.
+
+\subsection{Compatibility Interface and Examples}
+
+New applications should include \verb|SDDS.hpp|.  The older
+\verb|SDDS3.h| header selects a deprecated {\tt SDDSFile} adapter by default for
+common source-migration cases.  The adapter does not preserve the old object
+layout, public storage fields, raw allocation modes, or complete historical
+method inventory.  Defining {\tt SDDS3\_ENABLE\_UNMODERNIZED\_API} selects the
+archived original declarations and is not recommended for new work.
+
+{\tt sdds::cppApiVersion} identifies the source-level API generation.  Source
+changes may occur in a future generation, so applications may test this
+constant at compile time when necessary.
+
+The directory \verb|SDDSlib++/demo| contains C++ counterparts to the C examples
+in \verb|SDDSlib/demo|:
+
+\begin{itemize}
+\item {\tt sddspp\_write\_demo} writes parameters, arrays, and columns of every
+SDDS scalar type.
+\item {\tt sddspp\_read\_demo} reads any supported data set and prints values
+using its layout definitions.
+\item {\tt sddsppdemo} writes and reads a compact binary data set using typed
+accessors and zero-copy row views.
+\end{itemize}
+
+\section{Two Templates for C SDDS Application Organization}
+This section gives pseudo-code templates for two typical C SDDS applications. One shows how to access data stored in a SDDS file, while the other shows how to make an SDDS file from data generated internally (or read from another source).
 \subsection{Accessing Data Stored in an SDDS File}
 
 \begin{verbatim}
@@ -582,7 +982,7 @@ while (DataGenerated(my_data_structure)) {
 SDDS_Terminate(&SDDS_table);
 \end{verbatim}
 
-\section{Manual Pages}
+\section{C Library Manual Pages}
 \label{ManualPages}
 \subsection{SDDS\_ArrayCount}
 \label{SDDS_ArrayCount}
