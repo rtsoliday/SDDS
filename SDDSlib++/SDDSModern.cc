@@ -26,6 +26,7 @@
 #include <cstring>
 #include <iomanip>
 #include <limits>
+#include <climits>
 #include <locale>
 #include <sstream>
 #include <system_error>
