@@ -403,6 +403,14 @@ ifeq ($(OS), Linux)
     RPATH = -Wl,-rpath,/usr/local/oag/3rdParty/gcc-11.3.0/lib64
     LDFLAGS += -static-libstdc++
   endif
+
+  # GCC 8 keeps std::filesystem symbols in a separate support library.
+  GCC_MAJOR_VERSION ?= $(firstword $(subst ., ,$(shell $(CCC) -dumpversion)))
+  ifeq ($(GCC_MAJOR_VERSION),8)
+    CXX_FILESYSTEM_LIB = -lstdc++fs
+    LIBRARY_SYS_LIBS += $(CXX_FILESYSTEM_LIB)
+    PROD_SYS_LIBS += $(CXX_FILESYSTEM_LIB)
+  endif
 endif
 
 ifeq ($(OS), Darwin)
