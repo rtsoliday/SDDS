@@ -47,7 +47,7 @@ foreach f $libFiles {
   exec chmod a-wx $f
   exec cp -f $f $env(HOME)/rpmbuild/BUILD/${name}/
 }
-set incFiles [glob ../include/*.h]
+set incFiles [concat [glob ../include/*.h] [glob ../include/*.hpp]]
 foreach f $incFiles {
   exec chmod a+r $f
   exec chmod a-wx $f
