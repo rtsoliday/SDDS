@@ -99,6 +99,7 @@ install -s -m 755 sddsinterpset %{buildroot}%{_bindir}/sddsinterpset
 install -s -m 755 sddskde %{buildroot}%{_bindir}/sddskde
 install -s -m 755 sddskde2d %{buildroot}%{_bindir}/sddskde2d
 install -s -m 755 sddslocaldensity %{buildroot}%{_bindir}/sddslocaldensity
+install -s -m 755 sddsgroupedenvelope %{buildroot}%{_bindir}/sddsgroupedenvelope
 install -s -m 755 sddsmakedataset %{buildroot}%{_bindir}/sddsmakedataset
 install -s -m 755 sddsmatrixmult %{buildroot}%{_bindir}/sddsmatrixmult
 install -s -m 755 sddsmatrixop %{buildroot}%{_bindir}/sddsmatrixop
@@ -236,6 +237,7 @@ install -s -m 755 wfm2sdds %{buildroot}%{_bindir}/wfm2sdds
 %{_bindir}/sddskde
 %{_bindir}/sddskde2d
 %{_bindir}/sddslocaldensity
+%{_bindir}/sddsgroupedenvelope
 %{_bindir}/sddsmakedataset
 %{_bindir}/sddsmatrixmult
 %{_bindir}/sddsmatrixop
