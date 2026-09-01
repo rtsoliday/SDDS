@@ -309,7 +309,8 @@ typedef struct {
 } EVAL_PARAMETERS;
 void makeEvaluationTable(EVAL_PARAMETERS *evalParameters, double *x, int64_t n,
                          double *coef, int32_t *order, long terms,
-                         SDDS_DATASET *SDDSin, char *xName, char *yName);
+                         SDDS_DATASET *SDDSin, SDDS_DATASET *SDDSout,
+                         char *xName, char *yName);
 
 static double (*basis_fn)(double xa, long ordera);
 static double (*basis_dfn)(double xa, long ordera);
@@ -905,10 +906,6 @@ int main(int argc, char **argv) {
         }
       } else if (verbose)
         fprintf(stdout, "fit failed.\n");
-
-      if (evalParameters.file)
-        makeEvaluationTable(&evalParameters, x, points, coef, order, terms,
-                            &SDDSin, xName, yName);
     }
 
     if (!SDDS_StartPage(&SDDSout, rangeFitOnly ? pointsOrig : points))
@@ -994,8 +991,16 @@ int main(int argc, char **argv) {
                             terms, iSigLevel,
                             invalid ? NaN : ChiSqrSigLevel(chi, points - terms), iOffset,
                             invalid ? NaN : xOffset, iFactor, invalid ? NaN : xScaleFactor,
-                            iFitIsValid, isFit ? 'y' : 'n', -1) ||
-        !SDDS_WritePage(&SDDSout))
+                            iFitIsValid, isFit ? 'y' : 'n', -1))
+      SDDS_PrintErrors(stderr,
+                       SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    /* Generate the evaluation table (if requested) after all parameters of the
+       main output page have been set, so that every parameter present in the
+       fit output file can be copied into the evaluation output file. */
+    if (!invalid && evalParameters.file)
+      makeEvaluationTable(&evalParameters, x, points, coef, order, terms,
+                          &SDDSin, &SDDSout, xName, yName);
+    if (!SDDS_WritePage(&SDDSout))
       SDDS_PrintErrors(stderr,
                        SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if (!invalid) {
@@ -1520,8 +1525,8 @@ void compareOriginalToFit(double *x, double *y, double **residual,
 
 void makeEvaluationTable(EVAL_PARAMETERS *evalParameters, double *x,
                          int64_t points, double *coef, int32_t *order,
-                         long terms, SDDS_DATASET *SDDSin, char *xName,
-                         char *yName) {
+                         long terms, SDDS_DATASET *SDDSin, SDDS_DATASET *SDDSout,
+                         char *xName, char *yName) {
   double *xEval, *yEval, delta;
   int64_t i;
   yEval = NULL;
@@ -1533,6 +1538,8 @@ void makeEvaluationTable(EVAL_PARAMETERS *evalParameters, double *x,
                                        NULL) ||
         !SDDS_TransferColumnDefinition(&evalParameters->dataset, SDDSin, yName,
                                        NULL) ||
+        !SDDS_TransferAllParameterDefinitions(&evalParameters->dataset, SDDSout,
+                                              SDDS_TRANSFER_KEEPOLD) ||
         !SDDS_WriteLayout(&evalParameters->dataset))
       SDDS_PrintErrors(stderr,
                        SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -1597,6 +1604,7 @@ void makeEvaluationTable(EVAL_PARAMETERS *evalParameters, double *x,
                                  xEval, evalParameters->number, xName) ||
       !SDDS_SetColumnFromDoubles(&evalParameters->dataset, SDDS_SET_BY_NAME,
                                  yEval, evalParameters->number, yName) ||
+      !SDDS_CopyParameters(&evalParameters->dataset, SDDSout) ||
       !SDDS_WritePage(&evalParameters->dataset))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   free(xEval);
