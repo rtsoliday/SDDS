@@ -298,9 +298,9 @@ typedef struct
   double begin, end;
   SDDS_DATASET dataset;
 } EVAL_PARAMETERS;
-void setupEvaluationFile(EVAL_PARAMETERS *evalParameters, char *xName, char **yName, long yNames, SDDS_DATASET *SDDSin);
+void setupEvaluationFile(EVAL_PARAMETERS *evalParameters, char *xName, char **yName, long yNames, SDDS_DATASET *SDDSin, SDDS_DATASET *SDDSmain);
 void makeEvaluationTable(EVAL_PARAMETERS *evalParameters, double *x, int64_t points, double *coef, int32_t *order,
-                         long terms, char *xName, char **yName, long yNames, long iYName);
+                         long terms, SDDS_DATASET *SDDSmain, char *xName, char **yName, long yNames, long iYName);
 
 static double (*basis_fn)(double xa, long ordera);
 static double (*basis_dfn)(double xa, long ordera);
@@ -907,10 +907,10 @@ int main(int argc, char **argv) {
     if (!outputInitialized) {
       initializeOutputFile(&SDDSout, &SDDSoutInfo, output, infoFile, &SDDSin, input, xName, yNames, xSigmaName, ySigmaNames, ySigmasValid, order, terms, chebyshev, numYNames, copyParameters, repeatFits);
       free(output);
+      if (evalParameters.file)
+        setupEvaluationFile(&evalParameters, xName, yNames, numYNames, &SDDSin, &SDDSout);
       outputInitialized = 1;
     }
-    if (evalParameters.file)
-      setupEvaluationFile(&evalParameters, xName, yNames, numYNames, &SDDSin);
 
     rmsResidual = tmalloc(sizeof(double) * numYNames);
     for (colIndex = 0; colIndex < numYNames; colIndex++) {
@@ -975,9 +975,6 @@ int main(int argc, char **argv) {
         }
       } else if (verbose)
         fprintf(stderr, "fit failed for %s.\n", yNames[colIndex]);
-
-      if (evalParameters.file)
-        makeEvaluationTable(&evalParameters, x, points, coef[colIndex], order, terms, xName, yNames, numYNames, colIndex);
     }
 
     if (outputInitialized) {
@@ -1099,6 +1096,12 @@ int main(int argc, char **argv) {
                                 iOffsetO, xOffset, iFactorO, xScaleFactor, iFitIsValidO[colIndex], isFit[colIndex] ? 'y' : 'n', -1))
           bomb("O", NULL);
       }
+      /* Generate the evaluation table (if requested) after all parameters of the
+         main output page have been set, so that every parameter present in the
+         fit output file can be copied into the evaluation output file. */
+      if (evalParameters.file)
+        for (colIndex = 0; colIndex < numYNames; colIndex++)
+          makeEvaluationTable(&evalParameters, x, points, coef[colIndex], order, terms, &SDDSout, xName, yNames, numYNames, colIndex);
       if (!SDDS_WritePage(&SDDSout) || (infoFile && !SDDS_WritePage(&SDDSoutInfo)))
         bomb("O", NULL);
     }
@@ -1637,7 +1640,7 @@ char **makeCoefficientUnits(SDDS_DATASET * SDDSout, char *xName, char *yName, in
   return coefUnits;
 }
 
-void setupEvaluationFile(EVAL_PARAMETERS * evalParameters, char *xName, char **yName, long yNames, SDDS_DATASET *SDDSin) {
+void setupEvaluationFile(EVAL_PARAMETERS * evalParameters, char *xName, char **yName, long yNames, SDDS_DATASET *SDDSin, SDDS_DATASET *SDDSmain) {
   long i;
   SDDS_DATASET *SDDSout;
   SDDSout = &evalParameters->dataset;
@@ -1647,12 +1650,14 @@ void setupEvaluationFile(EVAL_PARAMETERS * evalParameters, char *xName, char **y
   for (i = 0; i < yNames; i++)
     if (!SDDS_TransferColumnDefinition(SDDSout, SDDSin, yName[i], NULL))
       SDDS_Bomb("Problem setting up evaluation file");
+  if (!SDDS_TransferAllParameterDefinitions(SDDSout, SDDSmain, SDDS_TRANSFER_KEEPOLD))
+    SDDS_Bomb("Problem setting up evaluation file");
   if (!SDDS_WriteLayout(SDDSout))
     SDDS_Bomb("Problem setting up evaluation file");
 }
 
 void makeEvaluationTable(EVAL_PARAMETERS * evalParameters, double *x, int64_t points, double *coef, int32_t *order, long terms,
-                         char *xName, char **yName, long yNames, long iYName) {
+                         SDDS_DATASET *SDDSmain, char *xName, char **yName, long yNames, long iYName) {
   static double *xEval = NULL, *yEval = NULL;
   static int64_t maxEvals = 0;
   double delta;
@@ -1689,7 +1694,9 @@ void makeEvaluationTable(EVAL_PARAMETERS * evalParameters, double *x, int64_t po
        !SDDS_StartPage(&evalParameters->dataset, evalParameters->number)) ||
       !SDDS_SetColumnFromDoubles(&evalParameters->dataset, SDDS_SET_BY_NAME, xEval, evalParameters->number, xName) ||
       !SDDS_SetColumnFromDoubles(&evalParameters->dataset, SDDS_SET_BY_NAME, yEval, evalParameters->number, yName[iYName]) ||
-      (iYName == yNames - 1 && !SDDS_WritePage(&evalParameters->dataset)))
+      (iYName == yNames - 1 &&
+       (!SDDS_CopyParameters(&evalParameters->dataset, SDDSmain) ||
+        !SDDS_WritePage(&evalParameters->dataset))))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 }
 
