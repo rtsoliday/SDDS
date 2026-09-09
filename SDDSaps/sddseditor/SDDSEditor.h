@@ -153,6 +153,7 @@ private:
   void showParameterMenu(QTableView *view, int row, const QPoint &globalPos);
   void showColumnMenu(QTableView *view, int column, const QPoint &globalPos);
   void showArrayMenu(QTableView *view, int column, const QPoint &globalPos);
+  void openArrayViewer(int column);
   void resizeArray(int column);
   void sortColumn(int column, Qt::SortOrder order);
   void searchColumn(int column);
@@ -206,6 +207,7 @@ private:
   bool applyingStructuralUndo;
   bool darkPalette;
   QPointer<QDialog> searchColumnDialog;
+  QVector<QPointer<QDialog>> arrayViewers;
 
   /* Used only during initial load to provide progress through UI model building. */
   QPointer<QProgressDialog> loadProgressDialog;

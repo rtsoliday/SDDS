@@ -10,6 +10,8 @@
 #undef QMessageBox
 #undef QInputDialog
 #include <QElapsedTimer>
+#include <QBrush>
+#include <QCheckBox>
 
 /** Fail with a named assertion that is attributable to this test program. */
 static void require(bool condition, const char *message) {
@@ -228,6 +230,312 @@ public:
       }
     }
     fprintf(stdout, "PASS automatic panel sizing and manual splitter dragging\n");
+  }
+
+  /** Exercise slice mapping, editing, clipboard, pages and structural undo. */
+  static void arrayViewer(const QString &root) {
+    SDDSEditor editor;
+    setup(editor);
+    editor.dataset.layout.array_definition[0].dimensions = 3;
+    require(SDDS_SaveLayout(&editor.dataset), "save 3D array layout");
+    editor.pages[0].arrays[0].dims = {2, 3, 4};
+    editor.pages[0].arrays[0].values.clear();
+    for (int i = 0; i < 24; ++i)
+      editor.pages[0].arrays[0].values.append(QString::number(i));
+    editor.populateModels();
+    editor.openArrayViewer(0);
+    require(!editor.arrayViewers.isEmpty(), "open array viewer");
+    ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+    ArraySliceModel *grid = viewer->sliceModel();
+    require(!viewer->isModal(), "array viewer remains nonmodal");
+    require(grid->rowCount() == 3 && grid->columnCount() == 4, "3D array defaults to last two axes");
+    require(grid->index(2, 3).data().toString() == "11", "last SDDS dimension varies fastest");
+    require(grid->headerData(0, Qt::Vertical).toString() == "0", "array headers use zero-based indices");
+    viewer->findChild<QSpinBox *>("arraySliceIndex0")->setValue(1);
+    require(grid->index(2, 3).data().toString() == "23", "slice navigator maps to next plane");
+    require(grid->coordinates(grid->index(2, 3)) == QVector<int>({1, 2, 3}), "complete coordinate readout");
+    require(grid->setData(grid->index(2, 3), "123.5"), "edit a slice cell");
+    require(editor.pages[0].arrays[0].values[23] == "123.5" && editor.dirty, "slice edits update original data and dirty state");
+    viewer->findChild<QSpinBox *>("arraySliceIndex0")->setValue(0);
+    editor.undoStack->undo();
+    require(editor.pages[0].arrays[0].values[23] == "23", "undo targets original element after slice change");
+    editor.undoStack->redo();
+    viewer->findChild<QComboBox *>("arrayRowDimension")->setCurrentIndex(2);
+    require(grid->rowCount() == 4 && grid->columnCount() == 3, "selecting the column axis swaps grid axes");
+    require(grid->index(3, 2).data().toString() == "11", "transposed grid preserves element mapping");
+    viewer->findChild<QComboBox *>("arrayRowDimension")->setCurrentIndex(0);
+    require(grid->rowCount() == 2 && grid->columnCount() == 3, "arbitrary row axis selection");
+    viewer->findChild<QSpinBox *>("arraySliceIndex2")->setValue(3);
+    require(grid->index(1, 2).data().toString() == "123.5", "slice coordinates survive arbitrary axis selection");
+    applyCellEditWithUndo(editor.undoStack, editor.arrayModel, editor.arrayModel->index(23, 0), "99");
+    require(grid->index(1, 2).data().toString() == "99", "main editor edits immediately appear in viewer");
+
+    viewer->findChild<QComboBox *>("arrayRowDimension")->setCurrentIndex(1);
+    viewer->findChild<QComboBox *>("arrayColumnDimension")->setCurrentIndex(2);
+    viewer->table()->setCurrentIndex(grid->index(0, 1));
+    viewer->table()->edit(grid->index(0, 1));
+    QCoreApplication::processEvents();
+    QLineEdit *cellEditor = viewer->table()->findChild<QLineEdit *>();
+    require(cellEditor != nullptr, "slice grid opens an actual cell editor");
+    cellEditor->setFocus();
+    cellEditor->setText("77.25");
+    viewer->findChild<QSpinBox *>("arraySliceIndex0")->setValue(1);
+    require(editor.pages[0].arrays[0].values[1] == "77.25" && editor.pages[0].arrays[0].values[13] == "13",
+            "slice navigation commits active edit to the original plane");
+    editor.undoStack->undo();
+    require(editor.pages[0].arrays[0].values[1] == "1", "undo restores the active editor's original element");
+    viewer->findChild<QSpinBox *>("arraySliceIndex0")->setValue(0);
+    viewer->table()->setCurrentIndex(grid->index(0, 0));
+    const QVector<QString> before = editor.pages[0].arrays[0].values;
+    require(viewer->pasteText("101\t102\n103\t104"), "paste rectangular slice selection");
+    require(editor.pages[0].arrays[0].values[0] == "101" && editor.pages[0].arrays[0].values[5] == "104", "paste respects slice row stride");
+    editor.undoStack->undo();
+    require(editor.pages[0].arrays[0].values == before, "paste is one undo operation");
+    require(!viewer->pasteText("100\tinvalid"), "reject invalid numeric paste");
+    require(editor.pages[0].arrays[0].values == before, "invalid paste is atomic");
+    viewer->table()->setCurrentIndex(grid->index(2, 3));
+    require(!viewer->pasteText("1\t2"), "reject paste outside slice");
+    viewer->copySelection(true);
+    require(QApplication::clipboard()->text() == "0\t1\t2\t3\n4\t5\t6\t7\n8\t9\t10\t11", "copy current slice in displayed order");
+    viewer->refresh();
+    viewer->table()->setCurrentIndex(grid->index(2, 3));
+    QCoreApplication::processEvents();
+    viewer->grab().save(root + "/array-viewer-3d.png");
+    const QString file = root + "/viewer-3d.sdds";
+    require(editor.writeFile(file), "save viewer-edited array");
+    SDDSEditor reloaded;
+    require(reloaded.loadFile(file), "reload viewer-edited array");
+    require(reloaded.pages[0].arrays[0].values[23] == "99", "viewer edits survive SDDS save and reload");
+
+    acceptDialog("Resize Array", [](QDialog *dialog) {
+      for (QSpinBox *box : dialog->findChildren<QSpinBox *>())
+        box->setValue(1);
+    });
+    editor.resizeArray(0);
+    require(grid->rowCount() == 1 && grid->columnCount() == 1, "viewer refreshes after array resize");
+    editor.undoStack->undo();
+    require(grid->rowCount() == 3 && grid->columnCount() == 4, "structural undo restores grid shape");
+    editor.undoStack->undo();
+    require(editor.pages[0].arrays[0].values[23] == "123.5", "cell undo still works after structural restoration");
+
+    // Switching pages uses the same undo-history policy as the main editor.
+    PageStore next = editor.pages[0];
+    next.arrays[0].dims = {1, 2, 2};
+    next.arrays[0].values = {"40", "41", "42", "43"};
+    editor.pages.append(next);
+    viewer->findChild<QSpinBox *>("arraySliceIndex0")->setValue(1);
+    editor.pageChanged(1);
+    require(grid->rowCount() == 2 && grid->columnCount() == 2, "viewer follows page shape changes");
+    require(viewer->findChild<QSpinBox *>("arraySliceIndex0")->value() == 0, "smaller page clamps slice index");
+    require(grid->index(1, 1).data().toString() == "43", "viewer reads selected page");
+    require(!editor.undoStack->canUndo(), "page switch clears stale coordinate undo history");
+    editor.pages[1].arrays[0].dims = {0, 2, 2};
+    editor.pages[1].arrays[0].values.clear();
+    editor.populateModels();
+    require(grid->rowCount() == 0 && grid->columnCount() == 0, "empty slice exposes no editable cells");
+    editor.pageChanged(0);
+    viewer->table()->setCurrentIndex(grid->index(0, 0));
+    viewer->table()->edit(grid->index(0, 0));
+    QCoreApplication::processEvents();
+    cellEditor = nullptr;
+    for (QLineEdit *line : viewer->table()->findChildren<QLineEdit *>())
+      if (!line->isHidden())
+        cellEditor = line;
+    require(cellEditor != nullptr, "open cell editor before closing viewer");
+    cellEditor->setFocus();
+    cellEditor->setText("500");
+    QPointer<QDialog> closed = viewer;
+    viewer->close();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    require(closed.isNull(), "closing viewer releases its window");
+    require(editor.pages[0].arrays[0].values[0] == "500", "closing viewer commits the active cell");
+    editor.undoStack->undo();
+    require(editor.pages[0].arrays[0].values[0] == "0", "undo remains valid after viewer closes");
+
+    // One-dimensional text arrays preserve embedded delimiters via clipboard.
+    editor.dataset.layout.array_definition[0].dimensions = 1;
+    editor.dataset.layout.array_definition[0].type = SDDS_STRING;
+    require(SDDS_SaveLayout(&editor.dataset), "save 1D string layout");
+    editor.pages[0].arrays[0].dims = {2};
+    editor.pages[0].arrays[0].values = {"a\tb", "c\nd"};
+    editor.populateModels();
+    editor.openArrayViewer(0);
+    viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+    grid = viewer->sliceModel();
+    require(grid->rowCount() == 2 && grid->columnCount() == 1, "1D arrays use a single column");
+    viewer->copySelection(true);
+    const QString clipboard = QApplication::clipboard()->text();
+    viewer->table()->setCurrentIndex(grid->index(0, 0));
+    require(grid->setData(grid->index(0, 0), "changed"), "edit string slice");
+    require(viewer->pasteText(clipboard), "paste lossless copied string array");
+    require(editor.pages[0].arrays[0].values == QVector<QString>({"a\tb", "c\nd"}), "clipboard preserves tabs and newlines inside cells");
+
+    // Arbitrary dimension counts use one control per undisplayed dimension.
+    editor.dataset.layout.array_definition[0].dimensions = 4;
+    require(SDDS_SaveLayout(&editor.dataset), "save 4D layout");
+    editor.pages[0].arrays[0].dims = {2, 2, 2, 3};
+    editor.pages[0].arrays[0].values.clear();
+    for (int i = 0; i < 24; ++i)
+      editor.pages[0].arrays[0].values.append(QString::number(i));
+    editor.populateModels();
+    viewer->findChild<QComboBox *>("arrayRowDimension")->setCurrentIndex(2);
+    viewer->findChild<QComboBox *>("arrayColumnDimension")->setCurrentIndex(3);
+    viewer->findChild<QSpinBox *>("arraySliceIndex0")->setValue(1);
+    viewer->findChild<QSpinBox *>("arraySliceIndex1")->setValue(1);
+    require(grid->index(1, 2).data().toString() == "23", "4D slicing maps both fixed dimensions correctly");
+    editor.deleteArrayIndexes({0});
+    require(grid->rowCount() == 0, "deleting an array disables its viewer");
+    editor.undoStack->undo();
+    require(grid->rowCount() > 0, "undoing deletion reconnects the named array");
+    QPointer<QDialog> replaced = viewer;
+    require(editor.loadFile(file), "replace document while viewer is open");
+    require(replaced.isNull(), "loading another file closes stale viewers");
+    fprintf(stdout, "PASS multidimensional array viewer mapping, edits, clipboard, pages, and lifecycle\n");
+  }
+
+  /** Verify heatmap scaling, special values, live edits, and display-only state. */
+  static void arrayHeatmap(const QString &root) {
+    SDDSEditor editor;
+    setup(editor);
+    editor.dataset.layout.array_definition[0].dimensions = 3;
+    require(SDDS_SaveLayout(&editor.dataset), "save heatmap array layout");
+    auto &values = editor.pages[0].arrays[0].values;
+    editor.pages[0].arrays[0].dims = {2, 3, 4};
+    values.clear();
+    for (int i = 0; i < 24; ++i)
+      values.append(QString::number(i));
+    editor.populateModels();
+    editor.openArrayViewer(0);
+    ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+    ArraySliceModel *grid = viewer->sliceModel();
+    QCheckBox *heatmap = viewer->findChild<QCheckBox *>("arrayHeatmap");
+    QComboBox *scale = viewer->findChild<QComboBox *>("arrayHeatmapScale");
+    QLineEdit *minimum = viewer->findChild<QLineEdit *>("arrayHeatmapMinimum");
+    QLineEdit *maximum = viewer->findChild<QLineEdit *>("arrayHeatmapMaximum");
+    QPushButton *apply = viewer->findChild<QPushButton *>("arrayHeatmapApply");
+    QLabel *status = viewer->findChild<QLabel *>("arrayHeatmapStatus");
+    auto color = [grid](int r, int c) { return qvariant_cast<QBrush>(grid->index(r, c).data(Qt::BackgroundRole)).color(); };
+    require(!heatmap->isChecked() && !grid->index(0, 0).data(Qt::BackgroundRole).isValid(), "normal table is the default");
+    editor.dirty = false;
+    const auto original = values;
+    const int history = editor.undoStack->count();
+    heatmap->setChecked(true);
+    require(minimum->text().toInt() == 0 && maximum->text().toInt() == 11, "automatic range scans the current slice only");
+    const QColor low = color(0, 0), high = color(2, 3);
+    require(low != high && color(1, 1) != low && color(1, 1) != high, "heatmap has low, middle and high colors");
+    require(qvariant_cast<QBrush>(grid->index(0, 0).data(Qt::ForegroundRole)).color() == QColor(Qt::white) &&
+            qvariant_cast<QBrush>(grid->index(2, 3).data(Qt::ForegroundRole)).color() == QColor(Qt::black), "heatmap text contrasts with dark and light cells");
+    viewer->findChild<QSpinBox *>("arraySliceIndex0")->setValue(1);
+    require(minimum->text().toInt() == 12 && maximum->text().toInt() == 23, "automatic range follows slice navigation");
+    require(color(0, 0) == low && color(2, 3) == high, "automatic slices use the full color scale");
+    scale->setCurrentIndex(1);
+    require(minimum->text().toInt() == 12 && maximum->text().toInt() == 23, "fixed range starts with current slice limits");
+    viewer->findChild<QSpinBox *>("arraySliceIndex0")->setValue(0);
+    require(minimum->text().toInt() == 12 && maximum->text().toInt() == 23 && color(2, 3) == low, "fixed range persists and clips values below its minimum");
+    minimum->setText("0");
+    maximum->setText("23");
+    apply->click();
+    require(color(0, 0) == low && color(2, 3) != high, "manual limits control the color mapping");
+    const QColor beforeInvalid = color(2, 3);
+    minimum->setText("20");
+    maximum->setText("10");
+    apply->click();
+    require(color(2, 3) == beforeInvalid && status->text().contains("previous range"), "reversed limits preserve the active range");
+    minimum->setText("nan");
+    maximum->setText("23");
+    apply->click();
+    require(color(2, 3) == beforeInvalid, "nonfinite limits are rejected");
+    minimum->setText("0");
+    apply->click();
+    require(values == original && !editor.dirty && editor.undoStack->count() == history, "heatmap controls do not change document or undo history");
+    require(grid->index(2, 3).data(Qt::ToolTipRole).toString().contains("= 11"), "heatmap tooltip retains the exact value");
+    viewer->copySelection(true);
+    require(QApplication::clipboard()->text().endsWith("8\t9\t10\t11"), "heatmap copy preserves numeric text");
+    viewer->findChild<QComboBox *>("arrayRowDimension")->setCurrentIndex(2);
+    require(color(3, 2) == beforeInvalid, "heatmap follows transposed axes");
+    viewer->findChild<QComboBox *>("arrayRowDimension")->setCurrentIndex(1);
+    scale->setCurrentIndex(0);
+    require(grid->setData(grid->index(2, 3), "100"), "heatmap cells remain editable");
+    QCoreApplication::processEvents();
+    require(maximum->text().toInt() == 100 && color(2, 3) == high, "automatic range updates after edits");
+    editor.undoStack->undo();
+    QCoreApplication::processEvents();
+    require(maximum->text().toInt() == 11, "undo updates heatmap scale");
+    // Applying an edit can detach Qt vectors; access storage afresh after undo.
+    editor.pages[0].arrays[0].values[0] = "";
+    editor.pages[0].arrays[0].values[1] = "NaN";
+    editor.pages[0].arrays[0].values[2] = "Inf";
+    editor.pages[0].arrays[0].values[3] = "-Inf";
+    editor.populateModels();
+    require(minimum->text().toInt() == 4 && maximum->text().toInt() == 11, "missing and nonfinite values are excluded from the scale");
+    const QColor missing = color(0, 0);
+    require(missing == QColor(160, 160, 160) && color(0, 1) == missing && color(0, 2) == missing && color(0, 3) == missing, "all missing/nonfinite values share a distinct gray color");
+    editor.pages[0].arrays[0].values.fill("7");
+    editor.populateModels();
+    require(minimum->text().toInt() == 7 && maximum->text().toInt() == 7 && color(0, 0) == color(2, 3) && color(0, 0) != missing, "constant slices use a valid uniform color");
+    editor.pages[0].arrays[0].values.fill("NaN");
+    editor.populateModels();
+    require(minimum->text().isEmpty() && maximum->text().isEmpty() && color(1, 1) == missing && status->text().contains("no finite"), "all-nonfinite slices have no fabricated numeric range");
+    // Preserve numeric precision in the parser and prevent overflow in normalization.
+    editor.pages[0].arrays[0].values.fill("0");
+    const long double extreme = std::numeric_limits<long double>::max() / 1.1L;
+    char boundText[128];
+    std::snprintf(boundText, sizeof(boundText), "%.*Lg", std::numeric_limits<long double>::max_digits10, extreme);
+    const QString bound = QString::fromLatin1(boundText);
+    editor.pages[0].arrays[0].values[0] = "-" + bound;
+    editor.pages[0].arrays[0].values[11] = bound;
+    editor.populateModels();
+    require(color(0, 0) == low && color(2, 3) == high && color(1, 1) != missing, "extreme signed values normalize without overflow");
+    const QString extremeMinimum = minimum->text(), extremeMaximum = maximum->text();
+    scale->setCurrentIndex(1);
+    minimum->setText(extremeMinimum);
+    maximum->setText(extremeMaximum);
+    apply->click();
+    require(!status->text().contains("previous range") && color(0, 0) == low && color(2, 3) == high, "displayed extreme limits round-trip through fixed range controls");
+    scale->setCurrentIndex(0);
+    if (std::numeric_limits<long double>::digits >= 64) {
+      editor.pages[0].arrays[0].values.fill("18446744073709551614");
+      editor.pages[0].arrays[0].values[11] = "18446744073709551615";
+      editor.populateModels();
+      require(color(0, 0) == low && color(2, 3) == high, "adjacent uint64 values retain distinct colors");
+      require(minimum->text() == "18446744073709551614" && maximum->text() == "18446744073709551615", "range controls retain full uint64 precision");
+    }
+    // A shape change to an empty page must clear automatic bounds safely.
+    editor.pages[0].arrays[0].dims = {0, 3, 4};
+    editor.pages[0].arrays[0].values.clear();
+    editor.populateModels();
+    require(grid->rowCount() == 0 && minimum->text().isEmpty(), "empty arrays have no heatmap range");
+    editor.pages[0].arrays[0].dims = {2, 3, 4};
+    for (int i = 0; i < 24; ++i)
+      editor.pages[0].arrays[0].values.append(QString::number(i));
+    editor.populateModels();
+    // Page changes preserve user-specified color limits.
+    scale->setCurrentIndex(1);
+    minimum->setText("0");
+    maximum->setText("23");
+    apply->click();
+    PageStore next = editor.pages[0];
+    next.arrays[0].values.fill("100");
+    editor.pages.append(next);
+    editor.pageChanged(1);
+    require(minimum->text().toInt() == 0 && maximum->text().toInt() == 23 && color(0, 0) == high, "fixed limits survive page changes and clip high values");
+    editor.pageChanged(0);
+    editor.dataset.layout.array_definition[0].type = SDDS_STRING;
+    require(SDDS_SaveLayout(&editor.dataset), "save string type for heatmap gating");
+    editor.populateModels();
+    require(!heatmap->isEnabled() && !grid->index(0, 0).data(Qt::BackgroundRole).isValid(), "numeric-looking string arrays do not receive a heatmap");
+    editor.dataset.layout.array_definition[0].type = SDDS_DOUBLE;
+    require(SDDS_SaveLayout(&editor.dataset), "restore numeric heatmap type");
+    editor.populateModels();
+    require(heatmap->isEnabled() && grid->index(0, 0).data(Qt::BackgroundRole).isValid(), "restoring numeric type restores heatmap availability");
+    heatmap->setChecked(false);
+    require(!grid->index(0, 0).data(Qt::BackgroundRole).isValid() && !grid->index(0, 0).data(Qt::ForegroundRole).isValid(), "turning heatmap off restores ordinary table colors");
+    heatmap->setChecked(true);
+    viewer->table()->clearSelection();
+    QCoreApplication::processEvents();
+    viewer->grab().save(root + "/array-heatmap.png");
+    require(editor.writeFile(root + "/heatmap-3d.sdds"), "save a usable heatmap sample");
+    fprintf(stdout, "PASS array heatmap scaling, colors, edits, precision, pages, and numeric type gating\n");
   }
 
   /** A format-copy failure must leave the destination intact. */
@@ -518,6 +826,8 @@ int main(int argc, char **argv) {
   const QString layoutInput = QFile::decodeName(qgetenv("SDDSEDITOR_LAYOUT_INPUT"));
   if (!layoutInput.isEmpty())
     SDDSEditorTests::filePanelSizing(layoutInput, artifacts.path());
+  SDDSEditorTests::arrayViewer(artifacts.path());
+  SDDSEditorTests::arrayHeatmap(artifacts.path());
   SDDSEditorTests::safeSave(artifacts.path());
   SDDSEditorTests::fixedParameter(artifacts.path());
   SDDSEditorTests::undo();

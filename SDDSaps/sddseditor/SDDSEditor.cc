@@ -4,6 +4,7 @@
  */
 
 #include "SDDSEditor.h"
+#include "ArrayViewer.h"
 #include "mdb.h"
 
 #include <QMenuBar>
@@ -2559,6 +2560,13 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   connect(colIns, &QAction::triggered, this, &SDDSEditor::insertColumn);
   connect(colDel, &QAction::triggered, this, &SDDSEditor::deleteColumn);
   QMenu *arrayMenu = editMenu->addMenu(tr("Array"));
+  QAction *arrayGrid = arrayMenu->addAction(tr("Open Array Viewer..."));
+  connect(arrayGrid, &QAction::triggered, this, [this]() {
+    int column = arrayView->currentIndex().column();
+    if (column < 0 && datasetLoaded && dataset.layout.n_arrays > 0)
+      column = 0;
+    openArrayViewer(column);
+  });
   QAction *arrayAttr = arrayMenu->addAction(tr("Attributes"));
   QAction *arrayIns = arrayMenu->addAction(tr("Insert"));
   QAction *arrayDel = arrayMenu->addAction(tr("Delete"));
@@ -4844,6 +4852,10 @@ void SDDSEditor::resizeEvent(QResizeEvent *event) {
 }
 
 void SDDSEditor::clearDataset() {
+  // Viewer callbacks refer to this dataset; close them before replacing it.
+  for (const QPointer<QDialog> &viewer : arrayViewers)
+    delete viewer.data();
+  arrayViewers.clear();
 
   if (datasetLoaded) {
     SDDS_Terminate(&dataset);
@@ -5591,6 +5603,7 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
   pendingArrayHeaderColumns.clear();
 
   QMenu menu(view);
+  QAction *viewerAct = menu.addAction(tr("Open Array Viewer..."));
   QAction *searchAct = menu.addAction(tr("Search"));
   QAction *resizeAct = menu.addAction(tr("Resize"));
   menu.addSeparator();
@@ -5603,7 +5616,9 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
   menu.addSeparator();
   QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
-  if (chosen == searchAct)
+  if (chosen == viewerAct)
+    openArrayViewer(column);
+  else if (chosen == searchAct)
     searchArray(column);
   else if (chosen == resizeAct)
     resizeArray(column);
@@ -5615,6 +5630,50 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
     applyTextFormulaSelection();
   else if (chosen == delAct)
     deleteArrayIndexes(arraysForDelete);
+}
+
+/** Open a slice viewer using the same array model and undo stack as the editor. */
+void SDDSEditor::openArrayViewer(int column) {
+  if (!datasetLoaded || column < 0 || column >= dataset.layout.n_arrays)
+    return;
+  flushPendingEdits();
+  const QString name = QString::fromUtf8(dataset.layout.array_definition[column].name);
+  auto state = [this, name]() {
+    ArrayViewerState result;
+    result.name = name;
+    result.page = currentPage;
+    if (!datasetLoaded || currentPage < 0 || currentPage >= pages.size())
+      return result;
+    for (int i = 0; i < dataset.layout.n_arrays; ++i) {
+      if (name != QString::fromUtf8(dataset.layout.array_definition[i].name) || i >= pages[currentPage].arrays.size())
+        continue;
+      result.column = i;
+      result.dimensions = pages[currentPage].arrays[i].dims;
+      result.elements = pages[currentPage].arrays[i].values.size();
+      result.numeric = SDDS_NUMERIC_TYPE(dataset.layout.array_definition[i].type);
+      result.units = QString::fromUtf8(dataset.layout.array_definition[i].units);
+      break;
+    }
+    return result;
+  };
+  auto type = [this, state]() {
+    const int index = state().column;
+    return index >= 0 ? dataset.layout.array_definition[index].type : SDDS_STRING;
+  };
+  ArrayViewer *viewer = new ArrayViewer(arrayModel, undoStack, state,
+      [this, type](const QModelIndex &index, const QString &text) {
+        return applyCellEditWithUndo(undoStack, arrayModel, index, canonicalizeForDisplay(text, type()));
+      },
+      [type](const QString &text) { return validateTextForType(text, type(), false); }, this);
+  // The slice model creates undo commands against flat source coordinates.
+  viewer->table()->setItemDelegate(new SDDSItemDelegate(
+      [type](const QModelIndex &) { return type(); }, nullptr, viewer->table()));
+  QShortcut *save = new QShortcut(QKeySequence::Save, viewer);
+  connect(save, &QShortcut::activated, this, &SDDSEditor::saveFile);
+  arrayViewers.erase(std::remove_if(arrayViewers.begin(), arrayViewers.end(),
+                                   [](const QPointer<QDialog> &v) { return v.isNull(); }), arrayViewers.end());
+  arrayViewers.append(viewer);
+  viewer->show();
 }
 
 void SDDSEditor::arrayHeaderMenuRequested(const QPoint &pos) {
@@ -7734,6 +7793,11 @@ void SDDSEditor::showHelp() {
                        " - Sorting column or array data\n"
                        " - Searching or replacing values in columns or arrays\n"
                        " - Resizing arrays\n"
+                       " - Open Array Viewer: edit a 2D slice, choose axes, and navigate remaining dimensions\n"
+                       "   Array Viewer uses zero-based indices and shares edits and Undo/Redo with this editor.\n"
+                       "   Copy/Paste works on rectangular selections; Copy slice copies the displayed plane.\n"
+                       "   The viewer follows page changes; slice indices adjust when the shape changes.\n"
+                       "   Heatmap colors numeric values using Current slice or a Fixed range; gray marks nonfinite/missing values.\n"
                        "Use the Edit menu to insert or delete items, and File->Save to commit changes.\n\n"
                        "Formula / Fill tools (Edit->Formula / Fill):\n"
                        " - Fill Series... (Ctrl+Shift+F): fill selected cells with start + step*i\n"

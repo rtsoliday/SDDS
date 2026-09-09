@@ -2,7 +2,7 @@ DD  = ../
 include ../../Makefile.rules
 
 PROD = sddseditor
-sddseditor_SRC = main.cc SDDSEditor.cc
+sddseditor_SRC = main.cc SDDSEditor.cc ArrayViewer.cc
 
 HDF5_INCLUDE ?= /usr/include/hdf5/serial
 USE_H5_16_API ?= 1
@@ -96,8 +96,8 @@ $(OBJ_DIR)/sddseditor$(EXEEXT): $(sddseditor_OBJS) $(LIBRARY) $(PROD_DEPS)
 # Checked-in regression programs; all executables and fixtures stay in OBJ_DIR.
 $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT): SDDSEditor.cc SDDSEditor.h $(OBJ_DIR)/SDDSEditor_moc.h
 
-$(OBJ_DIR)/sddseditor_tests$(EXEEXT): $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT) $(PROD_DEPS)
-	$(LINKEXE) $(OUTPUTEXE) $< $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+$(OBJ_DIR)/sddseditor_tests$(EXEEXT): $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT) $(OBJ_DIR)/ArrayViewer.$(OBJEXT) $(PROD_DEPS)
+	$(LINKEXE) $(OUTPUTEXE) $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT) $(OBJ_DIR)/ArrayViewer.$(OBJEXT) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 
 $(OBJ_DIR)/test-bin/sddsplot$(EXEEXT): $(OBJ_DIR)/PlotSnapshotProbe.$(OBJEXT)
 	mkdir -p $(OBJ_DIR)/test-bin
