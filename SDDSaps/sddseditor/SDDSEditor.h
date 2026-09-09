@@ -119,6 +119,7 @@ protected:
 
 private:
   friend class StructuralChangeCommand;
+  friend class SDDSEditorTests;
   friend struct StructuralSnapshot;
   friend bool captureStructuralSnapshot(SDDSEditor *editor, StructuralSnapshot *snapshot);
   friend bool restoreStructuralSnapshot(SDDSEditor *editor, const StructuralSnapshot &snapshot);
@@ -135,6 +136,8 @@ private:
   /** Ensures a dataset is initialized, creating an empty one if needed. */
   bool ensureDataset();
   bool writeFile(const QString &path);
+  /** Serialize current data without changing the document saved state. */
+  bool writeDatasetFile(const QString &path);
   bool writeHDF(const QString &path);
   bool writeCSV(const QString &path);
   void changeParameterType(int row);

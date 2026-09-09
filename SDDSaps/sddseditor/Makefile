@@ -82,7 +82,7 @@ endif
 
 include ../../Makefile.build
 
-$(OBJ_DIR)/SDDSEditor_moc.h:
+$(OBJ_DIR)/SDDSEditor_moc.h: SDDSEditor.h | $(OBJ_DIR)
 	$(MOC) SDDSEditor.h -o $(OBJ_DIR)/SDDSEditor_moc.h
 
 SDDSEditor.cc: $(OBJ_DIR)/SDDSEditor_moc.h
@@ -92,3 +92,17 @@ $(OBJ_DIR)/sddseditor$(EXEEXT): $(sddseditor_OBJS) $(LIBRARY) $(PROD_DEPS)
 	cp -f $@ $(BIN_DIR)/
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
+
+# Checked-in regression programs; all executables and fixtures stay in OBJ_DIR.
+$(OBJ_DIR)/SDDSEditorTests.$(OBJEXT): SDDSEditor.cc SDDSEditor.h $(OBJ_DIR)/SDDSEditor_moc.h
+
+$(OBJ_DIR)/sddseditor_tests$(EXEEXT): $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT) $(PROD_DEPS)
+	$(LINKEXE) $(OUTPUTEXE) $< $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+
+$(OBJ_DIR)/test-bin/sddsplot$(EXEEXT): $(OBJ_DIR)/PlotSnapshotProbe.$(OBJEXT)
+	mkdir -p $(OBJ_DIR)/test-bin
+	$(LINKEXE) $(OUTPUTEXE) $< $(LDFLAGS)
+
+.PHONY: tests
+tests: all $(OBJ_DIR)/sddseditor_tests$(EXEEXT) $(OBJ_DIR)/test-bin/sddsplot$(EXEEXT)
+	QT_QPA_PLATFORM=offscreen ./$(OBJ_DIR)/sddseditor_tests$(EXEEXT)
