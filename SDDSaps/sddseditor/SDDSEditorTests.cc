@@ -66,6 +66,170 @@ public:
     editor.populateModels();
   }
 
+  /** Verify actual widget geometry, since splitter sizes can hide unused gaps. */
+  static void panelsFillSplitter(const SDDSEditor &viewer) {
+    const int panels = viewer.paramBox->height() + viewer.colBox->height() + viewer.arrayBox->height();
+    const int handles = viewer.dataSplitter->handle(1)->height() + viewer.dataSplitter->handle(2)->height();
+    require(panels + handles == viewer.dataSplitter->contentsRect().height(),
+            "panels fill all available splitter height without gaps");
+  }
+
+  /** Drag a real splitter handle through the same Qt mouse events as the UI. */
+  static void dragPanelHandle(SDDSEditor &viewer, int index, int distance) {
+    QSplitterHandle *handle = viewer.dataSplitter->handle(index);
+    const QPoint start = handle->rect().center();
+    const QPoint globalStart = handle->mapToGlobal(start);
+    const QPoint globalEnd = globalStart + QPoint(0, distance);
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(start), QPointF(globalStart),
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(handle, &press);
+    QMouseEvent move(QEvent::MouseMove, QPointF(start + QPoint(0, distance)), QPointF(globalEnd),
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(handle, &move);
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(handle->mapFromGlobal(globalEnd)), QPointF(globalEnd),
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(handle, &release);
+    QCoreApplication::processEvents();
+  }
+
+  /** Automatic compact sizing must allow later manual expansion in both directions. */
+  static void manualPanelSizing(SDDSEditor &viewer) {
+    const int parameters = viewer.paramBox->height();
+    dragPanelHandle(viewer, 1, 80);
+    require(viewer.paramBox->height() == parameters + 80, "drag expands parameters beyond their content height");
+    panelsFillSplitter(viewer);
+    viewer.resize(viewer.width(), viewer.height() + 60);
+    QCoreApplication::processEvents();
+    require(viewer.paramBox->height() == parameters + 80, "window resize preserves expanded parameter size");
+    panelsFillSplitter(viewer);
+    dragPanelHandle(viewer, 1, -80);
+    require(viewer.paramBox->height() == parameters, "drag restores compact parameter height");
+
+    const int arrays = viewer.arrayBox->height();
+    dragPanelHandle(viewer, 2, -80);
+    require(viewer.arrayBox->height() == arrays + 80, "drag expands arrays even without array definitions");
+    panelsFillSplitter(viewer);
+    const int expandedParameters = viewer.paramBox->height();
+    const int expandedArrays = viewer.arrayBox->height();
+    viewer.resize(viewer.width(), viewer.height() + 60);
+    QCoreApplication::processEvents();
+    require(viewer.paramBox->height() == expandedParameters, "window resize preserves manual parameter size");
+    if (viewer.arrayModel->rowCount() == 0)
+      require(viewer.arrayBox->height() == expandedArrays, "window resize preserves manual empty array size");
+    panelsFillSplitter(viewer);
+    const int beforeShrink = viewer.arrayBox->height();
+    dragPanelHandle(viewer, 2, 80);
+    require(viewer.arrayBox->height() == beforeShrink - 80, "array panel can shrink after expansion");
+    panelsFillSplitter(viewer);
+  }
+
+  /** Optionally check a supplied dataset without saving or modifying it. */
+  static void filePanelSizing(const QString &path, const QString &root) {
+    const QByteArray original = readFile(path);
+    for (bool loadBeforeShow : {false, true}) {
+      SDDSEditor viewer;
+      if (!loadBeforeShow) {
+        viewer.show();
+        QCoreApplication::processEvents();
+      }
+      require(viewer.loadFile(path), "load supplied layout test file");
+      viewer.show();
+      QCoreApplication::processEvents();
+      for (int growth : {0, 120}) {
+        viewer.resize(viewer.width(), viewer.height() + growth);
+        QCoreApplication::processEvents();
+        fprintf(stdout, "supplied file %s (load before show=%d): splitter=%d, parameters=%d, columns=%d, arrays=%d\n",
+                qPrintable(path), loadBeforeShow, viewer.dataSplitter->height(), viewer.paramBox->height(),
+                viewer.colBox->height(), viewer.arrayBox->height());
+        panelsFillSplitter(viewer);
+        if (viewer.paramModel->rowCount() == 1 &&
+            (viewer.columnModel->rowCount() > 0 || viewer.arrayModel->rowCount() > 0)) {
+          const int rowHeight = viewer.paramView->rowHeight(0);
+          require(viewer.paramView->viewport()->height() >= rowHeight &&
+                  viewer.paramView->viewport()->height() <= rowHeight + 2,
+                  "supplied file parameter row fits without unused rows");
+        }
+      }
+      viewer.grab().save(root + QString("/supplied-file-%1.png").arg(loadBeforeShow));
+      manualPanelSizing(viewer);
+    }
+    require(readFile(path) == original, "supplied file remains unchanged");
+    fprintf(stdout, "PASS supplied file panel sizing\n");
+  }
+
+  /** Opening files gives unused parameter space to populated data panels. */
+  static void panelSizing(const QString &root) {
+    SDDSEditor viewer;
+    viewer.show();
+    QCoreApplication::processEvents();
+    for (int scenario : {3, 1, 2, 0, 7, 5, 6, 4}) {
+      const int mask = scenario & 3;
+      SDDSEditor source;
+      setup(source);
+      require(SDDS_DefineParameter(&source.dataset, "Parameter", nullptr, nullptr,
+                                   nullptr, nullptr, SDDS_STRING, nullptr) >= 0,
+              "define panel sizing parameter");
+      require(SDDS_SaveLayout(&source.dataset), "save panel sizing layout");
+      source.pages[0].parameters = {"value"};
+      if (!(mask & 1))
+        source.pages[0].columns[0].clear();
+      if (!(mask & 2)) {
+        source.pages[0].arrays[0].dims = {0, 2};
+        source.pages[0].arrays[0].values.clear();
+      }
+      if (!(scenario & 4)) {
+        if (!(mask & 1)) {
+          removeColumnFromLayout(&source.dataset.layout, 0);
+          source.pages[0].columns.clear();
+        }
+        if (!(mask & 2)) {
+          removeArrayFromLayout(&source.dataset.layout, 0);
+          source.pages[0].arrays.clear();
+        }
+        require(SDDS_SaveLayout(&source.dataset), "save absent panel layout");
+      }
+      source.populateModels();
+      const QString path = root + QString("/panels%1.sdds").arg(scenario);
+      require(source.writeFile(path), "save panel sizing fixture");
+      require(viewer.loadFile(path), "load panel sizing fixture");
+      QCoreApplication::processEvents();
+      viewer.grab().save(root + QString("/panels%1.png").arg(scenario));
+      fprintf(stdout, "panels %d: splitter=%d, parameters=%d at %d, columns=%d at %d, arrays=%d at %d\n",
+              scenario, viewer.dataSplitter->height(), viewer.paramBox->height(), viewer.paramBox->y(),
+              viewer.colBox->height(), viewer.colBox->y(), viewer.arrayBox->height(), viewer.arrayBox->y());
+      const int rowHeight = viewer.paramView->rowHeight(0);
+      if (mask) {
+        panelsFillSplitter(viewer);
+        require(viewer.paramView->viewport()->height() >= rowHeight,
+                "parameter row remains fully visible");
+        require(viewer.paramView->viewport()->height() <= rowHeight + 2,
+                "parameter panel has no unused rows");
+        const int beforeParameters = viewer.paramBox->height();
+        const int beforeColumns = viewer.colBox->height();
+        const int beforeArrays = viewer.arrayBox->height();
+        viewer.resize(viewer.width(), viewer.height() + 120);
+        QCoreApplication::processEvents();
+        panelsFillSplitter(viewer);
+        require(viewer.paramBox->height() == beforeParameters,
+                "window growth does not add blank parameter space");
+        if (mask & 1)
+          require(viewer.colBox->height() > beforeColumns, "populated columns receive extra space");
+        else
+          require(viewer.colBox->height() == beforeColumns, "empty columns do not receive extra space");
+        if (mask & 2)
+          require(viewer.arrayBox->height() > beforeArrays, "populated arrays receive extra space");
+        else
+          require(viewer.arrayBox->height() == beforeArrays, "empty arrays do not receive extra space");
+        if (mask & 1)
+          manualPanelSizing(viewer);
+      } else {
+        require(viewer.paramView->viewport()->height() > 3 * rowHeight,
+                "parameter panel can expand when other panels have no data");
+      }
+    }
+    fprintf(stdout, "PASS automatic panel sizing and manual splitter dragging\n");
+  }
+
   /** A format-copy failure must leave the destination intact. */
   static void safeSave(const QString &root) {
     SDDSEditor editor;
@@ -350,6 +514,10 @@ int main(int argc, char **argv) {
       }
   });
   warnings.start(10);
+  SDDSEditorTests::panelSizing(artifacts.path());
+  const QString layoutInput = QFile::decodeName(qgetenv("SDDSEDITOR_LAYOUT_INPUT"));
+  if (!layoutInput.isEmpty())
+    SDDSEditorTests::filePanelSizing(layoutInput, artifacts.path());
   SDDSEditorTests::safeSave(artifacts.path());
   SDDSEditorTests::fixedParameter(artifacts.path());
   SDDSEditorTests::undo();

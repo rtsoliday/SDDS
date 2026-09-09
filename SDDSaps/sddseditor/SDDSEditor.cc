@@ -26,6 +26,7 @@
 #include <QInputDialog>
 #include <QFont>
 #include <QHeaderView>
+#include <QScrollBar>
 #include <QMenu>
 #include <QProcess>
 #include <QApplication>
@@ -4719,16 +4720,87 @@ void SDDSEditor::updatePanelSizing(int32_t pcount, int32_t ccount, int32_t acoun
     } else {
       box->setChecked(false);
       view->setVisible(false);
-      box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-      const int hint = box->sizeHint().height();
-      box->setMinimumHeight(hint);
-      box->setMaximumHeight(hint);
+      box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+      box->setMinimumHeight(box->sizeHint().height());
+      box->setMaximumHeight(QWIDGETSIZE_MAX);
     }
   };
 
   applyPanelState(paramBox, paramView, pcount > 0);
   applyPanelState(colBox, columnView, ccount > 0);
   applyPanelState(arrayBox, arrayView, acount > 0);
+
+  const bool columnData = ccount > 0 && columnModel->rowCount() > 0;
+  const bool arrayData = acount > 0 && arrayModel->rowCount() > 0;
+  const bool fitParameters = pcount > 0 && (columnData || arrayData);
+  paramView->setSizePolicy(QSizePolicy::Expanding,
+                           fitParameters ? QSizePolicy::Ignored : QSizePolicy::Expanding);
+  int parameterHeight = QWIDGETSIZE_MAX;
+  if (fitParameters) {
+    // Fit the initial panel to its rows, header, frame, and group title.
+    // Ignore the scroll area's minimum-size hint so a small parameter set fits,
+    // but do not impose a maximum height that would prevent manual expansion.
+    const QMargins boxMargins = paramBox->contentsMargins();
+    const QMargins layoutMargins = paramBox->layout()->contentsMargins();
+    int64_t height = static_cast<int64_t>(paramView->verticalHeader()->length()) +
+                     paramView->horizontalHeader()->sizeHint().height() +
+                     2 * paramView->frameWidth() +
+                     boxMargins.top() + boxMargins.bottom() +
+                     layoutMargins.top() + layoutMargins.bottom();
+    if (paramView->horizontalScrollBar()->isVisible())
+      height += paramView->horizontalScrollBar()->sizeHint().height();
+    parameterHeight = static_cast<int>(std::min<int64_t>(height, QWIDGETSIZE_MAX));
+  }
+
+  // Only panels with rows/elements receive the space released by parameters.
+  dataSplitter->setStretchFactor(0, columnData || arrayData ? 0 : 1);
+  dataSplitter->setStretchFactor(1, columnData ? 1 : 0);
+  dataSplitter->setStretchFactor(2, arrayData ? 1 : 0);
+
+  // Hidden splitters have no usable geometry; showEvent applies these sizes.
+  if ((!columnData && !arrayData) || !dataSplitter->isVisible())
+    return;
+
+  // Assign compact sizes through the splitter rather than widget height limits,
+  // leaving every panel free to expand when the user drags a splitter handle.
+  QList<int> sizes = dataSplitter->sizes();
+  const int columnWeight = std::max(1, sizes[1]);
+  const int arrayWeight = std::max(1, sizes[2]);
+  if (pcount == 0)
+    sizes[0] = paramBox->sizeHint().height();
+  if (ccount == 0)
+    sizes[1] = colBox->sizeHint().height();
+  if (acount == 0)
+    sizes[2] = arrayBox->sizeHint().height();
+  int available = dataSplitter->contentsRect().height();
+  for (int i = 1; i < dataSplitter->count(); ++i)
+    available -= dataSplitter->handle(i)->height();
+  // Initial layout can assign less than a row to a view with Ignored policy.
+  // Allow up to a third of the height to fit parameters before sharing the rest.
+  if (fitParameters)
+    sizes[0] = std::min(parameterHeight, std::max(sizes[0], available / 3));
+  const int remaining = std::max(0, available - sizes[0] -
+                                   (columnData ? 0 : sizes[1]) -
+                                   (arrayData ? 0 : sizes[2]));
+  if (columnData && arrayData) {
+    sizes[1] = static_cast<int>(static_cast<int64_t>(remaining) * columnWeight /
+                                (static_cast<int64_t>(columnWeight) + arrayWeight));
+    sizes[2] = remaining - sizes[1];
+  } else {
+    sizes[columnData ? 1 : 2] = remaining;
+  }
+  dataSplitter->setSizes(sizes);
+}
+
+/** Reapply panel sizing with final geometry for files loaded before show(). */
+void SDDSEditor::showEvent(QShowEvent *event) {
+  QMainWindow::showEvent(event);
+  if (datasetLoaded) {
+    QTimer::singleShot(0, this, [this]() {
+      if (datasetLoaded)
+        updatePanelSizing(dataset.layout.n_parameters, dataset.layout.n_columns, dataset.layout.n_arrays);
+    });
+  }
 }
 
 void SDDSEditor::resizeEvent(QResizeEvent *event) {
