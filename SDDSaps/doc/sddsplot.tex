@@ -168,7 +168,7 @@ local switches.
         for matches to wildcard datanames, or only the first.  The default is to scan all files, which may be slow
         for many files with large numbers of columns or parameters.
 
-  \item {\tt -define=\{column | parameter\},{\em equation}\[,{\em definition-entries}\]} --- Defines a column or parameter
+  \item {\tt -define=\{column | parameter\},{\em equation}[,{\em definition-entries}]} --- Defines a column or parameter
     for plotting, in terms of columns and parameters in the input file. This option must be given inside a plot request
     and the request must have only one file.
     
@@ -408,7 +408,7 @@ the element name is used.  Alternatively, the text may be taken from a named str
 string that is given explicitly, or the user may specify with the {\tt use} qualifier that the
 element name, symbol, or descrpition be used.  The user may also force the appearance of the units on the
 label using the {\tt units} qualifier.   The label text may be edited using Toolkit editing commands
-(\progref{SDDS editing}).
+(\hyperref[SDDSediting]{SDDS Editing}).
 
 The {\tt offset} and {\tt scale} qualifiers allow changing the position and size of the label.  The {\tt
 offset} is specified as a fraction of the vertical dimension of the plot region.  The {\tt scale} is
@@ -462,7 +462,7 @@ of the form {\tt \{ l | r | c\}\{t | b | c\}}.  The letters stand for Left, Righ
 The default justification would thus be specified as {\tt justify=lb}.
 
 The text is normally creating using line type 0.  This may be changed with the {\tt linetype} option.  As with the other
-labels, the text may be edited using Toolkit editing commands (\progref{SDDS editing}).
+labels, the text may be edited using Toolkit editing commands (\hyperref[SDDSediting]{SDDS Editing}).
 
   \item {\tt -dateStamp}---Directs that a time and date stamp be placed on the plot.  It appears in the upper left corner
 of the plot.
@@ -556,8 +556,7 @@ symbol is blank.  {\tt xDescription} and {\tt yDescription} specify use of the i
 fields.  {\tt xName} and {\tt yName} specify use of the indicated datanames.  {\tt filename}
 specifies use of the name of the file from which the data comes.  {\tt specified={\em string}}
 specifies use of the given string.  {\tt parameter={\em name}} specifies use of the contents of the
-named string parameter.  Any legend text may be editing using SDDS editing commands\progref{SDDS
-Editing} via the {\tt editCommand} qualifier.  If {\tt firstFileOnly} is given, only the first file
+named string parameter.  Any legend text may be editing using SDDS editing commands\hyperref[SDDSediting]{SDDS Editing} via the {\tt editCommand} qualifier.  If {\tt firstFileOnly} is given, only the first file
 in the request will have legends generated.  If {\tt scale={\em factor}} is given, the legend text
 size is scaled by the given factor.
 
@@ -901,8 +900,9 @@ tall while maintaining width, while \verb|$f| makes characters half as tall whil
   \item \textbf{see also:}
     \begin{itemize}
     \item \hyperref[exampleData]{Data for Examples}
-    \item \progref{SDDS editing}
-    \item \progref{SDDS Wildcard Conventions}
+    \item \hyperref[SDDSediting]{SDDS Editing}
+    \item \hyperref[SDDS Wildcard Conventions]{SDDS Wildcard Conventions}
+    \item \href{sddsplot-character-charts/index.html}{sddsplot character chart gallery}
     \end{itemize}
   \item \textbf{author:} M. Borland, H. Shang and R. Soliday ANL/APS.
 
