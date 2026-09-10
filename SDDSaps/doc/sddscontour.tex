@@ -218,7 +218,7 @@ Use \verb|-v1v2preferred| to force the first method to be used when both paramet
         \end{itemize}
         {\bf For example}, parameters {\em origin1}, {\em delta1}, {\em max\_ext1}, {\em origin2}, {\em delta2}, and {\em max\_ext2} in \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour.input1}{sddscontour.input1} define the coordinate ranges.
         The first three give the minimum, spacing, and maximum of the x coordinate, while the latter three give the same for y.
-        The {\em Index} column provides the x index so that {\em x = Index * delta1 + origin1}.  Columns {\em Ex_n} contain field
+        The {\em Index} column provides the x index so that {\em x = Index * delta1 + origin1}.  Columns {\em Ex\_n} contain field
         values at {\em y = (n-1)*delta2 + origin2}.  Without \verb|-xrange| and \verb|-yrange| the plot shows index values rather
         than coordinates:
         \begin{flushleft}{\tt \bf
@@ -228,7 +228,7 @@ Use \verb|-v1v2preferred| to force the first method to be used when both paramet
 
         To remove the string portion of the y tick labels, use \verb|-ystrings|:
         \begin{flushleft}{\tt \bf
-            sddscontour sddscontour.input1 -columnmatch=Index,Ex* -ystrings=edit=\%/Ex_//,sparse=10 -ylabel=y -shade
+            sddscontour sddscontour.input1 -columnmatch=Index,Ex* -ystrings=edit=\%/Ex\_//,sparse=10 -ylabel=y -shade
             \href{https://ops.aps.anl.gov/manuals/example_files/sddscontour2_img.html}{show\_plot}
         }\end{flushleft}
 
