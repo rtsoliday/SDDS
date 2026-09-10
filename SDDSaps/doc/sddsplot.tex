@@ -816,6 +816,29 @@ the \verb|motif| device type and the following device argument:
   \item \textbf{special characters:}
 \verb|sddsplot| supports Greek and mathematical characters in labels and strings through special sequences embedded in
 text strings.  A similar mechanism is used to allow character-by-character control over size and positioning.
+The \href{sddsplot-character-charts/index.html}{sddsplot character chart gallery}
+provides 34 downloadable PNG charts covering all 32 named fonts and the original
+Greek and special-symbol sets. Each glyph is labeled with the text needed in a
+title or label. The gallery is included beside the HTML manual and in the
+\verb|SDDSaps/doc/sddsplot-character-charts| source directory. When copying the
+PDF manual, include this directory beside the PDF to preserve the gallery link.
+
+Protect dollar signs from shell expansion. For example, in Bash:
+\begin{verbatim}
+sddsplot data.sdds -columnNames=x,y '-title=Angle $ga$r'
+\end{verbatim}
+Single quotes preserve the formatting codes. Inside double quotes, escape each
+dollar sign, as in \verb|"-title=Angle \$ga\$r"|. An unescaped sequence such as
+\verb|$y8$r| inside double quotes is interpreted as shell variables and can
+disappear before reaching \verb|sddsplot|.
+
+Use \verb|-font=name| to select the default font (\verb|rowmans| initially),
+and \verb|-listFonts| to list fonts supported by the installed version.
+Some punctuation uses the original symbol table regardless of the selected
+font; the charts mark these glyphs. A literal tilde (\verb|~|) is not supported
+by the character mapping, even when quoted correctly. \verb|$y3$r| draws an
+arc, not a tilde.
+
 The special sequences are of the form \verb|$|{\em character}, where {\em character} may be one of the following:
 \begin{itemize}
 
@@ -828,6 +851,14 @@ character sets. \verb|$g| switches into Greek mode, while \verb|$r|
 switches back to Roman mode.  The correspondance between Greek
 characters and the alphabet is shown in Figure \ref{CharSet}.  For
 example, to make a lower-case alpha, one would use \verb|$ga$r|.
+
+\item {\tt c}, {\tt m}, {\tt k}, {\tt y}: select the \verb|cyrillic|,
+\verb|mathlow|, \verb|greek|, and \verb|symbolic| fonts, respectively.
+\verb|$r| restores the configured default font and exits Greek mode.
+
+\item {\tt 1}, {\tt 2}, {\tt 3}: select \verb|rowmans|, \verb|rowmand|,
+and \verb|rowmant|, respectively. For example, \verb|$2ABC$r| draws
+\verb|ABC| with \verb|rowmand| and then restores the default font.
 
 \item {\tt s}, {\tt e}: provide for switching between Special and
 normal characters.  \verb|$s| switches to special character mode,

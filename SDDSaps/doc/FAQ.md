@@ -53,6 +53,7 @@ Use the table of contents below to jump to a specific topic.
 * [3.12 How can I use a parameter value to define a plot filter range?](#faq38)
 * [3.13 How can I save a plot from sddsplot as an image or PDF file?](#faq73)
 * [3.14 How can I change this command to plot with a log scale?](#faq75)
+* [3.15 Where can I find character codes, and why do symbols disappear from my title?](#faq76)
 
 ---
 
@@ -2500,5 +2501,35 @@ sddsplot logscale_data_random.sdds \
 Replace `Values` with the actual column name you want on the log axis. `logarithmic` instructs `sddsplot` to take the logarithm of the y data, and `specialScales` enables log-style scales for the axis so the tick marks and labels reflect the logarithmic spacing.
 
 If you already created a `log10` column, keep the existing `-col` request and add `-tickSettings=ylogarithmic` instead so the axis labeling matches the logarithmic data without applying the transform twice.
+
+---
+
+## <a id="faq76"></a>Where can I find character codes, and why do symbols disappear from my title?
+
+### Answer
+
+The [sddsplot character charts](sddsplot-character-charts/README.md) show all 32
+named fonts plus the original Greek and special-symbol sets, with the input
+code beneath each glyph. [Open the gallery](sddsplot-character-charts/index.html)
+in a browser to browse the PNGs.
+
+In Bash, dollar signs inside double quotes introduce variable expansion. If
+`y8` and `r` are unset, `"-title=Title $y8$r text"` loses both sequences before
+sddsplot sees the title. Use single quotes:
+
+```bash
+sddsplot data.sdds -columnNames=x,y '-title=Title $y8$r text'
+```
+
+Or escape the dollar signs inside double quotes:
+
+```bash
+sddsplot data.sdds -columnNames=x,y "-title=Title \$y8\$r text"
+```
+
+The code selects a glyph from the symbol font; consult its chart for the shape.
+A literal tilde (`~`) has a separate limitation: it is missing from sddsplot's
+character mapping, so quoting it does not make it render. `$y3$r` is an arc,
+not a tilde.
 
 ---
