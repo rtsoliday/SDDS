@@ -110,7 +110,7 @@ def make_chart(name, font, mode=''):
     d.text((x+80,y+110), code, anchor='mm', font=codefont, fill='#166f85')
     if old: d.ellipse((x+145,y+9,x+151,y+15), fill='#bf791a')
   bottom = 230+rows*150+10
-  d.text((40,bottom), 'Space is blank. Literal ~ and backslash are unsupported. $y3$r draws an arc, not a tilde.', font=textfont, fill='#34465a')
+  d.text((40,bottom), 'Space is blank.', font=textfont, fill='#34465a')
   d.text((40,bottom+36), 'Source: SDDSaps/sddsplots/{hershey.font, psymbol.c, graphics.c}  |  10 September 2026', font=smallfont, fill='#536579')
   file = name.replace(' ', '_')+'.png'
   im.save(OUT/file)
