@@ -81,7 +81,8 @@
 #define SET_YFLIP 55
 #define SET_SHOWGAPS 56
 #define SET_3D 57
-#define OPTIONS 58
+#define SET_PSPACE 58
+#define OPTIONS 59
 
 static char *option[OPTIONS] = {
   "quantity", "swapxy", "shade", "contours", "equation", "scales",
@@ -94,7 +95,7 @@ static char *option[OPTIONS] = {
   "thickness", "ticksettings", "pipe", "waterfall", "yrange", "xrange",
   "nocolorbar", "yaxis", "xaxis", "xyz", "drawline", "levellist",
   "symbols", "fillscreen", "xlog", "fixfontsize", "limitlevels",
-  "convertunits", "yflip", "showgaps", "3d"};
+  "convertunits", "yflip", "showgaps", "3d", "pspace"};
 
 static long threeD = 0;
 static long threeDMode = 0; /* 0=surface,1=bar,2=scatter */
@@ -115,7 +116,7 @@ char *USAGE = "sddscontour [-pipe] [<SDDSfilename>]\n\
  [[-shade=<number>[,<min>,<max>,gray]] | [-contours=<number>[,<min>,<max>]]] \n\
  [-levelList=<listOfLevels>] [-limitLevels={minimum=<value>,}{maximum=<value>}]\n\
  [-mapShade=<hue0>,<hue1>] \n\
- [-scales=<xl>,<xh>,<yl>,<yh>] [-v1v2Preferred] \n\
+ [-scales=<xl>,<xh>,<yl>,<yh>] [-pspace=<plo>,<phi>,<qlo>,<qhi>] [-v1v2Preferred] \n\
  [-labelcontours=interval[,offset]] [-logscale[=<floor>]]\n\
  [-device={qt|motif|png|postscript}[,<device-arguments>]] [-output=<filename>]\n\
  qt device arguments: '-dashes <0|1> -linetype <filename> -movie 1 [-interval <seconds>] -keep <number> -share <name> -timeoutHours <hours> -spectrum'\n\
@@ -135,7 +136,7 @@ char *USAGE = "sddscontour [-pipe] [<SDDSfilename>]\n\
  [-layout=<nx>,<ny>] [-thickness=<integer>] [-xlog]\n\
  [-ticksettings=[{xy}time]] [-nocolorbar] [-yaxis=scaleValue=<value>|scaleParameter=<name>[,offsetValue=<number>|offsetParameter=<name>] \n\
  [-xaxis=scaleValue=<value>|scaleParameter=<name>[,offsetValue=<number>|offsetParameter=<name>] \n\
- [-fixfontsize=[all=.02][,legend=.015][,<x|y>xlabel=<value>][,<x|y>ticks=<value>][,title=<value>][,topline=<value>]]\n\
+ [-fixfontsize=[all=.02][,legend=.015][,<x|y>xlabel=<value>][,<x|y>ticks=<value>][,title=<value>][,topline=<value>][,intensityBar=<value>]]\n\
  [-convertunits={column|parameter},<name>,<new-units-name>,<old-units-name>[,<factor>]]\n\
  [-drawLine={x0value=<value> | p0value=<value> | x0parameter=<name> | p0parameter=<name>},\n\
             {x1value=<value> | p1value=<value> | x1parameter=<name> | p1parameter=<name>},\n\
@@ -229,7 +230,8 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
                   char *colorName, char *colorUnits, long swap_xy, double xlabelScale, double ylabelScale, long yRangeProvided, long xRangeProvided,
                   char **yStringLabels, long yStringCount,
                   DRAW_LINE_SPEC *drawLineSpec, long drawlines, long fill_screen, long nx_interp,
-                  long ny_interp, double *orig_limit, short xlog, long nx_offset, short show_gaps);
+                  long ny_interp, double *orig_limit, short xlog, long nx_offset, short show_gaps,
+                  double *user_pspace);
 long get_plot_labels(SDDS_DATASET *SDDS_table, char *indeptcolumn, char **columnname, long columnnames,
                      char *allmatches, char *waterfall_par,
                      char *users_xlabel, char *users_ylabel, char *users_title,
@@ -357,6 +359,8 @@ void sddscontour_main(char *input_line)
   long x_lowpass, y_lowpass, nx_interp, ny_interp;
   long pause_interval = 1, fill_screen = 0;
   double orig_limit[4] = {0, 0, 0, 0};
+  double user_pspace[4] = {0, 0, 0, 0};
+  long pspaceGiven = 0;
   static char bufferstr[SDDS_MAXLINE];
   double levelLimit[2];
 
@@ -401,6 +405,7 @@ void sddscontour_main(char *input_line)
   long conversions = 0;
   short show_gaps = 0;
 
+  memset(&fontsize, 0, sizeof(fontsize));
   fontsize.autosize = 1;
   xlabelScale = ylabelScale = 1.0;
   rpn_definitions_file = rpn_expression = NULL;
@@ -670,6 +675,18 @@ void sddscontour_main(char *input_line)
           fprintf(stderr, "Error (sddscontour): incorrect -scales syntax\n");
           return (1);
         }
+        break;
+      case SET_PSPACE:
+        if (s_arg[i_arg].n_items != 5 ||
+            sscanf(s_arg[i_arg].list[1], "%lf", &user_pspace[0]) != 1 ||
+            sscanf(s_arg[i_arg].list[2], "%lf", &user_pspace[1]) != 1 ||
+            sscanf(s_arg[i_arg].list[3], "%lf", &user_pspace[2]) != 1 ||
+            sscanf(s_arg[i_arg].list[4], "%lf", &user_pspace[3]) != 1 ||
+            user_pspace[0] >= user_pspace[1] || user_pspace[2] >= user_pspace[3]) {
+          fprintf(stderr, "Error (sddscontour): incorrect -pspace syntax (use -pspace=<plo>,<phi>,<qlo>,<qhi>)\n");
+          return (1);
+        }
+        pspaceGiven = 1;
         break;
       case SET_LABEL_CONTOURS:
         if ((s_arg[i_arg].n_items != 2 && s_arg[i_arg].n_items != 3) ||
@@ -1267,6 +1284,7 @@ void sddscontour_main(char *input_line)
         fontsize.yticks = -1;
         fontsize.title = -1;
         fontsize.topline = -1;
+        fontsize.intensityBar = -1;
         if (s_arg[i_arg].n_items == 1) {
           fontsize.all = .02;
           SetupFontSize(&fontsize);
@@ -1282,8 +1300,9 @@ void sddscontour_main(char *input_line)
                             "yticks", SDDS_DOUBLE, &(fontsize.yticks), 1, 0,
                             "title", SDDS_DOUBLE, &(fontsize.title), 1, 0,
                             "topline", SDDS_DOUBLE, &(fontsize.topline), 1, 0,
+                            "intensitybar", SDDS_DOUBLE, &(fontsize.intensityBar), 1, 0,
                             NULL)) {
-            fprintf(stderr, "Error (sddscontour): invalid -fixfontsize syntax: -fixfontsize=[all=.02][,legend=.015][,<x|y>xlabel=<value>][,<x|y>ticks=<value>][,title=<value>][,topline=<value>]\n");
+            fprintf(stderr, "Error (sddscontour): invalid -fixfontsize syntax: -fixfontsize=[all=.02][,legend=.015][,<x|y>xlabel=<value>][,<x|y>ticks=<value>][,title=<value>][,topline=<value>][,intensityBar=<value>]\n");
             return (1);
           }
           s_arg[i_arg].n_items++;
@@ -1753,7 +1772,8 @@ void sddscontour_main(char *input_line)
                  yEditCommand, ySparseInterval, yScale, contour_label_interval,
                  contour_label_offset, do_shade, 1, colorName, colorUnits, swap_xy, xlabelScale, ylabelScale, yRangeProvided, xRangeProvided,
                  waterfall_indepLabels, waterfall_indepLabelCount,
-                 drawLineSpec, drawlines, fill_screen, nx_interp, ny_interp, orig_limit, xlog, nx_offset, show_gaps);
+                 drawLineSpec, drawlines, fill_screen, nx_interp, ny_interp, orig_limit, xlog, nx_offset, show_gaps,
+                 pspaceGiven ? user_pspace : NULL);
     if (waterfall_indepLabels) {
       SDDS_FreeStringArray(waterfall_indepLabels, waterfall_indepLabelCount);
       waterfall_indepLabels = NULL;
@@ -2870,7 +2890,8 @@ void sddscontour_main(char *input_line)
                         yEditCommand, ySparseInterval, yScale, contour_label_interval,
                         contour_label_offset, do_shade, 0, colorName, colorUnits, swap_xy, xlabelScale, ylabelScale, yRangeProvided, xRangeProvided,
                         NULL, 0,
-                        drawLineSpec, drawlines, fill_screen, nx_interp, ny_interp, orig_limit, xlog, nx_offset, show_gaps))
+                        drawLineSpec, drawlines, fill_screen, nx_interp, ny_interp, orig_limit, xlog, nx_offset, show_gaps,
+                        pspaceGiven ? user_pspace : NULL))
         continue;
       /*restore the values after swap since they will be used for next plot */
 
@@ -2944,7 +2965,8 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
                   long yRangeProvided, long xRangeProvided,
                   char **yStringLabels, long yStringCount,
                   DRAW_LINE_SPEC *drawLineSpec, long drawlines, long fill_screen,
-                  long nx_interp, long ny_interp, double *orig_limit, short xlog, long nx_offset, short show_gaps) {
+                  long nx_interp, long ny_interp, double *orig_limit, short xlog, long nx_offset, short show_gaps,
+                  double *user_pspace) {
   long i, j, ix_min = 0, ix_max = 0, iy_min = 0, iy_max = 0, gray = 0;
   double max_value, min_value, *level, limit[4];
   register double value;
@@ -3024,7 +3046,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
                   hue0, hue1, layout, *ixl, *iyl,
                   NULL, pen, *flags, pause_interval,
                   thickness, tsetFlags, colorName, colorUnits, xlabelScale, ylabelScale, gray,
-                  fill_screen, xlog, nx_offset, show_gaps);
+                  fill_screen, xlog, nx_offset, show_gaps, user_pspace);
     *flags |= DEVICE_DEFINED;
     PlotShapesData(shape, shapes, xmin, xmax, ymin, ymax);
   }
@@ -3045,7 +3067,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
                      contour_label_interval, contour_label_offset,
                      layout, *ixl, *iyl, NULL, pen,
                      *flags, pause_interval,
-                     shape, shapes, tsetFlags, xlabelScale, ylabelScale, do_shade, thickness, fill_screen);
+                     shape, shapes, tsetFlags, xlabelScale, ylabelScale, do_shade, thickness, fill_screen, user_pspace);
     *flags |= DEVICE_DEFINED;
   }
   if (yStringLabels && yStringCount > 0 && !(*flags & NO_SCALES)) {
