@@ -26,12 +26,13 @@ void go_shade_grid(
 		   char *device, char *title, char *xvar, char *yvar, char *topline,
 		   double **data, double xmin, double xmax, double ymin, double ymax,
 		   double *xintervals, double *yintervals, long nx, long ny,
-		   double min_level, double max_level, long n_levels, 
-		   double hue0, double hue1, long layout[2], long ix, long iy,                  
+		   double min_level, double max_level, long n_levels,
+		   double hue0, double hue1, long layout[2], long ix, long iy,
 		   char *shapes, int *pen, long flags, long pause_interval,
-		   long thickness, unsigned long long tsetFlags, char *colorName, 
-                   char *colorUnits, double xlabelScale, double ylabelScale, long gray, 
-                   long fill_screen, short xlog, long nx_offset, short show_gaps)
+		   long thickness, unsigned long long tsetFlags, char *colorName,
+                   char *colorUnits, double xlabelScale, double ylabelScale, long gray,
+                   long fill_screen, short xlog, long nx_offset, short show_gaps,
+                   double *user_pspace)
 {
   long reverse, pen0;
   double map[4], average, spread;
@@ -80,6 +81,19 @@ void go_shade_grid(
   }
   if (fill_screen)
     set_pspace(0, 1, 0, 1);
+  if (user_pspace &&
+      user_pspace[0] < user_pspace[1] && user_pspace[2] < user_pspace[3]) {
+    if (layout[0] && layout[1]) {
+      /* Interpret user_pspace as normalized [0,1] within a single panel,
+         then remap to this panel's position in the layout (matches sddsplot). */
+      set_pspace((ix + user_pspace[0]) / layout[0],
+                 (ix + user_pspace[1]) / layout[0],
+                 (layout[1] - 1 - iy + user_pspace[2]) / layout[1],
+                 (layout[1] - 1 - iy + user_pspace[3]) / layout[1]);
+    } else {
+      set_pspace(user_pspace[0], user_pspace[1], user_pspace[2], user_pspace[3]);
+    }
+  }
   set_clipping(1, 1, 1);
 
   if (flags&EQUAL_ASPECT1) 
@@ -116,7 +130,11 @@ void go_shade_grid(
     }
   }
   set_mapping(map[0], map[1], map[2], map[3]);
-  
+  /* Reset character size to default for each panel — otherwise the size
+     shrunk by adjustTickCharSize/adjustLabelCharSize on the previous
+     panel carries over and can make labels vanish. Matches sddsplot. */
+  set_default_char_size();
+
   get_pspace(&pmin, &pmax, &qmin, &qmax);
   get_wspace(&wpmin, &wpmax, &wqmin, &wqmax);
 

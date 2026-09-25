@@ -33,7 +33,7 @@ void go_plot_contours(
     long contour_label_offset, long layout[2], long ix, long iy,
     char *shapes, int *pen, long flags, long pause_interval,
     SHAPE_DATA *shape, long nshapes, unsigned long long tsetFlags, double xlabelScale, double ylabelScale,
-    short noSetup, long thickness, long fill_screen)
+    short noSetup, long thickness, long fill_screen, double *user_pspace)
 {
     double map[4], average, spread;
     double pmin, pmax, qmin, qmax;
@@ -76,6 +76,19 @@ void go_plot_contours(
       }
       if (fill_screen)
         set_pspace(0, 1, 0, 1);
+      if (user_pspace &&
+          user_pspace[0] < user_pspace[1] && user_pspace[2] < user_pspace[3]) {
+        if (layout[0] && layout[1]) {
+          /* Interpret user_pspace as normalized [0,1] within a single panel,
+             then remap to this panel's position in the layout (matches sddsplot). */
+          set_pspace((ix + user_pspace[0]) / layout[0],
+                     (ix + user_pspace[1]) / layout[0],
+                     (layout[1] - 1 - iy + user_pspace[2]) / layout[1],
+                     (layout[1] - 1 - iy + user_pspace[3]) / layout[1]);
+        } else {
+          set_pspace(user_pspace[0], user_pspace[1], user_pspace[2], user_pspace[3]);
+        }
+      }
       set_clipping(1, 1, 1);
 
       pen0 = set_linetype(0);
@@ -112,9 +125,13 @@ void go_plot_contours(
         }
       }
       set_mapping(map[0], map[1], map[2], map[3]);
+      /* Reset character size to default for each panel — otherwise the size
+         shrunk by adjustTickCharSize/adjustLabelCharSize on the previous
+         panel carries over and can make labels vanish. Matches sddsplot. */
+      set_default_char_size();
       get_pspace(&pmin, &pmax, &qmin, &qmax);
       get_wspace(&wpmin, &wpmax, &wqmin, &wqmax);
-      
+
 
       if (!(flags&NO_BORDER)) {
         border();
