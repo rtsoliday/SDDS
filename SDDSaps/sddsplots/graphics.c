@@ -113,6 +113,7 @@ typedef struct
   double yticks;
   double title;
   double topline;
+  double intensityBar;
 } FONT_SIZE;
 
 static FONT_SIZE fontsize;
@@ -1438,6 +1439,13 @@ void fix_char_size(
         {
           character_size = fontsize.legend;
         }
+      else if (mode == 6)
+        {
+          if (fontsize.intensityBar > 0)
+            character_size = fontsize.intensityBar;
+          else if (fontsize.legend > 0)
+            character_size = fontsize.legend;
+        }
     }
 
   if (character_size)
@@ -1465,7 +1473,7 @@ void char_scale(double xfact, double yfact, short mode)
     }
   else
     {
-      if ((fontsize.all > 0) && (mode != 5))
+      if ((fontsize.all > 0) && (mode != 5) && (mode != 6))
         {
           character_size = fontsize.all;
         }
@@ -1488,6 +1496,10 @@ void char_scale(double xfact, double yfact, short mode)
       else if ((mode == 4) && (fontsize.yticks > 0))
         {
           character_size = fontsize.yticks;
+        }
+      else if ((mode == 6) && (fontsize.intensityBar > 0))
+        {
+          character_size = fontsize.intensityBar;
         }
     }
   character_aspect *= yfact / xfact;
@@ -1952,6 +1964,7 @@ void make_intensity_bar(long n_shades, long shadeOffset, long reverse,
   double yrange, xrange, dy, y, yave;
   double xl, yl, xh, yh;
   double xb[5], yb[5];
+  double savedYticks;
 
   get_mapping(&xmin, &xmax, &ymin, &ymax);
   if (!(yrange = ymax - ymin))
@@ -1979,7 +1992,7 @@ void make_intensity_bar(long n_shades, long shadeOffset, long reverse,
   if (colorSymbol)
     {
       set_linethickness(tickLabelThickness);
-      if ((fontsize.all > 0) || (fontsize.legend > 0)) {
+      if ((fontsize.all > 0) || (fontsize.legend > 0) || (fontsize.intensityBar > 0)) {
         locksize = 1;
       }
       if (colorUnits)
@@ -1987,7 +2000,7 @@ void make_intensity_bar(long n_shades, long shadeOffset, long reverse,
           char units[256];
           double hsize, vsize;
           get_char_size(&hsize, &vsize, 1);
-          fix_char_size(hsize, vsize, 1, 5);
+          fix_char_size(hsize, vsize, 1, 6);
           sprintf(units, "(%s)", colorUnits);
           plotStringInBox(units, (xh + xl) / 2.0, yh + (yh - yl) * 0.05 + ((yh - yl) * 0.03 * (unitsize - 1)), allowedSpace * unitsize * 0.5, (yh - yl) * 0.03 * unitsize, 0, locksize);
           plotStringInBox(colorSymbol, (xh + xl) / 2.0, yh + (yh - yl) * 0.05 + ((yh - yl) * 0.03 * (unitsize - 1)) + vsize * 1.5, allowedSpace * unitsize * 0.9, (yh - yl) * 0.03 * unitsize, 0, locksize);
@@ -1996,7 +2009,7 @@ void make_intensity_bar(long n_shades, long shadeOffset, long reverse,
         {
           double hsize, vsize;
           get_char_size(&hsize, &vsize, 1);
-          fix_char_size(hsize, vsize, 1, 5);
+          fix_char_size(hsize, vsize, 1, 6);
           plotStringInBox(colorSymbol, (xh + xl) / 2.0, yh + (yh - yl) * 0.05 + ((yh - yl) * 0.03 * (unitsize - 1)) + vsize * 1.5, allowedSpace * unitsize * 0.9, (yh - yl) * 0.03 * unitsize, 0, locksize);
         }
       set_linethickness(0);
@@ -2024,6 +2037,13 @@ void make_intensity_bar(long n_shades, long shadeOffset, long reverse,
   plot_lines(xb, yb, 5, PRESET_LINETYPE, 0);
 
   set_clipping(1, 1, 1);
+
+  /* Route the intensity bar's tick labels through the intensityBar font size
+     by temporarily overriding fontsize.yticks (make_scale uses mode 4 for the
+     y-axis tick labels). Restored after the calls below. */
+  savedYticks = fontsize.yticks;
+  if (fontsize.intensityBar > 0)
+    fontsize.yticks = fontsize.intensityBar;
 
   make_scale(1,                                                    /* plane */
              0,                                                    /* log? */
@@ -2079,6 +2099,8 @@ void make_intensity_bar(long n_shades, long shadeOffset, long reverse,
              NULL, 1, 0, 0, 0 /* label */,
              1 /* no subtick label for log scale */
              );
+
+  fontsize.yticks = savedYticks;
 }
 
 void SetupFontSize(FONT_SIZE *fs)
@@ -2092,4 +2114,5 @@ void SetupFontSize(FONT_SIZE *fs)
   fontsize.yticks = fs->yticks;
   fontsize.title = fs->title;
   fontsize.topline = fs->topline;
+  fontsize.intensityBar = fs->intensityBar;
 }
