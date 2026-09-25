@@ -110,6 +110,7 @@ typedef struct {
   double yticks;
   double title;
   double topline;
+  double intensityBar;
 } FONT_SIZE;
 void go_plot_contours(
     char *device, char *title, char *xvar, char *yvar, char *topline,
@@ -119,7 +120,7 @@ void go_plot_contours(
     long contour_label_offset, long layout[2], long ix, long iy,
     char *shapes, int *pen, long flags, long pause_interval,
     SHAPE_DATA *shape, long nshapes, unsigned long long tsetFlags, double xlabelScale, double ylabelScale, short no_setup,
-    long thickness, long fill_screen);
+    long thickness, long fill_screen, double *user_pspace);
 void label_contours(
     double **data,
     long nx,
@@ -161,9 +162,10 @@ void go_shade_grid(
     double minlev, double maxlev, long nlev,
     double hue0, double hue1, long layout[2], long ix, long iy,
     char *shapes, int *pen, long flags, long pause_interval,
-    long thickness, unsigned long long tsetFlags, char *colorName, 
-    char *colorUnits, double xlabelScale, double ylabelScale, 
-    long gray, long fill_screen, short xlog, long nx_offset, short show_gaps);
+    long thickness, unsigned long long tsetFlags, char *colorName,
+    char *colorUnits, double xlabelScale, double ylabelScale,
+    long gray, long fill_screen, short xlog, long nx_offset, short show_gaps,
+    double *user_pspace);
 
 void shade_grid(double **fxy, double xmin, double ymin, double dx, double dy, 
 		double *xintervals, double *yintervals, long nx, long ny, 
