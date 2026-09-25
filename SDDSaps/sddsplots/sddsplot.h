@@ -466,6 +466,9 @@ typedef struct {
 typedef struct {
   unsigned long flags;
   char *ID;       /* scales group ID, possibly derived from other data or enter by user */
+  double offset;  /* fractional shift of the scale away from the plot when placed on the
+                     opposite side (right for y, top for x); expressed as a fraction of
+                     the plot-region extent along the "other" plane */
 } SCALES_GROUP_SPEC;
 #define SCALESGROUP_ID_GIVEN        0x0001U
 #define SCALESGROUP_USE_FILEINDEX   0x0002U
@@ -477,6 +480,7 @@ typedef struct {
 #define SCALESGROUP_USE_INAMESTRING 0x0080U
 #define SCALESGROUP_USE_UNITS       0x0100U
 #define SCALESGROUP_OTHER_SIDE      0x0200U
+#define SCALESGROUP_OFFSET_GIVEN    0x0400U
 #define RESERVED_SCALESGROUP_ID "\001\002\003\004\005\006\007\010"
 
 /* used for collecting and sorting scales group data for each ID */
@@ -795,6 +799,7 @@ typedef struct {
   double yticks;
   double title;
   double topline;
+  double intensityBar;
 } FONT_SIZE;
 
 typedef enum {

@@ -1599,7 +1599,7 @@ long tagrequest_AP(PLOT_SPEC *plotspec, char **item, long items)
 }
 
 
-static char *xScalesGroup_usage = "-xScalesGroup={ID=<string> | fileIndex|fileString|nameIndex|nameString|page|request|units}[,top]";
+static char *xScalesGroup_usage = "-xScalesGroup={ID=<string> | fileIndex|fileString|nameIndex|nameString|page|request|units}[,top[,offset=<fraction>]]";
 long scalesGroup_AP(PLOT_SPEC *plotspec, char **item, long items, long plane,
                     char *errorMessage, char *usage);
 
@@ -1609,7 +1609,7 @@ long xScalesGroup_AP(PLOT_SPEC *plotspec, char **item, long items)
                         xScalesGroup_usage);
 }
 
-static char *yScalesGroup_usage = "-yScalesGroup={ID=<string> | fileIndex|fileString|nameIndex|nameString|page|request|units}[,right]";
+static char *yScalesGroup_usage = "-yScalesGroup={ID=<string> | fileIndex|fileString|nameIndex|nameString|page|request|units}[,right[,offset=<fraction>]]";
 
 long yScalesGroup_AP(PLOT_SPEC *plotspec, char **item, long items)
 {
@@ -1623,6 +1623,7 @@ long scalesGroup_AP(PLOT_SPEC *plotspec, char **item, long items, long plane,
   PLOT_REQUEST *plreq;
 
   plreq = plotspec->plot_request+plotspec->plot_requests-1;
+  plreq->scalesGroupSpec[plane].offset = 0;
   if (!scanItemList(&plreq->scalesGroupSpec[plane].flags,
                     item, &items,  0,
                     "id", SDDS_STRING, &plreq->scalesGroupSpec[plane].ID, 1, SCALESGROUP_ID_GIVEN,
@@ -1635,9 +1636,14 @@ long scalesGroup_AP(PLOT_SPEC *plotspec, char **item, long items, long plane,
                     "units", -1, NULL, 0, SCALESGROUP_USE_UNITS,
                     "right", -1, NULL, 0, SCALESGROUP_OTHER_SIDE,
                     "top", -1, NULL, 0, SCALESGROUP_OTHER_SIDE,
+                    "offset", SDDS_DOUBLE, &plreq->scalesGroupSpec[plane].offset, 1, SCALESGROUP_OFFSET_GIVEN,
                     NULL) ||
-      bitsSet(plreq->scalesGroupSpec[plane].flags&~SCALESGROUP_OTHER_SIDE)!=1)
+      bitsSet(plreq->scalesGroupSpec[plane].flags&~(SCALESGROUP_OTHER_SIDE|SCALESGROUP_OFFSET_GIVEN))!=1)
     return bombre(errorMessage, usage, 0);
+
+  if ((plreq->scalesGroupSpec[plane].flags&SCALESGROUP_OFFSET_GIVEN) &&
+      !(plreq->scalesGroupSpec[plane].flags&SCALESGROUP_OTHER_SIDE))
+    return bombre("invalid -[xy]scalesGroup syntax---offset only applies with right/top.", usage, 0);
 
   if (plreq->scalesGroupSpec[plane].flags&SCALESGROUP_ID_GIVEN &&
       strcmp(plreq->scalesGroupSpec[plane].ID, RESERVED_SCALESGROUP_ID)==0)
@@ -3127,6 +3133,7 @@ long fixfontsize_AP(PLOT_SPEC *plotspec, char **item, long items)
     plotspec->fontsize[0].yticks = -1;
     plotspec->fontsize[0].title = -1;
     plotspec->fontsize[0].topline = -1;
+    plotspec->fontsize[0].intensityBar = -1;
     if (items==0) {
       plotspec->fontsize[0].all = .02;
       SetupFontSize(&(plotspec->fontsize[0]));
@@ -3143,8 +3150,9 @@ long fixfontsize_AP(PLOT_SPEC *plotspec, char **item, long items)
                       "yticks", SDDS_DOUBLE, &(plotspec->fontsize[0].yticks), 1, 0,
                       "title", SDDS_DOUBLE, &(plotspec->fontsize[0].title), 1, 0,
                       "topline", SDDS_DOUBLE, &(plotspec->fontsize[0].topline), 1, 0,
+                      "intensitybar", SDDS_DOUBLE, &(plotspec->fontsize[0].intensityBar), 1, 0,
                       NULL)) {
-      return bombre("invalid -fixfontsize syntax", "-fixfontsize=[all=.02][,legend=.015][,<x|y>xlabel=<value>][,<x|y>ticks=<value>][,title=<value>][,topline=<value>]", 0);
+      return bombre("invalid -fixfontsize syntax", "-fixfontsize=[all=.02][,legend=.015][,<x|y>xlabel=<value>][,<x|y>ticks=<value>][,title=<value>][,topline=<value>][,intensityBar=<value>]", 0);
     }
     SetupFontSize(&(plotspec->fontsize[0]));
     return 1;

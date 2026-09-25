@@ -68,7 +68,7 @@ char *USAGE1 = "sddsplot \n\
   -lineTypeDefault=<integer>[,thickness=<value>] [-thickness=<integer>] \n\
   -device=<device-name>[,<device-args>] [-listDevices]\n\
   -font=<font-name> -listFonts\n\
-  -fixfontsize=[all=.02][,legend=.015][,<x|y>xlabel=<value>][,<x|y>ticks=<value>][,title=<value>][,topline=<value>]\n\
+  -fixfontsize=[all=.02][,legend=.015][,<x|y>xlabel=<value>][,<x|y>ticks=<value>][,title=<value>][,topline=<value>][,intensityBar=<value>]\n\
   -output=<filename>\n\
   -graphic=<element>[,type=<type|@column>][,fill][,subtype={<type>|type|@column}][,thickness=<integer>][,connect[={<linetype>|type|subtype}]][,vary[={type|subtype}][,scale=<factor>][,eachFile][,eachPage][,eachRequest][,fixForName][,fixForFile]]\n\
   -arrowSettings=[scale=<value>][,barbLength=<value>][,barbAngle=<deg>][,lineType=<number>][,centered][,cartesianData][,polarData][,scalarData][,singleBarb][,autoscale]\n\
@@ -109,9 +109,9 @@ char *USAGE3 = "  -topTitle\n\
   -subticksettings=[{xy}divisions=<integer>][,[{xy}]grid][,[{xy}]linetype=<integer>][,[{xy}]thickness=<integer>][,{xy}size=<fraction>][,xNoLogLabel][,yNoLogLabel]\n\
   -ticksettings=[{xy}spacing=<value>][,[{xy}]grid][,[{xy}]linetype=<integer>][,[{xy}]thickness=<integer>][,{xy}size=<fraction>][{xy}modulus=<value>][,[{xy}]logarithmic][,{xy}factor=<value>][,{xy}time][,{xy}nonExponentialLabels][,{xy}scaleChars=<factor>][,[{xy}]labelThickness=<integer>]\n\
   -enumeratedScales=[interval=<integer>][,limit=<integer>][,scale=<factor>][,allTicks][,rotate][,editCommand=<string>]\n\
-  -xScalesGroup={ID=<string>|fileIndex|fileString|nameIndex|nameString|page|request|units}[,top]\n";
+  -xScalesGroup={ID=<string>|fileIndex|fileString|nameIndex|nameString|page|request|units}[,top[,offset=<fraction>]]\n";
 
-char *USAGE4 = "  -yScalesGroup={ID=<string>|fileIndex|fileString|nameIndex|nameString|page|request|units}[,right]\n\
+char *USAGE4 = "  -yScalesGroup={ID=<string>|fileIndex|fileString|nameIndex|nameString|page|request|units}[,right[,offset=<fraction>]]\n\
   -legend={{xy}symbol|{xy}description|{xy}name|filename|specified=<string>|parameter=<name>}{,editCommand=<edit-string>}[,units][,firstFileOnly][,scale=<value>][,thickness=<integer>][,nosubtype]\n\
   -pointlabel=<name>[,edit=<editCommand>][,scale=<number>][,justifyMode={rcl}{bct}][,thickness=<integer>[,lineType=<integer>]][,vertical]\n\
   -newPanel  -endPanel  -nextPage\n\
@@ -2601,8 +2601,12 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
                               (plspec->scaleLabelInfo[plane][scalesGroup].scaleNumber - 1.0) /
                               plspec->panel[panel].scalesUsed[plane] *
                               (pspace[0 + 2 * otherPlane] - lowerBoundary);
-                          else
+                          else {
                             labelPosition = limit[1 + 2 * otherPlane];
+                            if (plreq->scalesGroupSpec[plane].flags & SCALESGROUP_OFFSET_GIVEN)
+                              labelPosition += plreq->scalesGroupSpec[plane].offset *
+                                (limit[1 + 2 * otherPlane] - limit[0 + 2 * otherPlane]);
+                          }
                           labelHeight = (pspace[2 * otherPlane] - lowerBoundary) / plspec->panel[panel].scalesUsed[plane] *
                             (limit[1 + 2 * otherPlane] - limit[0 + 2 * otherPlane]) / (pspace[1 + 2 * otherPlane] - pspace[0 + 2 * otherPlane]);
                           adjustHeightAndPosition = 0;
