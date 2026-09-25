@@ -29,6 +29,7 @@ typedef struct {
 int DefineAttributeParameters(GLOBAL_VARS *gv);
 int SetAttributeParameters(GLOBAL_VARS *gv);
 int FreeAttributesMemory(GLOBAL_VARS *gv);
+int ConvertRankOneDatasets(hid_t loc_id, GLOBAL_VARS *gv);
 
 
 #define SET_PIPE 0
@@ -66,6 +67,7 @@ char *get_column_prefix(int spaticalDims, int data_type, int index);
 int main( int argc, char **argv ) {
   hid_t file_id; 
   herr_t status;
+  int rankOneResult;
   //int idx_f;
   GLOBAL_VARS gv;
   SDDS_TABLE SDDS_table;
@@ -184,6 +186,15 @@ int main( int argc, char **argv ) {
     fprintf(stderr, "unable to open %s\n", gv.filename);
     return(1);
   }
+  rankOneResult = !gv.query ? ConvertRankOneDatasets(file_id, &gv) : 0;
+  if (rankOneResult) {
+    status = H5Fclose(file_id);
+    if (status) {
+      fprintf(stderr, "unable to close %s\n", gv.filename);
+      return(1);
+    }
+    return(rankOneResult < 0 ? 1 : 0);
+  }
   if (!(gv.groupname)) {
     H5Giterate(file_id, "/", NULL, file_info, &gv);
   } else {
@@ -205,6 +216,185 @@ int main( int argc, char **argv ) {
   return(0);
 }
 
+int ConvertRankOneDatasets(hid_t file_id, GLOBAL_VARS *gv) {
+  hid_t group = file_id, dataset, datatype, dataspace, nativeType;
+  hsize_t objects, objectIndex, dimensions[1], rows = 0, outputRows, row, outputRow;
+  H5G_obj_t objectType;
+  H5T_class_t typeClass;
+  H5T_sign_t sign;
+  char **names = NULL, *name;
+  long *sddsTypes = NULL;
+  size_t *elementSizes = NULL;
+  long datasets = 0, datasetIndex;
+  ssize_t nameLength;
+  void *data = NULL;
+  int result = 0;
+
+  if (gv->groupname) {
+    group = H5Gopen(file_id, gv->groupname);
+    if (group < 0) {
+      fprintf(stderr, "unable to open group %s\n", gv->groupname);
+      return(-1);
+    }
+  }
+  if (H5Gget_num_objs(group, &objects) < 0) {
+    fprintf(stderr, "unable to list HDF5 objects\n");
+    goto cleanup;
+  }
+
+  for (objectIndex = 0; objectIndex < objects; objectIndex++) {
+    objectType = H5Gget_objtype_by_idx(group, objectIndex);
+    if (objectType != H5G_DATASET)
+      continue;
+    nameLength = H5Gget_objname_by_idx(group, objectIndex, NULL, 0);
+    if (nameLength < 0)
+      goto cleanup;
+    name = malloc((size_t)nameLength + 1);
+    if (!name || H5Gget_objname_by_idx(group, objectIndex, name, (size_t)nameLength + 1) < 0) {
+      free(name);
+      goto cleanup;
+    }
+    if (gv->datasetname && strcmp(name, gv->datasetname) != 0) {
+      free(name);
+      continue;
+    }
+
+    dataset = H5Dopen(group, name);
+    dataspace = dataset >= 0 ? H5Dget_space(dataset) : -1;
+    datatype = dataset >= 0 ? H5Dget_type(dataset) : -1;
+    if (dataset < 0 || dataspace < 0 || datatype < 0) {
+      fprintf(stderr, "unable to inspect dataset %s\n", name);
+      free(name);
+      goto cleanup;
+    }
+    if (H5Sget_simple_extent_ndims(dataspace) != 1) {
+      H5Tclose(datatype);
+      H5Sclose(dataspace);
+      H5Dclose(dataset);
+      free(name);
+      if (gv->datasetname)
+        goto cleanup;
+      result = 0;
+      goto cleanup;
+    }
+    H5Sget_simple_extent_dims(dataspace, dimensions, NULL);
+    if (datasets && dimensions[0] != rows) {
+      fprintf(stderr, "unable to combine one-dimensional datasets: %s has %llu elements, expected %llu\n",
+              name, (unsigned long long)dimensions[0], (unsigned long long)rows);
+      H5Tclose(datatype);
+      H5Sclose(dataspace);
+      H5Dclose(dataset);
+      free(name);
+      result = -1;
+      goto cleanup;
+    }
+    rows = dimensions[0];
+    typeClass = H5Tget_class(datatype);
+    sign = typeClass == H5T_INTEGER ? H5Tget_sign(datatype) : H5T_SGN_ERROR;
+    names = SDDS_Realloc(names, sizeof(*names) * (datasets + 1));
+    sddsTypes = SDDS_Realloc(sddsTypes, sizeof(*sddsTypes) * (datasets + 1));
+    elementSizes = SDDS_Realloc(elementSizes, sizeof(*elementSizes) * (datasets + 1));
+    names[datasets] = name;
+    if (typeClass == H5T_FLOAT && H5Tget_size(datatype) == 8) {
+      sddsTypes[datasets] = SDDS_DOUBLE;
+      elementSizes[datasets] = sizeof(double);
+    } else if (typeClass == H5T_FLOAT && H5Tget_size(datatype) == 4) {
+      sddsTypes[datasets] = SDDS_FLOAT;
+      elementSizes[datasets] = sizeof(float);
+    } else if (typeClass == H5T_INTEGER && H5Tget_size(datatype) == 4 && sign != H5T_SGN_NONE) {
+      sddsTypes[datasets] = SDDS_LONG;
+      elementSizes[datasets] = sizeof(int32_t);
+    } else if (typeClass == H5T_INTEGER && H5Tget_size(datatype) == 2) {
+      sddsTypes[datasets] = sign == H5T_SGN_NONE ? SDDS_USHORT : SDDS_SHORT;
+      elementSizes[datasets] = sizeof(short);
+    } else {
+      fprintf(stderr, "unable to convert one-dimensional dataset %s: unsupported numeric type\n", name);
+      H5Tclose(datatype);
+      H5Sclose(dataspace);
+      H5Dclose(dataset);
+      result = -1;
+      goto cleanup;
+    }
+    datasets++;
+    H5Tclose(datatype);
+    H5Sclose(dataspace);
+    H5Dclose(dataset);
+  }
+
+  if (!datasets)
+    goto cleanup;
+  outputRows = 0;
+  for (row = 0; row < rows; row++)
+    if (gv->reduceFactor <= 1 || row % gv->reduceFactor == (hsize_t)(gv->keep - 1))
+      outputRows++;
+
+  if (!SDDS_InitializeOutput(gv->SDDS_table, gv->outputmode, 1, "HDF5 one-dimensional datasets", NULL, gv->newfilename))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  if (gv->withindex && SDDS_DefineColumn(gv->SDDS_table, "Index", NULL, NULL, NULL, NULL, SDDS_LONG, 0) < 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  for (datasetIndex = 0; datasetIndex < datasets; datasetIndex++)
+    if (SDDS_DefineColumn(gv->SDDS_table, names[datasetIndex], NULL, NULL, NULL, NULL, sddsTypes[datasetIndex], 0) < 0)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  if (!SDDS_WriteLayout(gv->SDDS_table) || !SDDS_StartTable(gv->SDDS_table, outputRows))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
+  if (gv->withindex) {
+    int32_t *indices = malloc(sizeof(*indices) * outputRows);
+    for (row = outputRow = 0; row < rows; row++)
+      if (gv->reduceFactor <= 1 || row % gv->reduceFactor == (hsize_t)(gv->keep - 1))
+        indices[outputRow++] = (int32_t)row;
+    if (!SDDS_SetColumn(gv->SDDS_table, SDDS_SET_BY_NAME, indices, outputRows, "Index"))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    free(indices);
+  }
+
+  for (datasetIndex = 0; datasetIndex < datasets; datasetIndex++) {
+    dataset = H5Dopen(group, names[datasetIndex]);
+    datatype = H5Dget_type(dataset);
+    nativeType = H5Tget_native_type(datatype, H5T_DIR_DESCEND);
+    data = malloc(elementSizes[datasetIndex] * rows);
+    if (!data || H5Dread(dataset, nativeType, H5S_ALL, H5S_ALL, H5P_DEFAULT, data) < 0) {
+      fprintf(stderr, "unable to read dataset %s\n", names[datasetIndex]);
+      H5Tclose(nativeType);
+      H5Tclose(datatype);
+      H5Dclose(dataset);
+      result = -1;
+      goto cleanup;
+    }
+    if (gv->reduceFactor > 1) {
+      for (row = outputRow = 0; row < rows; row++) {
+        if (row % gv->reduceFactor != (hsize_t)(gv->keep - 1))
+          continue;
+        memmove((char *)data + outputRow * elementSizes[datasetIndex],
+                (char *)data + row * elementSizes[datasetIndex], elementSizes[datasetIndex]);
+        outputRow++;
+      }
+    }
+    if (!SDDS_SetColumn(gv->SDDS_table, SDDS_SET_BY_NAME, data, outputRows, names[datasetIndex]))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    free(data);
+    data = NULL;
+    H5Tclose(nativeType);
+    H5Tclose(datatype);
+    H5Dclose(dataset);
+  }
+  if (!SDDS_WriteTable(gv->SDDS_table) || !SDDS_Terminate(gv->SDDS_table))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  gv->datasetfound = 1;
+  result = 1;
+
+cleanup:
+  free(data);
+  for (datasetIndex = 0; datasetIndex < datasets; datasetIndex++)
+    free(names[datasetIndex]);
+  free(names);
+  free(sddsTypes);
+  free(elementSizes);
+  if (group != file_id)
+    H5Gclose(group);
+  return(result);
+}
+
 herr_t file_info(hid_t loc_id, const char *name, void *opdata) {
   int rank, i, k, m, n=1, index=0, index2, attrs, dim3;
   long j;
@@ -213,7 +403,7 @@ herr_t file_info(hid_t loc_id, const char *name, void *opdata) {
   long II;
   long J;
   long K;
-  hid_t dataset, datatype, dataspace, nativetype; 
+  hid_t dataset, datatype, dataspace, nativetype = -1;
   herr_t status;
   H5T_class_t t_class;
   //H5T_order_t order;
@@ -260,7 +450,8 @@ herr_t file_info(hid_t loc_id, const char *name, void *opdata) {
   }
 
   if (statbuf.type != H5G_DATASET) {
-    fprintf(stderr, "HDF buffer type is not dataset, can not convert to SDDS.\n");
+    if (!gv->query)
+      fprintf(stderr, "HDF buffer type is not dataset, can not convert to SDDS.\n");
     return(0);
   }
 
@@ -274,16 +465,15 @@ herr_t file_info(hid_t loc_id, const char *name, void *opdata) {
   t_class = H5Tget_class(datatype);
   //order = H5Tget_order(datatype);
   size = H5Tget_size(datatype);
-  nativetype = H5Tget_native_type(datatype, H5T_DIR_DESCEND);
   if (gv->query) {
-    if (t_class == H5T_INTEGER) 
-      fprintf(stdout, "Data set has interger type \n");
-    else if (t_class == H5T_FLOAT) 
-      fprintf(stdout, "Data set has floating-point type \n");
-    else {
-      fprintf(stderr, "Data set is an unsupported type and cannot be converted to SDDS\n");
-      return(1);
-    }
+    if (t_class == H5T_INTEGER)
+      fprintf(stdout, "Data set has integer type\n");
+    else if (t_class == H5T_FLOAT)
+      fprintf(stdout, "Data set has floating-point type\n");
+    else if (t_class == H5T_STRING)
+      fprintf(stdout, "Data set has string type (not convertible to SDDS)\n");
+    else
+      fprintf(stdout, "Data set has unsupported type (not convertible to SDDS)\n");
   }
   
   dataspace = H5Dget_space(dataset);
@@ -292,15 +482,22 @@ herr_t file_info(hid_t loc_id, const char *name, void *opdata) {
     return(1);
   }
   rank = H5Sget_simple_extent_ndims(dataspace);
-  dims_out = malloc(sizeof(hsize_t)*rank);
-  H5Sget_simple_extent_dims(dataspace, dims_out, NULL);
+  dims_out = rank ? malloc(sizeof(*dims_out) * rank) : NULL;
+  if (rank && H5Sget_simple_extent_dims(dataspace, dims_out, NULL) < 0) {
+    fprintf(stderr, "unable to get dimension sizes for %s\n", name);
+    return(1);
+  }
   for (i = 0; i < rank - 1; i++) {
     len = strlen(buffer1);
     snprintf(buffer1 + len, sizeof(buffer1) - len, "%d x ", (int)dims_out[i]);
     //sprintf(buffer1, "%s%d x ", buffer1,  (int)dims_out[i]);
   }
-  len = strlen(buffer1);
-  snprintf(buffer1 + len, sizeof(buffer1) - len, "%d", (int)dims_out[rank - 1]);
+  if (rank) {
+    len = strlen(buffer1);
+    snprintf(buffer1 + len, sizeof(buffer1) - len, "%d", (int)dims_out[rank - 1]);
+  } else {
+    snprintf(buffer1, sizeof(buffer1), "scalar");
+  }
   if (gv->query) {
     fprintf(stdout, "No. of dimensions: %d\n", rank);
     fprintf(stdout, "Dimension sizes: %s\n", buffer1);
@@ -313,7 +510,16 @@ herr_t file_info(hid_t loc_id, const char *name, void *opdata) {
   }
   if (gv->query) {
     fprintf(stdout, "%d attributes\n", attrs);
+    H5Aiterate(dataset, NULL, attr_info, gv);
+    fprintf(stdout, "\n");
+    free(dims_out);
+    H5Sclose(dataspace);
+    H5Tclose(datatype);
+    H5Dclose(dataset);
+    return(0);
   }
+
+  nativetype = H5Tget_native_type(datatype, H5T_DIR_DESCEND);
 
   for (i = 0; i < rank; i++) {
     n = n * (int)dims_out[i];
@@ -847,12 +1053,10 @@ herr_t attr_info(hid_t loc_id, const char *name, void *opdata) {
       for( i = 0; i < (int)npoints; i++) printf("%le ", double_array[i]); 
       printf("\n");
     }
+    attribute_data = double_array;
+    attribute_type = SDDS_DOUBLE;
     if (strcmp((char*)name, "numSpatialDims")==0) 
       gv->spatialDims = (int)(double_array[0]);
-    if (!gv->query) {
-      attribute_data = (double*)double_array;
-      attribute_type = SDDS_DOUBLE;
-    }
   } else if ((H5T_FLOAT == H5Tget_class(atype)) && (size == 4)) {
     npoints = H5Sget_simple_extent_npoints(aspace);
     float_array = (float *)malloc(sizeof(float)*(int)npoints); 
@@ -862,10 +1066,8 @@ herr_t attr_info(hid_t loc_id, const char *name, void *opdata) {
       for( i = 0; i < (int)npoints; i++) printf("%le ", float_array[i]); 
       printf("\n");
     }
-    if (!gv->query) { 
-      attribute_data = (float*)float_array;
-      attribute_type = SDDS_FLOAT;
-    }
+    attribute_data = float_array;
+    attribute_type = SDDS_FLOAT;
   } else if ((H5T_INTEGER == H5Tget_class(atype)) && (size == 4)) {
     npoints = H5Sget_simple_extent_npoints(aspace);
     int_array = (int *)malloc(sizeof(int)*(int)npoints); 
@@ -875,21 +1077,17 @@ herr_t attr_info(hid_t loc_id, const char *name, void *opdata) {
       for( i = 0; i < (int)npoints; i++) printf("%d ", int_array[i]); 
       printf("\n");
     }
+    attribute_data = int_array;
+    attribute_type = SDDS_LONG;
     if (strcmp((char*)name, "numSpatialDims")==0) 
       gv->spatialDims = (int)(int_array[0]);
-    if (!gv->query) {
-      attribute_data = (int*)int_array;
-      attribute_type = SDDS_LONG;
-    }   
   } else if (H5T_STRING == H5Tget_class(atype)) {
     fprintf(stderr, "Warning: unable to convert string attribute %s to SDDS (not yet supported)\n", name);
   } else {
     fprintf(stderr, "Unable to convert attribute %s to SDDS\n", name);
     return 1;
   }
-  if (gv->query) {
-    fprintf(stdout, "\n");
-  } else {
+  if (!gv->query) {
     gv->attribute_name = SDDS_Realloc(gv->attribute_name, sizeof(*(gv->attribute_name))*(gv->attributes+1));
     gv->attribute_value = SDDS_Realloc(gv->attribute_value, sizeof(*(gv->attribute_value))*(gv->attributes+1));
     gv->attribute_dim = SDDS_Realloc(gv->attribute_dim, sizeof(*(gv->attribute_dim))*(gv->attributes+1));
@@ -899,8 +1097,13 @@ herr_t attr_info(hid_t loc_id, const char *name, void *opdata) {
     gv->attribute_dim[gv->attributes] = (int)(npoints);
     gv->attribute_value[gv->attributes]= attribute_data;
     gv->attributes ++;
+  } else {
+    free(attribute_data);
   }
-  
+
+  free(dims_out);
+  H5Sclose(aspace);
+  H5Tclose(atype);
   status = H5Aclose(attr);
   if (status < 0) {
     fprintf(stderr, "unable to close attribute %s\n", name);
