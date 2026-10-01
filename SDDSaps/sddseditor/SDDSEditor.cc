@@ -398,6 +398,34 @@ static QString truncateForMessage(const QString &text, int maxLen = 80) {
 }
 
 /*
+ * SDDS text is stored in the local 8-bit encoding, which on Windows is the
+ * ANSI code page.  Characters outside it would be written as '?', so text is
+ * accepted only if it survives the conversion unchanged.
+ */
+static bool localEncodingPreserves(const QString &text) {
+  for (QChar ch : text)
+    if (ch.unicode() >= 0x80)
+      return QString::fromLocal8Bit(text.toLocal8Bit()) == text;
+  return true;
+}
+
+static QString unencodableTextMessage() {
+  return QObject::tr("Text contains characters that cannot be saved in this system's character encoding");
+}
+
+/** Warn about the first definition attribute that cannot be stored. */
+static bool definitionTextEncodable(QWidget *parent, const QStringList &fields) {
+  for (const QString &field : fields) {
+    if (!localEncodingPreserves(field)) {
+      QMessageBox::warning(parent, QObject::tr("SDDS"),
+                           QObject::tr("%1: %2").arg(unencodableTextMessage(), truncateForMessage(field)));
+      return false;
+    }
+  }
+  return true;
+}
+
+/*
  * Shortest text that converts back to exactly the same value.  This is as
  * lossless as printing max_digits10 digits, but shows 0.1 rather than
  * 0.10000000000000001.
@@ -477,6 +505,15 @@ static QString sddsValueToString(const void *data, int64_t index, int32_t type) 
   }
 }
 
+/*
+ * strtold may report ERANGE for a subnormal result (glibc does), although the
+ * value is finite and exactly what SDDS stored.  Reject only overflow and
+ * underflow to zero.
+ */
+static bool longDoubleOutOfRange(long double value) {
+  return errno == ERANGE && (std::isinf(value) || value == 0.0L);
+}
+
 static bool parseLongDoubleStrict(const QString &text, long double *out) {
   if (!out)
     return false;
@@ -496,7 +533,7 @@ static bool parseLongDoubleStrict(const QString &text, long double *out) {
     ++end;
   if (end && *end)
     return false;
-  if (errno == ERANGE)
+  if (longDoubleOutOfRange(v))
     return false;
   *out = v;
   return true;
@@ -684,6 +721,12 @@ static bool validateTextForType(const QString &text, int type,
       if (showMessage)
         QMessageBox::warning(nullptr, QObject::tr("SDDS"),
                              QObject::tr("Character field must contain one Latin-1 character (one byte)"));
+      return false;
+    }
+  } else if (type == SDDS_STRING) {
+    if (!localEncodingPreserves(text)) {
+      if (showMessage)
+        QMessageBox::warning(nullptr, QObject::tr("SDDS"), unencodableTextMessage());
       return false;
     }
   }
@@ -1134,7 +1177,7 @@ private:
     char *end = nullptr;
     errno = 0;
     long double value = strtold(start, &end);
-    if (end == start || errno == ERANGE) {
+    if (end == start || longDoubleOutOfRange(value)) {
       ok = false;
       return 0.0L;
     }
@@ -3193,7 +3236,10 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
           });
   paramView->setItemDelegate(new SDDSItemDelegate(
       [this](const QModelIndex &idx) {
-        return dataset.layout.parameter_definition[idx.row()].type;
+        // Units and descriptions are text; numeric formatting would rewrite "1E3" as "1000".
+        return idx.column() == ParameterPageModel::ValueColumn
+                   ? dataset.layout.parameter_definition[idx.row()].type
+                   : SDDS_STRING;
       },
       undoStack, paramView));
   // Shown as Name | Type | Units | Value | Description.  Only the display order
@@ -4422,6 +4468,12 @@ void SDDSEditor::openFile() {
 }
 
 bool SDDSEditor::loadFile(const QString &path) {
+  if (!localEncodingPreserves(path)) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Cannot open %1: the path contains characters that cannot be represented in this system's character encoding")
+                             .arg(QDir::toNativeSeparators(path)));
+    return false;
+  }
   SDDS_DATASET in;
   memset(&in, 0, sizeof(in));
   if (!SDDS_InitializeInput(&in,
@@ -4761,6 +4813,13 @@ bool SDDSEditor::writeDatasetFile(const QString &path) {
     const auto &def = dataset.layout.array_definition[i];
     if (!validFormat(def.name, def.format_string, def.type))
       return false;
+  }
+
+  if (!localEncodingPreserves(path)) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Cannot write %1: the path contains characters that cannot be represented in this system's character encoding")
+                             .arg(QDir::toNativeSeparators(path)));
+    return false;
   }
 
   SDDS_DATASET out;
@@ -5945,8 +6004,16 @@ void SDDSEditor::saveFileAs() {
   }
 }
 
+/** Name an export after the open file; proposing the SDDS file itself risks overwriting it. */
+static QString exportDefaultPath(const QString &filename, const QString &suffix) {
+  if (filename.isEmpty())
+    return QString();
+  const QFileInfo fi(filename);
+  return fi.path() + '/' + fi.completeBaseName() + suffix;
+}
+
 void SDDSEditor::saveFileAsHDF() {
-  QString path = QFileDialog::getSaveFileName(this, tr("Save HDF"), currentFilename,
+  QString path = QFileDialog::getSaveFileName(this, tr("Save HDF"), exportDefaultPath(currentFilename, ".h5"),
                                              tr("HDF Files (*.h5 *.hdf);;All Files (*)"));
   if (path.isEmpty())
     return;
@@ -5955,11 +6022,7 @@ void SDDSEditor::saveFileAsHDF() {
 }
 
 void SDDSEditor::exportCSV() {
-  QString def = currentFilename;
-  if (!def.isEmpty()) {
-    QFileInfo fi(def);
-    def = fi.path() + '/' + fi.completeBaseName() + ".csv";
-  }
+  QString def = exportDefaultPath(currentFilename, ".csv");
   QString path = QFileDialog::getSaveFileName(this, tr("Export CSV"), def,
                                              tr("CSV Files (*.csv);;All Files (*)"));
   if (path.isEmpty())
@@ -6427,6 +6490,8 @@ void SDDSEditor::editParameterAttributes() {
                                 return dataset.layout.parameter_definition[i].name;
                               }))
     return;
+  if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text(), fixed.text()}))
+    return;
   const int32_t tval = typeGroup.checkedId();
   if (!fixed.text().isEmpty() &&
       !validateTextForType(fixed.text(), tval, false)) {
@@ -6564,6 +6629,8 @@ void SDDSEditor::editColumnAttributesAt(int col) {
                                 return dataset.layout.column_definition[i].name;
                               }))
     return;
+  if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text()}))
+    return;
   if (!dataset.original_layout.column_definition ||
       col >= dataset.original_layout.n_columns) {
     QMessageBox::warning(this, tr("SDDS"),
@@ -6688,6 +6755,8 @@ void SDDSEditor::editArrayAttributesAt(int col) {
                               [this](int i) {
                                 return dataset.layout.array_definition[i].name;
                               }))
+    return;
+  if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text(), group.text()}))
     return;
   int32_t dimCnt = dimsCount.value();
   for (const PageStore &pd : pages) {
@@ -8112,6 +8181,8 @@ void SDDSEditor::insertParameter() {
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
     return;
+  if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text(), fixed.text()}))
+    return;
   // Same check as the attribute editor; otherwise the file cannot be saved later.
   if (!fixed.text().isEmpty() &&
       !validateTextForType(fixed.text(), typeGroup.checkedId(), false)) {
@@ -8210,6 +8281,8 @@ void SDDSEditor::insertColumn() {
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
     return;
+  if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text()}))
+    return;
 
   QByteArray baName = name.text().toLocal8Bit();
   QByteArray baSym = symbol.text().toLocal8Bit();
@@ -8301,6 +8374,8 @@ void SDDSEditor::insertArray() {
   connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
+    return;
+  if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text(), group.text()}))
     return;
 
   QByteArray baName = name.text().toLocal8Bit();

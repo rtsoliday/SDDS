@@ -195,10 +195,29 @@ public:
       require(SDDS_DefineParameter(&editor.dataset, "Text", nullptr, nullptr, nullptr, nullptr,
                                    SDDS_STRING, nullptr) >= 0, "define Unicode text parameter");
       require(SDDS_SaveLayout(&editor.dataset), "save text layout");
-      editor.pages[0].parameters = {QString::fromUtf8("café Ω")};
       editor.pages[0].columns[0].clear();
       for (int byte = 0; byte < 256; ++byte)
         editor.pages[0].columns[0].append(byte ? QString(QChar(byte)) : QString());
+      bool loadedBytesSave = true;
+      for (int byte = 1; byte < 256; ++byte)
+        loadedBytesSave = loadedBytesSave &&
+                          localEncodingPreserves(QString::fromLocal8Bit(QByteArray(1, char(byte))));
+      check(loadedBytesSave, "text decoded from any file byte can be saved again");
+      QString text = QString::fromUtf8("café Ω");
+      if (!localEncodingPreserves(text)) {
+        // A legacy code page such as Windows-1252 has no Ω; refuse rather than write '?'.
+        editor.pages[0].parameters = {text};
+        editor.populateModels();
+        const QString textPath = root + "/preserved-text.sdds";
+        putFile(textPath, "original text bytes");
+        check(!validateTextForType(text, SDDS_STRING, false) &&
+                  !editor.writeFile(textPath) && readFile(textPath) == "original text bytes",
+              "text outside the system encoding cannot silently overwrite saved data");
+        text = QString::fromUtf8("café");
+        if (!localEncodingPreserves(text))
+          text = "cafe";
+      }
+      editor.pages[0].parameters = {text};
       editor.populateModels();
       for (bool ascii : {false, true}) {
         editor.asciiBtn->setChecked(ascii);
@@ -1451,6 +1470,61 @@ public:
     }
     fprintf(stdout, "PASS header menus, computed number text, empty filter values, attribute encoding\n");
   }
+
+  /** Regressions for parameter metadata display, export names and tiny long doubles. */
+  static void displayAndRangeFixes() {
+    // Units and descriptions are text even when the parameter value is numeric.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineParameter(&editor.dataset, "P", nullptr, "1E3", "0.50", nullptr,
+                                   SDDS_DOUBLE, nullptr) >= 0, "define described parameter");
+      require(SDDS_SaveLayout(&editor.dataset), "save described parameter");
+      editor.pages[0].parameters = {"0.10"};
+      editor.populateModels();
+      SDDSItemDelegate *delegate = static_cast<SDDSItemDelegate *>(editor.paramView->itemDelegate());
+      auto shown = [&](int column) {
+        QStyleOptionViewItem option;
+        delegate->initStyleOption(&option, editor.paramModel->index(0, column));
+        return option.text;
+      };
+      require(shown(ParameterPageModel::ValueColumn) == "0.1", "parameter value uses numeric display");
+      require(shown(ParameterPageModel::UnitsColumn) == "1E3", "parameter units are shown verbatim");
+      require(shown(ParameterPageModel::DescriptionColumn) == "0.50", "parameter description is shown verbatim");
+    }
+
+    // Export dialogs never propose the open SDDS file as the destination.
+    require(exportDefaultPath("C:/data/run.sdds", ".h5") == "C:/data/run.h5", "HDF export proposes an .h5 name");
+    require(exportDefaultPath("C:/data/run.sdds", ".csv") == "C:/data/run.csv", "CSV export proposes a .csv name");
+    require(exportDefaultPath(QString(), ".h5").isEmpty(), "untitled export has no proposed name");
+
+    // Subnormal long doubles load, validate, save and evaluate like other finite values.
+    {
+      const long double tiny = std::numeric_limits<long double>::denorm_min();
+      const QString text = sddsValueToString(&tiny, 0, SDDS_LONGDOUBLE);
+      long double parsed = 0;
+      require(parseLongDoubleStrict(text, &parsed) && parsed == tiny, "subnormal long double parses");
+      require(validateTextForType(text, SDDS_LONGDOUBLE, false), "subnormal long double is valid");
+      ExpressionContext ctx = {};
+      long double result = 0;
+      require(evaluateExpressionText(text, ctx, &result) && result == tiny, "subnormal literal evaluates");
+      require(!parseLongDoubleStrict("1e999999", &parsed), "long double overflow is rejected");
+      require(!parseLongDoubleStrict("1e-999999", &parsed), "long double underflow to zero is rejected");
+    }
+    // Attribute text the system encoding cannot hold is refused instead of saved as '?'.
+    const QString omega(QChar(0x03A9));
+    if (!localEncodingPreserves(omega)) {
+      SDDSEditor editor;
+      setup(editor);
+      acceptDialog("Column Attributes", [omega](QDialog *dialog) {
+        dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[2]->setText(omega);
+      });
+      editor.editColumnAttributesAt(0);
+      require(!editor.dataset.layout.column_definition[0].units && !editor.undoStack->canUndo(),
+              "unencodable column units are refused");
+    }
+    fprintf(stdout, "PASS parameter metadata display, export names, subnormal long doubles, attribute encoding\n");
+  }
 };
 
 /** Run the named regressions and retain fixtures under the build directory. */
@@ -1490,6 +1564,7 @@ int main(int argc, char **argv) {
   SDDSEditorTests::sparseClipboard();
   SDDSEditorTests::interfaceChrome(artifacts.path());
   SDDSEditorTests::menuAndTextFixes();
+  SDDSEditorTests::displayAndRangeFixes();
   fprintf(stdout, "PASS all sddseditor regressions\n");
   return 0;
 }
