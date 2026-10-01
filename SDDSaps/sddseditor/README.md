@@ -17,6 +17,10 @@ dragging splitter handles (including empty array panels).
 Additional regressions cover pending main-table and array-viewer edits, filtered
 search/replace and formula operations, all 256 character bytes and Unicode strings
 in plain/gzip/xz saves, signed zero, failed HDF exports and HDF names of `.`.
+They also cover literal token text in formulas, embedded NUL rejection, trailing
+empty clipboard rows, lossless transfers between the main tables and array
+viewers, CSV validation and unequal array lengths, and main-window Undo/Redo
+with a pending viewer edit.
 
 Executables are built under the platform object directory (`O.Linux-x86_64` on
 Linux). The plotting probe is named `test-bin/sddsplot` there; only the test
@@ -28,7 +32,7 @@ The test prints each result and its fixture directory. Fixtures are retained in
 `O.*/test-artifacts-*` for inspection, and the normal `make clean` target removes
 them with the object directory. Versioned symlink checks run on Unix platforms.
 
-The editor stages SDDS saves and HDF exports beside the destination before
+The editor stages SDDS saves, CSV exports and HDF exports beside the destination before
 replacing it. Failed saves and exports preserve the existing file. Versioned
 symlink saves select an unused version
 and create it exclusively before replacing the link. Plot snapshots use a private
@@ -70,7 +74,8 @@ can still be edited.
 
 Character fields hold a single byte, displayed as Latin-1. Characters outside
 that range must use a string field. Floating-point formatting preserves negative
-zero as `-0`.
+zero as `-0`. String fields and definition text reject embedded NUL characters,
+which the SDDS text format cannot preserve.
 
 Copying a non-contiguous selection copies the rectangle around it. Other
 programs receive empty fields for the unselected cells. Pasting inside the

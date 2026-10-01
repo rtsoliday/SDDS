@@ -403,6 +403,9 @@ static QString truncateForMessage(const QString &text, int maxLen = 80) {
  * accepted only if it survives the conversion unchanged.
  */
 static bool localEncodingPreserves(const QString &text) {
+  // SDDS stores text in NUL-terminated C strings.
+  if (text.contains(QChar(0)))
+    return false;
   for (QChar ch : text)
     if (ch.unicode() >= 0x80)
       return QString::fromLocal8Bit(text.toLocal8Bit()) == text;
@@ -410,7 +413,7 @@ static bool localEncodingPreserves(const QString &text) {
 }
 
 static QString unencodableTextMessage() {
-  return QObject::tr("Text contains characters that cannot be saved in this system's character encoding");
+  return QObject::tr("Text contains a NUL character or characters that cannot be saved in this system's character encoding");
 }
 
 /** Warn about the first definition attribute that cannot be stored. */
@@ -515,7 +518,7 @@ static bool longDoubleOutOfRange(long double value) {
 }
 
 static bool parseLongDoubleStrict(const QString &text, long double *out) {
-  if (!out)
+  if (!out || text.contains(QChar(0)))
     return false;
   QString trimmed = text.trimmed();
   if (trimmed.isEmpty()) {
@@ -672,6 +675,12 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
 
 static bool validateTextForType(const QString &text, int type,
                                 bool showMessage = true) {
+  if (type != SDDS_CHARACTER && text.contains(QChar(0))) {
+    if (showMessage)
+      QMessageBox::warning(nullptr, QObject::tr("SDDS"),
+                           QObject::tr("Field must not contain a NUL character"));
+    return false;
+  }
   if (SDDS_NUMERIC_TYPE(type)) {
     QString trimmed = text.trimmed();
     if (!trimmed.isEmpty()) {
@@ -789,6 +798,8 @@ static bool validateDefinitionName(QWidget *parent, const QString &name,
                                    const char *dataClass,
                                    int selfIndex, int count,
                                    const std::function<const char *(int)> &nameAt) {
+  if (!definitionTextEncodable(parent, {name}))
+    return false;
   QByteArray ba = name.toLocal8Bit();
   if (!SDDS_IsValidName(ba.constData(), dataClass)) {
     QMessageBox::warning(parent, QObject::tr("SDDS"),
@@ -1805,14 +1816,22 @@ static QString applyTemplateVariables(const QString &templ,
                                       int col,
                                       int dr,
                                       int dc) {
-  QString out = templ;
-  out.replace("${x}", x);
-  out.replace("${a}", a);
-  out.replace("${i}", QString::number(i));
-  out.replace("${row}", QString::number(row));
-  out.replace("${col}", QString::number(col));
-  out.replace("${dr}", QString::number(dr));
-  out.replace("${dc}", QString::number(dc));
+  const QHash<QString, QString> variables = {
+      {"x", x}, {"a", a}, {"i", QString::number(i)},
+      {"row", QString::number(row)}, {"col", QString::number(col)},
+      {"dr", QString::number(dr)}, {"dc", QString::number(dc)}};
+  const QRegularExpression tokens(QStringLiteral("\\$\\{(x|a|i|row|col|dr|dc)\\}"));
+  auto matches = tokens.globalMatch(templ);
+  QString out;
+  int offset = 0;
+  // Substitute the original template once; cell text can itself contain tokens.
+  while (matches.hasNext()) {
+    const QRegularExpressionMatch match = matches.next();
+    out += templ.mid(offset, match.capturedStart() - offset);
+    out += variables.value(match.captured(1));
+    offset = match.capturedEnd();
+  }
+  out += templ.mid(offset);
   return out;
 }
 
@@ -3551,8 +3570,8 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   undoAct->setShortcut(QKeySequence::Undo);
   QAction *redoAct = editMenu->addAction(tr("Redo"));
   redoAct->setShortcut(QKeySequence::Redo);
-  connect(undoAct, &QAction::triggered, undoStack, &QUndoStack::undo);
-  connect(redoAct, &QAction::triggered, undoStack, &QUndoStack::redo);
+  connect(undoAct, &QAction::triggered, this, [this]() { flushPendingEdits(); undoStack->undo(); });
+  connect(redoAct, &QAction::triggered, this, [this]() { flushPendingEdits(); undoStack->redo(); });
   undoAct->setEnabled(undoStack->canUndo());
   redoAct->setEnabled(undoStack->canRedo());
   connect(undoStack, &QUndoStack::canUndoChanged, undoAct, &QAction::setEnabled);
@@ -4368,7 +4387,7 @@ void SDDSEditor::paste() {
     text.replace("\r\n", "\n");
     text.replace('\r', '\n');
     QStringList lines = text.split('\n');
-    while (!lines.isEmpty() && lines.last().isEmpty())
+    if (lines.size() > 1 && lines.last().isEmpty())
       lines.removeLast();
     if (lines.isEmpty())
       lines << QString();
@@ -5874,7 +5893,18 @@ bool SDDSEditor::writeCSV(const QString &path) {
     return false;
   commitModels();
 
-  QFile file(path);
+  QString errorText;
+  for (int pg = 0; pg < pages.size(); ++pg) {
+    if (!validatePageForWrite(dataset.layout, pages[pg], pg, &errorText)) {
+      QMessageBox::warning(this, tr("SDDS"), errorText);
+      return false;
+    }
+  }
+
+  const QFileInfo destination(path);
+  const QString finalPath = destination.isSymLink() ? destination.symLinkTarget() : destination.absoluteFilePath();
+  QSaveFile file(finalPath);
+  file.setDirectWriteFallback(false);
   if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to open output"));
     return false;
@@ -5958,11 +5988,12 @@ bool SDDSEditor::writeCSV(const QString &path) {
 
       for (int r = 0; r < maxLen; ++r) {
         for (int a = 0; a < acount; ++a) {
-          QString cell = (a < pd.arrays.size() && r < pd.arrays[a].values.size())
+          const bool present = a < pd.arrays.size() && r < pd.arrays[a].values.size();
+          QString cell = present
                              ? pd.arrays[a].values[r]
                              : QString();
           const int32_t type = dataset.layout.array_definition[a].type;
-          if (SDDS_NUMERIC_TYPE(type) && cell.trimmed().isEmpty())
+          if (present && SDDS_NUMERIC_TYPE(type) && cell.trimmed().isEmpty())
             cell = "0";
           out << escape(cell);
           if (a != acount - 1)
@@ -5977,10 +6008,13 @@ bool SDDSEditor::writeCSV(const QString &path) {
   out.flush();
   if (out.status() != QTextStream::Ok || file.error() != QFileDevice::NoError) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed while writing CSV output"));
-    file.close();
+    file.cancelWriting();
     return false;
   }
-  file.close();
+  if (!file.commit()) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to replace CSV output file"));
+    return false;
+  }
 
   return true;
 }

@@ -44,7 +44,8 @@
 #include <locale>
 #include <iomanip>
 
-static const char *arrayCellsMime = "application/x-sddseditor-array-cells";
+// Share the lossless rectangular clipboard representation with the main tables.
+static const char *arrayCellsMime = "application/x-sddseditor-cells";
 
 /** Parse finite SDDS numbers without narrowing integers or long doubles to double. */
 static bool heatmapNumber(const QString &text, long double *value) {

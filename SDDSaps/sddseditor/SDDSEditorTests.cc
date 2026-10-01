@@ -53,6 +53,132 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** Reproduce data-loss cases across formulas, clipboard, export and pending undo. */
+  static void dataPreservation(const QString &root) {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      if (!ok)
+        ++failures;
+    };
+    check(applyTemplateVariables("${x}|${a}|${row}|${unknown}", "${a}", "${row}", 0, 2, 3, 4, 5) ==
+              "${a}|${row}|2|${unknown}", "formula substitutes tokens only in the original template");
+    const QString nulText = QStringLiteral("before") + QChar(0) + "after";
+    check(!validateTextForType(nulText, SDDS_STRING, false), "strings reject embedded NUL instead of silently truncating");
+    long double number = 0;
+    check(!parseLongDoubleStrict(QStringLiteral("1") + QChar(0) + "garbage", &number),
+          "strict numeric parsing rejects text after an embedded NUL");
+    check(validateTextForType(QString(QChar(0)), SDDS_CHARACTER, false), "character byte zero remains valid");
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.show();
+      editor.activateWindow();
+      editor.columnView->setFocus();
+      QCoreApplication::processEvents();
+      editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+      QApplication::clipboard()->setText("5\n\n");
+      editor.paste();
+      check(editor.pages[0].columns[0] == QVector<QString>({"5", "", "2"}),
+            "text paste keeps the final empty row before the terminating newline");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.array_definition[0].type = SDDS_STRING;
+      editor.dataset.layout.array_definition[0].dimensions = 1;
+      require(SDDS_SaveLayout(&editor.dataset), "save text array test layout");
+      const QVector<QString> text = {"a\tb", "c\nd"};
+      editor.pages[0].arrays[0].dims = {2};
+      editor.pages[0].arrays[0].values = text;
+      editor.populateModels();
+      editor.show();
+      editor.activateWindow();
+      editor.arrayView->setFocus();
+      QCoreApplication::processEvents();
+      editor.arrayView->selectAll();
+      editor.copy();
+      editor.openArrayViewer(0);
+      ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      editor.pages[0].arrays[0].values = {"old1", "old2"};
+      viewer->table()->setCurrentIndex(viewer->sliceModel()->index(0, 0));
+      check(viewer->pasteText(QApplication::clipboard()->text()) && editor.pages[0].arrays[0].values == text,
+            "main table to array viewer paste preserves embedded tabs and newlines");
+      editor.pages[0].arrays[0].values = text;
+      viewer->copySelection(true);
+      editor.pages[0].arrays[0].values = {"old1", "old2"};
+      editor.activateWindow();
+      editor.arrayView->setFocus();
+      QCoreApplication::processEvents();
+      editor.arrayView->setCurrentIndex(editor.arrayModel->index(0, 0));
+      editor.paste();
+      check(editor.pages[0].arrays[0].values == text,
+            "array viewer to main table paste preserves embedded tabs and newlines");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      const QString path = root + "/preserved.csv";
+      putFile(path, "original CSV bytes");
+      editor.dirty = true;
+      editor.pages[0].columns[0][0] = "invalid integer";
+      check(!editor.writeCSV(path) && readFile(path) == "original CSV bytes",
+            "invalid CSV export fails and preserves the destination");
+      check(editor.dirty, "failed CSV export preserves unsaved state");
+      editor.pages[0].columns[0][0] = "3";
+      require(SDDS_DefineArray(&editor.dataset, "B", nullptr, nullptr, nullptr, nullptr,
+                               SDDS_DOUBLE, 0, 1, nullptr) >= 0, "define shorter CSV array");
+      require(SDDS_SaveLayout(&editor.dataset), "save shorter array layout");
+      ArrayStore shorter;
+      shorter.dims = {1};
+      shorter.values = {QString()};
+      editor.pages[0].arrays.append(shorter);
+      editor.populateModels();
+      require(editor.writeCSV(path), "export arrays of unequal length");
+      check(readFile(path).contains("Arrays\nA,B\n10,0\n20,\n30,\n40,\n"),
+            "CSV leaves missing array elements blank while empty numeric elements export as zero");
+      check(editor.dirty, "successful CSV export does not mark the SDDS document saved");
+#ifndef _WIN32
+      const QByteArray exported = readFile(path);
+      const QString link = root + "/export-link.csv";
+      require(QFile::link(path, link), "create CSV destination link");
+      editor.pages[0].columns[0][0] = "8";
+      require(editor.writeCSV(link), "export through a CSV symlink");
+      check(QFileInfo(link).isSymLink() && readFile(path) != exported && readFile(link) == readFile(path),
+            "CSV replacement preserves the destination symlink and updates its target");
+#endif
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      applyCellEditWithUndo(editor.undoStack, editor.columnModel, editor.columnModel->index(0, 0), "9");
+      editor.openArrayViewer(0);
+      ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      viewer->table()->edit(viewer->sliceModel()->index(0, 0));
+      QCoreApplication::processEvents();
+      QLineEdit *cell = viewer->table()->viewport()->findChild<QLineEdit *>();
+      require(cell && !cell->isHidden(), "open viewer edit before main Undo");
+      cell->setText("123");
+      QAction *undo = nullptr;
+      for (QAction *action : editor.findChildren<QAction *>())
+        if (action->text() == "Undo" && action->parent() != viewer)
+          undo = action;
+      require(undo && undo->isEnabled(), "main Undo action is available");
+      undo->trigger();
+      check(editor.pages[0].columns[0][0] == "9" && editor.pages[0].arrays[0].values[0] == "10",
+            "main Undo commits and undoes the newest pending viewer edit");
+      QAction *redo = nullptr;
+      for (QAction *action : editor.findChildren<QAction *>())
+        if (action->text() == "Redo" && action->parent() != viewer)
+          redo = action;
+      require(redo && redo->isEnabled(), "main Redo action is available");
+      redo->trigger();
+      check(editor.pages[0].columns[0][0] == "9" && editor.pages[0].arrays[0].values[0] == "123",
+            "main Redo restores the committed viewer edit");
+    }
+    require(failures == 0, "data preservation regressions");
+  }
+
   /** Regressions for pending edits, filtered operations and lossless byte/number storage. */
   static void editingSafety(const QString &root) {
     int failures = 0;
@@ -1546,6 +1672,7 @@ int main(int argc, char **argv) {
       }
   });
   warnings.start(10);
+  SDDSEditorTests::dataPreservation(artifacts.path());
   SDDSEditorTests::editingSafety(artifacts.path());
   SDDSEditorTests::panelSizing(artifacts.path());
   const QString layoutInput = QFile::decodeName(qgetenv("SDDSEDITOR_LAYOUT_INPUT"));
