@@ -56,6 +56,91 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** Reproduce pending-copy, stable numeric ordering and stale filter defects. */
+  static void additionalBugFixes() {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      if (!ok)
+        ++failures;
+    };
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.show();
+      editor.activateWindow();
+      editor.columnView->setFocus();
+      const QModelIndex index = editor.columnModel->index(0, 0);
+      editor.columnView->setCurrentIndex(index);
+      editor.columnView->openPersistentEditor(index);
+      QCoreApplication::processEvents();
+      QLineEdit *cell = qobject_cast<QLineEdit *>(editor.columnView->indexWidget(index));
+      require(cell && !cell->isHidden(), "open persistent editor for pending copy");
+      cell->setText("123");
+      editor.copy();
+      check(QApplication::clipboard()->text() == "123", "copy includes the pending cell edit");
+    }
+    for (int type : {SDDS_LONG64, SDDS_ULONG64, SDDS_DOUBLE, SDDS_LONGDOUBLE}) {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.column_definition[0].type = type;
+      require(SDDS_DefineColumn(&editor.dataset, "Order", nullptr, nullptr, nullptr,
+                                nullptr, SDDS_STRING, 0) >= 0, "define sort row labels");
+      require(SDDS_SaveLayout(&editor.dataset), "save stable sort layout");
+      const QVector<QString> values = SDDS_INTEGER_TYPE(type)
+          ? QVector<QString>({"1", "01", "+1", "", "0"})
+          : QVector<QString>({"1", "1.0", "1e0", "", "0"});
+      const QVector<QString> labels = {"a", "b", "c", "d", "e"};
+      editor.pages[0].columns = {values, labels};
+      editor.populateModels();
+      editor.sortColumn(0, Qt::AscendingOrder);
+      check(editor.pages[0].columns[1] == QVector<QString>({"d", "e", "a", "b", "c"}),
+            "ascending numeric sort preserves equal values in original order");
+      editor.undoStack->undo();
+      editor.sortColumn(0, Qt::DescendingOrder);
+      check(editor.pages[0].columns[1] == labels,
+            "descending numeric sort preserves equal values in original order");
+      editor.undoStack->undo();
+      editor.pages[0].columns[0] = {"2", "15x", "10", "1x", "1"};
+      editor.sortColumn(0, Qt::AscendingOrder);
+      check(editor.pages[0].columns[0] == QVector<QString>({"1", "2", "10", "1x", "15x"}),
+            "invalid numeric cells follow valid numbers with a consistent ordering");
+      editor.undoStack->undo();
+      editor.sortColumn(0, Qt::DescendingOrder);
+      check(editor.pages[0].columns[0] == QVector<QString>({"10", "2", "1", "15x", "1x"}),
+            "descending numeric sort also places invalid cells after valid numbers");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.pages[0].columns[0][0].clear();
+      editor.populateModels();
+      editor.rowFilterExpression = "X==0";
+      editor.rowFilterActive = true;
+      editor.refreshColumnRowFilter(false);
+      require(!editor.columnView->isRowHidden(0), "empty numeric value filters as zero");
+      acceptDialog("Column Type", [](QDialog *dialog) {
+        dialog->findChild<QComboBox *>()->setCurrentText("string");
+      });
+      editor.changeColumnType(0);
+      check(editor.columnView->isRowHidden(0) && editor.visibleColumnRows == 0,
+            "changing column type immediately reapplies the row filter");
+      editor.undoStack->undo();
+      require(!editor.columnView->isRowHidden(0), "undo type change restores numeric filtering");
+      acceptDialog("Column Attributes", [](QDialog *dialog) {
+        dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[0]->setText("Renamed");
+      });
+      editor.editColumnAttributesAt(0);
+      check(!editor.rowFilterActive && editor.visibleColumnRows == 3,
+            "renaming a filtered column immediately disables the invalid filter");
+    }
+    const long double exact = std::nextafter(1.0L, 2.0L);
+    long double parsed = 0;
+    check(parseLongDoubleStrict(longDoubleToText(exact), &parsed) && parsed == exact,
+          "computed long double text retains enough digits to round trip");
+    require(failures == 0, "additional editor bug regressions");
+  }
+
   /** Reproduce data-loss cases across formulas, clipboard, export and pending undo. */
   static void dataPreservation(const QString &root) {
     int failures = 0;
@@ -1074,6 +1159,54 @@ public:
     fprintf(stdout, "PASS exact integer and long double filters\n");
   }
 
+  /** Panel search covers its original column scope while cycling visible matches. */
+  static void panelSearch() {
+    SDDSEditor editor;
+    setup(editor);
+    require(SDDS_DefineColumn(&editor.dataset, "Y", nullptr, nullptr, nullptr,
+                              nullptr, SDDS_STRING, 0) >= 0, "define second search column");
+    require(SDDS_DefineColumn(&editor.dataset, "Z", nullptr, nullptr, nullptr,
+                              nullptr, SDDS_STRING, 0) >= 0, "define third search column");
+    require(SDDS_SaveLayout(&editor.dataset), "save panel search layout");
+    editor.pages[0].columns = {{"3", "1", "2"}, {"Needle", "other", "needle"},
+                               {"needle", "other", "needle"}};
+    editor.populateModels();
+    editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+    editor.columnView->clearSelection();
+    editor.columnSearchEdit->setText("needle");
+    auto find = [&](int row, int column, const char *label) {
+      editor.findInColumnPanel();
+      require(editor.columnView->currentIndex() == editor.columnModel->index(row, column), label);
+    };
+    find(0, 1, "no selection searches beyond current first column, ignoring case");
+    find(0, 2, "search result selection does not narrow all-column scope");
+    find(2, 1, "search advances across rows and columns");
+    find(2, 2, "search reaches last column");
+    find(0, 1, "all-column search wraps");
+    editor.columnView->selectColumn(2);
+    find(0, 2, "user selection changes search scope");
+    find(2, 2, "selected column search stays in that column");
+    find(0, 2, "selected column search wraps");
+    editor.columnView->selectColumn(1);
+    editor.columnView->selectionModel()->select(editor.columnModel->index(0, 2), QItemSelectionModel::Select);
+    find(0, 1, "multiple selected columns search from first match");
+    find(0, 2, "multiple selected columns retain scope after first result");
+    editor.rowFilterExpression = "X<3";
+    editor.rowFilterActive = true;
+    editor.applyColumnRowFilter();
+    find(2, 1, "search skips filtered rows");
+    editor.columnView->clearSelection();
+    editor.clearColumnRowFilter();
+    editor.columnSearchEdit->setText("3");
+    find(0, 0, "clearing selection and changing query searches all columns again");
+    editor.pages.append(editor.pages[0]);
+    editor.pages[1].columns[1][0] = "page two";
+    editor.pageChanged(1);
+    editor.columnSearchEdit->setText("page two");
+    find(0, 1, "page change resets panel search scope and position");
+    fprintf(stdout, "PASS panel search scope, navigation, filtering, and page changes\n");
+  }
+
   /** Changing the query, data, or page cannot reuse old search positions. */
   static void search() {
     SDDSEditor editor;
@@ -1097,6 +1230,32 @@ public:
     };
     fields[0]->setText("abc");
     click("Search");
+    fields[1]->setText("abc");
+    applyCellEditWithUndo(editor.undoStack, editor.columnModel, editor.columnModel->index(1, 0), "redo target");
+    editor.undoStack->undo();
+    const int undoCount = editor.undoStack->count();
+    click("Replace All");
+    require(editor.undoStack->count() == undoCount && editor.undoStack->canRedo(),
+            "identical Replace All does not create an undo macro or discard redo");
+    editor.columnView->selectAll();
+    click("Replace Selected");
+    require(editor.undoStack->count() == undoCount && editor.undoStack->canRedo(),
+            "identical Replace Selected does not create an undo macro or discard redo");
+    click("Search");
+    QLineEdit *pending = qobject_cast<QLineEdit *>(editor.columnView->indexWidget(editor.columnModel->index(0, 0)));
+    require(pending, "search opens persistent cell editor");
+    pending->setText("edited abc");
+    click("Search");
+    require(editor.pages[0].columns[0][0] == "edited abc", "search preserves pending persistent cell edit");
+    editor.columnModel->setData(editor.columnModel->index(2, 0), "abc");
+    click("Next");
+    require(editor.columnView->currentIndex().row() == 0, "Next rebuilds invalidated search matches");
+    click("Next");
+    require(editor.columnView->currentIndex().row() == 2, "Next advances to another search result");
+    click("Previous");
+    require(editor.columnView->currentIndex().row() == 0, "Previous returns to the earlier search result");
+    editor.columnModel->setData(editor.columnModel->index(2, 0), "tail");
+    editor.columnModel->setData(editor.columnModel->index(0, 0), "abc");
     fields[0]->setText("zz");
     fields[1]->setText("new");
     click("Replace");
@@ -1128,17 +1287,40 @@ public:
         };
         edits[0]->setText("abc");
         press("Search");
+        edits[1]->setText("abc");
+        const int undoCount = editor.undoStack->count();
+        press("Replace All");
+        require(editor.undoStack->count() == undoCount, "identical array Replace All does not create an undo macro");
+        QLineEdit *pending = qobject_cast<QLineEdit *>(editor.arrayView->indexWidget(editor.arrayModel->index(0, 0)));
+        require(pending, "array search opens persistent cell editor");
+        pending->setText("edited abc");
+        press("Search");
+        require(editor.pages[1].arrays[0].values[0] == "edited abc", "array search preserves pending persistent cell edit");
+        editor.arrayModel->setData(editor.arrayModel->index(2, 0), "abc");
+        press("Next");
+        press("Next");
+        require(editor.arrayView->currentIndex().row() == 2, "array Next advances after rebuilding matches");
+        press("Previous");
+        require(editor.arrayView->currentIndex().row() == 0, "array Previous returns to the earlier result");
+        editor.arrayModel->setData(editor.arrayModel->index(2, 0), "tail");
+        editor.arrayModel->setData(editor.arrayModel->index(0, 0), "abc");
         edits[0]->setText("zz");
         edits[1]->setText("new");
         press("Replace");
+        edits[0]->setText("abc");
+        press("Search");
+        pending = qobject_cast<QLineEdit *>(editor.arrayView->indexWidget(editor.arrayModel->index(0, 0)));
+        require(pending, "array close test opens persistent editor");
+        pending->setText("closed abc");
         arrayDialog->accept();
         return;
       }
       require(false, "array search dialog exists");
     });
     editor.searchArray(0);
-    require(editor.pages[1].arrays[0].values[0] == "abc" && editor.pages[1].arrays[0].values[1] == "new", "array query change replaces correct text");
-    fprintf(stdout, "PASS search query, data, and page invalidation\n");
+    require(editor.pages[1].arrays[0].values[0] == "closed abc" && editor.pages[1].arrays[0].values[1] == "new",
+            "array query change replaces correct text and closing commits pending edit");
+    fprintf(stdout, "PASS search invalidation, pending edits, and no-op replacements\n");
   }
 
   /** Capture the actual QProcess input using the checked-in plot probe. */
@@ -1810,6 +1992,7 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::additionalBugFixes();
   SDDSEditorTests::dataPreservation(artifacts.path());
   SDDSEditorTests::editingSafety(artifacts.path());
   SDDSEditorTests::panelSizing(artifacts.path());
@@ -1824,6 +2007,7 @@ int main(int argc, char **argv) {
   SDDSEditorTests::emptyArrays(artifacts.path());
   SDDSEditorTests::filters();
   SDDSEditorTests::search();
+  SDDSEditorTests::panelSearch();
   SDDSEditorTests::plot(artifacts.path());
   SDDSEditorTests::reviewFixes(artifacts.path());
   SDDSEditorTests::sparseClipboard();

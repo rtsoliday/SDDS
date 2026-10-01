@@ -13,6 +13,14 @@ insertion, cell and structural undo/redo, sorting, resizing, empty arrays in SDD
 and HDF, numeric row filters, search invalidation, plotting unsaved edits, and
 parameter panel sizing when opening files, resizing the window, and manually
 dragging splitter handles (including empty array panels).
+Column search checks cover all columns with no selection, one or several
+selected columns, repeated Enter, case-insensitive matches, filtering and page
+changes. Search/replace checks also cover pending edits in highlighted results,
+refreshing matches with Next/Previous, and identical replacements preserving
+undo/redo history.
+Further checks cover copying pending edits, stable sorting of numerically equal
+values, consistent placement of invalid numeric cells, refreshing row filters
+after column type/name changes, and exact long-double result formatting.
 
 Additional regressions cover pending main-table and array-viewer edits, filtered
 search/replace and formula operations, all 256 character bytes and Unicode strings
@@ -83,6 +91,11 @@ which the SDDS text format cannot preserve.
 Copying a non-contiguous selection copies the rectangle around it. Other
 programs receive empty fields for the unselected cells. Pasting inside the
 editor or an array viewer leaves the matching target cells unchanged.
+Copy commits pending cell edits before reading the selection. Numeric sorts
+preserve the original order of equal values, with NaN and invalid numeric text
+after valid numbers in either direction. Column definition changes immediately
+refresh an active row filter; renaming a referenced column disables that filter
+and shows all rows.
 
 The parameter table lists Name, Type, Units, Value and Description. Only the
 value can be edited; double-click the type to change it, or units/description
@@ -92,7 +105,11 @@ array shape and units. Numeric data is right-aligned.
 
 When a row filter is active, a chip next to the Columns title shows the
 expression and visible row count. Click it to edit the filter or × to clear
-it. The Columns search box finds the next match in the current column.
+it. The Columns search box finds text in selected columns, or all columns if
+none are selected. Press Enter to move through matches in row order and wrap
+back to the beginning. Selecting a search result keeps the original search
+scope; selecting cells or columns yourself changes it. Searches ignore case
+and skip filtered rows.
 
 The status bar shows the save state, file, page, current cell, row counts and
 the last undoable action. Messages that used to appear in the top console are

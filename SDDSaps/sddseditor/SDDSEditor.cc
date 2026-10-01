@@ -1818,15 +1818,15 @@ private:
 };
 
 static QString longDoubleToText(long double value) {
-  return QString::asprintf("%.*Lg", std::numeric_limits<long double>::max_digits10 - 1,
+  return QString::asprintf("%.*Lg", std::numeric_limits<long double>::max_digits10,
                            value);
 }
 
 /*
  * Text for a computed value stored in a cell of the given type.  Where long
- * double is no wider than double (MSVC), longDoubleToText() keeps only 16
- * digits, so doubles would not round-trip and large integers would print in
- * exponent form that integer columns reject.  Values outside the type's range
+ * double is no wider than double (MSVC), preserve doubles with their shortest
+ * exact representation and format integers without exponent notation that
+ * integer columns reject. Values outside the type's range
  * keep the generic text so validation still rejects them.
  */
 static QString numericResultText(long double value, int type) {
@@ -3384,11 +3384,12 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   columnSearchEdit->setObjectName("panelSearch");
   columnSearchEdit->setClearButtonEnabled(true);
   columnSearchEdit->setFixedWidth(220);
-  columnSearchEdit->setPlaceholderText(tr("Find in column..."));
-  columnSearchEdit->setToolTip(tr("Find text in the current column (Enter for next match)"));
+  columnSearchEdit->setPlaceholderText(tr("Find in all columns..."));
+  columnSearchEdit->setToolTip(tr("Find text in selected columns, or all columns if none are selected (Enter for next match)"));
   QAction *searchIcon = columnSearchEdit->addAction(QIcon(), QLineEdit::LeadingPosition);
   bindIcon(searchIcon, IconSearch, ToneMuted);
   connect(columnSearchEdit, &QLineEdit::returnPressed, this, &SDDSEditor::findInColumnPanel);
+  connect(columnSearchEdit, &QLineEdit::textChanged, this, [this]() { columnSearchMatch = QModelIndex(); });
   colBox->addHeaderWidget(columnSearchEdit);
   QToolButton *colInsertBtn = makePanelAction(colBox, tr("Insert"), IconPlus, tr("Insert a column"));
   colBox->addHeaderWidget(colInsertBtn);
@@ -3414,6 +3415,12 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
           });
   connect(columnModel, &QAbstractItemModel::modelReset, this,
           [this]() { lastColumnSelectionColumns.clear(); });
+  // Column names and types affect variable resolution and empty-value semantics.
+  connect(columnModel, &QAbstractItemModel::headerDataChanged, this,
+          [this]() {
+            if (rowFilterActive)
+              refreshColumnRowFilter(false);
+          });
   connect(columnModel, &QAbstractItemModel::dataChanged, this,
           [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
             if (!updatingModels)
@@ -3469,16 +3476,9 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   columnView->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(columnView, &QTableView::customContextMenuRequested,
           this, &SDDSEditor::columnCellMenuRequested);
-  connect(columnView->selectionModel(), &QItemSelectionModel::currentChanged, this,
-          [this](const QModelIndex &current, const QModelIndex &) {
-            if (columnSearchEdit) {
-              const int c = current.isValid() ? current.column() : -1;
-              columnSearchEdit->setPlaceholderText(
-                  c >= 0 && c < dataset.layout.n_columns
-                      ? tr("Find in %1...").arg(QString::fromLocal8Bit(dataset.layout.column_definition[c].name))
-                      : tr("Find in column..."));
-            }
-          });
+  connect(columnView->selectionModel(), &QItemSelectionModel::selectionChanged, this,
+          &SDDSEditor::updateColumnSearchScope);
+  connect(columnModel, &QAbstractItemModel::modelReset, this, &SDDSEditor::updateColumnSearchScope);
   colBox->setBody(columnView);
   dataSplitter->addWidget(colBox);
 
@@ -4023,32 +4023,65 @@ void SDDSEditor::updateParameterColumns() {
   paramView->setColumnHidden(ParameterPageModel::DescriptionColumn, !anyDescription);
 }
 
-/** Select the next visible cell in the current column containing the search text. */
+/** Capture user-selected columns without letting a search result narrow the scope. */
+void SDDSEditor::updateColumnSearchScope() {
+  if (selectingColumnSearchMatch)
+    return;
+  columnSearchMatch = QModelIndex();
+  columnSearchColumns.clear();
+  QSet<int> selected;
+  collectSelectedColumns(columnView, &selected);
+  for (int c = 0; c < columnModel->columnCount(); ++c)
+    if (selected.contains(c))
+      columnSearchColumns.append(c);
+  if (columnSearchColumns.size() == 1) {
+    const int c = columnSearchColumns.first();
+    columnSearchEdit->setPlaceholderText(tr("Find in %1...").arg(QString::fromLocal8Bit(dataset.layout.column_definition[c].name)));
+  } else {
+    columnSearchEdit->setPlaceholderText(columnSearchColumns.isEmpty() ? tr("Find in all columns...") : tr("Find in selected columns..."));
+  }
+}
+
+/** Select successive visible matches in row order, wrapping within the search scope. */
 void SDDSEditor::findInColumnPanel() {
   const QString needle = columnSearchEdit->text();
   if (needle.isEmpty() || !datasetLoaded)
     return;
   const int rows = columnModel->rowCount();
-  int column = columnView->currentIndex().column();
-  if (column < 0 || column >= columnModel->columnCount())
-    column = 0;
   if (rows <= 0 || columnModel->columnCount() <= 0)
     return;
-  const int start = columnView->currentIndex().isValid() ? columnView->currentIndex().row() : -1;
-  for (int step = 1; step <= rows; ++step) {
-    const int row = (start + step) % rows;
+  flushPendingEdits();
+  QVector<int> columns = columnSearchColumns;
+  if (columns.isEmpty())
+    for (int c = 0; c < columnModel->columnCount(); ++c)
+      columns.append(c);
+  const int startRow = columnSearchMatch.isValid() ? columnSearchMatch.row() : 0;
+  const int startColumn = columnSearchMatch.isValid() ? columns.indexOf(columnSearchMatch.column()) : -1;
+  // Visit the remainder of the starting row after wrapping, without multiplying counts.
+  for (qint64 offset = 0; offset <= rows; ++offset) {
+    const int row = (static_cast<qint64>(startRow) + offset) % rows;
     if (columnView->isRowHidden(row))
       continue;
-    const QModelIndex idx = columnModel->index(row, column);
-    if (idx.data(Qt::DisplayRole).toString().contains(needle, Qt::CaseInsensitive)) {
-      columnView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
-      columnView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
-      lastCellView = columnView;
-      updateStatusBar();
-      return;
+    const int first = offset == 0 ? startColumn + 1 : 0;
+    const int end = offset == rows ? startColumn + 1 : columns.size();
+    for (int c = first; c < end; ++c) {
+      const int column = columns[c];
+      if (columnView->isColumnHidden(column))
+        continue;
+      const QModelIndex idx = columnModel->index(row, column);
+      if (idx.data(Qt::DisplayRole).toString().contains(needle, Qt::CaseInsensitive)) {
+        selectingColumnSearchMatch = true;
+        columnView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
+        selectingColumnSearchMatch = false;
+        columnSearchMatch = idx;
+        columnView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
+        lastCellView = columnView;
+        updateStatusBar();
+        return;
+      }
     }
   }
-  message(tr("\"%1\" not found in %2").arg(needle, QString::fromLocal8Bit(dataset.layout.column_definition[column].name)));
+  message(tr("\"%1\" not found in the searched columns").arg(needle));
 }
 
 void SDDSEditor::markDirty() {
@@ -4338,6 +4371,7 @@ void SDDSEditor::copy() {
   QTableView *view = focusedTable();
   if (!view)
     return;
+  flushPendingEdits();
   QModelIndexList indexes = visibleSelectedIndexes(view);
   if (indexes.isEmpty())
     return;
@@ -7359,7 +7393,9 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
           if (bok && (bi < std::numeric_limits<short>::min() || bi > std::numeric_limits<short>::max()))
             bok = false;
         }
-        if (aok && bok && ai != bi)
+        if (aok != bok)
+          return aok;
+        if (aok && bok)
           return order == Qt::AscendingOrder ? ai < bi : ai > bi;
       } else if (type == SDDS_ULONG64 || type == SDDS_ULONG || type == SDDS_USHORT) {
         bool aok = true;
@@ -7381,7 +7417,9 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
           if (bok && bi > std::numeric_limits<unsigned short>::max())
             bok = false;
         }
-        if (aok && bok && ai != bi)
+        if (aok != bok)
+          return aok;
+        if (aok && bok)
           return order == Qt::AscendingOrder ? ai < bi : ai > bi;
       } else {
         long double ai = 0.0L;
@@ -7420,7 +7458,9 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
             return std::isnan(bi);
           return false;
         }
-        if (aok && bok && ai != bi)
+        if (aok != bok)
+          return aok;
+        if (aok && bok)
           return order == Qt::AscendingOrder ? ai < bi : ai > bi;
       }
 
@@ -7456,6 +7496,7 @@ void SDDSEditor::searchColumn(int column) {
     return;
   if (column < 0 || column >= dataset.layout.n_columns)
     return;
+  flushPendingEdits();
 
   if (searchColumnDialog)
     searchColumnDialog->close();
@@ -7542,6 +7583,7 @@ void SDDSEditor::searchColumn(int column) {
   };
 
   runSearch = [this, column, dlg, patternEdit, replaceEdit, state, focusMatch](bool showInfo, bool refocus) {
+    flushPendingEdits();
     QString pat = patternEdit->text();
     state->matches.clear();
     state->matchIndex = -1;
@@ -7574,6 +7616,7 @@ void SDDSEditor::searchColumn(int column) {
   };
 
   auto replaceCurrent = [this, column, patternEdit, replaceEdit, state, runSearch, columnType]() {
+    flushPendingEdits();
     if (state->matches.isEmpty())
       runSearch(true, true);
     if (state->matches.isEmpty())
@@ -7599,6 +7642,7 @@ void SDDSEditor::searchColumn(int column) {
   };
 
   auto replaceAll = [this, column, patternEdit, replaceEdit, state, runSearch, columnType]() {
+    flushPendingEdits();
     if (state->matches.isEmpty())
       runSearch(true, true);
     if (state->matches.isEmpty())
@@ -7630,6 +7674,8 @@ void SDDSEditor::searchColumn(int column) {
         changed = true;
       }
       if (changed) {
+        if (val == idx.data(Qt::EditRole).toString())
+          continue;
         bool show = !warned;
         if (validateTextForType(val, columnType, show)) {
           if (undoStack && !macroStarted) {
@@ -7651,6 +7697,7 @@ void SDDSEditor::searchColumn(int column) {
   };
 
   auto replaceSelected = [this, column, patternEdit, replaceEdit, state, runSearch, columnType]() {
+    flushPendingEdits();
     QString pat = patternEdit->text();
     if (pat.isEmpty())
       return;
@@ -7675,6 +7722,8 @@ void SDDSEditor::searchColumn(int column) {
         changed = true;
       }
       if (changed) {
+        if (val == idx.data(Qt::EditRole).toString())
+          continue;
         bool show = !warned;
         if (validateTextForType(val, columnType, show)) {
           if (undoStack && !macroStarted) {
@@ -7699,19 +7748,33 @@ void SDDSEditor::searchColumn(int column) {
   QObject::connect(replaceBtn, &QPushButton::clicked, dlg, replaceCurrent);
   QObject::connect(replaceSelectedBtn, &QPushButton::clicked, dlg, replaceSelected);
   QObject::connect(replaceAllBtn, &QPushButton::clicked, dlg, replaceAll);
-  QObject::connect(nextBtn, &QPushButton::clicked, dlg, [state, focusMatch]() {
-    if (state->matches.isEmpty())
+  QObject::connect(nextBtn, &QPushButton::clicked, dlg, [this, state, focusMatch, runSearch]() {
+    flushPendingEdits();
+    if (state->matches.isEmpty()) {
+      runSearch(true, true);
       return;
+    }
     state->matchIndex = (state->matchIndex + 1) % state->matches.size();
     focusMatch();
   });
-  QObject::connect(prevBtn, &QPushButton::clicked, dlg, [state, focusMatch]() {
-    if (state->matches.isEmpty())
-      return;
+  QObject::connect(prevBtn, &QPushButton::clicked, dlg, [this, state, focusMatch, runSearch]() {
+    flushPendingEdits();
+    if (state->matches.isEmpty()) {
+      runSearch(true, false);
+      if (state->matches.isEmpty())
+        return;
+      state->matchIndex = 0;
+    }
     state->matchIndex = (state->matchIndex - 1 + state->matches.size()) % state->matches.size();
     focusMatch();
   });
   QObject::connect(closeBtn, &QPushButton::clicked, dlg, &QDialog::close);
+  connect(dlg, &QDialog::finished, this, [this, state]() {
+    flushPendingEdits();
+    if (state->activeEditor.isValid())
+      columnView->closePersistentEditor(state->activeEditor);
+    state->activeEditor = QModelIndex();
+  });
 
   QObject::connect(dlg, &QDialog::destroyed, this, [this, state, dlg]() {
     if (state->activeEditor.isValid())
@@ -7786,6 +7849,7 @@ void SDDSEditor::searchArray(int column) {
     return;
   if (column < 0 || column >= dataset.layout.n_arrays)
     return;
+  flushPendingEdits();
 
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Search Array"));
@@ -7843,6 +7907,7 @@ void SDDSEditor::searchArray(int column) {
   };
 
   auto runSearch = [&](bool showInfo) {
+    flushPendingEdits();
     QString pat = patternEdit.text();
     matches.clear();
     matchIndex = -1;
@@ -7874,6 +7939,7 @@ void SDDSEditor::searchArray(int column) {
   };
 
   auto replaceCurrent = [&]() {
+    flushPendingEdits();
     if (matches.isEmpty())
       runSearch(true);
     if (matches.isEmpty())
@@ -7899,6 +7965,7 @@ void SDDSEditor::searchArray(int column) {
   };
 
   auto replaceAll = [&]() {
+    flushPendingEdits();
     if (matches.isEmpty())
       runSearch(true);
     if (matches.isEmpty())
@@ -7925,6 +7992,8 @@ void SDDSEditor::searchArray(int column) {
         changed = true;
       }
       if (changed) {
+        if (val == idx.data(Qt::EditRole).toString())
+          continue;
         bool show = !warned;
         if (validateTextForType(val, arrayType, show)) {
           if (undoStack && !macroStarted) {
@@ -7949,18 +8018,26 @@ void SDDSEditor::searchArray(int column) {
   QObject::connect(&replaceBtn, &QPushButton::clicked, replaceCurrent);
   QObject::connect(&replaceAllBtn, &QPushButton::clicked, replaceAll);
   QObject::connect(&nextBtn, &QPushButton::clicked, [&]() {
-    if (matches.isEmpty())
+    flushPendingEdits();
+    if (matches.isEmpty()) {
+      runSearch(true);
       return;
+    }
     matchIndex = (matchIndex + 1) % matches.size();
     focusMatch();
   });
   QObject::connect(&prevBtn, &QPushButton::clicked, [&]() {
-    if (matches.isEmpty())
-      return;
+    flushPendingEdits();
+    if (matches.isEmpty()) {
+      runSearch(true);
+      if (matches.isEmpty())
+        return;
+    }
     matchIndex = (matchIndex - 1 + matches.size()) % matches.size();
     focusMatch();
   });
   QObject::connect(&closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+  connect(&dlg, &QDialog::finished, &dlg, [&]() { flushPendingEdits(); });
 
   dlg.exec();
   if (activeEditor.isValid())
@@ -9410,7 +9487,7 @@ void SDDSEditor::showHelp() {
                        "Click a panel title to collapse or expand it. Double-click a parameter's Type to change it.\n"
                        "The status bar shows the save state, file, page, current cell and visible rows;\n"
                        "its Messages button (Ctrl+Shift+L) opens the message log.\n"
-                       "Type in the Columns search box and press Enter to find the next match in the current column.\n"
+                       "Type in the Columns search box and press Enter to find the next match in selected columns, or all columns if none are selected.\n"
                        "Right click headers for more actions such as:\n"
                        " - Plotting a column\n"
                        " - Sorting column or array data\n"

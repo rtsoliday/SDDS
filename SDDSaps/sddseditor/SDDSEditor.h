@@ -155,6 +155,7 @@ private:
   void updateFilterIndicator();
   void updateParameterColumns();
   void findInColumnPanel();
+  void updateColumnSearchScope();
   void flushPendingEdits();
   void loadPage(int page);
   void populateModels();
@@ -230,6 +231,9 @@ private:
   QFrame *filterChip;
   QToolButton *filterChipText;
   QLineEdit *columnSearchEdit;
+  QVector<int> columnSearchColumns;
+  QPersistentModelIndex columnSearchMatch;
+  bool selectingColumnSearchMatch{false};
 
   QLabel *modifiedLabel;
   QLabel *pathLabel;
