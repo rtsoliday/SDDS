@@ -14,7 +14,6 @@
 #include <QPainter>
 #include <QLinearGradient>
 #include <QTimer>
-#include <QCloseEvent>
 #include <QComboBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -40,6 +39,8 @@
 #include <algorithm>
 #include <limits>
 #include <cmath>
+#include <cerrno>
+#include <cstdlib>
 #include <sstream>
 #include <locale>
 #include <iomanip>
@@ -49,12 +50,19 @@ static const char *arrayCellsMime = "application/x-sddseditor-cells";
 
 /** Parse finite SDDS numbers without narrowing integers or long doubles to double. */
 static bool heatmapNumber(const QString &text, long double *value) {
-  std::istringstream input(text.toStdString());
-  input.imbue(std::locale::classic());
-  if (!(input >> *value) || !std::isfinite(*value))
+  if (!value || text.contains(QChar(0)))
     return false;
-  input >> std::ws;
-  return input.eof();
+  const QByteArray encoded = text.trimmed().toLatin1();
+  const char *start = encoded.constData();
+  char *end = nullptr;
+  // main.cc sets LC_NUMERIC to C for all SDDS numeric parsing. Streams can
+  // reject representable subnormals on ERANGE; only underflow to zero is invalid.
+  errno = 0;
+  const long double parsed = strtold(start, &end);
+  if (end == start || *end || !std::isfinite(parsed) || (errno == ERANGE && parsed == 0))
+    return false;
+  *value = parsed;
+  return true;
 }
 
 /** Format limits without Qt's floating formatter narrowing long double values. */
@@ -593,10 +601,10 @@ void ArrayViewer::finishEditing() {
   static_cast<ArraySliceTableView *>(grid)->finishEditing();
 }
 
-/** Commit an active cell before closing the independent viewer window. */
-void ArrayViewer::closeEvent(QCloseEvent *event) {
+/** Commit an active cell on every dismissal, including Escape/reject and close. */
+void ArrayViewer::done(int result) {
   finishEditing();
-  QDialog::closeEvent(event);
+  QDialog::done(result);
 }
 
 /** Copy TSV plus a private lossless representation for strings containing tabs/newlines. */

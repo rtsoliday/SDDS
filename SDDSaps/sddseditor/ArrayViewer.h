@@ -83,7 +83,7 @@ public:
   ArraySliceModel *sliceModel() const { return model; }
 
 private:
-  void closeEvent(QCloseEvent *event) override;
+  void done(int result) override;
   void rebuildSliceControls();
   void applySlice();
   void updateSelection();

@@ -88,7 +88,8 @@ ifeq ($(OS), Windows)
   ifneq ($(MOC_MAJOR),$(QT_MAJOR))
     $(error MOC=$(MOC) is not Qt $(QT_MAJOR))
   endif
-  CCFLAGS += -I../../include -I../../lzma -I$(HDF_DIR)/include -I$(OBJ_DIR) /std:c++17 /Zc:__cplusplus /permissive- -I"$(QT_DIR)/include" -I"$(QT_DIR)/include/QtCore" -I"$(QT_DIR)/include/QtGui" -I"$(QT_DIR)/include/QtWidgets"
+  # Qt text and test fixtures are UTF-8; Windows SDK macros must not reach Qt/STL.
+  CCFLAGS += -I../../include -I../../lzma -I$(HDF_DIR)/include -I$(OBJ_DIR) /std:c++17 /Zc:__cplusplus /permissive- /utf-8 -DNOMINMAX -I"$(QT_DIR)/include" -I"$(QT_DIR)/include/QtCore" -I"$(QT_DIR)/include/QtGui" -I"$(QT_DIR)/include/QtWidgets"
   LDFLAGS += /LIBPATH:"$(QT_DIR)/lib" Qt$(QT_MAJOR)PrintSupport.lib Qt$(QT_MAJOR)Widgets.lib Qt$(QT_MAJOR)Gui.lib Qt$(QT_MAJOR)Core.lib
   PROD_LIBS = SDDS1.lib rpnlib.lib mdbmth.lib mdblib.lib z.lib
   PROD_SYS_LIBS = $(HDF_DIR)/lib/libhdf5.lib $(HDF_DIR)/lib/libszaec.lib $(HDF_DIR)/lib/libaec.lib $(LZMA_LIB) shlwapi.lib advapi32.lib

@@ -2078,6 +2078,109 @@ public:
     require(failures == 0, "definition and page regressions");
   }
 
+  /** Computed underflow, no-op history, viewer dismissal and subnormal heatmaps. */
+  static void portabilityAndEditingFixes() {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      failures += !ok;
+    };
+    bool floatOk = false;
+    const float floatTiny = std::numeric_limits<float>::denorm_min();
+    const float formattedTiny = numericResultText(floatTiny, SDDS_FLOAT).toFloat(&floatOk);
+    check(floatOk && formattedTiny == floatTiny && numericResultText(-0.0L, SDDS_FLOAT) == "-0" &&
+              !validateTextForType(numericResultText(static_cast<long double>(std::numeric_limits<float>::max()) * 2,
+                                                   SDDS_FLOAT), SDDS_FLOAT, false),
+          "computed float formatting preserves subnormals and signed zero and rejects overflow");
+    const long double belowFloat = static_cast<long double>(std::numeric_limits<float>::denorm_min()) / 4;
+    check(!validateTextForType(numericResultText(belowFloat, SDDS_FLOAT), SDDS_FLOAT, false),
+          "computed float underflow is rejected instead of silently becoming zero");
+    if (std::numeric_limits<long double>::min_exponent < std::numeric_limits<double>::min_exponent) {
+      const long double belowDouble = static_cast<long double>(std::numeric_limits<double>::denorm_min()) / 4;
+      check(!validateTextForType(numericResultText(belowDouble, SDDS_DOUBLE), SDDS_DOUBLE, false),
+            "computed double underflow is rejected instead of silently becoming zero");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.column_definition[0].type = SDDS_FLOAT;
+      require(SDDS_SaveLayout(&editor.dataset), "save float formula fixture layout");
+      editor.populateModels();
+      editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+      const auto before = editor.pages[0].columns;
+      const int history = editor.undoStack->count();
+      acceptDialog("Apply Numerical Expression", [](QDialog *dialog) {
+        dialog->findChild<QLineEdit *>()->setText("1e-50");
+      });
+      editor.applyNumericalExpression(editor.columnView);
+      check(editor.pages[0].columns == before && editor.undoStack->count() == history,
+            "a formula below the float range leaves cells and undo history unchanged");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.pages[0].columns[0] = {"1", "2", "3"};
+      editor.populateModels();
+      applyCellEditWithUndo(editor.undoStack, editor.columnModel, editor.columnModel->index(0, 0), "9");
+      editor.undoStack->undo();
+      editor.dirty = false;
+      editor.sortColumn(0, Qt::AscendingOrder);
+      check(editor.undoStack->canRedo() && editor.undoStack->index() == 0 && !editor.dirty,
+            "sorting already sorted rows preserves redo and the saved state");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      applyCellEditWithUndo(editor.undoStack, editor.arrayModel, editor.arrayModel->index(0, 0), "99");
+      editor.undoStack->undo();
+      editor.dirty = false;
+      acceptDialog("Resize Array", [](QDialog *) {});
+      editor.resizeArray(0);
+      check(editor.undoStack->canRedo() && editor.undoStack->index() == 0 && !editor.dirty,
+            "accepting unchanged array dimensions preserves redo and the saved state");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.show();
+      editor.openArrayViewer(0);
+      ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      const QModelIndex index = viewer->sliceModel()->index(0, 0);
+      viewer->table()->openPersistentEditor(index);
+      QCoreApplication::processEvents();
+      QLineEdit *cell = qobject_cast<QLineEdit *>(viewer->table()->indexWidget(index));
+      require(cell && !cell->isHidden(), "pending array editor for dismissal");
+      cell->setText("77");
+      viewer->reject(); // QDialog's Escape path bypasses closeEvent.
+      check(editor.pages[0].arrays[0].values[0] == "77" && editor.undoStack->canUndo(),
+            "dismissing the array viewer commits its pending edit");
+      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.array_definition[0].type = SDDS_LONGDOUBLE;
+      require(SDDS_SaveLayout(&editor.dataset), "save subnormal heatmap layout");
+      const long double tiny = std::numeric_limits<long double>::denorm_min();
+      editor.pages[0].arrays[0].values = {longDoubleToText(tiny), longDoubleToText(2 * tiny), "nan", "inf"};
+      editor.populateModels();
+      editor.openArrayViewer(0);
+      ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      long double minimum = 0, maximum = 0;
+      check(viewer->sliceModel()->finiteRange(&minimum, &maximum) && minimum == tiny && maximum == 2 * tiny,
+            "heatmap bounds include finite subnormal values");
+      viewer->findChild<QCheckBox *>("arrayHeatmap")->setChecked(true);
+      viewer->findChild<QComboBox *>("arrayHeatmapScale")->setCurrentIndex(1);
+      viewer->findChild<QPushButton *>("arrayHeatmapApply")->click();
+      check(parseLongDoubleStrict(viewer->findChild<QLineEdit *>("arrayHeatmapMinimum")->text(), &minimum) &&
+                parseLongDoubleStrict(viewer->findChild<QLineEdit *>("arrayHeatmapMaximum")->text(), &maximum) &&
+                minimum == tiny && maximum == 2 * tiny &&
+                !viewer->findChild<QLabel *>("arrayHeatmapStatus")->text().contains("previous range"),
+            "subnormal heatmap limits round-trip through fixed range controls");
+    }
+    require(failures == 0, "portability and editing regressions");
+  }
+
   /** Bracketed and case-sensitive filter names, literal plot names, exact integers, NaN results. */
   static void namesAndExactNumbers(const QString &root) {
     int failures = 0;
@@ -2232,6 +2335,7 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::portabilityAndEditingFixes();
   SDDSEditorTests::definitionNameEncoding();
   SDDSEditorTests::pendingTableActions();
   SDDSEditorTests::multilineSave(artifacts.path());

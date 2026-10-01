@@ -3,6 +3,11 @@
  * @brief Implementation of the Qt SDDS editor.
  */
 
+// mdb.h includes windows.h; prevent its macros before any Qt/STL headers load.
+#if defined(_WIN32) && !defined(NOMINMAX)
+#  define NOMINMAX
+#endif
+
 #include "SDDSEditor.h"
 #include "ArrayViewer.h"
 #include "mdb.h"
@@ -94,9 +99,6 @@
  * std::numeric_limits<T>::min()/max() by macro expansion.
  */
 #if defined(_WIN32)
-#  ifndef NOMINMAX
-#    define NOMINMAX
-#  endif
 #  if defined(min)
 #    undef min
 #  endif
@@ -1625,10 +1627,14 @@ enum class RowFilterTokenKind {
 };
 
 struct RowFilterToken {
+  RowFilterToken(RowFilterTokenKind kind = RowFilterTokenKind::Invalid,
+                 const QString &text = QString(), bool bracketed = false)
+      : kind(kind), text(text), bracketed(bracketed) {}
+
   RowFilterTokenKind kind;
   QString text;
   /* Written as [name]: always a column, never a row variable or true/false. */
-  bool bracketed = false;
+  bool bracketed;
 };
 
 class RowFilterParser {
@@ -2080,11 +2086,17 @@ static QString numericResultText(long double value, int type) {
     if (type == SDDS_DOUBLE ||
         (type == SDDS_LONGDOUBLE &&
          std::numeric_limits<long double>::digits <= std::numeric_limits<double>::digits)) {
-      if (fabsl(value) <= std::numeric_limits<double>::max())
-        return shortestDoubleText(static_cast<double>(value));
+      if (fabsl(value) <= std::numeric_limits<double>::max()) {
+        const double narrowed = static_cast<double>(value);
+        if (value == 0 || narrowed != 0)
+          return shortestDoubleText(narrowed);
+      }
     } else if (type == SDDS_FLOAT) {
-      if (fabsl(value) <= std::numeric_limits<float>::max())
-        return shortestFloatText(static_cast<float>(value));
+      if (fabsl(value) <= std::numeric_limits<float>::max()) {
+        const float narrowed = static_cast<float>(value);
+        if (value == 0 || narrowed != 0)
+          return shortestFloatText(narrowed);
+      }
     } else if (SDDS_INTEGER_TYPE(type) && value == floorl(value)) {
       // 2^63 and 2^64 are exact in every long double format.
       if (value >= -9223372036854775808.0L && value < 9223372036854775808.0L)
@@ -2093,6 +2105,8 @@ static QString numericResultText(long double value, int type) {
         return QString::number(static_cast<qulonglong>(value));
     }
   }
+  // Keep an out-of-range result as text so validation can reject it before
+  // changing cells. In particular, never turn nonzero underflow into valid "0".
   return longDoubleToText(value);
 }
 
@@ -7739,6 +7753,12 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
 
   std::stable_sort(idx.begin(), idx.end(), cmp);
 
+  bool reordered = false;
+  for (int i = 0; i < rows; ++i)
+    reordered = reordered || idx[i] != i;
+  if (!reordered)
+    return; // A no-op must not push an undo command and discard pending Redo.
+
   for (int c = 0; c < pd.columns.size(); ++c) {
     QVector<QString> sorted(rows);
     for (int i = 0; i < rows; ++i)
@@ -8096,6 +8116,8 @@ void SDDSEditor::resizeArray(int column) {
                          tr("Array dimensions are too large."));
     return;
   }
+  if (newDims == as.dims && newSize == as.values.size())
+    return; // Keep history and the saved state when the shape is unchanged.
   as.values = reshapeArrayValues(as.values, as.dims, newDims, newSize);
   as.dims = newDims;
 

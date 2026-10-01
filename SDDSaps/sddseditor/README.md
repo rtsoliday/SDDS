@@ -70,7 +70,10 @@ attribute editors and type changes, and edits that change nothing adding no
 Undo step. Name checks cover row filters on bracketed (`[Q[0]]`), case-sensitive
 and `i`/`row` column names, and plotting columns whose names contain brackets.
 Formula checks cover exact long64/ulong64 fill series and expressions beyond
-2^53, and NaN results.
+2^53, and NaN results. Computed float/double values that underflow to zero are
+rejected without changing data; representable subnormal values remain valid.
+Checks also cover unchanged sorts and array resizes preserving Redo and the
+saved state, pending viewer edits on Escape/reject, and subnormal heatmap bounds.
 
 Executables are built under the platform object directory (`O.Linux-x86_64` on
 Linux). The plotting probe is named `test-bin/sddsplot` there; only the test
