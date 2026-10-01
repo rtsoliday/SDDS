@@ -1,4 +1,40 @@
-# SDDS editor regression tests
+# SDDS editor
+
+## Build selection
+
+Build the SDDS libraries from the repository root first with `make -j`.
+The editor supports Qt 5 and Qt 6. Its code generator (`moc`), headers and
+libraries must all come from the same Qt installation.
+
+On Linux and macOS, select the version explicitly when needed:
+
+```sh
+make -C SDDSaps/sddseditor QT_MAJOR=5
+make -C SDDSaps/sddseditor QT_MAJOR=6
+```
+
+The selected Qt installation must be visible to `pkg-config`, including its
+Widgets and PrintSupport packages. Set `PKG_CONFIG_PATH` for installations
+outside the default search path, and `MOC` if the matching generator is outside
+the standard locations. The default preference is Qt 6 on Linux and Qt 5 on
+macOS, with the other version used when it is the only installed version.
+Qt 6 builds enable C++17. Changing Qt installations rebuilds the editor's
+objects and generated header automatically.
+
+On Windows, use the MSVC environment initialized by `build-windows.bat`.
+The default kit is `C:/Qt/6.8.2/msvc2022_64`. To build the editor with a
+different Qt 5 or Qt 6 MSVC kit, pass its root directory:
+
+```sh
+make -C SDDSaps/sddseditor QT_DIR=C:/Qt/5.15.2/msvc2019_64
+```
+
+Use a Qt kit compatible with the compiler, and put its `bin` directory on
+`PATH` when running the editor or tests so that Windows finds the matching
+Qt DLLs. The make recipes also use Cygwin's `cmp` to detect configuration
+changes.
+
+## Regression tests
 
 After building the repository, run:
 

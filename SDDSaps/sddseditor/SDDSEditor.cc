@@ -2109,7 +2109,7 @@ static QString joinSubtitle(const QStringList &parts) {
 
 /** Pick an installed monospace font, falling back to the platform fixed font. */
 static QFont preferredTableFont() {
-#if defined(Q_OS_MACOS) || defined(Q_OS_OSX)
+#if defined(Q_OS_MAC)
   // macOS text is drawn at 72 points per inch, so match its larger UI font.
   const qreal pointSize = 12;
 #else
@@ -2741,7 +2741,7 @@ public:
       return QString::fromLocal8Bit(def.description);
     if (role != Qt::DisplayRole)
       return QVariant();
-    return def.name ? QString(def.name) : QString();
+    return QString::fromLocal8Bit(def.name);
   }
 
   void refresh() {
@@ -2864,7 +2864,7 @@ public:
       const COLUMN_DEFINITION &def = dataset->layout.column_definition[section];
       switch (role) {
       case Qt::DisplayRole:
-        return QString(def.name);
+        return QString::fromLocal8Bit(def.name);
       case HeaderSubtitleRole:
         return joinSubtitle({QString::fromLocal8Bit(SDDS_GetTypeName(def.type)),
                              def.units ? QString::fromLocal8Bit(def.units) : QString()});
@@ -2995,7 +2995,7 @@ public:
       const ARRAY_DEFINITION &def = dataset->layout.array_definition[section];
       switch (role) {
       case Qt::DisplayRole:
-        return QString(def.name);
+        return QString::fromLocal8Bit(def.name);
       case HeaderSubtitleRole: {
         QStringList dims;
         if (pages && currentPage && *currentPage >= 0 && *currentPage < pages->size() &&
@@ -4441,6 +4441,7 @@ void SDDSEditor::paste() {
   QTableView *view = focusedTable();
   if (!view)
     return;
+  flushPendingEdits();
   QModelIndex start = view->currentIndex();
   if (!start.isValid())
     return;
@@ -4531,6 +4532,7 @@ void SDDSEditor::deleteCells() {
   QTableView *view = focusedTable();
   if (!view)
     return;
+  flushPendingEdits();
   QModelIndexList indexes = visibleSelectedIndexes(view);
   if (indexes.isEmpty())
     return;
@@ -4928,6 +4930,9 @@ bool SDDSEditor::writeDatasetFile(const QString &path) {
     return false;
   }
   out.layout.data_mode.mode = asciiBtn->isChecked() ? SDDS_ASCII : SDDS_BINARY;
+  // Editing columns invalidates the input's multiline row layout. Always emit
+  // one complete ASCII row per line, including for compressed output.
+  out.layout.data_mode.lines_per_row = 1;
   if (!SDDS_WriteLayout(&out)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to write layout"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
@@ -7316,10 +7321,10 @@ void SDDSEditor::plotColumn(int column) {
   if (!snapshot->isValid() || !writeDatasetFile(snapshot->filePath("plot.sdds")))
     return;
 
-  QString colName = dataset.layout.column_definition[column].name;
+  QString colName = QString::fromLocal8Bit(dataset.layout.column_definition[column].name);
   bool hasTime = false;
   for (int c = 0; c < dataset.layout.n_columns; ++c) {
-    if (QString(dataset.layout.column_definition[c].name) == QLatin1String("Time")) {
+    if (QString::fromLocal8Bit(dataset.layout.column_definition[c].name) == QLatin1String("Time")) {
       hasTime = true;
       break;
     }
@@ -9046,6 +9051,7 @@ void SDDSEditor::fillSeries(QTableView *view) {
     return;
   }
 
+  flushPendingEdits();
   QModelIndexList selection = visibleSelectedIndexes(view, true);
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Fill Series"), tr("Select one or more cells first."));
@@ -9126,6 +9132,7 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
     return;
   }
 
+  flushPendingEdits();
   QModelIndexList selection = visibleSelectedIndexes(view, true);
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Apply Numerical Expression"), tr("Select one or more cells first."));
@@ -9250,6 +9257,7 @@ void SDDSEditor::applyTextFormula(QTableView *view) {
     return;
   }
 
+  flushPendingEdits();
   QModelIndexList selection = visibleSelectedIndexes(view, true);
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Apply Text Formula"), tr("Select one or more cells first."));

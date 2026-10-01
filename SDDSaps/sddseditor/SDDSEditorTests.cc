@@ -56,6 +56,113 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** SDDS names use the same local encoding as values, including on Windows. */
+  static void definitionNameEncoding() {
+    SDDSEditor editor;
+    require(editor.ensureDataset(), "initialize name encoding fixture");
+    QString name = QStringLiteral("caf") + QChar(0x00E9);
+    if (!localEncodingPreserves(name))
+      name = "Name";
+    const QByteArray encoded = name.toLocal8Bit();
+    // Permit names from legacy layouts independently of the C character locale.
+    const uint32_t nameFlags = SDDS_SetNameValidityFlags(SDDS_ALLOW_ANY_NAME);
+    require(SDDS_DefineParameter(&editor.dataset, encoded.constData(), nullptr, nullptr,
+                                 nullptr, nullptr, SDDS_STRING, nullptr) >= 0, "define local-encoding parameter");
+    require(SDDS_DefineColumn(&editor.dataset, encoded.constData(), nullptr, nullptr,
+                              nullptr, nullptr, SDDS_STRING, 0) >= 0, "define local-encoding column");
+    require(SDDS_DefineArray(&editor.dataset, encoded.constData(), nullptr, nullptr,
+                             nullptr, nullptr, SDDS_STRING, 0, 1, nullptr) >= 0, "define local-encoding array");
+    require(SDDS_SaveLayout(&editor.dataset), "save name encoding layout");
+    SDDS_SetNameValidityFlags(nameFlags);
+    editor.pages[0].parameters = {"value"};
+    editor.pages[0].columns = {{"value"}};
+    ArrayStore array;
+    array.dims = {1};
+    array.values = {"value"};
+    editor.pages[0].arrays = {array};
+    editor.populateModels();
+    require(editor.paramModel->headerData(0, Qt::Vertical).toString() == name, "parameter name uses local encoding");
+    require(editor.columnModel->headerData(0, Qt::Horizontal).toString() == name, "column name uses local encoding");
+    require(editor.arrayModel->headerData(0, Qt::Horizontal).toString() == name, "array name uses local encoding");
+    fprintf(stdout, "PASS definition names use the SDDS text encoding\n");
+  }
+
+  /** Table actions must consume pending delegate text before computing their edits. */
+  static void pendingTableActions() {
+    int failures = 0;
+    for (const QString &action : {QString("Paste"), QString("Delete"), QString("Numerical"), QString("Text"), QString("Fill")}) {
+      SDDSEditor editor;
+      setup(editor);
+      editor.show();
+      editor.activateWindow();
+      editor.columnView->setFocus();
+      const QModelIndex index = editor.columnModel->index(0, 0);
+      editor.columnView->setCurrentIndex(index);
+      editor.columnView->openPersistentEditor(index);
+      QCoreApplication::processEvents();
+      QLineEdit *cell = qobject_cast<QLineEdit *>(editor.columnView->indexWidget(index));
+      require(cell && !cell->isHidden(), "pending editor for table action");
+      cell->setText("123");
+      QString expected;
+      if (action == "Paste") {
+        QApplication::clipboard()->setText("456");
+        editor.paste();
+        expected = "456";
+      } else if (action == "Delete") {
+        editor.deleteCells();
+      } else if (action == "Numerical") {
+        acceptDialog("Apply Numerical Expression", [](QDialog *dialog) {
+          dialog->findChild<QLineEdit *>()->setText("x+1");
+        });
+        editor.applyNumericalExpression(editor.columnView);
+        expected = "124";
+      } else if (action == "Text") {
+        acceptDialog("Apply Text Formula", [](QDialog *dialog) {
+          dialog->findChild<QLineEdit *>()->setText("${x}0");
+        });
+        editor.applyTextFormula(editor.columnView);
+        expected = "1230";
+      } else {
+        acceptDialog("Fill Series", [](QDialog *dialog) {
+          const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+          fields[0]->setText("456");
+          fields[1]->setText("1");
+        });
+        editor.fillSeries(editor.columnView);
+        expected = "456";
+      }
+      editor.flushPendingEdits();
+      const bool applied = index.data(Qt::EditRole).toString() == expected;
+      editor.undoStack->undo();
+      const bool undone = index.data(Qt::EditRole).toString() == "123";
+      editor.undoStack->undo();
+      const bool original = index.data(Qt::EditRole).toString() == "3";
+      const bool ok = applied && undone && original;
+      fprintf(stdout, "%s pending %s commits text and preserves both undo steps\n", ok ? "PASS" : "FAIL", qPrintable(action));
+      failures += !ok;
+    }
+    require(failures == 0, "pending table action regressions");
+  }
+
+  /** A loaded multiline layout must remain writable after deleting columns. */
+  static void multilineSave(const QString &root) {
+    const QString input = root + "/multiline-input.sdds";
+    putFile(input, "SDDS1\n&column name=X, type=long, &end\n"
+                   "&column name=Y, type=long, &end\n&column name=Z, type=long, &end\n"
+                   "&data mode=ascii, lines_per_row=3, &end\n2\n1\n2\n3\n4\n5\n6\n");
+    SDDSEditor editor;
+    require(editor.loadFile(input), "load multiline ASCII fixture");
+    editor.deleteColumnIndexes({1, 2});
+    for (const QString &suffix : {QString(".sdds"), QString(".sdds.gz"), QString(".sdds.xz")}) {
+      const QString output = root + "/multiline-output" + suffix;
+      require(editor.writeFile(output), "save multiline input after deleting columns");
+      SDDSEditor loaded;
+      require(loaded.loadFile(output), "reload edited multiline file");
+      require(loaded.pages[0].columns == QVector<QVector<QString>>({{"1", "4"}}), "multiline save retains rows");
+    }
+    fprintf(stdout, "PASS edited multiline ASCII save and compressed round trips\n");
+  }
+
   /** Reproduce pending-copy, stable numeric ordering and stale filter defects. */
   static void additionalBugFixes() {
     int failures = 0;
@@ -1992,6 +2099,9 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::definitionNameEncoding();
+  SDDSEditorTests::pendingTableActions();
+  SDDSEditorTests::multilineSave(artifacts.path());
   SDDSEditorTests::additionalBugFixes();
   SDDSEditorTests::dataPreservation(artifacts.path());
   SDDSEditorTests::editingSafety(artifacts.path());
