@@ -24,6 +24,9 @@
 #include <QMimeData>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonValue>
+#include <QPair>
+#include <QSet>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QShortcut>
@@ -622,9 +625,15 @@ void ArrayViewer::copySelection(bool wholeSlice) {
     QJsonArray row;
     for (int c = left; c <= right; ++c) {
       const QModelIndex index = model->index(r, c);
-      const QString value = wholeSlice || grid->selectionModel()->isSelected(index) ? index.data(Qt::EditRole).toString() : QString();
-      fields << value;
-      row.append(value);
+      if (wholeSlice || grid->selectionModel()->isSelected(index)) {
+        const QString value = index.data(Qt::EditRole).toString();
+        fields << value;
+        row.append(value);
+      } else {
+        // Unselected cells inside the rectangle: blank as text, null (left unchanged) on paste.
+        fields << QString();
+        row.append(QJsonValue());
+      }
     }
     lines << fields.join('\t');
     cells.append(row);
@@ -641,13 +650,17 @@ bool ArrayViewer::pasteText(const QString &text) {
   if (!start.isValid())
     return false;
   QVector<QStringList> rows;
+  QSet<QPair<int, int>> gaps;
   const QMimeData *mime = QApplication::clipboard()->mimeData();
   if (mime && mime->hasFormat(arrayCellsMime) && mime->text() == text) {
     const QJsonArray cells = QJsonDocument::fromJson(mime->data(arrayCellsMime)).array();
     for (const QJsonValue &row : cells) {
       QStringList fields;
-      for (const QJsonValue &cell : row.toArray())
+      for (const QJsonValue &cell : row.toArray()) {
+        if (cell.isNull())
+          gaps.insert(qMakePair(rows.size(), fields.size()));
         fields << cell.toString();
+      }
       rows.append(fields);
     }
   } else {
@@ -668,8 +681,9 @@ bool ArrayViewer::pasteText(const QString &text) {
       notice->setText(tr("Paste must be a rectangle that fits within the displayed slice."));
       return false;
     }
-    for (const QString &value : rows[r]) {
-      if (!model->accepts(value)) {
+    for (int c = 0; c < rows[r].size(); ++c) {
+      const QString &value = rows[r][c];
+      if (!gaps.contains(qMakePair(r, c)) && !model->accepts(value)) {
         notice->setText(tr("Paste contains a value incompatible with the array's data type. No cells were changed."));
         return false;
       }
@@ -678,7 +692,8 @@ bool ArrayViewer::pasteText(const QString &text) {
   undo->beginMacro(tr("Paste array slice"));
   for (int r = 0; r < rows.size(); ++r)
     for (int c = 0; c < rows[r].size(); ++c)
-      model->setData(model->index(start.row() + r, start.column() + c), rows[r][c]);
+      if (!gaps.contains(qMakePair(r, c)))
+        model->setData(model->index(start.row() + r, start.column() + c), rows[r][c]);
   undo->endMacro();
   notice->clear();
   return true;

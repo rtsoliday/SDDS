@@ -25,10 +25,18 @@
 
 class QTimer;
 
-class QGroupBox;
 class QSplitter;
 class QDialog;
 class QProgressDialog;
+class QToolButton;
+class QToolBar;
+class QDockWidget;
+class QLabel;
+class QLineEdit;
+class QAction;
+class QFrame;
+class DataPanel;
+class TwoLineHeaderView;
 class ParameterPageModel;
 class ColumnPageModel;
 class ArrayPageModel;
@@ -128,7 +136,22 @@ private:
                                         StructuralSnapshot &&before,
                                         const QString &label);
 
+  /** Icon slot refreshed whenever the theme changes. */
+  struct IconBinding {
+    QPointer<QObject> target;
+    int kind;
+    int tone;
+  };
+
   void applyTheme(bool dark);
+  void buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoAct,
+                    QAction *redoAct, QAction *filterAct, QAction *arrayViewerAct);
+  void buildStatusBar();
+  void bindIcon(QObject *target, int kind, int tone = 0);
+  void updateStatusBar();
+  void updateFilterIndicator();
+  void updateParameterColumns();
+  void findInColumnPanel();
   void flushPendingEdits();
   void loadPage(int page);
   void populateModels();
@@ -141,6 +164,8 @@ private:
   bool writeDatasetFile(const QString &path);
   bool writeHDF(const QString &path);
   bool writeCSV(const QString &path);
+  void editColumnAttributesAt(int column);
+  void editArrayAttributesAt(int column);
   void changeParameterType(int row);
   void changeColumnType(int column);
   void changeArrayType(int column);
@@ -159,6 +184,10 @@ private:
   void searchColumn(int column);
   void searchArray(int column);
   void updatePanelSizing(int32_t pcount, int32_t ccount, int32_t acount);
+  /** Formula tools on the selection in @p view; the slots pass the focused table. */
+  void fillSeries(QTableView *view);
+  void applyNumericalExpression(QTableView *view);
+  void applyTextFormula(QTableView *view);
   bool applyColumnRowFilter(QString *errorText = nullptr, int *visibleRows = nullptr);
   void refreshColumnRowFilter(bool showMessageOnError);
   void message(const QString &text);
@@ -174,17 +203,45 @@ private:
   bool asciiSave;
 
   QPlainTextEdit *consoleEdit;
+  QDockWidget *consoleDock;
   QComboBox *pageCombo;
-  QRadioButton *asciiBtn;
-  QRadioButton *binaryBtn;
+  QToolButton *asciiBtn;
+  QToolButton *binaryBtn;
+
+  QToolBar *mainToolBar;
+  QToolButton *pagePrevBtn;
+  QToolButton *pageNextBtn;
+  QLabel *pageCountLabel;
+  QAction *filterAction;
+  QAction *plotAction;
 
   QTableView *paramView;
   QTableView *columnView;
   QTableView *arrayView;
-  QGroupBox *paramBox;
-  QGroupBox *colBox;
-  QGroupBox *arrayBox;
+  TwoLineHeaderView *columnHeader;
+  TwoLineHeaderView *arrayHeader;
+  DataPanel *paramBox;
+  DataPanel *colBox;
+  DataPanel *arrayBox;
   QSplitter *dataSplitter;
+  QFrame *filterChip;
+  QToolButton *filterChipText;
+  QLineEdit *columnSearchEdit;
+
+  QLabel *modifiedLabel;
+  QLabel *pathLabel;
+  QLabel *pageStatusLabel;
+  QLabel *cellStatusLabel;
+  QLabel *rowsStatusLabel;
+  QLabel *statusMessageLabel;
+  QLabel *undoStatusLabel;
+  QToolButton *messagesButton;
+  QTimer *statusMessageTimer;
+  int unreadMessages;
+  QPointer<QTableView> lastCellView;
+  int visibleColumnRows;
+  bool applyingTheme;
+  QVector<IconBinding> iconBindings;
   ParameterPageModel *paramModel;
   ColumnPageModel *columnModel;
   ArrayPageModel *arrayModel;

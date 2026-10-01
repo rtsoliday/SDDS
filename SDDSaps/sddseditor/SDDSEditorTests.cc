@@ -12,6 +12,7 @@
 #include <QElapsedTimer>
 #include <QBrush>
 #include <QCheckBox>
+#include <clocale>
 
 /** Fail with a named assertion that is attributable to this test program. */
 static void require(bool condition, const char *message) {
@@ -802,6 +803,428 @@ public:
         require(!QFileInfo::exists(QString::fromUtf8(argument)), "plot snapshot cleaned after process exits");
     fprintf(stdout, "PASS plotting unsaved snapshot and cleanup\n");
   }
+
+  /** Regressions found in the code review: parsing, undo, export, resize, sort, filters. */
+  static void reviewFixes(const QString &root) {
+    ExpressionContext ctx = {};
+    long double value = 0;
+    require(evaluateExpressionText("-2^2", ctx, &value) && value == -4.0L, "power binds tighter than unary minus");
+    require(evaluateExpressionText("2^-1", ctx, &value) && value == 0.5L, "negative exponent");
+    require(evaluateExpressionText("2^3^2", ctx, &value) && value == 512.0L, "power is right associative");
+    require(evaluateExpressionText("-3*2", ctx, &value) && value == -6.0L, "leading minus still works");
+
+    const double tenth = 0.1;
+    const float tenthF = 0.1f;
+    require(sddsValueToString(&tenth, 0, SDDS_DOUBLE) == "0.1", "doubles load as shortest exact text");
+    require(sddsValueToString(&tenthF, 0, SDDS_FLOAT) == "0.1", "floats load as shortest exact text");
+    require(QString("0.1").toDouble() == tenth && canonicalizeForDisplay("0.10000000000000001", SDDS_DOUBLE) == "0.1",
+            "display canonicalization is shortest and exact");
+
+    // The save format is not part of structural undo.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.binaryBtn->setChecked(true);
+      acceptDialog("Insert Rows", [](QDialog *) {});
+      editor.insertColumnRows();
+      editor.undoStack->undo();
+      require(editor.binaryBtn->isChecked() && !editor.asciiBtn->isChecked(), "undo keeps the binary save choice");
+    }
+
+    // HDF object names may not contain '/'.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineParameter(&editor.dataset, "dnux/dp", nullptr, nullptr, nullptr,
+                                   nullptr, SDDS_DOUBLE, nullptr) >= 0, "define slash parameter");
+      require(SDDS_SaveLayout(&editor.dataset), "save slash layout");
+      editor.pages[0].parameters = {"2.5"};
+      editor.populateModels();
+      const QString path = root + "/slash.h5";
+      require(editor.writeHDF(path), "export names containing '/' to HDF");
+      hid_t file = H5Fopen(QFile::encodeName(path).constData(), H5F_ACC_RDONLY, H5P_DEFAULT);
+      require(file >= 0, "reopen HDF export");
+      require(H5Lexists(file, "/page1/parameters/dnux%2Fdp", H5P_DEFAULT) > 0, "slash is percent-encoded");
+      H5Fclose(file);
+    }
+
+    // Resizing keeps elements at their coordinates.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      acceptDialog("Resize Array", [](QDialog *dialog) {
+        const auto boxes = dialog->findChildren<QSpinBox *>();
+        require(boxes.size() == 2, "two dimension boxes");
+        boxes[0]->setValue(2);
+        boxes[1]->setValue(3);
+      });
+      editor.resizeArray(0);
+      require(editor.pages[0].arrays[0].values == QVector<QString>({"10", "20", "", "30", "40", ""}),
+              "growing the last dimension keeps rows aligned");
+    }
+
+    // NaN sorts last in both directions.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineColumn(&editor.dataset, "D", nullptr, nullptr, nullptr, nullptr, SDDS_DOUBLE, 0) >= 0,
+              "define double column");
+      require(SDDS_SaveLayout(&editor.dataset), "save double column");
+      editor.pages[0].columns = {{"1", "2", "3", "4"}, {"3", "nan", "1", "2"}};
+      editor.populateModels();
+      editor.sortColumn(1, Qt::AscendingOrder);
+      require(editor.pages[0].columns[1] == QVector<QString>({"1", "2", "3", "nan"}), "ascending sort puts NaN last");
+      editor.sortColumn(1, Qt::DescendingOrder);
+      require(editor.pages[0].columns[1] == QVector<QString>({"3", "2", "1", "nan"}), "descending sort puts NaN last");
+    }
+
+    // Edits never reach rows hidden by the row filter.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.show();
+      editor.activateWindow();
+      editor.columnView->setFocus();
+      QCoreApplication::processEvents();
+      editor.rowFilterExpression = "X!=1";
+      editor.rowFilterActive = true;
+      editor.refreshColumnRowFilter(false);
+      require(editor.columnView->isRowHidden(1), "filter hides the middle row");
+      editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+      QApplication::clipboard()->setText("7\n8");
+      editor.paste();
+      require(editor.pages[0].columns[0] == QVector<QString>({"7", "1", "8"}), "paste skips hidden rows");
+      editor.columnView->selectionModel()->select(
+          QItemSelection(editor.columnModel->index(0, 0), editor.columnModel->index(2, 0)),
+          QItemSelectionModel::ClearAndSelect);
+      editor.deleteColumnRows();
+      require(editor.pages[0].columns[0] == QVector<QString>({"1"}), "deleting rows keeps hidden rows");
+    }
+
+    // A fixed value must match the parameter type.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      acceptDialog("New Parameter", [](QDialog *dialog) {
+        const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        fields[0]->setText("Bad");
+        fields[5]->setText("abc");
+        for (QRadioButton *button : dialog->findChildren<QRadioButton *>())
+          if (button->text() == "long")
+            button->setChecked(true);
+      });
+      editor.insertParameter();
+      require(editor.dataset.layout.n_parameters == 0, "invalid fixed value is rejected");
+    }
+
+    // Columns without rows can still have their attributes edited.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.pages[0].columns[0].clear();
+      editor.populateModels();
+      require(editor.columnModel->rowCount() == 0, "column has no rows");
+      acceptDialog("Column Attributes", [](QDialog *dialog) {
+        dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[2]->setText("mm");
+      });
+      editor.editColumnAttributesAt(0);
+      require(QString(editor.dataset.layout.column_definition[0].units) == "mm", "zero-row column attributes");
+    }
+    fprintf(stdout, "PASS review fixes: expressions, number text, undo format, HDF names, resize, sort, filters\n");
+  }
+
+  /** Pasting a non-contiguous copy leaves cells that were not selected unchanged. */
+  static void sparseClipboard() {
+    SDDSEditor editor;
+    setup(editor);
+    editor.show();
+    editor.activateWindow();
+    editor.columnView->setFocus();
+    QCoreApplication::processEvents();
+    require(QApplication::focusWidget() == editor.columnView, "column table has focus for clipboard test");
+    QItemSelectionModel *selection = editor.columnView->selectionModel();
+    selection->clearSelection();
+    selection->select(editor.columnModel->index(0, 0), QItemSelectionModel::Select);
+    selection->select(editor.columnModel->index(2, 0), QItemSelectionModel::Select);
+    editor.copy();
+    require(QApplication::clipboard()->text() == "3\n\n2", "sparse copy keeps a text gap for other programs");
+    editor.pages[0].columns[0] = {"7", "8", "9"};
+    editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+    editor.paste();
+    require(editor.pages[0].columns[0] == QVector<QString>({"3", "8", "2"}),
+            "sparse paste leaves unselected cells unchanged");
+    editor.undoStack->undo();
+    require(editor.pages[0].columns[0] == QVector<QString>({"7", "8", "9"}), "sparse paste is one undo step");
+    QApplication::clipboard()->setText("5\n\n6");
+    editor.paste();
+    require(editor.pages[0].columns[0] == QVector<QString>({"5", "", "6"}),
+            "external text still pastes empty fields");
+
+    editor.openArrayViewer(0);
+    ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+    ArraySliceModel *grid = viewer->sliceModel();
+    QItemSelectionModel *gridSelection = viewer->table()->selectionModel();
+    gridSelection->clearSelection();
+    gridSelection->select(grid->index(0, 0), QItemSelectionModel::Select);
+    gridSelection->select(grid->index(1, 1), QItemSelectionModel::Select);
+    viewer->copySelection(false);
+    const QString copied = QApplication::clipboard()->text();
+    require(copied == "10\t\n\t40", "array viewer sparse copy text");
+    editor.pages[0].arrays[0].values = {"1", "2", "3", "4"};
+    viewer->table()->setCurrentIndex(grid->index(0, 0));
+    require(viewer->pasteText(copied), "array viewer sparse paste");
+    require(editor.pages[0].arrays[0].values == QVector<QString>({"10", "2", "3", "40"}),
+            "array viewer sparse paste leaves unselected cells unchanged");
+    fprintf(stdout, "PASS sparse copy and paste\n");
+  }
+
+  /** Toolbar, panel headers, filter chip, status bar and themes reflect editor state. */
+  static void interfaceChrome(const QString &root) {
+    SDDSEditor editor;
+    setup(editor);
+    require(SDDS_DefineParameter(&editor.dataset, "Energy", nullptr, "MeV", "Beam energy",
+                                 nullptr, SDDS_DOUBLE, nullptr) >= 0, "define described parameter");
+    require(SDDS_SaveLayout(&editor.dataset), "save described parameter layout");
+    editor.pages[0].parameters = {"7000"};
+    editor.populateModels();
+    editor.show();
+    QCoreApplication::processEvents();
+    require(!editor.dirty, "building the interface leaves the document unmodified");
+
+    ParameterPageModel *params = editor.paramModel;
+    require(params->columnCount() == 4, "parameter table shows type, units and description");
+    require(params->index(0, ParameterPageModel::TypeColumn).data().toString() == "double", "parameter type column");
+    require(params->index(0, ParameterPageModel::UnitsColumn).data().toString() == "MeV", "parameter units column");
+    require(params->index(0, ParameterPageModel::DescriptionColumn).data().toString() == "Beam energy",
+            "parameter description column");
+    require(!editor.paramView->isColumnHidden(ParameterPageModel::UnitsColumn), "used units column is shown");
+    const QModelIndex typeCell = params->index(0, ParameterPageModel::TypeColumn);
+    require(!(params->flags(typeCell) & (Qt::ItemIsEditable | Qt::ItemIsSelectable)), "metadata cells are read-only");
+    const int undoCount = editor.undoStack->count();
+    require(!applyCellEditWithUndo(editor.undoStack, params, typeCell, "long"), "metadata edits are rejected");
+    require(editor.undoStack->count() == undoCount, "rejected metadata edit adds no undo entry");
+    editor.paramView->setCurrentIndex(typeCell);
+    require(editor.paramView->currentIndex().column() == ParameterPageModel::ValueColumn,
+            "clicking metadata keeps the value cell current");
+
+    require(editor.columnModel->headerData(0, Qt::Horizontal, HeaderSubtitleRole).toString() == "long64",
+            "column header subtitle shows type");
+    require(editor.columnModel->headerData(0, Qt::Horizontal, Qt::TextAlignmentRole).toInt() ==
+                int(Qt::AlignRight | Qt::AlignVCenter), "numeric columns align right");
+    require(editor.arrayModel->headerData(0, Qt::Horizontal, HeaderSubtitleRole).toString().contains(
+                QString("2%12").arg(QChar(0x00D7))), "array header subtitle shows dimensions");
+    require(!editor.pagePrevBtn->isEnabled() && !editor.pageNextBtn->isEnabled(), "single page disables page arrows");
+    require(editor.colBox->isChecked() && editor.arrayBox->isChecked(), "populated panels are expanded");
+
+    editor.rowFilterExpression = "X>1";
+    editor.rowFilterActive = true;
+    editor.refreshColumnRowFilter(false);
+    require(editor.filterChip->isVisibleTo(editor.colBox), "active filter shows the filter chip");
+    require(editor.filterAction->isChecked(), "active filter checks the toolbar action");
+    require(editor.visibleColumnRows == 2, "filter chip counts visible rows");
+    require(editor.rowsStatusLabel->text() == "2 of 3 rows", "status bar shows filtered row count");
+    editor.clearColumnRowFilter();
+    require(!editor.filterChip->isVisibleTo(editor.colBox) && !editor.filterAction->isChecked(),
+            "clearing the filter hides the chip");
+
+    editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+    editor.columnSearchEdit->setText("2");
+    editor.findInColumnPanel();
+    require(editor.columnView->currentIndex().row() == 2, "column search selects the next match");
+    require(editor.cellStatusLabel->text().startsWith("Row 3"), "status bar follows the current cell");
+
+    editor.unreadMessages = 0;
+    editor.message("checked");
+    require(editor.messagesButton->text() == "Messages (1)", "hidden log counts unread messages");
+    editor.messagesButton->setChecked(true);
+    QCoreApplication::processEvents();
+    require(editor.consoleDock->isVisible() && editor.messagesButton->text() == "Messages",
+            "opening the log clears the unread count");
+
+    editor.grab().save(root + "/interface-light.png");
+    editor.applyTheme(true);
+    QCoreApplication::processEvents();
+    require(editor.darkPalette && QApplication::palette().color(QPalette::Window).lightness() < 128,
+            "dark theme installs a dark palette");
+    editor.grab().save(root + "/interface-dark.png");
+    editor.applyTheme(false);
+    require(!editor.dirty, "theme changes leave the document unmodified");
+    fprintf(stdout, "PASS toolbar, panel headers, filter chip, status bar, and themes\n");
+  }
+
+  /** Accept a dialog once it is shown, including one opened after a context menu closes. */
+  static void acceptDialogWhenShown(const QString &title, std::function<void(QDialog *)> configure) {
+    QTimer *timer = new QTimer;
+    auto attempts = std::make_shared<int>(0);
+    QObject::connect(timer, &QTimer::timeout, [timer, attempts, title, configure]() {
+      for (QWidget *widget : QApplication::topLevelWidgets()) {
+        QDialog *dialog = qobject_cast<QDialog *>(widget);
+        if (dialog && dialog->isVisible() && dialog->windowTitle() == title) {
+          timer->stop();
+          timer->deleteLater();
+          configure(dialog);
+          dialog->accept();
+          return;
+        }
+      }
+      require(++*attempts < 500, "expected editor dialog is shown");
+    });
+    timer->start(10);
+  }
+
+  /** Pick a context-menu entry through the menu's own keyboard activation. */
+  static void chooseMenuItem(const QString &text) {
+    QTimer::singleShot(0, [text]() {
+      QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+      require(menu, "context menu is open");
+      for (QAction *action : menu->actions()) {
+        if (action->text() == text) {
+          menu->setActiveAction(action);
+          QKeyEvent press(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+          QApplication::sendEvent(menu, &press);
+          return;
+        }
+      }
+      require(false, "context menu item exists");
+    });
+  }
+
+  /** Regressions for header menus, numeric text, filters and attribute encoding. */
+  static void menuAndTextFixes() {
+    // A model reset clears the selection silently; header menus must not reuse it.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      for (const char *name : {"Y", "Z"})
+        require(SDDS_DefineColumn(&editor.dataset, name, nullptr, nullptr, nullptr, nullptr,
+                                  SDDS_LONG64, 0) >= 0, "define extra column");
+      require(SDDS_SaveLayout(&editor.dataset), "save extra columns");
+      editor.pages[0].columns = {{"1"}, {"2"}, {"3"}};
+      editor.populateModels();
+      editor.show();
+      QCoreApplication::processEvents();
+      QItemSelectionModel *selection = editor.columnView->selectionModel();
+      selection->select(editor.columnModel->index(0, 1), QItemSelectionModel::Select);
+      selection->select(editor.columnModel->index(0, 2), QItemSelectionModel::Select);
+      editor.populateModels();
+      require(selection->selectedIndexes().isEmpty(), "model reset clears the selection");
+      chooseMenuItem("Delete");
+      editor.showColumnMenu(editor.columnView, 1, editor.columnView->mapToGlobal(QPoint(5, 5)));
+      require(editor.dataset.layout.n_columns == 2 &&
+              QString(editor.dataset.layout.column_definition[1].name) == "Z",
+              "header delete after a reset removes only the clicked column");
+    }
+
+    // Formula tools started from a header menu act on that table, not the focused one.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineParameter(&editor.dataset, "P", nullptr, nullptr, nullptr, nullptr,
+                                   SDDS_DOUBLE, nullptr) >= 0, "define focus parameter");
+      require(SDDS_SaveLayout(&editor.dataset), "save focus parameter");
+      editor.pages[0].parameters = {"1"};
+      editor.populateModels();
+      editor.show();
+      editor.activateWindow();
+      editor.paramView->setFocus();
+      QCoreApplication::processEvents();
+      require(QApplication::focusWidget() == editor.paramView, "parameter table has focus");
+      editor.columnView->selectionModel()->select(
+          QItemSelection(editor.columnModel->index(0, 0), editor.columnModel->index(2, 0)),
+          QItemSelectionModel::ClearAndSelect);
+      chooseMenuItem("Fill Series...");
+      acceptDialogWhenShown("Fill Series", [](QDialog *dialog) {
+        const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        fields[0]->setText("5");
+        fields[1]->setText("1");
+      });
+      editor.showColumnMenu(editor.columnView, 0, editor.columnView->mapToGlobal(QPoint(5, 5)));
+      require(editor.pages[0].columns[0] == QVector<QString>({"5", "6", "7"}) &&
+              editor.pages[0].parameters[0] == "1",
+              "header menu fill series fills the column selection");
+    }
+
+    // Computed values keep the precision of the target type.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineColumn(&editor.dataset, "D", nullptr, nullptr, nullptr, nullptr,
+                                SDDS_DOUBLE, 0) >= 0, "define double column");
+      require(SDDS_SaveLayout(&editor.dataset), "save double column");
+      editor.pages[0].columns = {{"1", "2", "3"}, {"0.30000000000000004", "0.1", "1.2345678901234567e+300"}};
+      editor.populateModels();
+      editor.show();
+      editor.activateWindow();
+      editor.columnView->setFocus();
+      QCoreApplication::processEvents();
+      editor.columnView->selectionModel()->select(
+          QItemSelection(editor.columnModel->index(0, 1), editor.columnModel->index(2, 1)),
+          QItemSelectionModel::ClearAndSelect);
+      acceptDialogWhenShown("Apply Numerical Expression", [](QDialog *dialog) {
+        dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[0]->setText("x");
+      });
+      editor.applyNumericalExpressionSelection();
+      require(editor.pages[0].columns[1] == QVector<QString>({"0.30000000000000004", "0.1", "1.2345678901234567e+300"}),
+              "identity expression leaves doubles unchanged");
+      editor.columnView->selectionModel()->select(
+          QItemSelection(editor.columnModel->index(0, 0), editor.columnModel->index(2, 0)),
+          QItemSelectionModel::ClearAndSelect);
+      acceptDialogWhenShown("Fill Series", [](QDialog *dialog) {
+        const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        fields[0]->setText("100000000000000000");
+        fields[1]->setText("64");
+      });
+      editor.fillSeries(editor.columnView);
+      require(editor.pages[0].columns[0] ==
+                  QVector<QString>({"100000000000000000", "100000000000000064", "100000000000000128"}),
+              "large integer series is written as integers");
+      require(numericResultText(0.1f, SDDS_FLOAT) == "0.1", "float results use shortest text");
+      long double tooLargeForFloat = 0;
+      require(parseLongDoubleStrict("1e40", &tooLargeForFloat), "parse float overflow value");
+      require(!validateTextForType(numericResultText(tooLargeForFloat, SDDS_FLOAT), SDDS_FLOAT, false),
+              "float overflow is rejected rather than turned into infinity");
+    }
+
+    // Empty text is not the number zero in string comparisons.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineColumn(&editor.dataset, "S", nullptr, nullptr, nullptr, nullptr,
+                                SDDS_STRING, 0) >= 0, "define string column");
+      require(SDDS_SaveLayout(&editor.dataset), "save string column");
+      editor.pages[0].columns = {{"", "1", "2"}, {"0", "", "a"}};
+      editor.populateModels();
+      editor.rowFilterActive = true;
+      int visible = 0;
+      editor.rowFilterExpression = "S == \"\"";
+      require(editor.applyColumnRowFilter(nullptr, &visible) && visible == 1 &&
+              !editor.columnView->isRowHidden(1), "empty string matches only empty cells");
+      editor.rowFilterExpression = "S == \"0\"";
+      require(editor.applyColumnRowFilter(nullptr, &visible) && visible == 1 &&
+              !editor.columnView->isRowHidden(0), "zero string matches only zero");
+      editor.rowFilterExpression = "X == 0";
+      require(editor.applyColumnRowFilter(nullptr, &visible) && visible == 1 &&
+              !editor.columnView->isRowHidden(0), "empty numeric cells compare as their saved zero");
+      editor.rowFilterExpression = "X < 1";
+      require(editor.applyColumnRowFilter(nullptr, &visible) && visible == 1, "empty numeric cells order as zero");
+    }
+
+    // Accepting an attribute dialog unchanged keeps non-ASCII text byte for byte.
+    {
+      SDDSEditor editor;
+      setup(editor);
+      const QString micro = QString(QChar(0x00B5)) + "m";
+      require(replaceSharedLayoutString(&editor.dataset.layout.column_definition[0].units,
+                                        &editor.dataset.original_layout.column_definition[0].units,
+                                        micro), "set non-ASCII units");
+      const QByteArray before(editor.dataset.layout.column_definition[0].units);
+      acceptDialog("Column Attributes", [](QDialog *) {});
+      editor.editColumnAttributesAt(0);
+      require(QByteArray(editor.dataset.layout.column_definition[0].units) == before,
+              "attribute dialog preserves non-ASCII units");
+    }
+    fprintf(stdout, "PASS header menus, computed number text, empty filter values, attribute encoding\n");
+  }
 };
 
 /** Run the named regressions and retain fixtures under the build directory. */
@@ -809,6 +1232,7 @@ int main(int argc, char **argv) {
   setbuf(stdout, nullptr);
   fprintf(stdout, "sddseditor_tests: initializing Qt offscreen\n");
   QApplication app(argc, argv);
+  setlocale(LC_NUMERIC, "C"); // Match main.cc: SDDS numbers always use a decimal point.
   QTemporaryDir artifacts(QCoreApplication::applicationDirPath() + "/test-artifacts-XXXXXX");
   require(artifacts.isValid(), "create test artifacts in object directory");
   artifacts.setAutoRemove(false);
@@ -835,6 +1259,10 @@ int main(int argc, char **argv) {
   SDDSEditorTests::filters();
   SDDSEditorTests::search();
   SDDSEditorTests::plot(artifacts.path());
+  SDDSEditorTests::reviewFixes(artifacts.path());
+  SDDSEditorTests::sparseClipboard();
+  SDDSEditorTests::interfaceChrome(artifacts.path());
+  SDDSEditorTests::menuAndTextFixes();
   fprintf(stdout, "PASS all sddseditor regressions\n");
   return 0;
 }

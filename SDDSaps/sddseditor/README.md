@@ -44,6 +44,50 @@ This checks that the panels fill the splitter when loading before or after the
 window is shown and when resizing it. Screenshots are retained with the test
 artifacts; the supplied file is never saved or modified.
 
+## Interface
+
+The toolbar holds Open, Save, Undo/Redo, page navigation (previous/next arrows
+and a page list), Filter rows, Plot (current column), Array viewer, and the
+ASCII/Binary save format. Parameters, columns and arrays are shown in separate
+panels. Click a panel title to collapse or expand it, or use the **View** menu.
+Each panel header shows its count and common actions (Insert and Attributes;
+Attributes edits the definition of the current cell's parameter, column or array).
+
+Floating-point values are shown with the fewest digits that convert back to
+exactly the same number (0.1, not 0.10000000000000001). Rows hidden by the row
+filter are never changed: copy, paste, delete, fill and formula operations act
+only on visible rows, and a paste fills successive visible rows. Resizing an
+array keeps each element at its indices. Export HDF writes `/` and `%` in SDDS
+names as `%2F` and `%25`, because HDF5 uses `/` as a path separator. Column and
+array headers have an **Attributes...** menu item, so definitions without rows
+can still be edited.
+
+Copying a non-contiguous selection copies the rectangle around it. Other
+programs receive empty fields for the unselected cells. Pasting inside the
+editor or an array viewer leaves the matching target cells unchanged.
+
+The parameter table lists Name, Type, Units, Value and Description. Only the
+value can be edited; double-click the type to change it, or units/description
+to open the attribute editor. Units and Description are hidden when no
+parameter defines them. Column and array headers show the name plus the type,
+array shape and units. Numeric data is right-aligned.
+
+When a row filter is active, a chip next to the Columns title shows the
+expression and visible row count. Click it to edit the filter or × to clear
+it. The Columns search box finds the next match in the current column.
+
+The status bar shows the save state, file, page, current cell, row counts and
+the last undoable action. Messages that used to appear in the top console are
+shown briefly in the status bar and kept in the message log. Open the log with
+**Messages** (Ctrl+Shift+L); unread messages are counted on the button.
+
+The editor uses its own light or dark palette, chosen from the desktop palette
+at startup (Qt 6.5+ also follows later desktop changes). Icons are drawn in
+code, so the editor needs only the Qt Widgets module. The table font is the
+first installed of Source Code Pro, JetBrains Mono, Cascadia Mono, Consolas,
+Menlo, DejaVu Sans Mono or Liberation Mono, falling back to the system
+fixed-width font.
+
 ## Multidimensional array viewer
 
 Right-click an array header or cell and choose **Open Array Viewer...**, or use

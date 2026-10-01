@@ -67,6 +67,27 @@
 #include <cmath>
 #include <QLocale>
 #include <QResizeEvent>
+#include <QToolBar>
+#include <QToolButton>
+#include <QStatusBar>
+#include <QFrame>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
+#include <QIcon>
+#include <QStyle>
+#include <QStyleOptionHeader>
+#include <QFontInfo>
+#include <QFontDatabase>
+#include <QFontMetrics>
+#include <QGuiApplication>
+#include <QStyleHints>
+#include <QSplitterHandle>
+#include <QPaintEvent>
+#include <QMimeData>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonValue>
 
 /*
  * On Windows, some headers define min/max as macros, which breaks code like
@@ -366,6 +387,32 @@ static QString truncateForMessage(const QString &text, int maxLen = 80) {
 }
 
 /*
+ * Shortest text that converts back to exactly the same value.  This is as
+ * lossless as printing max_digits10 digits, but shows 0.1 rather than
+ * 0.10000000000000001.
+ */
+static QString shortestDoubleText(double value) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 7, 0)
+  return QString::number(value, 'g', QLocale::FloatingPointShortest);
+#else
+  return QString::number(value, 'g', std::numeric_limits<double>::max_digits10);
+#endif
+}
+
+/* Qt has no shortest float formatter; try increasing precision until the text round-trips. */
+static QString shortestFloatText(float value) {
+  if (std::isfinite(value)) {
+    for (int precision = std::numeric_limits<float>::digits10;
+         precision < std::numeric_limits<float>::max_digits10; ++precision) {
+      const QString text = QString::number(static_cast<double>(value), 'g', precision);
+      if (text.toFloat() == value)
+        return text;
+    }
+  }
+  return QString::number(static_cast<double>(value), 'g', std::numeric_limits<float>::max_digits10);
+}
+
+/*
  * Convert directly from the typed buffers owned by SDDS.  The SDDS
  * Get*InString helpers allocate one C string per value and the editor then
  * immediately copies every one into a QString.  Avoiding that intermediate
@@ -389,11 +436,9 @@ static QString sddsValueToString(const void *data, int64_t index, int32_t type) 
   case SDDS_ULONG64:
     return QString::number(static_cast<qulonglong>(static_cast<const uint64_t *>(data)[index]));
   case SDDS_FLOAT:
-    return QString::number(static_cast<double>(static_cast<const float *>(data)[index]),
-                           'g', std::numeric_limits<float>::max_digits10);
+    return shortestFloatText(static_cast<const float *>(data)[index]);
   case SDDS_DOUBLE:
-    return QString::number(static_cast<const double *>(data)[index], 'g',
-                           std::numeric_limits<double>::max_digits10);
+    return shortestDoubleText(static_cast<const double *>(data)[index]);
   case SDDS_LONGDOUBLE: {
     char buffer[128];
     const int written = snprintf(buffer, sizeof(buffer), "%.*Lg",
@@ -648,6 +693,40 @@ static int dimProduct(const QVector<int> &dims) {
   return (int)prod;
 }
 
+/**
+ * Copy array values into a new shape so every surviving element keeps its
+ * coordinates (SDDS stores the last dimension fastest).  New cells are empty.
+ */
+static QVector<QString> reshapeArrayValues(const QVector<QString> &values,
+                                           const QVector<int> &oldDims,
+                                           const QVector<int> &newDims,
+                                           int newSize) {
+  QVector<QString> result(std::max(0, newSize));
+  if (oldDims.size() != newDims.size() || dimProduct(oldDims) != values.size()) {
+    for (int i = 0; i < result.size() && i < values.size(); ++i)
+      result[i] = values[i];
+    return result;
+  }
+  const int count = oldDims.size();
+  QVector<int> coord(count, 0);
+  for (int flat = 0; flat < values.size(); ++flat) {
+    int rest = flat;
+    for (int d = count - 1; d >= 0; --d) {
+      coord[d] = rest % oldDims[d];
+      rest /= oldDims[d];
+    }
+    int64_t target = 0;
+    bool inside = true;
+    for (int d = 0; d < count && inside; ++d) {
+      inside = coord[d] < newDims[d];
+      target = target * newDims[d] + coord[d];
+    }
+    if (inside && target < result.size())
+      result[static_cast<int>(target)] = values[flat];
+  }
+  return result;
+}
+
 static bool validateDefinitionName(QWidget *parent, const QString &name,
                                    const char *dataClass,
                                    int selfIndex, int count,
@@ -773,6 +852,23 @@ static void collectSelectedColumns(QTableView *view, QSet<int> *columns) {
       columns->insert(idx.column());
 }
 
+/*
+ * Selected cells the user can see.  A selection dragged across rows hidden by
+ * the row filter also covers those rows in the selection model, so edits and
+ * deletions must not use selectionModel()->selectedIndexes() directly.
+ */
+static QModelIndexList visibleSelectedIndexes(const QTableView *view) {
+  QModelIndexList visible;
+  if (!view || !view->selectionModel())
+    return visible;
+  const QModelIndexList selected = view->selectionModel()->selectedIndexes();
+  visible.reserve(selected.size());
+  for (const QModelIndex &idx : selected)
+    if (idx.isValid() && !view->isRowHidden(idx.row()) && !view->isColumnHidden(idx.column()))
+      visible.append(idx);
+  return visible;
+}
+
 static QVector<int> selectedRowsOrFallback(QTableView *view, int maxRows,
                                            int fallbackRow) {
   QSet<int> selected;
@@ -843,7 +939,7 @@ static QString canonicalizeForDisplay(const QString &text, int type) {
     bool ok = true;
     double val = text.toDouble(&ok);
     if (ok)
-      return QLocale::c().toString(val, 'g', std::numeric_limits<double>::max_digits10);
+      return shortestDoubleText(val);
   } else if (type == SDDS_LONGDOUBLE) {
     //long double val = std::stold(text.toStdString());
     //return QString::asprintf("%.*Lg", std::numeric_limits<long double>::max_digits10, val);
@@ -851,7 +947,7 @@ static QString canonicalizeForDisplay(const QString &text, int type) {
     bool ok = true;
     float val = text.toFloat(&ok);
     if (ok)
-      return QLocale::c().toString(val, 'g', std::numeric_limits<float>::max_digits10);
+      return shortestFloatText(val);
   }
   return text;
 }
@@ -860,7 +956,9 @@ class SetDataCommand : public QUndoCommand {
 public:
   SetDataCommand(QAbstractItemModel *model, const QModelIndex &index,
                  const QString &oldVal, const QString &newVal)
-      : m(model), row(index.row()), column(index.column()), oldValue(oldVal), newValue(newVal) {}
+      : m(model), row(index.row()), column(index.column()), oldValue(oldVal), newValue(newVal) {
+    setText(QObject::tr("Edit Cell"));
+  }
 
   void undo() override { apply(oldValue); }
   void redo() override { apply(newValue); }
@@ -882,6 +980,9 @@ private:
 static bool applyCellEditWithUndo(QUndoStack *undoStack, QAbstractItemModel *model,
                                   const QModelIndex &index, const QString &newValue) {
   if (!model || !index.isValid())
+    return false;
+  // Read-only metadata cells, such as parameter types, never become undo entries.
+  if (!(model->flags(index) & Qt::ItemIsEditable))
     return false;
   const QString oldValue = index.data(Qt::EditRole).toString();
   if (oldValue == newValue)
@@ -936,13 +1037,13 @@ private:
   }
 
   long double parseTerm() {
-    long double lhs = parsePower();
+    long double lhs = parseUnary();
     while (ok) {
       skipWs();
       if (match('*'))
-        lhs *= parsePower();
+        lhs *= parseUnary();
       else if (match('/')) {
-        long double rhs = parsePower();
+        long double rhs = parseUnary();
         if (rhs == 0.0L) {
           ok = false;
           return 0.0L;
@@ -954,11 +1055,13 @@ private:
     return lhs;
   }
 
+  /* '^' binds tighter than a leading sign (-2^2 == -4) and is right
+     associative; its exponent may carry a sign (2^-1 == 0.5). */
   long double parsePower() {
-    long double base = parseUnary();
+    long double base = parsePrimary();
     skipWs();
     if (match('^')) {
-      long double expv = parsePower();
+      long double expv = parseUnary();
       base = powl(base, expv);
     }
     return base;
@@ -970,7 +1073,7 @@ private:
       return parseUnary();
     if (match('-'))
       return -parseUnary();
-    return parsePrimary();
+    return parsePower();
   }
 
   long double parsePrimary() {
@@ -1104,8 +1207,12 @@ struct RowFilterValue {
   long double number;
 };
 
+/*
+ * Empty text is not a number here, so "" never equals "0" in a string
+ * comparison; the resolver supplies "0" for empty numeric cells instead.
+ */
 static bool parseNumericValueForFilter(const QString &text, long double *out) {
-  return parseLongDoubleStrict(text, out);
+  return !text.trimmed().isEmpty() && parseLongDoubleStrict(text, out);
 }
 
 /** Compare integers exactly even on platforms with 64-bit long double. */
@@ -1113,7 +1220,7 @@ static bool compareIntegerText(const QString &left, const QString &right, int *r
   auto normalize = [](QString text, QString *digits, bool *negative) {
     text = text.trimmed();
     if (text.isEmpty())
-      text = "0";
+      return false;
     *negative = text.startsWith('-');
     if (text.startsWith('-') || text.startsWith('+'))
       text.remove(0, 1);
@@ -1599,6 +1706,34 @@ static QString longDoubleToText(long double value) {
                            value);
 }
 
+/*
+ * Text for a computed value stored in a cell of the given type.  Where long
+ * double is no wider than double (MSVC), longDoubleToText() keeps only 16
+ * digits, so doubles would not round-trip and large integers would print in
+ * exponent form that integer columns reject.  Values outside the type's range
+ * keep the generic text so validation still rejects them.
+ */
+static QString numericResultText(long double value, int type) {
+  if (std::isfinite(value)) {
+    if (type == SDDS_DOUBLE ||
+        (type == SDDS_LONGDOUBLE &&
+         std::numeric_limits<long double>::digits <= std::numeric_limits<double>::digits)) {
+      if (fabsl(value) <= std::numeric_limits<double>::max())
+        return shortestDoubleText(static_cast<double>(value));
+    } else if (type == SDDS_FLOAT) {
+      if (fabsl(value) <= std::numeric_limits<float>::max())
+        return shortestFloatText(static_cast<float>(value));
+    } else if (SDDS_INTEGER_TYPE(type) && value == floorl(value)) {
+      // 2^63 and 2^64 are exact in every long double format.
+      if (value >= -9223372036854775808.0L && value < 9223372036854775808.0L)
+        return QString::number(static_cast<qlonglong>(value));
+      if (value >= 0 && value < 18446744073709551616.0L)
+        return QString::number(static_cast<qulonglong>(value));
+    }
+  }
+  return longDoubleToText(value);
+}
+
 static QString applyTemplateVariables(const QString &templ,
                                       const QString &x,
                                       const QString &a,
@@ -1714,11 +1849,9 @@ bool restoreStructuralSnapshot(SDDSEditor *editor, const StructuralSnapshot &sna
     editor->currentPage = 0;
   }
 
-  if (editor->datasetLoaded) {
-    editor->asciiSave = editor->dataset.layout.data_mode.mode == SDDS_ASCII;
-    editor->asciiBtn->setChecked(editor->asciiSave);
-    editor->binaryBtn->setChecked(!editor->asciiSave);
-  }
+  // The ASCII/Binary choice is a save option, not document structure; the
+  // snapshot layout still holds the mode the file was loaded with, so undo and
+  // redo leave the user's current choice alone.
 
   editor->pageCombo->blockSignals(true);
   editor->pageCombo->clear();
@@ -1823,6 +1956,537 @@ private:
   std::function<void()> multiCellPasteHandler;
 };
 
+/* Header data role holding the muted second header line (type, shape, units). */
+static const int HeaderSubtitleRole = Qt::UserRole + 41;
+
+/* Private clipboard format: JSON rows of cell strings, null where a cell was not selected. */
+static const char *const editorCellsMime = "application/x-sddseditor-cells";
+
+static QString middleDot() { return QString(QChar(0x00B7)); }
+
+static int textAdvance(const QFontMetrics &fm, const QString &text) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
+  return fm.horizontalAdvance(text);
+#else
+  return fm.width(text);
+#endif
+}
+
+/** Join non-empty header fragments as "double · m". */
+static QString joinSubtitle(const QStringList &parts) {
+  QStringList kept;
+  for (const QString &part : parts)
+    if (!part.isEmpty())
+      kept << part;
+  return kept.join(QString(" %1 ").arg(middleDot()));
+}
+
+/** Pick an installed monospace font, falling back to the platform fixed font. */
+static QFont preferredTableFont() {
+#if defined(Q_OS_MACOS) || defined(Q_OS_OSX)
+  // macOS text is drawn at 72 points per inch, so match its larger UI font.
+  const qreal pointSize = 12;
+#else
+  const qreal pointSize = 10;
+#endif
+  const char *candidates[] = {"Source Code Pro", "JetBrains Mono", "Cascadia Mono",
+                              "Consolas", "Menlo", "DejaVu Sans Mono", "Liberation Mono"};
+  for (const char *name : candidates) {
+    QFont font(QString::fromLatin1(name));
+    font.setPointSizeF(pointSize);
+    if (QFontInfo(font).family().compare(QString::fromLatin1(name), Qt::CaseInsensitive) == 0)
+      return font;
+  }
+  QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+  font.setPointSizeF(pointSize);
+  return font;
+}
+
+/** Color tokens shared by the editor palette, style sheet and icons. */
+struct EditorTheme {
+  QColor win, chrome, surface, header, border, grid, text, muted;
+  QColor accent, accentSoft, accentText, onAccent, zebra, warn, hover;
+};
+
+static EditorTheme editorTheme(bool dark) {
+  EditorTheme t;
+  if (dark) {
+    t.win = QColor("#16181C");
+    t.chrome = QColor("#1D2025");
+    t.surface = QColor("#1B1E23");
+    t.header = QColor("#252930");
+    t.border = QColor("#363B44");
+    t.grid = QColor("#2A2E35");
+    t.text = QColor("#E6E8EC");
+    t.muted = QColor("#A3ABB8");
+    t.accent = QColor("#7AA7FF");
+    t.accentSoft = QColor("#22324F");
+    t.accentText = QColor("#B9CFFF");
+    t.onAccent = QColor("#0B1220");
+    t.zebra = QColor("#1F2228");
+    t.warn = QColor("#F0A04B");
+    t.hover = QColor("#2A2F37");
+  } else {
+    t.win = QColor("#F4F5F7");
+    t.chrome = QColor("#FBFBFC");
+    t.surface = QColor("#FFFFFF");
+    t.header = QColor("#F1F3F6");
+    t.border = QColor("#DCE0E6");
+    t.grid = QColor("#ECEEF2");
+    t.text = QColor("#1C2230");
+    t.muted = QColor("#5A6374");
+    t.accent = QColor("#2463D6");
+    t.accentSoft = QColor("#E6EEFC");
+    t.accentText = QColor("#1A4FB0");
+    t.onAccent = QColor("#FFFFFF");
+    t.zebra = QColor("#FAFBFC");
+    t.warn = QColor("#A6520A");
+    t.hover = QColor("#ECEFF3");
+  }
+  return t;
+}
+
+static QPalette editorPalette(const EditorTheme &t, QPalette pal) {
+  const QPalette::ColorGroup groups[] = {QPalette::Active, QPalette::Inactive};
+  for (QPalette::ColorGroup g : groups) {
+    pal.setColor(g, QPalette::Window, t.win);
+    pal.setColor(g, QPalette::WindowText, t.text);
+    pal.setColor(g, QPalette::Base, t.surface);
+    pal.setColor(g, QPalette::AlternateBase, t.zebra);
+    pal.setColor(g, QPalette::Text, t.text);
+    pal.setColor(g, QPalette::Button, t.chrome);
+    pal.setColor(g, QPalette::ButtonText, t.text);
+    pal.setColor(g, QPalette::Highlight, t.accent);
+    pal.setColor(g, QPalette::HighlightedText, t.onAccent);
+    pal.setColor(g, QPalette::ToolTipBase, t.surface);
+    pal.setColor(g, QPalette::ToolTipText, t.text);
+    pal.setColor(g, QPalette::Light, t.surface);
+    pal.setColor(g, QPalette::Midlight, t.header);
+    pal.setColor(g, QPalette::Mid, t.border);
+    pal.setColor(g, QPalette::Dark, t.border.darker(130));
+    pal.setColor(g, QPalette::Link, t.accent);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 12, 0)
+    pal.setColor(g, QPalette::PlaceholderText, t.muted);
+#endif
+  }
+  pal.setColor(QPalette::Disabled, QPalette::Window, t.win);
+  pal.setColor(QPalette::Disabled, QPalette::Base, t.win);
+  pal.setColor(QPalette::Disabled, QPalette::Button, t.chrome);
+  pal.setColor(QPalette::Disabled, QPalette::Text, t.muted);
+  pal.setColor(QPalette::Disabled, QPalette::WindowText, t.muted);
+  pal.setColor(QPalette::Disabled, QPalette::ButtonText, t.muted);
+  return pal;
+}
+
+static QString editorStyleSheet(const EditorTheme &t) {
+  QString css = QStringLiteral(
+      "#centralArea { background: @win; }"
+      "QToolBar#mainToolBar { background: @chrome; border: none; border-bottom: 1px solid @border; padding: 4px 8px; spacing: 2px; }"
+      "QToolBar#mainToolBar::separator { background: @border; width: 1px; margin: 6px 6px; }"
+      "QToolBar#mainToolBar QToolButton { border: none; border-radius: 6px; padding: 5px 8px; color: @text; background: transparent; }"
+      "QToolBar#mainToolBar QToolButton:hover { background: @hover; }"
+      "QToolBar#mainToolBar QToolButton:pressed { background: @border; }"
+      "QToolBar#mainToolBar QToolButton:checked { background: @accentSoft; color: @accentText; }"
+      "QToolBar#mainToolBar QToolButton:disabled { color: @muted; }"
+      "QToolBar#mainToolBar QToolButton#pageNav { border: 1px solid @border; background: @surface; padding: 3px; }"
+      "QToolBar#mainToolBar QToolButton#pageNav:hover { background: @hover; }"
+      "QLabel#toolbarLabel { color: @muted; padding: 0px 4px; }"
+      "QFrame#formatSwitch { background: @header; border: 1px solid @border; border-radius: 7px; }"
+      "QToolBar#mainToolBar QFrame#formatSwitch QToolButton { border-radius: 5px; padding: 3px 12px; color: @muted; }"
+      "QToolBar#mainToolBar QFrame#formatSwitch QToolButton:checked { background: @surface; color: @text; }"
+      "QFrame#dataPanel { background: @surface; border: 1px solid @border; border-radius: 8px; }"
+      "QFrame#panelHeader { background: transparent; border: none; }"
+      "QFrame#panelRule { background: @border; border: none; }"
+      "QToolButton#panelToggle { border: none; color: @text; padding: 2px 4px; background: transparent; }"
+      "QLabel#countChip { background: @header; color: @muted; border-radius: 9px; padding: 1px 8px; }"
+      "QToolButton#panelAction { border: none; border-radius: 5px; padding: 3px 8px; color: @muted; background: transparent; }"
+      "QToolButton#panelAction:hover { background: @hover; color: @text; }"
+      "QFrame#filterChip { background: @accentSoft; border-radius: 11px; }"
+      "QFrame#filterChip QToolButton { border: none; background: transparent; color: @accentText; padding: 1px 4px; }"
+      "QFrame#filterChip QToolButton:hover { color: @text; }"
+      "QLineEdit#panelSearch { background: @win; border: 1px solid @border; border-radius: 6px; padding: 2px 4px; color: @text; }"
+      "QLineEdit#panelSearch:focus { border-color: @accent; }"
+      "QFrame#dataPanel QTableView { background: @surface; alternate-background-color: @zebra; gridline-color: @grid;"
+      "  border: none; color: @text; selection-background-color: @accentSoft; selection-color: @text; }"
+      "QFrame#dataPanel QTableView::item { padding: 0px 6px; }"
+      "QFrame#dataPanel QTableView::item:focus { border: 2px solid @accent; padding: 0px 4px; }"
+      "QFrame#dataPanel QHeaderView { background: @header; border: none; }"
+      "QFrame#dataPanel QHeaderView::section { background: @header; color: @text; border: none;"
+      "  border-right: 1px solid @grid; border-bottom: 1px solid @border; padding: 0px 8px; }"
+      "QFrame#dataPanel QHeaderView::section:vertical { color: @muted; border-right: 1px solid @border;"
+      "  border-bottom: 1px solid @grid; padding: 0px 6px; }"
+      "QFrame#dataPanel QHeaderView::section:checked { background: @accentSoft; color: @accentText; }"
+      "QFrame#dataPanel QTableCornerButton::section { background: @header; border: none;"
+      "  border-right: 1px solid @border; border-bottom: 1px solid @border; }"
+      "QStatusBar { background: @chrome; border-top: 1px solid @border; color: @muted; }"
+      "QStatusBar::item { border: none; }"
+      "QStatusBar QLabel { color: @muted; padding: 0px 6px; }"
+      "QStatusBar QLabel#modifiedLabel[modified=\"true\"] { color: @warn; font-weight: bold; }"
+      "QToolButton#messagesButton { border: 1px solid @border; border-radius: 5px; background: @surface;"
+      "  color: @text; padding: 1px 8px; margin: 2px 4px; }"
+      "QToolButton#messagesButton:checked { background: @accentSoft; color: @accentText; }"
+      "QDockWidget#messagesDock QPlainTextEdit { background: @surface; color: @text; border: none; }");
+  const QList<QPair<QString, QColor>> tokens = {
+      {"@win", t.win}, {"@chrome", t.chrome}, {"@surface", t.surface}, {"@header", t.header},
+      {"@border", t.border}, {"@grid", t.grid}, {"@text", t.text}, {"@muted", t.muted},
+      {"@accentSoft", t.accentSoft}, {"@accentText", t.accentText}, {"@accent", t.accent},
+      {"@zebra", t.zebra}, {"@warn", t.warn}, {"@hover", t.hover}};
+  // Longer names first, so "@accent" does not consume "@accentSoft".
+  for (const auto &token : tokens)
+    css.replace(token.first, token.second.name());
+  return css;
+}
+
+enum EditorIcon {
+  IconOpen, IconSave, IconUndo, IconRedo, IconPrev, IconNext, IconFilter, IconPlot,
+  IconGrid, IconPlus, IconSliders, IconTerminal, IconClose, IconSearch,
+  IconChevronDown, IconChevronRight
+};
+
+enum IconTone { ToneText, ToneMuted, ToneAccent };
+
+/** Outline icon geometry on a 24 x 24 grid. */
+static QPainterPath editorIconPath(int kind) {
+  QPainterPath p;
+  switch (kind) {
+  case IconOpen:
+    p.moveTo(3, 18.5); p.lineTo(3, 6); p.lineTo(9, 6); p.lineTo(11, 8.5);
+    p.lineTo(20, 8.5); p.lineTo(20, 18.5); p.closeSubpath();
+    break;
+  case IconSave:
+    p.moveTo(4, 3.5); p.lineTo(16, 3.5); p.lineTo(20.5, 8); p.lineTo(20.5, 20.5);
+    p.lineTo(4, 20.5); p.closeSubpath();
+    p.moveTo(7.5, 3.5); p.lineTo(7.5, 8.5); p.lineTo(15, 8.5); p.lineTo(15, 3.5);
+    p.moveTo(7.5, 20.5); p.lineTo(7.5, 14); p.lineTo(17, 14); p.lineTo(17, 20.5);
+    break;
+  case IconUndo:
+    p.moveTo(9, 14); p.lineTo(4, 9); p.lineTo(9, 4);
+    p.moveTo(4, 9); p.lineTo(14, 9); p.arcTo(QRectF(8, 9, 12, 12), 90, -180); p.lineTo(11, 21);
+    break;
+  case IconRedo:
+    p.moveTo(15, 14); p.lineTo(20, 9); p.lineTo(15, 4);
+    p.moveTo(20, 9); p.lineTo(10, 9); p.arcTo(QRectF(4, 9, 12, 12), 90, 180); p.lineTo(13, 21);
+    break;
+  case IconPrev:
+    p.moveTo(15, 18); p.lineTo(9, 12); p.lineTo(15, 6);
+    break;
+  case IconNext:
+    p.moveTo(9, 18); p.lineTo(15, 12); p.lineTo(9, 6);
+    break;
+  case IconFilter:
+    p.moveTo(3, 5); p.lineTo(21, 5); p.lineTo(14, 13); p.lineTo(14, 19);
+    p.lineTo(10, 17); p.lineTo(10, 13); p.closeSubpath();
+    break;
+  case IconPlot:
+    p.moveTo(3, 3); p.lineTo(3, 21); p.lineTo(21, 21);
+    p.moveTo(7, 15); p.lineTo(11, 10); p.lineTo(15, 13); p.lineTo(20, 6);
+    break;
+  case IconGrid:
+    p.addRoundedRect(QRectF(3, 3, 18, 18), 2, 2);
+    p.moveTo(3, 9); p.lineTo(21, 9); p.moveTo(3, 15); p.lineTo(21, 15);
+    p.moveTo(9, 3); p.lineTo(9, 21); p.moveTo(15, 3); p.lineTo(15, 21);
+    break;
+  case IconPlus:
+    p.moveTo(12, 5); p.lineTo(12, 19); p.moveTo(5, 12); p.lineTo(19, 12);
+    break;
+  case IconSliders:
+    p.moveTo(4, 7); p.lineTo(13, 7); p.moveTo(17, 7); p.lineTo(20, 7);
+    p.moveTo(4, 17); p.lineTo(7, 17); p.moveTo(11, 17); p.lineTo(20, 17);
+    p.addEllipse(QPointF(15, 7), 2, 2);
+    p.addEllipse(QPointF(9, 17), 2, 2);
+    break;
+  case IconTerminal:
+    p.moveTo(4, 17); p.lineTo(10, 12); p.lineTo(4, 7);
+    p.moveTo(12, 19); p.lineTo(20, 19);
+    break;
+  case IconClose:
+    p.moveTo(18, 6); p.lineTo(6, 18); p.moveTo(6, 6); p.lineTo(18, 18);
+    break;
+  case IconSearch:
+    p.addEllipse(QPointF(11, 11), 7, 7);
+    p.moveTo(20, 20); p.lineTo(16, 16);
+    break;
+  case IconChevronDown:
+    p.moveTo(6, 9); p.lineTo(12, 15); p.lineTo(18, 9);
+    break;
+  case IconChevronRight:
+    p.moveTo(9, 6); p.lineTo(15, 12); p.lineTo(9, 18);
+    break;
+  default:
+    break;
+  }
+  return p;
+}
+
+/*
+ * Icons are painted from vector outlines at several pixel sizes so they stay
+ * crisp on standard and high-density displays without extra Qt modules.
+ */
+static QIcon makeEditorIcon(int kind, const QColor &color, const QColor &disabled) {
+  const QPainterPath path = editorIconPath(kind);
+  QIcon icon;
+  const int sizes[] = {14, 16, 20, 24, 28, 32, 40, 48, 64};
+  for (int size : sizes) {
+    for (int mode = 0; mode < 2; ++mode) {
+      QPixmap pm(size, size);
+      pm.fill(Qt::transparent);
+      QPainter painter(&pm);
+      painter.setRenderHint(QPainter::Antialiasing);
+      const qreal scale = size / 24.0;
+      painter.scale(scale, scale);
+      const qreal width = std::max<qreal>(1.75, 1.15 / scale);
+      painter.setPen(QPen(mode ? disabled : color, width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+      painter.setBrush(Qt::NoBrush);
+      painter.drawPath(path);
+      painter.end();
+      icon.addPixmap(pm, mode ? QIcon::Disabled : QIcon::Normal);
+    }
+  }
+  return icon;
+}
+
+/** Card holding one data table with a header bar that collapses the table. */
+class DataPanel : public QFrame {
+public:
+  static const int HeaderHeight = 34;
+  static const int BottomInset = 5;
+
+  DataPanel(const QString &title, QWidget *parent = nullptr)
+      : QFrame(parent), body(nullptr) {
+    setObjectName("dataPanel");
+    outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, BottomInset);
+    outer->setSpacing(0);
+
+    header = new QFrame(this);
+    header->setObjectName("panelHeader");
+    header->setFixedHeight(HeaderHeight);
+    headerRow = new QHBoxLayout(header);
+    headerRow->setContentsMargins(6, 0, 8, 0);
+    headerRow->setSpacing(6);
+
+    toggle = new QToolButton(header);
+    toggle->setObjectName("panelToggle");
+    toggle->setText(title);
+    toggle->setCheckable(true);
+    toggle->setChecked(true);
+    toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    toggle->setIconSize(QSize(14, 14));
+    toggle->setToolTip(QObject::tr("Show or hide %1").arg(title));
+    QFont titleFont = toggle->font();
+    titleFont.setBold(true);
+    toggle->setFont(titleFont);
+    headerRow->addWidget(toggle);
+
+    count = new QLabel(header);
+    count->setObjectName("countChip");
+    QFont chipFont = count->font();
+    chipFont.setPointSizeF(std::max<qreal>(7.0, chipFont.pointSizeF() - 1));
+    count->setFont(chipFont);
+    count->setAlignment(Qt::AlignCenter);
+    count->setFixedHeight(QFontMetrics(chipFont).height() + 4);
+    headerRow->addWidget(count, 0, Qt::AlignVCenter);
+    outer->addWidget(header);
+
+    rule = new QFrame(this);
+    rule->setObjectName("panelRule");
+    rule->setFixedHeight(1);
+    outer->addWidget(rule);
+
+    QObject::connect(toggle, &QToolButton::toggled, this, [this](bool on) {
+      if (body)
+        body->setVisible(on);
+      rule->setVisible(on);
+      outer->setContentsMargins(0, 0, 0, on ? BottomInset : 0);
+      toggle->setIcon(on ? expandedIcon : collapsedIcon);
+    });
+  }
+
+  void setBody(QWidget *widget) {
+    body = widget;
+    outer->addWidget(widget, 1);
+  }
+
+  void addHeaderWidget(QWidget *widget) { headerRow->addWidget(widget, 0, Qt::AlignVCenter); }
+  void addHeaderStretch() { headerRow->addStretch(1); }
+  QToolButton *toggleButton() const { return toggle; }
+
+  void setCountText(const QString &text) {
+    if (count->text() != text)
+      count->setText(text);
+  }
+
+  void setToggleIcons(const QIcon &expanded, const QIcon &collapsed) {
+    expandedIcon = expanded;
+    collapsedIcon = collapsed;
+    toggle->setIcon(toggle->isChecked() ? expandedIcon : collapsedIcon);
+  }
+
+  void setChecked(bool on) { toggle->setChecked(on); }
+  bool isChecked() const { return toggle->isChecked(); }
+
+  /** Height of everything except the body while the panel is expanded. */
+  int chromeHeight() {
+    ensurePolished();
+    const QMargins frame = contentsMargins();
+    return frame.top() + frame.bottom() + HeaderHeight + rule->height() + BottomInset;
+  }
+
+private:
+  QVBoxLayout *outer;
+  QFrame *header;
+  QHBoxLayout *headerRow;
+  QToolButton *toggle;
+  QLabel *count;
+  QFrame *rule;
+  QWidget *body;
+  QIcon expandedIcon;
+  QIcon collapsedIcon;
+};
+
+/** Horizontal header drawing a bold name with a muted type/units line. */
+class TwoLineHeaderView : public QHeaderView {
+public:
+  explicit TwoLineHeaderView(QWidget *parent = nullptr)
+      : QHeaderView(Qt::Horizontal, parent) {
+    setSectionsClickable(true);
+    setHighlightSections(true);
+  }
+
+  void setColors(const QColor &text, const QColor &muted, const QColor &accentText) {
+    textColor = text;
+    mutedColor = muted;
+    highlightColor = accentText;
+    viewport()->update();
+  }
+
+protected:
+  void paintSection(QPainter *painter, const QRect &rect, int logicalIndex) const override {
+    if (!rect.isValid() || !model())
+      return;
+    QStyleOptionHeader opt;
+    initStyleOption(&opt);
+    opt.rect = rect;
+    opt.section = logicalIndex;
+    opt.text.clear();
+    bool highlighted = false;
+    if (highlightSections() && selectionModel()) {
+      highlighted = selectionModel()->columnIntersectsSelection(logicalIndex, rootIndex());
+      if (highlighted)
+        opt.state |= QStyle::State_On;
+    }
+    const int visual = visualIndex(logicalIndex);
+    if (count() == 1)
+      opt.position = QStyleOptionHeader::OnlyOneSection;
+    else if (visual == 0)
+      opt.position = QStyleOptionHeader::Beginning;
+    else if (visual == count() - 1)
+      opt.position = QStyleOptionHeader::End;
+    else
+      opt.position = QStyleOptionHeader::Middle;
+    painter->save();
+    style()->drawControl(QStyle::CE_HeaderSection, &opt, painter, this);
+    painter->restore();
+
+    const QString title = model()->headerData(logicalIndex, orientation(), Qt::DisplayRole).toString();
+    const QString subtitle = model()->headerData(logicalIndex, orientation(), HeaderSubtitleRole).toString();
+    const QVariant alignValue = model()->headerData(logicalIndex, orientation(), Qt::TextAlignmentRole);
+    const Qt::Alignment hAlign = (alignValue.isValid() ? Qt::Alignment(alignValue.toInt()) : defaultAlignment()) &
+                                 Qt::AlignHorizontal_Mask;
+    const QRect textRect = rect.adjusted(8, 2, -8, -2);
+    const QFont titleFont = sectionTitleFont();
+    const QFont subFont = subtitleFont();
+    const QFontMetrics titleFm(titleFont);
+    const QFontMetrics subFm(subFont);
+
+    painter->save();
+    painter->setClipRect(rect);
+    int top = textRect.top();
+    if (subtitle.isEmpty())
+      top += (textRect.height() - titleFm.height()) / 2;
+    else
+      top += (textRect.height() - titleFm.height() - subFm.height()) / 2;
+    painter->setFont(titleFont);
+    painter->setPen(highlighted && highlightColor.isValid() ? highlightColor
+                    : textColor.isValid() ? textColor : palette().color(QPalette::WindowText));
+    painter->drawText(QRect(textRect.left(), top, textRect.width(), titleFm.height()),
+                      int(hAlign | Qt::AlignVCenter),
+                      titleFm.elidedText(title, Qt::ElideRight, textRect.width()));
+    if (!subtitle.isEmpty()) {
+      painter->setFont(subFont);
+      painter->setPen(mutedColor.isValid() ? mutedColor : palette().color(QPalette::Disabled, QPalette::WindowText));
+      painter->drawText(QRect(textRect.left(), top + titleFm.height(), textRect.width(), subFm.height()),
+                        int(hAlign | Qt::AlignVCenter),
+                        subFm.elidedText(subtitle, Qt::ElideRight, textRect.width()));
+    }
+    painter->restore();
+  }
+
+  QSize sectionSizeFromContents(int logicalIndex) const override {
+    if (!model())
+      return QHeaderView::sectionSizeFromContents(logicalIndex);
+    const QString title = model()->headerData(logicalIndex, orientation(), Qt::DisplayRole).toString();
+    const QString subtitle = model()->headerData(logicalIndex, orientation(), HeaderSubtitleRole).toString();
+    const QFontMetrics titleFm(sectionTitleFont());
+    const QFontMetrics subFm(subtitleFont());
+    const int width = std::max(textAdvance(titleFm, title), textAdvance(subFm, subtitle)) + 20;
+    const int height = titleFm.height() + subFm.height() + 8;
+    return QSize(width, height);
+  }
+
+private:
+  QFont sectionTitleFont() const {
+    QFont f = font();
+    f.setBold(true);
+    return f;
+  }
+
+  QFont subtitleFont() const {
+    QFont f = font();
+    f.setPointSizeF(std::max<qreal>(7.0, f.pointSizeF() - 1));
+    return f;
+  }
+
+  QColor textColor;
+  QColor mutedColor;
+  QColor highlightColor;
+};
+
+/** Splitter handle drawn as a small grip between panel cards. */
+class PanelSplitterHandle : public QSplitterHandle {
+public:
+  PanelSplitterHandle(Qt::Orientation orientation, QSplitter *parent)
+      : QSplitterHandle(orientation, parent) {
+    setAttribute(Qt::WA_Hover);
+  }
+
+protected:
+  void paintEvent(QPaintEvent *) override {
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const char *property = underMouse() ? "gripHoverColor" : "gripColor";
+    QColor color = splitter()->property(property).value<QColor>();
+    if (!color.isValid())
+      color = palette().color(QPalette::Mid);
+    const QSizeF grip = orientation() == Qt::Vertical ? QSizeF(36, 3) : QSizeF(3, 36);
+    const QRectF r(QPointF((width() - grip.width()) / 2.0, (height() - grip.height()) / 2.0), grip);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    painter.drawRoundedRect(r, 1.5, 1.5);
+  }
+};
+
+class PanelSplitter : public QSplitter {
+public:
+  PanelSplitter(Qt::Orientation orientation, QWidget *parent = nullptr)
+      : QSplitter(orientation, parent) {}
+
+protected:
+  QSplitterHandle *createHandle() override {
+    return new PanelSplitterHandle(orientation(), this);
+  }
+};
+
 class ParameterPageModel : public QAbstractTableModel {
 public:
   ParameterPageModel(SDDS_DATASET *dataset, QVector<PageStore> *pages, int *currentPage,
@@ -1840,19 +2504,47 @@ public:
     return dataset->layout.n_parameters;
   }
 
+  /* Column 0 holds the editable value; the others show read-only definition metadata. */
+  enum Column { ValueColumn = 0, TypeColumn, UnitsColumn, DescriptionColumn, ColumnTotal };
+
   int columnCount(const QModelIndex &parent = QModelIndex()) const override {
     Q_UNUSED(parent);
-    return 1;
+    return ColumnTotal;
+  }
+
+  /* Display-only; callers repaint the view instead of emitting dataChanged,
+     which would mark the document modified. */
+  void setMutedColor(const QColor &color) { mutedColor = color; }
+
+  void refreshMetadata(int first, int last) {
+    if (first < 0 || last < first)
+      return;
+    emit dataChanged(index(first, TypeColumn), index(last, DescriptionColumn),
+                     {Qt::DisplayRole, Qt::ForegroundRole});
   }
 
   QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override {
     if (!index.isValid() || !dataset || !pages || !currentPage)
       return QVariant();
+    if (index.row() < 0 || index.row() >= dataset->layout.n_parameters)
+      return QVariant();
+    if (index.column() != ValueColumn) {
+      const PARAMETER_DEFINITION &def = dataset->layout.parameter_definition[index.row()];
+      if (role == Qt::ForegroundRole && mutedColor.isValid())
+        return mutedColor;
+      if (role == Qt::ToolTipRole && index.column() == TypeColumn)
+        return tr("Double-click to change the type");
+      if (role != Qt::DisplayRole)
+        return QVariant();
+      if (index.column() == TypeColumn)
+        return QString::fromLocal8Bit(SDDS_GetTypeName(def.type));
+      if (index.column() == UnitsColumn)
+        return def.units ? QString::fromLocal8Bit(def.units) : QString();
+      return def.description ? QString::fromLocal8Bit(def.description) : QString();
+    }
     if (role != Qt::DisplayRole && role != Qt::EditRole)
       return QVariant();
     if (*currentPage < 0 || *currentPage >= pages->size())
-      return QVariant();
-    if (index.column() != 0)
       return QVariant();
     const int r = index.row();
     const PageStore &pd = (*pages)[*currentPage];
@@ -1889,26 +2581,41 @@ public:
   Qt::ItemFlags flags(const QModelIndex &index) const override {
     if (!index.isValid())
       return Qt::NoItemFlags;
-    if (index.column() != 0)
-      return Qt::NoItemFlags;
+    if (index.column() != ValueColumn)
+      return Qt::ItemIsEnabled;
     return Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsEditable;
   }
 
   QVariant headerData(int section, Qt::Orientation orientation,
                       int role = Qt::DisplayRole) const override {
-    if (role != Qt::DisplayRole)
-      return QVariant();
     if (orientation == Qt::Horizontal) {
-      if (section != 0)
+      if (role == Qt::TextAlignmentRole)
+        return int(Qt::AlignLeft | Qt::AlignVCenter);
+      if (role != Qt::DisplayRole)
         return QVariant();
-      return tr("Value");
+      switch (section) {
+      case ValueColumn:
+        return tr("Value");
+      case TypeColumn:
+        return tr("Type");
+      case UnitsColumn:
+        return tr("Units");
+      case DescriptionColumn:
+        return tr("Description");
+      default:
+        return QVariant();
+      }
     }
     if (!dataset)
       return QVariant();
     if (section < 0 || section >= dataset->layout.n_parameters)
       return QVariant();
-    const char *name = dataset->layout.parameter_definition[section].name;
-    return name ? QString(name) : QString();
+    const PARAMETER_DEFINITION &def = dataset->layout.parameter_definition[section];
+    if (role == Qt::ToolTipRole && def.description)
+      return QString::fromLocal8Bit(def.description);
+    if (role != Qt::DisplayRole)
+      return QVariant();
+    return def.name ? QString(def.name) : QString();
   }
 
   void refresh() {
@@ -1924,7 +2631,25 @@ private:
   SDDS_DATASET *dataset;
   QVector<PageStore> *pages;
   int *currentPage;
+  QColor mutedColor;
 };
+
+static QVariant numericAlignment(int32_t type) {
+  return SDDS_NUMERIC_TYPE(type) ? int(Qt::AlignRight | Qt::AlignVCenter)
+                                 : int(Qt::AlignLeft | Qt::AlignVCenter);
+}
+
+static QString definitionToolTip(const char *name, int32_t type, const char *units,
+                                 const char *description) {
+  QStringList lines;
+  lines << QString("%1 (%2)").arg(QString::fromLocal8Bit(name ? name : ""),
+                                  QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+  if (units && *units)
+    lines << QObject::tr("Units: %1").arg(QString::fromLocal8Bit(units));
+  if (description && *description)
+    lines << QString::fromLocal8Bit(description);
+  return lines.join('\n');
+}
 
 class ColumnPageModel : public QAbstractTableModel {
 public:
@@ -1954,6 +2679,11 @@ public:
   QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override {
     if (!index.isValid() || !dataset || !pages || !currentPage)
       return QVariant();
+    if (role == Qt::TextAlignmentRole) {
+      if (index.column() < 0 || index.column() >= dataset->layout.n_columns)
+        return QVariant();
+      return numericAlignment(dataset->layout.column_definition[index.column()].type);
+    }
     if (role != Qt::DisplayRole && role != Qt::EditRole)
       return QVariant();
     if (*currentPage < 0 || *currentPage >= pages->size())
@@ -2000,13 +2730,28 @@ public:
 
   QVariant headerData(int section, Qt::Orientation orientation,
                       int role = Qt::DisplayRole) const override {
-    if (!dataset || role != Qt::DisplayRole)
+    if (!dataset)
       return QVariant();
     if (orientation == Qt::Horizontal) {
       if (section < 0 || section >= dataset->layout.n_columns)
         return QVariant();
-      return QString(dataset->layout.column_definition[section].name);
+      const COLUMN_DEFINITION &def = dataset->layout.column_definition[section];
+      switch (role) {
+      case Qt::DisplayRole:
+        return QString(def.name);
+      case HeaderSubtitleRole:
+        return joinSubtitle({QString::fromLocal8Bit(SDDS_GetTypeName(def.type)),
+                             def.units ? QString::fromLocal8Bit(def.units) : QString()});
+      case Qt::TextAlignmentRole:
+        return numericAlignment(def.type);
+      case Qt::ToolTipRole:
+        return definitionToolTip(def.name, def.type, def.units, def.description);
+      default:
+        return QVariant();
+      }
     }
+    if (role != Qt::DisplayRole)
+      return QVariant();
     return QString::number(section + 1);
   }
 
@@ -2052,6 +2797,11 @@ public:
   QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override {
     if (!index.isValid() || !dataset || !pages || !currentPage)
       return QVariant();
+    if (role == Qt::TextAlignmentRole) {
+      if (index.column() < 0 || index.column() >= dataset->layout.n_arrays)
+        return QVariant();
+      return numericAlignment(dataset->layout.array_definition[index.column()].type);
+    }
     if (role != Qt::DisplayRole && role != Qt::EditRole)
       return QVariant();
     if (*currentPage < 0 || *currentPage >= pages->size())
@@ -2111,13 +2861,36 @@ public:
 
   QVariant headerData(int section, Qt::Orientation orientation,
                       int role = Qt::DisplayRole) const override {
-    if (!dataset || role != Qt::DisplayRole)
+    if (!dataset)
       return QVariant();
     if (orientation == Qt::Horizontal) {
       if (section < 0 || section >= dataset->layout.n_arrays)
         return QVariant();
-      return QString(dataset->layout.array_definition[section].name);
+      const ARRAY_DEFINITION &def = dataset->layout.array_definition[section];
+      switch (role) {
+      case Qt::DisplayRole:
+        return QString(def.name);
+      case HeaderSubtitleRole: {
+        QStringList dims;
+        if (pages && currentPage && *currentPage >= 0 && *currentPage < pages->size() &&
+            section < (*pages)[*currentPage].arrays.size()) {
+          for (int d : (*pages)[*currentPage].arrays[section].dims)
+            dims << QString::number(d);
+        }
+        return joinSubtitle({QString::fromLocal8Bit(SDDS_GetTypeName(def.type)),
+                             dims.join(QChar(0x00D7)),
+                             def.units ? QString::fromLocal8Bit(def.units) : QString()});
+      }
+      case Qt::TextAlignmentRole:
+        return numericAlignment(def.type);
+      case Qt::ToolTipRole:
+        return definitionToolTip(def.name, def.type, def.units, def.description);
+      default:
+        return QVariant();
+      }
     }
+    if (role != Qt::DisplayRole)
+      return QVariant();
     return QString::number(section + 1);
   }
 
@@ -2232,6 +3005,29 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
 
   columnView = nullptr;
   arrayView = nullptr;
+  columnHeader = nullptr;
+  arrayHeader = nullptr;
+  mainToolBar = nullptr;
+  pagePrevBtn = nullptr;
+  pageNextBtn = nullptr;
+  pageCountLabel = nullptr;
+  filterAction = nullptr;
+  plotAction = nullptr;
+  filterChip = nullptr;
+  filterChipText = nullptr;
+  columnSearchEdit = nullptr;
+  modifiedLabel = nullptr;
+  pathLabel = nullptr;
+  pageStatusLabel = nullptr;
+  cellStatusLabel = nullptr;
+  rowsStatusLabel = nullptr;
+  statusMessageLabel = nullptr;
+  undoStatusLabel = nullptr;
+  messagesButton = nullptr;
+  statusMessageTimer = nullptr;
+  unreadMessages = 0;
+  visibleColumnRows = 0;
+  applyingTheme = false;
 
   resizeDebounceTimer = new QTimer(this);
   resizeDebounceTimer->setSingleShot(true);
@@ -2255,65 +3051,105 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   // Ensure SDDS_DATASET starts in a known-safe state (null pointers, zero counts).
   memset(&dataset, 0, sizeof(dataset));
 
-  // console dock
+  // Messages panel: collapsed by default and opened from the status bar.
   consoleEdit = new QPlainTextEdit(this);
   consoleEdit->setReadOnly(true);
-  // make the console dock roughly five text lines tall
+  consoleEdit->setFont(preferredTableFont());
   int lineH = consoleEdit->fontMetrics().lineSpacing();
-  consoleEdit->setFixedHeight(lineH * 5 + 2 * consoleEdit->frameWidth());
-  QDockWidget *dock = new QDockWidget(QString(), this);
-  dock->setTitleBarWidget(new QWidget());
-  dock->setWidget(consoleEdit);
-  addDockWidget(Qt::TopDockWidgetArea, dock);
+  consoleEdit->setMinimumHeight(lineH * 3 + 2 * consoleEdit->frameWidth());
+  consoleDock = new QDockWidget(tr("Messages"), this);
+  consoleDock->setObjectName("messagesDock");
+  consoleDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
+  consoleDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
+  consoleDock->setWidget(consoleEdit);
+  addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
+  consoleDock->hide();
 
   QWidget *central = new QWidget(this);
+  central->setObjectName("centralArea");
+  central->setAttribute(Qt::WA_StyledBackground, true);
   QVBoxLayout *mainLayout = new QVBoxLayout(central);
-  mainLayout->setContentsMargins(0, 0, 0, 0);
+  mainLayout->setContentsMargins(10, 8, 10, 8);
 
-  // page selector bar
-  QHBoxLayout *pageLayout = new QHBoxLayout();
-  pageLayout->setContentsMargins(0, 0, 0, 0);
-  pageLayout->addWidget(new QLabel(tr("Page"), this));
+  // Page navigation and save format live in the toolbar (see buildToolBar).
   pageCombo = new QComboBox(this);
+  pageCombo->setObjectName("pageCombo");
+  pageCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+  pageCombo->setToolTip(tr("Current page"));
   connect(pageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &SDDSEditor::pageChanged);
-  pageLayout->addWidget(pageCombo);
 
-  pageLayout->addStretch(1);
-  asciiBtn = new QRadioButton(tr("ASCII"), this);
-  binaryBtn = new QRadioButton(tr("Binary"), this);
+  asciiBtn = new QToolButton(this);
+  binaryBtn = new QToolButton(this);
+  asciiBtn->setText(tr("ASCII"));
+  binaryBtn->setText(tr("Binary"));
+  asciiBtn->setToolTip(tr("Save as ASCII SDDS"));
+  binaryBtn->setToolTip(tr("Save as binary SDDS"));
+  QButtonGroup *formatGroup = new QButtonGroup(this);
+  formatGroup->setExclusive(true);
+  for (QToolButton *button : {asciiBtn, binaryBtn}) {
+    button->setCheckable(true);
+    button->setAutoRaise(true);
+    formatGroup->addButton(button);
+  }
   asciiBtn->setChecked(true);
-  pageLayout->addWidget(asciiBtn);
-  pageLayout->addWidget(binaryBtn);
-  connect(asciiBtn, &QRadioButton::clicked, this, [this]() {
+  connect(asciiBtn, &QToolButton::clicked, this, [this]() {
     asciiSave = true;
     if (datasetLoaded)
       markDirty();
   });
-  connect(binaryBtn, &QRadioButton::clicked, this, [this]() {
+  connect(binaryBtn, &QToolButton::clicked, this, [this]() {
     asciiSave = false;
     if (datasetLoaded)
       markDirty();
   });
-  mainLayout->addLayout(pageLayout);
 
-  QFont tableFont("Source Code Pro");
-  tableFont.setStyleName("Regular");
-  tableFont.setPointSize(10);
+  QFont tableFont = preferredTableFont();
+  const int rowHeight = QFontMetrics(tableFont).height() + 6;
 
   // container for data panels
-  dataSplitter = new QSplitter(Qt::Vertical, this);
-  //dataSplitter->setChildrenCollapsible(false);
-  dataSplitter->setHandleWidth(4);
-  dataSplitter->setStyleSheet("QSplitter::handle { background-color: lightgrey; }");
+  dataSplitter = new PanelSplitter(Qt::Vertical, this);
+  dataSplitter->setObjectName("dataSplitter");
+  dataSplitter->setHandleWidth(10);
   mainLayout->addWidget(dataSplitter, 1);
 
+  auto makePanelAction = [this](QWidget *parent, const QString &text, int icon,
+                                const QString &toolTip) {
+    QToolButton *button = new QToolButton(parent);
+    button->setObjectName("panelAction");
+    button->setText(text);
+    button->setToolTip(toolTip);
+    button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    button->setIconSize(QSize(14, 14));
+    button->setAutoRaise(true);
+    bindIcon(button, icon, ToneMuted);
+    return button;
+  };
+  // Attribute editors act on the current cell; say so instead of doing nothing.
+  auto makeAttributesAction = [this, makePanelAction](DataPanel *panel, const QString &toolTip,
+                                                      std::function<QTableView *()> view,
+                                                      void (SDDSEditor::*edit)(),
+                                                      const QString &hint) {
+    QToolButton *button = makePanelAction(panel, tr("Attributes"), IconSliders, toolTip);
+    panel->addHeaderWidget(button);
+    connect(button, &QToolButton::clicked, this, [this, view, edit, hint]() {
+      if (datasetLoaded && !view()->currentIndex().isValid()) {
+        message(hint);
+        return;
+      }
+      (this->*edit)();
+    });
+  };
+
   // parameters panel
-  paramBox = new QGroupBox(tr("Parameters"), this);
-  paramBox->setCheckable(true);
-  paramBox->setChecked(true);
-  QVBoxLayout *paramLayout = new QVBoxLayout(paramBox);
-  paramLayout->setContentsMargins(0, 0, 0, 0);
+  paramBox = new DataPanel(tr("Parameters"), this);
+  paramBox->addHeaderStretch();
+  QToolButton *paramInsertBtn = makePanelAction(paramBox, tr("Insert"), IconPlus, tr("Insert a parameter"));
+  paramBox->addHeaderWidget(paramInsertBtn);
+  connect(paramInsertBtn, &QToolButton::clicked, this, &SDDSEditor::insertParameter);
+  makeAttributesAction(paramBox, tr("Edit the current parameter's attributes"),
+                       [this]() { return paramView; }, &SDDSEditor::editParameterAttributes,
+                       tr("Select a parameter to edit its attributes"));
   paramModel = new ParameterPageModel(&dataset, &pages, &currentPage, this);
   paramView = new SingleClickEditTableView(paramBox);
   paramView->setFont(tableFont);
@@ -2326,6 +3162,10 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
             lastParameterSelectionRows = sortedValidIndexesDescending(
                 selected, dataset.layout.n_parameters);
           });
+  // A model reset clears the selection without emitting selectionChanged, and
+  // the cached rows would then name different (or deleted) parameters.
+  connect(paramModel, &QAbstractItemModel::modelReset, this,
+          [this]() { lastParameterSelectionRows.clear(); });
   connect(paramModel, &QAbstractItemModel::dataChanged, this,
           [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
             if (!updatingModels)
@@ -2336,11 +3176,23 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
         return dataset.layout.parameter_definition[idx.row()].type;
       },
       undoStack, paramView));
-  // Let the single value column expand to take up the available space.
-  // This keeps the parameter table readable even when the window is wide.
-  paramView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+  // Shown as Name | Type | Units | Value | Description.  Only the display order
+  // changes; the value stays logical column 0 for editing and clipboard code.
+  // Value and description share the width; type and units fit their text.
+  QHeaderView *paramHeader = paramView->horizontalHeader();
+  paramHeader->setFont(QApplication::font());
+  paramHeader->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+  paramHeader->moveSection(paramHeader->visualIndex(ParameterPageModel::TypeColumn), 0);
+  paramHeader->moveSection(paramHeader->visualIndex(ParameterPageModel::UnitsColumn), 1);
+  paramHeader->setSectionResizeMode(ParameterPageModel::ValueColumn, QHeaderView::Stretch);
+  paramHeader->setSectionResizeMode(ParameterPageModel::TypeColumn, QHeaderView::ResizeToContents);
+  paramHeader->setSectionResizeMode(ParameterPageModel::UnitsColumn, QHeaderView::ResizeToContents);
+  paramHeader->setSectionResizeMode(ParameterPageModel::DescriptionColumn, QHeaderView::Stretch);
+  paramView->setAlternatingRowColors(true);
+  paramView->setShowGrid(false);
+  paramView->setWordWrap(false);
   paramView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
-  paramView->verticalHeader()->setDefaultSectionSize(18);
+  paramView->verticalHeader()->setDefaultSectionSize(rowHeight);
   paramView->verticalHeader()->setSectionsMovable(true);
   paramView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(paramView->verticalHeader(), &QHeaderView::sectionDoubleClicked, this,
@@ -2354,18 +3206,74 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   paramView->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(paramView, &QTableView::customContextMenuRequested,
           this, &SDDSEditor::parameterCellMenuRequested);
-  connect(paramBox, &QGroupBox::toggled, paramView, &QWidget::setVisible);
-  paramLayout->addWidget(paramView);
+  // Metadata cells are read-only: keep the value cell current and use
+  // double-click to open the matching definition editor.
+  connect(paramView->selectionModel(), &QItemSelectionModel::currentChanged, this,
+          [this](const QModelIndex &current, const QModelIndex &) {
+            if (current.isValid() && current.column() != ParameterPageModel::ValueColumn)
+              paramView->selectionModel()->setCurrentIndex(
+                  paramModel->index(current.row(), ParameterPageModel::ValueColumn),
+                  QItemSelectionModel::ClearAndSelect);
+          });
+  connect(paramView, &QTableView::doubleClicked, this, [this](const QModelIndex &index) {
+    if (!index.isValid() || index.column() == ParameterPageModel::ValueColumn)
+      return;
+    if (index.column() == ParameterPageModel::TypeColumn)
+      changeParameterType(index.row());
+    else
+      editParameterAttributes();
+  });
+  paramBox->setBody(paramView);
   dataSplitter->addWidget(paramBox);
 
   // columns panel
-  colBox = new QGroupBox(tr("Columns"), this);
-  colBox->setCheckable(true);
-  colBox->setChecked(true);
-  QVBoxLayout *colLayout = new QVBoxLayout(colBox);
-  colLayout->setContentsMargins(0, 0, 0, 0);
+  colBox = new DataPanel(tr("Columns"), this);
+  filterChip = new QFrame(colBox);
+  filterChip->setObjectName("filterChip");
+  QHBoxLayout *chipLayout = new QHBoxLayout(filterChip);
+  chipLayout->setContentsMargins(6, 0, 2, 0);
+  chipLayout->setSpacing(0);
+  filterChipText = new QToolButton(filterChip);
+  filterChipText->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  filterChipText->setIconSize(QSize(12, 12));
+  filterChipText->setToolTip(tr("Edit the row filter"));
+  filterChipText->setAutoRaise(true);
+  bindIcon(filterChipText, IconFilter, ToneAccent);
+  QToolButton *filterChipClear = new QToolButton(filterChip);
+  filterChipClear->setIconSize(QSize(11, 11));
+  filterChipClear->setToolTip(tr("Clear the row filter"));
+  filterChipClear->setAccessibleName(tr("Clear row filter"));
+  filterChipClear->setAutoRaise(true);
+  bindIcon(filterChipClear, IconClose, ToneAccent);
+  chipLayout->addWidget(filterChipText);
+  chipLayout->addWidget(filterChipClear);
+  filterChip->setFixedHeight(22);
+  filterChip->hide();
+  connect(filterChipText, &QToolButton::clicked, this, &SDDSEditor::filterColumnRows);
+  connect(filterChipClear, &QToolButton::clicked, this, &SDDSEditor::clearColumnRowFilter);
+  colBox->addHeaderWidget(filterChip);
+  colBox->addHeaderStretch();
+  columnSearchEdit = new QLineEdit(colBox);
+  columnSearchEdit->setObjectName("panelSearch");
+  columnSearchEdit->setClearButtonEnabled(true);
+  columnSearchEdit->setFixedWidth(220);
+  columnSearchEdit->setPlaceholderText(tr("Find in column..."));
+  columnSearchEdit->setToolTip(tr("Find text in the current column (Enter for next match)"));
+  QAction *searchIcon = columnSearchEdit->addAction(QIcon(), QLineEdit::LeadingPosition);
+  bindIcon(searchIcon, IconSearch, ToneMuted);
+  connect(columnSearchEdit, &QLineEdit::returnPressed, this, &SDDSEditor::findInColumnPanel);
+  colBox->addHeaderWidget(columnSearchEdit);
+  QToolButton *colInsertBtn = makePanelAction(colBox, tr("Insert"), IconPlus, tr("Insert a column"));
+  colBox->addHeaderWidget(colInsertBtn);
+  connect(colInsertBtn, &QToolButton::clicked, this, &SDDSEditor::insertColumn);
+  makeAttributesAction(colBox, tr("Edit the current column's attributes"),
+                       [this]() { return columnView; }, &SDDSEditor::editColumnAttributes,
+                       tr("Select a cell in a column, or right-click its header, to edit its attributes"));
   columnModel = new ColumnPageModel(&dataset, &pages, &currentPage, this);
   columnView = new SingleClickEditTableView(colBox);
+  columnHeader = new TwoLineHeaderView(columnView);
+  columnHeader->setFont(QApplication::font());
+  columnView->setHorizontalHeader(columnHeader);
   columnView->setFont(tableFont);
   columnView->setModel(columnModel);
   columnView->setSelectionBehavior(QAbstractItemView::SelectItems);
@@ -2377,6 +3285,8 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
             lastColumnSelectionColumns = sortedValidIndexesDescending(
                 selected, dataset.layout.n_columns);
           });
+  connect(columnModel, &QAbstractItemModel::modelReset, this,
+          [this]() { lastColumnSelectionColumns.clear(); });
   connect(columnModel, &QAbstractItemModel::dataChanged, this,
           [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
             if (!updatingModels)
@@ -2411,8 +3321,11 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   columnView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
   columnView->horizontalHeader()->setResizeContentsPrecision(200);
   columnView->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+  columnView->setAlternatingRowColors(true);
+  columnView->setWordWrap(false);
   columnView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
-  columnView->verticalHeader()->setDefaultSectionSize(18);
+  columnView->verticalHeader()->setDefaultSectionSize(rowHeight);
+  columnView->verticalHeader()->setDefaultAlignment(Qt::AlignRight | Qt::AlignVCenter);
   columnView->verticalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(columnView->verticalHeader(), &QHeaderView::customContextMenuRequested,
           this, &SDDSEditor::columnRowMenuRequested);
@@ -2429,18 +3342,36 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   columnView->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(columnView, &QTableView::customContextMenuRequested,
           this, &SDDSEditor::columnCellMenuRequested);
-  connect(colBox, &QGroupBox::toggled, columnView, &QWidget::setVisible);
-  colLayout->addWidget(columnView);
+  connect(columnView->selectionModel(), &QItemSelectionModel::currentChanged, this,
+          [this](const QModelIndex &current, const QModelIndex &) {
+            if (columnSearchEdit) {
+              const int c = current.isValid() ? current.column() : -1;
+              columnSearchEdit->setPlaceholderText(
+                  c >= 0 && c < dataset.layout.n_columns
+                      ? tr("Find in %1...").arg(QString::fromLocal8Bit(dataset.layout.column_definition[c].name))
+                      : tr("Find in column..."));
+            }
+          });
+  colBox->setBody(columnView);
   dataSplitter->addWidget(colBox);
 
   // arrays panel
-  arrayBox = new QGroupBox(tr("Arrays"), this);
-  arrayBox->setCheckable(true);
-  arrayBox->setChecked(true);
-  QVBoxLayout *arrayLayout = new QVBoxLayout(arrayBox);
-  arrayLayout->setContentsMargins(0, 0, 0, 0);
+  arrayBox = new DataPanel(tr("Arrays"), this);
+  arrayBox->addHeaderStretch();
+  QToolButton *arrayViewerBtn = makePanelAction(arrayBox, tr("Open in viewer"), IconGrid,
+                                                tr("Open the current array in the array viewer"));
+  QToolButton *arrayInsertBtn = makePanelAction(arrayBox, tr("Insert"), IconPlus, tr("Insert an array"));
+  arrayBox->addHeaderWidget(arrayViewerBtn);
+  arrayBox->addHeaderWidget(arrayInsertBtn);
+  connect(arrayInsertBtn, &QToolButton::clicked, this, &SDDSEditor::insertArray);
+  makeAttributesAction(arrayBox, tr("Edit the current array's attributes"),
+                       [this]() { return arrayView; }, &SDDSEditor::editArrayAttributes,
+                       tr("Select a cell in an array, or right-click its header, to edit its attributes"));
   arrayModel = new ArrayPageModel(&dataset, &pages, &currentPage, this);
   arrayView = new SingleClickEditTableView(arrayBox);
+  arrayHeader = new TwoLineHeaderView(arrayView);
+  arrayHeader->setFont(QApplication::font());
+  arrayView->setHorizontalHeader(arrayHeader);
   arrayView->setFont(tableFont);
   arrayView->setModel(arrayModel);
   arrayView->setSelectionBehavior(QAbstractItemView::SelectItems);
@@ -2452,6 +3383,8 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
             lastArraySelectionColumns = sortedValidIndexesDescending(
                 selected, dataset.layout.n_arrays);
           });
+  connect(arrayModel, &QAbstractItemModel::modelReset, this,
+          [this]() { lastArraySelectionColumns.clear(); });
   connect(arrayModel, &QAbstractItemModel::dataChanged, this,
           [this](const QModelIndex &, const QModelIndex &, const QVector<int> &) {
             if (!updatingModels)
@@ -2474,8 +3407,12 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
       undoStack, arrayView));
   arrayView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
   arrayView->horizontalHeader()->setResizeContentsPrecision(200);
+  arrayView->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+  arrayView->setAlternatingRowColors(true);
+  arrayView->setWordWrap(false);
   arrayView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
-  arrayView->verticalHeader()->setDefaultSectionSize(18);
+  arrayView->verticalHeader()->setDefaultSectionSize(rowHeight);
+  arrayView->verticalHeader()->setDefaultAlignment(Qt::AlignRight | Qt::AlignVCenter);
   arrayView->horizontalHeader()->setSectionsMovable(true);
   arrayView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(arrayView->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
@@ -2489,9 +3426,17 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   arrayView->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(arrayView, &QTableView::customContextMenuRequested,
           this, &SDDSEditor::arrayCellMenuRequested);
-  connect(arrayBox, &QGroupBox::toggled, arrayView, &QWidget::setVisible);
-  arrayLayout->addWidget(arrayView);
+  arrayBox->setBody(arrayView);
   dataSplitter->addWidget(arrayBox);
+
+  // Status bar cell readout follows whichever table last moved its cursor.
+  for (QTableView *view : {paramView, columnView, arrayView}) {
+    connect(view->selectionModel(), &QItemSelectionModel::currentChanged, this,
+            [this, view](const QModelIndex &, const QModelIndex &) {
+              lastCellView = view;
+              updateStatusBar();
+            });
+  }
 
   // let columns and arrays consume additional space when resizing
   dataSplitter->setStretchFactor(0, 0);
@@ -2542,6 +3487,11 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   redoAct->setShortcut(QKeySequence::Redo);
   connect(undoAct, &QAction::triggered, undoStack, &QUndoStack::undo);
   connect(redoAct, &QAction::triggered, undoStack, &QUndoStack::redo);
+  undoAct->setEnabled(undoStack->canUndo());
+  redoAct->setEnabled(undoStack->canRedo());
+  connect(undoStack, &QUndoStack::canUndoChanged, undoAct, &QAction::setEnabled);
+  connect(undoStack, &QUndoStack::canRedoChanged, redoAct, &QAction::setEnabled);
+  connect(undoStack, &QUndoStack::indexChanged, this, [this](int) { updateStatusBar(); });
   editMenu->addSeparator();
   QMenu *paramMenu = editMenu->addMenu(tr("Parameter"));
   QAction *paramAttr = paramMenu->addAction(tr("Attributes"));
@@ -2567,6 +3517,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
       column = 0;
     openArrayViewer(column);
   });
+  connect(arrayViewerBtn, &QToolButton::clicked, arrayGrid, &QAction::trigger);
   QAction *arrayAttr = arrayMenu->addAction(tr("Attributes"));
   QAction *arrayIns = arrayMenu->addAction(tr("Insert"));
   QAction *arrayDel = arrayMenu->addAction(tr("Delete"));
@@ -2606,6 +3557,30 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   connect(pageIns, &QAction::triggered, this, &SDDSEditor::insertPage);
   connect(pageDel, &QAction::triggered, this, &SDDSEditor::deletePage);
 
+  buildToolBar(openAct, saveAct, undoAct, redoAct, colRowFilter, arrayGrid);
+  buildStatusBar();
+
+  QMenu *viewMenu = menuBar()->addMenu(tr("View"));
+  QAction *toolBarAct = mainToolBar->toggleViewAction();
+  toolBarAct->setText(tr("Toolbar"));
+  viewMenu->addAction(toolBarAct);
+  QAction *statusBarAct = viewMenu->addAction(tr("Status Bar"));
+  statusBarAct->setCheckable(true);
+  statusBarAct->setChecked(true);
+  connect(statusBarAct, &QAction::toggled, statusBar(), &QWidget::setVisible);
+  QAction *messagesAct = consoleDock->toggleViewAction();
+  messagesAct->setText(tr("Messages"));
+  messagesAct->setShortcut(QKeySequence(tr("Ctrl+Shift+L")));
+  viewMenu->addAction(messagesAct);
+  viewMenu->addSeparator();
+  for (DataPanel *panel : {paramBox, colBox, arrayBox}) {
+    QAction *panelAct = viewMenu->addAction(panel->toggleButton()->text());
+    panelAct->setCheckable(true);
+    panelAct->setChecked(panel->isChecked());
+    connect(panelAct, &QAction::toggled, panel->toggleButton(), &QToolButton::setChecked);
+    connect(panel->toggleButton(), &QToolButton::toggled, panelAct, &QAction::setChecked);
+  }
+
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
   QAction *helpAct = infoMenu->addAction(tr("Help"));
@@ -2618,7 +3593,16 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
     QMessageBox::about(nullptr, QObject::tr("About"), text);
   });
   connect(helpAct, &QAction::triggered, this, &SDDSEditor::showHelp);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+  // Follow the desktop's light/dark setting while the editor is running.
+  connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this,
+          [this](Qt::ColorScheme scheme) {
+            if (scheme != Qt::ColorScheme::Unknown)
+              applyTheme(scheme == Qt::ColorScheme::Dark);
+          });
+#endif
   applyTheme(darkPalette);
+  updateFilterIndicator();
   updateWindowTitle();
 }
 
@@ -2626,8 +3610,318 @@ SDDSEditor::~SDDSEditor() {
   clearDataset();
 }
 
+void SDDSEditor::bindIcon(QObject *target, int kind, int tone) {
+  if (!target)
+    return;
+  IconBinding binding;
+  binding.target = target;
+  binding.kind = kind;
+  binding.tone = tone;
+  iconBindings.append(binding);
+}
+
+void SDDSEditor::buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoAct,
+                              QAction *redoAct, QAction *filterAct, QAction *arrayViewerAct) {
+  mainToolBar = new QToolBar(tr("Main Toolbar"), this);
+  mainToolBar->setObjectName("mainToolBar");
+  mainToolBar->setMovable(false);
+  mainToolBar->setFloatable(false);
+  mainToolBar->setIconSize(QSize(16, 16));
+  mainToolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  addToolBar(Qt::TopToolBarArea, mainToolBar);
+
+  auto addLabel = [this](const QString &text) {
+    QLabel *label = new QLabel(text, mainToolBar);
+    label->setObjectName("toolbarLabel");
+    mainToolBar->addWidget(label);
+    return label;
+  };
+
+  openAct->setToolTip(tr("Open an SDDS file (%1)").arg(openAct->shortcut().toString(QKeySequence::NativeText)));
+  saveAct->setToolTip(tr("Save (%1)").arg(saveAct->shortcut().toString(QKeySequence::NativeText)));
+  undoAct->setToolTip(tr("Undo (%1)").arg(undoAct->shortcut().toString(QKeySequence::NativeText)));
+  redoAct->setToolTip(tr("Redo (%1)").arg(redoAct->shortcut().toString(QKeySequence::NativeText)));
+  mainToolBar->addAction(openAct);
+  mainToolBar->addAction(saveAct);
+  mainToolBar->addSeparator();
+  mainToolBar->addAction(undoAct);
+  mainToolBar->addAction(redoAct);
+  for (QAction *action : {undoAct, redoAct}) {
+    if (QToolButton *button = qobject_cast<QToolButton *>(mainToolBar->widgetForAction(action)))
+      button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+  }
+  mainToolBar->addSeparator();
+
+  addLabel(tr("Page"));
+  pagePrevBtn = new QToolButton(mainToolBar);
+  pagePrevBtn->setObjectName("pageNav");
+  pagePrevBtn->setToolTip(tr("Previous page"));
+  pagePrevBtn->setAccessibleName(tr("Previous page"));
+  pagePrevBtn->setAutoRaise(true);
+  pageNextBtn = new QToolButton(mainToolBar);
+  pageNextBtn->setObjectName("pageNav");
+  pageNextBtn->setToolTip(tr("Next page"));
+  pageNextBtn->setAccessibleName(tr("Next page"));
+  pageNextBtn->setAutoRaise(true);
+  bindIcon(pagePrevBtn, IconPrev);
+  bindIcon(pageNextBtn, IconNext);
+  connect(pagePrevBtn, &QToolButton::clicked, this, [this]() {
+    if (pageCombo->currentIndex() > 0)
+      pageCombo->setCurrentIndex(pageCombo->currentIndex() - 1);
+  });
+  connect(pageNextBtn, &QToolButton::clicked, this, [this]() {
+    if (pageCombo->currentIndex() + 1 < pageCombo->count())
+      pageCombo->setCurrentIndex(pageCombo->currentIndex() + 1);
+  });
+  mainToolBar->addWidget(pagePrevBtn);
+  mainToolBar->addWidget(pageCombo);
+  mainToolBar->addWidget(pageNextBtn);
+  pageCountLabel = addLabel(QString());
+  mainToolBar->addSeparator();
+
+  // Checked while a row filter is active.
+  filterAction = new QAction(tr("Filter rows"), this);
+  filterAction->setCheckable(true);
+  filterAction->setToolTip(tr("Filter the column rows shown (%1)")
+                               .arg(filterAct->shortcut().toString(QKeySequence::NativeText)));
+  connect(filterAction, &QAction::triggered, this, [this]() {
+    filterColumnRows();
+    // Triggering toggles the check mark; restore it from the actual state.
+    updateFilterIndicator();
+  });
+  mainToolBar->addAction(filterAction);
+  plotAction = new QAction(tr("Plot"), this);
+  plotAction->setToolTip(tr("Plot the current column with sddsplot"));
+  connect(plotAction, &QAction::triggered, this, [this]() {
+    const int column = columnView->currentIndex().column();
+    if (column < 0) {
+      message(tr("Select a cell in the column to plot"));
+      return;
+    }
+    plotColumn(column);
+  });
+  mainToolBar->addAction(plotAction);
+  arrayViewerAct->setToolTip(tr("Open the current array in the array viewer"));
+  QAction *viewerToolAct = new QAction(tr("Array viewer"), this);
+  viewerToolAct->setToolTip(arrayViewerAct->toolTip());
+  connect(viewerToolAct, &QAction::triggered, arrayViewerAct, &QAction::trigger);
+  mainToolBar->addAction(viewerToolAct);
+
+  QWidget *spacer = new QWidget(mainToolBar);
+  spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+  mainToolBar->addWidget(spacer);
+  addLabel(tr("Save as"));
+  QFrame *formatSwitch = new QFrame(mainToolBar);
+  formatSwitch->setObjectName("formatSwitch");
+  QHBoxLayout *formatLayout = new QHBoxLayout(formatSwitch);
+  formatLayout->setContentsMargins(2, 2, 2, 2);
+  formatLayout->setSpacing(2);
+  formatLayout->addWidget(asciiBtn);
+  formatLayout->addWidget(binaryBtn);
+  mainToolBar->addWidget(formatSwitch);
+
+  bindIcon(openAct, IconOpen);
+  bindIcon(saveAct, IconSave);
+  bindIcon(undoAct, IconUndo);
+  bindIcon(redoAct, IconRedo);
+  bindIcon(filterAction, IconFilter);
+  bindIcon(plotAction, IconPlot);
+  bindIcon(viewerToolAct, IconGrid);
+  // Keep menus text-only; the toolbar carries the icons.
+  for (QAction *action : {openAct, saveAct, undoAct, redoAct})
+    action->setIconVisibleInMenu(false);
+}
+
+void SDDSEditor::buildStatusBar() {
+  QStatusBar *bar = statusBar();
+  bar->setSizeGripEnabled(true);
+  auto addLabel = [bar](const QString &name, int stretch = 0) {
+    QLabel *label = new QLabel(bar);
+    label->setObjectName(name);
+    bar->addWidget(label, stretch);
+    return label;
+  };
+  modifiedLabel = addLabel("modifiedLabel");
+  pathLabel = addLabel("pathLabel");
+  pageStatusLabel = addLabel("pageStatusLabel");
+  cellStatusLabel = addLabel("cellStatusLabel");
+  rowsStatusLabel = addLabel("rowsStatusLabel");
+  statusMessageLabel = addLabel("statusMessageLabel", 1);
+  // Long messages must not widen the window; the full text is in the tooltip.
+  statusMessageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+
+  undoStatusLabel = new QLabel(bar);
+  undoStatusLabel->setObjectName("undoStatusLabel");
+  bar->addPermanentWidget(undoStatusLabel);
+  messagesButton = new QToolButton(bar);
+  messagesButton->setObjectName("messagesButton");
+  messagesButton->setCheckable(true);
+  messagesButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  messagesButton->setIconSize(QSize(13, 13));
+  messagesButton->setToolTip(tr("Show or hide the message log (Ctrl+Shift+L)"));
+  bindIcon(messagesButton, IconTerminal);
+  bar->addPermanentWidget(messagesButton);
+  connect(messagesButton, &QToolButton::toggled, consoleDock, &QWidget::setVisible);
+  connect(consoleDock, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+    // A tabified or minimized dock can report false while still open.
+    const bool open = consoleDock->isVisible() || visible;
+    if (messagesButton->isChecked() != open) {
+      QSignalBlocker blocker(messagesButton);
+      messagesButton->setChecked(open);
+    }
+    if (open)
+      unreadMessages = 0;
+    updateStatusBar();
+  });
+
+  statusMessageTimer = new QTimer(this);
+  statusMessageTimer->setSingleShot(true);
+  connect(statusMessageTimer, &QTimer::timeout, statusMessageLabel, &QLabel::clear);
+}
+
 void SDDSEditor::message(const QString &text) {
   consoleEdit->appendPlainText(text);
+  if (statusMessageLabel) {
+    statusMessageLabel->setText(text);
+    statusMessageLabel->setToolTip(text);
+    statusMessageTimer->start(8000);
+  }
+  if (!consoleDock->isVisible())
+    ++unreadMessages;
+  updateStatusBar();
+}
+
+/** Refresh the toolbar page controls, panel counts and status bar readouts. */
+void SDDSEditor::updateStatusBar() {
+  if (!modifiedLabel || !paramBox || !colBox || !arrayBox)
+    return;
+  const QLocale locale;
+  const bool loaded = datasetLoaded && !pages.isEmpty();
+  const int pageCount = loaded ? pages.size() : 0;
+  const int page = loaded ? currentPage : -1;
+
+  pagePrevBtn->setEnabled(loaded && page > 0);
+  pageNextBtn->setEnabled(loaded && page + 1 < pageCount);
+  pageCombo->setEnabled(loaded);
+  pageCountLabel->setText(loaded ? tr("of %1").arg(locale.toString(pageCount)) : QString());
+
+  const int pcount = datasetLoaded ? dataset.layout.n_parameters : 0;
+  const int ccount = datasetLoaded ? dataset.layout.n_columns : 0;
+  const int acount = datasetLoaded ? dataset.layout.n_arrays : 0;
+  const int rows = columnModel->rowCount();
+  paramBox->setCountText(locale.toString(pcount));
+  colBox->setCountText(ccount > 0 ? tr("%1 %2 %3 rows").arg(locale.toString(ccount), QString(QChar(0x00D7)),
+                                                         locale.toString(rows))
+                                  : locale.toString(ccount));
+  arrayBox->setCountText(locale.toString(acount));
+
+  const bool wasModified = modifiedLabel->property("modified").toBool();
+  if (wasModified != dirty || modifiedLabel->text().isEmpty()) {
+    modifiedLabel->setProperty("modified", dirty);
+    modifiedLabel->setText(dirty ? QString("%1 %2").arg(QChar(0x25CF)).arg(tr("Modified")) : tr("Saved"));
+    modifiedLabel->style()->unpolish(modifiedLabel);
+    modifiedLabel->style()->polish(modifiedLabel);
+  }
+  modifiedLabel->setVisible(datasetLoaded);
+
+  const QString path = QDir::toNativeSeparators(currentFilename);
+  pathLabel->setToolTip(path);
+  pathLabel->setText(path.isEmpty() ? (datasetLoaded ? tr("Untitled") : tr("No file open"))
+                                    : pathLabel->fontMetrics().elidedText(path, Qt::ElideMiddle, 360));
+  pageStatusLabel->setText(loaded ? tr("Page %1 of %2").arg(locale.toString(page + 1), locale.toString(pageCount))
+                                  : QString());
+  pageStatusLabel->setVisible(loaded);
+
+  QString cell;
+  QTableView *view = lastCellView.data();
+  const QModelIndex current = view ? view->currentIndex() : QModelIndex();
+  if (loaded && current.isValid()) {
+    if (view == paramView && current.row() < pcount)
+      cell = tr("Parameter %1").arg(QString::fromLocal8Bit(dataset.layout.parameter_definition[current.row()].name));
+    else if (view == columnView && current.column() < ccount)
+      cell = tr("Row %1 %2 %3").arg(locale.toString(current.row() + 1), middleDot(),
+                                   QString::fromLocal8Bit(dataset.layout.column_definition[current.column()].name));
+    else if (view == arrayView && current.column() < acount)
+      cell = tr("Element %1 %2 %3").arg(locale.toString(current.row() + 1), middleDot(),
+                                       QString::fromLocal8Bit(dataset.layout.array_definition[current.column()].name));
+  }
+  cellStatusLabel->setText(cell);
+  cellStatusLabel->setVisible(!cell.isEmpty());
+
+  if (ccount > 0 && rowFilterActive)
+    rowsStatusLabel->setText(tr("%1 of %2 rows").arg(locale.toString(visibleColumnRows), locale.toString(rows)));
+  else if (ccount > 0)
+    rowsStatusLabel->setText(tr("%1 rows").arg(locale.toString(rows)));
+  else
+    rowsStatusLabel->clear();
+  rowsStatusLabel->setVisible(ccount > 0);
+
+  const QString undoText = undoStack->canUndo() ? undoStack->undoText() : QString();
+  undoStatusLabel->setText(undoText.isEmpty() ? QString() : tr("Undo: %1").arg(undoText));
+  undoStatusLabel->setVisible(!undoText.isEmpty());
+
+  messagesButton->setText(unreadMessages > 0 ? tr("Messages (%1)").arg(unreadMessages) : tr("Messages"));
+}
+
+/** Show the active row filter beside the Columns title and sync the toolbar. */
+void SDDSEditor::updateFilterIndicator() {
+  if (!filterChip)
+    return;
+  const bool active = rowFilterActive && !rowFilterExpression.trimmed().isEmpty();
+  if (filterAction && filterAction->isChecked() != active)
+    filterAction->setChecked(active);
+  if (active) {
+    const QString expression = filterChipText->fontMetrics().elidedText(
+        rowFilterExpression.simplified(), Qt::ElideRight, 260);
+    filterChipText->setText(tr("%1 %2 %3 shown").arg(expression, middleDot(),
+                                                     QLocale().toString(visibleColumnRows)));
+    filterChipText->setToolTip(tr("Row filter: %1\nClick to edit").arg(rowFilterExpression));
+  }
+  filterChip->setVisible(active);
+  updateStatusBar();
+}
+
+/** Hide parameter metadata columns that no definition uses. */
+void SDDSEditor::updateParameterColumns() {
+  bool anyUnits = false;
+  bool anyDescription = false;
+  if (datasetLoaded) {
+    for (int i = 0; i < dataset.layout.n_parameters; ++i) {
+      const PARAMETER_DEFINITION &def = dataset.layout.parameter_definition[i];
+      anyUnits = anyUnits || (def.units && *def.units);
+      anyDescription = anyDescription || (def.description && *def.description);
+    }
+  }
+  paramView->setColumnHidden(ParameterPageModel::UnitsColumn, !anyUnits);
+  paramView->setColumnHidden(ParameterPageModel::DescriptionColumn, !anyDescription);
+}
+
+/** Select the next visible cell in the current column containing the search text. */
+void SDDSEditor::findInColumnPanel() {
+  const QString needle = columnSearchEdit->text();
+  if (needle.isEmpty() || !datasetLoaded)
+    return;
+  const int rows = columnModel->rowCount();
+  int column = columnView->currentIndex().column();
+  if (column < 0 || column >= columnModel->columnCount())
+    column = 0;
+  if (rows <= 0 || columnModel->columnCount() <= 0)
+    return;
+  const int start = columnView->currentIndex().isValid() ? columnView->currentIndex().row() : -1;
+  for (int step = 1; step <= rows; ++step) {
+    const int row = (start + step) % rows;
+    if (columnView->isRowHidden(row))
+      continue;
+    const QModelIndex idx = columnModel->index(row, column);
+    if (idx.data(Qt::DisplayRole).toString().contains(needle, Qt::CaseInsensitive)) {
+      columnView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
+      columnView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
+      lastCellView = columnView;
+      updateStatusBar();
+      return;
+    }
+  }
+  message(tr("\"%1\" not found in %2").arg(needle, QString::fromLocal8Bit(dataset.layout.column_definition[column].name)));
 }
 
 void SDDSEditor::markDirty() {
@@ -2659,6 +3953,7 @@ void SDDSEditor::updateWindowTitle() {
   if (dirty)
     title += " *";
   setWindowTitle(title);
+  updateStatusBar();
 }
 
 void SDDSEditor::closeEvent(QCloseEvent *event) {
@@ -2915,7 +4210,7 @@ void SDDSEditor::copy() {
   QTableView *view = focusedTable();
   if (!view)
     return;
-  QModelIndexList indexes = view->selectionModel()->selectedIndexes();
+  QModelIndexList indexes = visibleSelectedIndexes(view);
   if (indexes.isEmpty())
     return;
 
@@ -2944,21 +4239,38 @@ void SDDSEditor::copy() {
   if (selected.isEmpty())
     return;
 
+  /*
+   * Plain text fills unselected cells inside the bounding rectangle with empty
+   * fields.  The private format marks those gaps as null so a paste inside the
+   * editor leaves the matching target cells unchanged.  Rows hidden by the row
+   * filter are left out entirely, matching what the user sees.
+   */
   QStringList rowTexts;
+  QJsonArray cellRows;
   for (int r = minRow; r <= maxRow; ++r) {
+    if (view->isRowHidden(r))
+      continue;
     QStringList cols;
+    QJsonArray rowCells;
     cols.reserve(maxCol - minCol + 1);
     for (int c = minCol; c <= maxCol; ++c) {
       if (selected.contains(keyFor(r, c))) {
         QModelIndex idx = view->model()->index(r, c);
-        cols << (idx.isValid() ? idx.data().toString() : QString());
+        const QString value = idx.isValid() ? idx.data().toString() : QString();
+        cols << value;
+        rowCells.append(value);
       } else {
         cols << QString();
+        rowCells.append(QJsonValue());
       }
     }
     rowTexts << cols.join('\t');
+    cellRows.append(rowCells);
   }
-  QApplication::clipboard()->setText(rowTexts.join('\n'));
+  QMimeData *mime = new QMimeData;
+  mime->setText(rowTexts.join('\n'));
+  mime->setData(editorCellsMime, QJsonDocument(cellRows).toJson(QJsonDocument::Compact));
+  QApplication::clipboard()->setMimeData(mime);
 }
 
 void SDDSEditor::paste() {
@@ -2969,23 +4281,58 @@ void SDDSEditor::paste() {
   if (!start.isValid())
     return;
   QString text = QApplication::clipboard()->text();
-  text.replace("\r\n", "\n");
-  text.replace('\r', '\n');
-  QStringList rows = text.split('\n');
-  while (!rows.isEmpty() && rows.last().isEmpty())
-    rows.removeLast();
+  // Cells copied from a non-contiguous selection carry null gaps to skip.
+  QVector<QStringList> rows;
+  QVector<QVector<bool>> gaps;
+  const QMimeData *mime = QApplication::clipboard()->mimeData();
+  if (mime && mime->hasFormat(editorCellsMime) && mime->text() == text) {
+    const QJsonArray cellRows = QJsonDocument::fromJson(mime->data(editorCellsMime)).array();
+    for (const QJsonValue &rowValue : cellRows) {
+      QStringList cols;
+      QVector<bool> rowGaps;
+      for (const QJsonValue &cell : rowValue.toArray()) {
+        cols << cell.toString();
+        rowGaps << cell.isNull();
+      }
+      rows << cols;
+      gaps << rowGaps;
+    }
+  } else {
+    text.replace("\r\n", "\n");
+    text.replace('\r', '\n');
+    QStringList lines = text.split('\n');
+    while (!lines.isEmpty() && lines.last().isEmpty())
+      lines.removeLast();
+    if (lines.isEmpty())
+      lines << QString();
+    for (const QString &line : lines) {
+      rows << line.split('\t');
+      gaps << QVector<bool>(rows.last().size(), false);
+    }
+  }
   if (rows.isEmpty())
-    rows << QString();
-  bool multiPaste = rows.size() > 1 || text.contains('\t');
+    return;
+  bool multiPaste = rows.size() > 1 || rows[0].size() > 1;
   bool changed = false;
   bool warned = false;
   bool macroStarted = false;
   QAbstractItemModel *model = view->model();
+  // Fill successive visible rows; rows hidden by the row filter are skipped.
+  QVector<int> targetRows;
+  for (int r = 0, row = start.row(); r < rows.size(); ++r, ++row) {
+    while (row < model->rowCount() && view->isRowHidden(row))
+      ++row;
+    targetRows << row;
+  }
   for (int r = 0; r < rows.size(); ++r) {
-    QStringList cols = rows[r].split('\t');
+    const QStringList &cols = rows[r];
     for (int c = 0; c < cols.size(); ++c) {
-      QModelIndex idx = model->index(start.row() + r, start.column() + c);
-      if (!idx.isValid())
+      if (gaps[r][c])
+        continue;
+      QModelIndex idx = model->index(targetRows[r], start.column() + c);
+      // Parameter metadata and cells past an array's end are read-only; do not
+      // warn that text which will never be stored is invalid for the type.
+      if (!idx.isValid() || !(model->flags(idx) & Qt::ItemIsEditable))
         continue;
       int type = SDDS_STRING;
       if (view == paramView)
@@ -3020,7 +4367,7 @@ void SDDSEditor::deleteCells() {
   QTableView *view = focusedTable();
   if (!view)
     return;
-  QModelIndexList indexes = view->selectionModel()->selectedIndexes();
+  QModelIndexList indexes = visibleSelectedIndexes(view);
   if (indexes.isEmpty())
     return;
   bool macroStarted = false;
@@ -3995,7 +5342,14 @@ bool SDDSEditor::writeHDF(const QString &path) {
 
   auto writeDataset = [&](hid_t grp, const char *name, hid_t dtype,
                           hid_t space, const void *data) -> bool {
-    hid_t ds = H5Dcreate1(grp, name, dtype, space, H5P_DEFAULT);
+    /*
+     * HDF5 treats '/' as a path separator, but SDDS names such as "dnux/dp"
+     * may contain it.  Percent-encode '%' and '/' so every name is one object.
+     */
+    QByteArray objectName(name ? name : "");
+    objectName.replace("%", "%25");
+    objectName.replace("/", "%2F");
+    hid_t ds = H5Dcreate1(grp, objectName.constData(), dtype, space, H5P_DEFAULT);
     if (ds < 0)
       return false;
     herr_t writeStatus = H5Sget_simple_extent_npoints(space) == 0
@@ -4642,6 +5996,7 @@ void SDDSEditor::populateModels() {
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   }
   paramModel->refresh();
+  updateParameterColumns();
   ++doneUnits;
   if (progress)
     updateProgress(false);
@@ -4657,9 +6012,8 @@ void SDDSEditor::populateModels() {
     updateProgress(false);
 
 
-  // Resize columns to fit their contents first so initial widths are reasonable
-  // then allow them to stretch to fill the remaining space and be adjusted by
-  // the user.
+  // Resize columns to fit their contents first so initial widths are reasonable;
+  // the user can then adjust them.
   if (progress) {
     progress->setLabelText(tr("Preparing display… (sizing columns)"));
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
@@ -4668,7 +6022,9 @@ void SDDSEditor::populateModels() {
   // During initial load (when progress dialog exists), skip it to speed up load.
   if (!(progress && hugeColumnTable))
     columnView->resizeColumnsToContents();
-  columnView->horizontalHeader()->setStretchLastSection(true);
+  // Keep content widths: stretching the last section would push right-aligned
+  // numbers away from their neighbors.
+  columnView->horizontalHeader()->setStretchLastSection(false);
   columnView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::Interactive);
   ++doneUnits;
@@ -4693,7 +6049,7 @@ void SDDSEditor::populateModels() {
   }
   if (!(progress && hugeArrayTable))
     arrayView->resizeColumnsToContents();
-  arrayView->horizontalHeader()->setStretchLastSection(true);
+  arrayView->horizontalHeader()->setStretchLastSection(false);
   arrayView->horizontalHeader()->setSectionResizeMode(
       QHeaderView::Interactive);
 
@@ -4709,7 +6065,7 @@ void SDDSEditor::populateModels() {
 void SDDSEditor::updatePanelSizing(int32_t pcount, int32_t ccount, int32_t acount) {
   const bool anyExist = (pcount > 0) || (ccount > 0) || (acount > 0);
 
-  auto applyPanelState = [&](QGroupBox *box, QTableView *view, bool hasData) {
+  auto applyPanelState = [&](DataPanel *box, QTableView *view, bool hasData) {
     if (!anyExist) {
       box->setChecked(true);
       view->setVisible(true);
@@ -4745,16 +6101,14 @@ void SDDSEditor::updatePanelSizing(int32_t pcount, int32_t ccount, int32_t acoun
                            fitParameters ? QSizePolicy::Ignored : QSizePolicy::Expanding);
   int parameterHeight = QWIDGETSIZE_MAX;
   if (fitParameters) {
-    // Fit the initial panel to its rows, header, frame, and group title.
+    // Fit the initial panel to its rows, header, frame, and panel title bar.
     // Ignore the scroll area's minimum-size hint so a small parameter set fits,
     // but do not impose a maximum height that would prevent manual expansion.
-    const QMargins boxMargins = paramBox->contentsMargins();
-    const QMargins layoutMargins = paramBox->layout()->contentsMargins();
+    paramView->ensurePolished();
     int64_t height = static_cast<int64_t>(paramView->verticalHeader()->length()) +
                      paramView->horizontalHeader()->sizeHint().height() +
                      2 * paramView->frameWidth() +
-                     boxMargins.top() + boxMargins.bottom() +
-                     layoutMargins.top() + layoutMargins.bottom();
+                     paramBox->chromeHeight();
     if (paramView->horizontalScrollBar()->isVisible())
       height += paramView->horizontalScrollBar()->sizeHint().height();
     parameterHeight = static_cast<int>(std::min<int64_t>(height, QWIDGETSIZE_MAX));
@@ -4973,12 +6327,13 @@ void SDDSEditor::editParameterAttributes() {
   dlg.setWindowTitle(tr("Parameter Attributes"));
   configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
-  QLineEdit name(def->name ? def->name : "", &dlg);
-  QLineEdit symbol(def->symbol ? def->symbol : "", &dlg);
-  QLineEdit units(def->units ? def->units : "", &dlg);
-  QLineEdit desc(def->description ? def->description : "", &dlg);
-  QLineEdit fmt(def->format_string ? def->format_string : "", &dlg);
-  QLineEdit fixed(def->fixed_value ? def->fixed_value : "", &dlg);
+  // Decode as the fields are encoded on OK (local 8-bit), or unchanged non-ASCII text is corrupted.
+  QLineEdit name(QString::fromLocal8Bit(def->name ? def->name : ""), &dlg);
+  QLineEdit symbol(QString::fromLocal8Bit(def->symbol ? def->symbol : ""), &dlg);
+  QLineEdit units(QString::fromLocal8Bit(def->units ? def->units : ""), &dlg);
+  QLineEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
+  QLineEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
+  QLineEdit fixed(QString::fromLocal8Bit(def->fixed_value ? def->fixed_value : ""), &dlg);
   QHBoxLayout *typeLayout = new QHBoxLayout();
   QButtonGroup typeGroup(&dlg);
   QMap<int, QRadioButton *> btns;
@@ -5086,29 +6441,33 @@ void SDDSEditor::editParameterAttributes() {
     }
   }
   paramModel->refresh();
+  updateParameterColumns();
   markDirty();
   pushStructuralUndoCommand(this, std::move(before),
                             tr("Edit Parameter Attributes"));
 }
 
 void SDDSEditor::editColumnAttributes() {
-  if (!datasetLoaded)
+  const QModelIndex idx = columnView->currentIndex();
+  if (idx.isValid())
+    editColumnAttributesAt(idx.column());
+}
+
+/** Edit one column definition; reachable from its header even with no rows. */
+void SDDSEditor::editColumnAttributesAt(int col) {
+  if (!datasetLoaded || col < 0 || col >= dataset.layout.n_columns)
     return;
   commitModels();
-  QModelIndex idx = columnView->currentIndex();
-  if (!idx.isValid())
-    return;
-  int col = idx.column();
   COLUMN_DEFINITION *def = &dataset.layout.column_definition[col];
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Column Attributes"));
   configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
-  QLineEdit name(def->name ? def->name : "", &dlg);
-  QLineEdit symbol(def->symbol ? def->symbol : "", &dlg);
-  QLineEdit units(def->units ? def->units : "", &dlg);
-  QLineEdit desc(def->description ? def->description : "", &dlg);
-  QLineEdit fmt(def->format_string ? def->format_string : "", &dlg);
+  QLineEdit name(QString::fromLocal8Bit(def->name ? def->name : ""), &dlg);
+  QLineEdit symbol(QString::fromLocal8Bit(def->symbol ? def->symbol : ""), &dlg);
+  QLineEdit units(QString::fromLocal8Bit(def->units ? def->units : ""), &dlg);
+  QLineEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
+  QLineEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
   QSpinBox length(&dlg);
   length.setRange(0, 1000000);
   length.setValue(def->field_length);
@@ -5201,30 +6560,34 @@ void SDDSEditor::editColumnAttributes() {
   def->field_length = savedDef->field_length = length.value();
   def->type = savedDef->type = typeGroup.checkedId();
   columnModel->refreshHeaders(col, col);
+  columnView->viewport()->update(); // alignment and formatting follow the type
   markDirty();
   pushStructuralUndoCommand(this, std::move(before),
                             tr("Edit Column Attributes"));
 }
 
 void SDDSEditor::editArrayAttributes() {
-  if (!datasetLoaded)
+  const QModelIndex idx = arrayView->currentIndex();
+  if (idx.isValid())
+    editArrayAttributesAt(idx.column());
+}
+
+/** Edit one array definition; reachable from its header even when empty. */
+void SDDSEditor::editArrayAttributesAt(int col) {
+  if (!datasetLoaded || col < 0 || col >= dataset.layout.n_arrays)
     return;
   commitModels();
-  QModelIndex idx = arrayView->currentIndex();
-  if (!idx.isValid())
-    return;
-  int col = idx.column();
   ARRAY_DEFINITION *def = &dataset.layout.array_definition[col];
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Array Attributes"));
   configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
-  QLineEdit name(def->name ? def->name : "", &dlg);
-  QLineEdit symbol(def->symbol ? def->symbol : "", &dlg);
-  QLineEdit units(def->units ? def->units : "", &dlg);
-  QLineEdit desc(def->description ? def->description : "", &dlg);
-  QLineEdit fmt(def->format_string ? def->format_string : "", &dlg);
-  QLineEdit group(def->group_name ? def->group_name : "", &dlg);
+  QLineEdit name(QString::fromLocal8Bit(def->name ? def->name : ""), &dlg);
+  QLineEdit symbol(QString::fromLocal8Bit(def->symbol ? def->symbol : ""), &dlg);
+  QLineEdit units(QString::fromLocal8Bit(def->units ? def->units : ""), &dlg);
+  QLineEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
+  QLineEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
+  QLineEdit group(QString::fromLocal8Bit(def->group_name ? def->group_name : ""), &dlg);
   QSpinBox length(&dlg);
   length.setRange(0, 1000000);
   length.setValue(def->field_length);
@@ -5390,7 +6753,8 @@ void SDDSEditor::changeParameterType(int row) {
     return;
   dataset.layout.parameter_definition[row].type = sddsType;
   dataset.original_layout.parameter_definition[row].type = sddsType;
-  // Type affects validation/formatting; repaint is sufficient.
+  // Type affects validation/formatting and the Type column.
+  paramModel->refreshMetadata(row, row);
   paramView->viewport()->update();
   markDirty();
   pushStructuralUndoCommand(this, std::move(before),
@@ -5412,9 +6776,14 @@ void SDDSEditor::showParameterMenu(QTableView *view, int row,
   pendingParameterHeaderRows.clear();
 
   QMenu menu(view);
+  QAction *attrAct = menu.addAction(tr("Attributes..."));
+  menu.addSeparator();
   QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
-  if (chosen == delAct)
+  if (chosen == attrAct) {
+    paramView->setCurrentIndex(paramModel->index(row, ParameterPageModel::ValueColumn));
+    editParameterAttributes();
+  } else if (chosen == delAct)
     deleteParameterRows(rowsForDelete);
 }
 
@@ -5466,6 +6835,7 @@ void SDDSEditor::changeColumnType(int column) {
   dataset.layout.column_definition[column].type = sddsType;
   dataset.original_layout.column_definition[column].type = sddsType;
   columnModel->refreshHeaders(column, column);
+  columnView->viewport()->update(); // alignment and formatting follow the type
   markDirty();
   pushStructuralUndoCommand(this, std::move(before),
                             tr("Change Column Type"));
@@ -5486,6 +6856,8 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
   pendingColumnHeaderColumns.clear();
 
   QMenu menu(view);
+  QAction *attrAct = menu.addAction(tr("Attributes..."));
+  menu.addSeparator();
   QAction *plotAct = menu.addAction(tr("Plot from file"));
   QAction *ascAct = menu.addAction(tr("Sort ascending"));
   QAction *descAct = menu.addAction(tr("Sort descending"));
@@ -5504,7 +6876,9 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
   menu.addSeparator();
   QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
-  if (chosen == plotAct)
+  if (chosen == attrAct)
+    editColumnAttributesAt(column);
+  else if (chosen == plotAct)
     plotColumn(column);
   else if (chosen == ascAct)
     sortColumn(column, Qt::AscendingOrder);
@@ -5517,12 +6891,13 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
     filterColumnRows();
   } else if (chosen == clearFilterAct)
     clearColumnRowFilter();
+  // A header never takes focus, so name the table instead of using the focused one.
   else if (chosen == fillSeriesAct)
-    fillSeriesSelection();
+    fillSeries(columnView);
   else if (chosen == applyExprAct)
-    applyNumericalExpressionSelection();
+    applyNumericalExpression(columnView);
   else if (chosen == copyFormulaAct)
-    applyTextFormulaSelection();
+    applyTextFormula(columnView);
   else if (chosen == delAct)
     deleteColumnIndexes(columnsForDelete);
 }
@@ -5577,14 +6952,11 @@ void SDDSEditor::columnRowMenuRequested(const QPoint &pos) {
   } else if (chosen == clearFilterAct) {
     clearColumnRowFilter();
   } else if (chosen == fillSeriesAct) {
-    columnView->setFocus();
-    fillSeriesSelection();
+    fillSeries(columnView);
   } else if (chosen == applyExprAct) {
-    columnView->setFocus();
-    applyNumericalExpressionSelection();
+    applyNumericalExpression(columnView);
   } else if (chosen == copyFormulaAct) {
-    columnView->setFocus();
-    applyTextFormulaSelection();
+    applyTextFormula(columnView);
   }
 }
 
@@ -5603,6 +6975,7 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
   pendingArrayHeaderColumns.clear();
 
   QMenu menu(view);
+  QAction *attrAct = menu.addAction(tr("Attributes..."));
   QAction *viewerAct = menu.addAction(tr("Open Array Viewer..."));
   QAction *searchAct = menu.addAction(tr("Search"));
   QAction *resizeAct = menu.addAction(tr("Resize"));
@@ -5616,18 +6989,21 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
   menu.addSeparator();
   QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
-  if (chosen == viewerAct)
+  if (chosen == attrAct)
+    editArrayAttributesAt(column);
+  else if (chosen == viewerAct)
     openArrayViewer(column);
   else if (chosen == searchAct)
     searchArray(column);
   else if (chosen == resizeAct)
     resizeArray(column);
+  // A header never takes focus, so name the table instead of using the focused one.
   else if (chosen == fillSeriesAct)
-    fillSeriesSelection();
+    fillSeries(arrayView);
   else if (chosen == applyExprAct)
-    applyNumericalExpressionSelection();
+    applyNumericalExpression(arrayView);
   else if (chosen == copyFormulaAct)
-    applyTextFormulaSelection();
+    applyTextFormula(arrayView);
   else if (chosen == delAct)
     deleteArrayIndexes(arraysForDelete);
 }
@@ -5637,7 +7013,7 @@ void SDDSEditor::openArrayViewer(int column) {
   if (!datasetLoaded || column < 0 || column >= dataset.layout.n_arrays)
     return;
   flushPendingEdits();
-  const QString name = QString::fromUtf8(dataset.layout.array_definition[column].name);
+  const QString name = QString::fromLocal8Bit(dataset.layout.array_definition[column].name);
   auto state = [this, name]() {
     ArrayViewerState result;
     result.name = name;
@@ -5645,13 +7021,13 @@ void SDDSEditor::openArrayViewer(int column) {
     if (!datasetLoaded || currentPage < 0 || currentPage >= pages.size())
       return result;
     for (int i = 0; i < dataset.layout.n_arrays; ++i) {
-      if (name != QString::fromUtf8(dataset.layout.array_definition[i].name) || i >= pages[currentPage].arrays.size())
+      if (name != QString::fromLocal8Bit(dataset.layout.array_definition[i].name) || i >= pages[currentPage].arrays.size())
         continue;
       result.column = i;
       result.dimensions = pages[currentPage].arrays[i].dims;
       result.elements = pages[currentPage].arrays[i].values.size();
       result.numeric = SDDS_NUMERIC_TYPE(dataset.layout.array_definition[i].type);
-      result.units = QString::fromUtf8(dataset.layout.array_definition[i].units);
+      result.units = QString::fromLocal8Bit(dataset.layout.array_definition[i].units);
       break;
     }
     return result;
@@ -5830,6 +7206,13 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
           ok = true;
           bi = bt.isEmpty() ? 0.0L : static_cast<long double>(bt.toDouble(&ok));
           bok = ok;
+        }
+        // NaN compares unequal to everything, which would break the sort's
+        // ordering; place NaN after all numbers in either direction.
+        if (aok && bok && (std::isnan(ai) || std::isnan(bi))) {
+          if (std::isnan(ai) != std::isnan(bi))
+            return std::isnan(bi);
+          return false;
         }
         if (aok && bok && ai != bi)
           return order == Qt::AscendingOrder ? ai < bi : ai > bi;
@@ -6059,10 +7442,7 @@ void SDDSEditor::searchColumn(int column) {
     QString pat = patternEdit->text();
     if (pat.isEmpty())
       return;
-    QItemSelectionModel *sel = columnView->selectionModel();
-    if (!sel)
-      return;
-    QModelIndexList indexes = sel->selectedIndexes();
+    QModelIndexList indexes = visibleSelectedIndexes(columnView);
     if (indexes.isEmpty())
       return;
     QString repl = replaceEdit->text();
@@ -6181,8 +7561,8 @@ void SDDSEditor::resizeArray(int column) {
                          tr("Array dimensions are too large."));
     return;
   }
+  as.values = reshapeArrayValues(as.values, as.dims, newDims, newSize);
   as.dims = newDims;
-  as.values.resize(newSize);
 
   populateModels();
   markDirty();
@@ -6409,6 +7789,7 @@ void SDDSEditor::changeArrayType(int column) {
   dataset.layout.array_definition[column].type = sddsType;
   dataset.original_layout.array_definition[column].type = sddsType;
   arrayModel->refreshHeaders(column, column);
+  arrayView->viewport()->update(); // alignment and formatting follow the type
   markDirty();
   pushStructuralUndoCommand(this, std::move(before),
                             tr("Change Array Type"));
@@ -6674,6 +8055,14 @@ void SDDSEditor::insertParameter() {
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
     return;
+  // Same check as the attribute editor; otherwise the file cannot be saved later.
+  if (!fixed.text().isEmpty() &&
+      !validateTextForType(fixed.text(), typeGroup.checkedId(), false)) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("Fixed value is invalid for type %1")
+                             .arg(QString::fromLocal8Bit(SDDS_GetTypeName(typeGroup.checkedId()))));
+    return;
+  }
 
   QByteArray baName = name.text().toLocal8Bit();
   QByteArray baSym = symbol.text().toLocal8Bit();
@@ -7092,7 +8481,8 @@ void SDDSEditor::deleteColumnRows() {
 
   commitModels();
 
-  QModelIndexList selection = columnView->selectionModel()->selectedIndexes();
+  // Never delete rows that the row filter is hiding.
+  QModelIndexList selection = visibleSelectedIndexes(columnView);
   if (selection.isEmpty())
     return;
 
@@ -7276,6 +8666,10 @@ bool SDDSEditor::applyColumnRowFilter(QString *errorText, int *visibleRows) {
     }
     const QVector<QString> &values = pd.columns[col];
     *outText = (row >= 0 && row < values.size()) ? values[row] : QString();
+    // An empty numeric cell is saved as zero, so filter it as zero.
+    if (SDDS_NUMERIC_TYPE(dataset.layout.column_definition[col].type) &&
+        outText->trimmed().isEmpty())
+      *outText = QStringLiteral("0");
     return true;
   };
 
@@ -7315,6 +8709,8 @@ void SDDSEditor::refreshColumnRowFilter(bool showMessageOnError) {
     for (int r = 0; r < columnModel->rowCount(); ++r)
       columnView->setRowHidden(r, false);
     rowFilterActive = false;
+    visibleColumnRows = columnModel->rowCount();
+    updateFilterIndicator();
     if (showMessageOnError) {
       QMessageBox::warning(this, tr("Row Filter"),
                            errorText.isEmpty() ? tr("Failed to apply row filter") : errorText);
@@ -7324,6 +8720,8 @@ void SDDSEditor::refreshColumnRowFilter(bool showMessageOnError) {
     return;
   }
 
+  visibleColumnRows = visibleRows;
+  updateFilterIndicator();
   if (rowFilterActive && showMessageOnError) {
     const int totalRows = columnModel->rowCount();
     message(tr("Row filter active: %1/%2 rows visible")
@@ -7333,13 +8731,16 @@ void SDDSEditor::refreshColumnRowFilter(bool showMessageOnError) {
 }
 
 void SDDSEditor::fillSeriesSelection() {
-  QTableView *view = focusedTable();
+  fillSeries(focusedTable());
+}
+
+void SDDSEditor::fillSeries(QTableView *view) {
   if (!view || !view->selectionModel()) {
     QMessageBox::information(this, tr("Fill Series"), tr("Select one or more cells first."));
     return;
   }
 
-  QModelIndexList selection = view->selectionModel()->selectedIndexes();
+  QModelIndexList selection = visibleSelectedIndexes(view);
   if (selection.isEmpty()) {
     QModelIndex idx = view->currentIndex();
     if (idx.isValid())
@@ -7404,7 +8805,7 @@ void SDDSEditor::fillSeriesSelection() {
       return;
     }
 
-    QString newText = longDoubleToText(start + step * static_cast<long double>(i));
+    QString newText = numericResultText(start + step * static_cast<long double>(i), type);
     if (!validateTextForType(newText, type, true))
       return;
     updates.append({idx, newText});
@@ -7423,13 +8824,16 @@ void SDDSEditor::fillSeriesSelection() {
 }
 
 void SDDSEditor::applyNumericalExpressionSelection() {
-  QTableView *view = focusedTable();
+  applyNumericalExpression(focusedTable());
+}
+
+void SDDSEditor::applyNumericalExpression(QTableView *view) {
   if (!view || !view->selectionModel()) {
     QMessageBox::information(this, tr("Apply Numerical Expression"), tr("Select one or more cells first."));
     return;
   }
 
-  QModelIndexList selection = view->selectionModel()->selectedIndexes();
+  QModelIndexList selection = visibleSelectedIndexes(view);
   if (selection.isEmpty()) {
     QModelIndex idx = view->currentIndex();
     if (idx.isValid())
@@ -7538,7 +8942,7 @@ void SDDSEditor::applyNumericalExpressionSelection() {
       return;
     }
 
-    QString newText = longDoubleToText(result);
+    QString newText = numericResultText(result, type);
     if (!validateTextForType(newText, type, true))
       return;
     updates.append({idx, newText});
@@ -7557,13 +8961,16 @@ void SDDSEditor::applyNumericalExpressionSelection() {
 }
 
 void SDDSEditor::applyTextFormulaSelection() {
-  QTableView *view = focusedTable();
+  applyTextFormula(focusedTable());
+}
+
+void SDDSEditor::applyTextFormula(QTableView *view) {
   if (!view || !view->selectionModel()) {
     QMessageBox::information(this, tr("Apply Text Formula"), tr("Select one or more cells first."));
     return;
   }
 
-  QModelIndexList selection = view->selectionModel()->selectedIndexes();
+  QModelIndexList selection = visibleSelectedIndexes(view);
   if (selection.isEmpty()) {
     QModelIndex idx = view->currentIndex();
     if (idx.isValid())
@@ -7732,45 +9139,69 @@ void SDDSEditor::deletePage() {
   pushStructuralUndoCommand(this, std::move(before), tr("Delete Page"));
 }
 
+/*
+ * Apply the light or dark editor theme: an application palette (so dialogs and
+ * array viewers match), the main window style sheet, and recolored icons.
+ */
 void SDDSEditor::applyTheme(bool dark) {
+  if (applyingTheme)
+    return;
+  applyingTheme = true;
   darkPalette = dark;
-  pageCombo->setStyleSheet(dark
-      ? "QComboBox { color: white; background-color: #303030; } "
-        "QComboBox QAbstractItemView { color: white; background-color: #303030; }"
-      : "");
-  const QString headerStyle = dark
-      ? "QHeaderView::section { background-color: #404040; color: white; }"
-      : "QHeaderView::section { background-color: #f0f0f0; }";
-  paramView->horizontalHeader()->setStyleSheet(headerStyle);
-  paramView->verticalHeader()->setStyleSheet(headerStyle);
-  columnView->horizontalHeader()->setStyleSheet(headerStyle);
-  columnView->verticalHeader()->setStyleSheet(headerStyle);
-  arrayView->horizontalHeader()->setStyleSheet(headerStyle);
-  arrayView->verticalHeader()->setStyleSheet(headerStyle);
-  dataSplitter->setStyleSheet(dark
-      ? "QSplitter::handle { background-color: #303030; }"
-      : "QSplitter::handle { background-color: lightgrey; }");
+  const EditorTheme t = editorTheme(dark);
+  qApp->setPalette(editorPalette(t, qApp->palette()));
+  setStyleSheet(editorStyleSheet(t));
+
+  dataSplitter->setProperty("gripColor", t.border);
+  dataSplitter->setProperty("gripHoverColor", t.accent);
+  for (int i = 0; i < dataSplitter->count(); ++i)
+    if (QSplitterHandle *handle = dataSplitter->handle(i))
+      handle->update();
+  columnHeader->setColors(t.text, t.muted, t.accentText);
+  arrayHeader->setColors(t.text, t.muted, t.accentText);
+  paramModel->setMutedColor(t.muted);
+  paramView->viewport()->update();
+
+  const QColor disabled = t.muted.lighter(dark ? 70 : 140);
+  for (const IconBinding &binding : iconBindings) {
+    if (!binding.target)
+      continue;
+    const QColor color = binding.tone == ToneMuted    ? t.muted
+                         : binding.tone == ToneAccent ? t.accentText
+                                                      : t.text;
+    const QIcon icon = makeEditorIcon(binding.kind, color, disabled);
+    if (QAction *action = qobject_cast<QAction *>(binding.target.data()))
+      action->setIcon(icon);
+    else if (QAbstractButton *button = qobject_cast<QAbstractButton *>(binding.target.data()))
+      button->setIcon(icon);
+  }
+  const QIcon expanded = makeEditorIcon(IconChevronDown, t.muted, disabled);
+  const QIcon collapsed = makeEditorIcon(IconChevronRight, t.muted, disabled);
+  for (DataPanel *panel : {paramBox, colBox, arrayBox})
+    panel->setToggleIcons(expanded, collapsed);
+  if (modifiedLabel) {
+    modifiedLabel->style()->unpolish(modifiedLabel);
+    modifiedLabel->style()->polish(modifiedLabel);
+  }
+  applyingTheme = false;
 }
 
 void SDDSEditor::changeEvent(QEvent *event) {
-  if (event->type() == QEvent::ApplicationPaletteChange ||
-      event->type() == QEvent::PaletteChange) {
-    QPalette pal = qApp->palette();
-    bool dark = pal.color(QPalette::Window).lightness() < 128;
-    QColor textColor = dark ? Qt::white : Qt::black;
-    pal.setColor(QPalette::Active, QPalette::Text, textColor);
-    pal.setColor(QPalette::Inactive, QPalette::Text, textColor);
-    pal.setColor(QPalette::Active, QPalette::WindowText, textColor);
-    pal.setColor(QPalette::Inactive, QPalette::WindowText, textColor);
-    qApp->setPalette(pal);
-    applyTheme(dark);
-  }
   QMainWindow::changeEvent(event);
+  // The editor installs its own palette; react only to outside palette changes.
+  if (applyingTheme || event->type() != QEvent::ApplicationPaletteChange)
+    return;
+  const bool dark = qApp->palette().color(QPalette::Window).lightness() < 128;
+  if (dark != darkPalette)
+    applyTheme(dark);
 }
 
 void SDDSEditor::restartApp() {
   if (!maybeSave())
     return;
+  // The user already chose Save or Discard.  Qt 6 quit() closes windows, so a
+  // still-dirty document would ask again, and Cancel would leave two editors.
+  dirty = false;
   QString program = QCoreApplication::applicationFilePath();
   QStringList args = QCoreApplication::arguments();
   if (!args.isEmpty())
@@ -7786,8 +9217,12 @@ void SDDSEditor::showHelp() {
   QVBoxLayout layout(&dlg);
   QPlainTextEdit text(&dlg);
   text.setReadOnly(true);
-  text.setPlainText(tr("Open a file using File->Open.\n"
-                       "Select a page and edit parameters, columns or arrays in the tables.\n"
+  text.setPlainText(tr("Open a file using File->Open or the toolbar.\n"
+                       "Select a page with the toolbar arrows or list, and edit parameters, columns or arrays in the tables.\n"
+                       "Click a panel title to collapse or expand it. Double-click a parameter's Type to change it.\n"
+                       "The status bar shows the save state, file, page, current cell and visible rows;\n"
+                       "its Messages button (Ctrl+Shift+L) opens the message log.\n"
+                       "Type in the Columns search box and press Enter to find the next match in the current column.\n"
                        "Right click headers for more actions such as:\n"
                        " - Plotting a column\n"
                        " - Sorting column or array data\n"
