@@ -22,12 +22,21 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <vector>
 
 namespace {
 
 std::vector<char> mutablePath(const std::filesystem::path &path);
+
+/** @brief Match the native long-double representation used by the C library. */
+sdds::LongDoubleEncoding cLongDoubleEncoding() {
+  return sizeof(long double) == sizeof(double) &&
+                 std::numeric_limits<long double>::digits == std::numeric_limits<double>::digits
+             ? sdds::LongDoubleEncoding::LegacyFloat64
+             : sdds::LongDoubleEncoding::Extended80;
+}
 
 sdds::Layout allTypesLayout(sdds::DataMode mode = sdds::DataMode::Binary,
                             sdds::MajorOrder major = sdds::MajorOrder::Row,
@@ -122,9 +131,7 @@ void cWrite(const std::filesystem::path &path) {
 
 void cppRead(const std::filesystem::path &path) {
   sdds::ReaderOptions options;
-#if defined(_WIN32)
-  options.longDoubleEncoding = sdds::LongDoubleEncoding::LegacyFloat64;
-#endif
+  options.longDoubleEncoding = cLongDoubleEncoding();
   auto reader = sdds::Reader::open(path, options);
   auto page = reader.next();
   assert(page && page->rowCount() == 2);
@@ -143,17 +150,18 @@ void cppWrite(const std::filesystem::path &path, sdds::DataMode mode,
   const auto layout = allTypesLayout(mode, major, order);
   sdds::WriterOptions options;
   options.compression = compression;
-#if defined(_WIN32)
-  options.longDoubleEncoding = sdds::LongDoubleEncoding::LegacyFloat64;
-#endif
+  options.longDoubleEncoding = cLongDoubleEncoding();
   auto writer = sdds::Writer::create(path, layout, options);
   writer.write(allTypesPage(std::make_shared<const sdds::Layout>(layout)));
   writer.close();
-  auto reader = sdds::Reader::open(path);
+  sdds::ReaderOptions readerOptions;
+  readerOptions.longDoubleEncoding = cLongDoubleEncoding();
+  auto reader = sdds::Reader::open(path, readerOptions);
   assert(reader.layout().associates.size() == 1);
   assert(reader.layout().associates[0].name == "related");
   assert(reader.layout().associates[0].isSdds);
   reader.close();
+  cppRead(path);
 }
 
 std::vector<char> mutablePath(const std::filesystem::path &path) {
@@ -172,6 +180,11 @@ void cRead(const std::filesystem::path &path) {
   std::int64_t parameter = 0;
   assert(SDDS_GetParameter(&dataset, const_cast<char *>("p64"), &parameter));
   assert(parameter == INT64_C(1234567890123));
+  auto *longdoubleValues = static_cast<long double *>(
+      SDDS_GetColumn(&dataset, const_cast<char *>("longdouble")));
+  assert(longdoubleValues && std::fabs(longdoubleValues[0] - 1.25L) < 1e-12L &&
+         std::fabs(longdoubleValues[1] + 2.5L) < 1e-12L);
+  SDDS_Free(longdoubleValues);
   auto *long64Values = static_cast<std::int64_t *>(
       SDDS_GetColumn(&dataset, const_cast<char *>("long64")));
   assert(long64Values && long64Values[1] == INT64_C(5000000000));
@@ -310,9 +323,17 @@ void includeMatrix(const std::filesystem::path &directory) {
 }  // namespace
 
 int main(int argc, char **argv) {
+  // The C library requires explicit opt-in on platforms whose long double is
+  // an eight-byte double, including Apple Silicon and MSVC.
+  if (cLongDoubleEncoding() == sdds::LongDoubleEncoding::LegacyFloat64) {
 #if defined(_WIN32)
-  _putenv_s("SDDS_LONGDOUBLE_64BITS", "1");
+    if (_putenv_s("SDDS_LONGDOUBLE_64BITS", "1") != 0)
+      return 1;
+#else
+    if (setenv("SDDS_LONGDOUBLE_64BITS", "1", 1) != 0)
+      return 1;
 #endif
+  }
   if (argc != 2) return 2;
   const std::filesystem::path directory(argv[1]);
   std::filesystem::create_directories(directory);

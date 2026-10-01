@@ -117,6 +117,13 @@ ASCII/binary data, both byte orders and major orders, compression, projection,
 row slicing, custom streams, headerless input, reconnect/locking/live reads,
 updates, transformations, malformed input, and the deprecated facade.
 
+The differential test explicitly matches the C library's native long-double
+encoding. On platforms with an eight-byte `long double` (including Apple
+Silicon and MSVC), it selects `LegacyFloat64` for C++ reads and writes and
+sets the C library's `SDDS_LONGDOUBLE_64BITS` option inside the test process.
+Other platforms use `Extended80`. No environment setup is needed to run the
+test. Test linking uses the dependency paths detected by `Makefile.rules`.
+
 The sanitizer target uses Clang AddressSanitizer and UndefinedBehaviorSanitizer.
 Leak detection is disabled because monitored build hosts may run under process
 inspection that is incompatible with LeakSanitizer. `make fuzz` builds the

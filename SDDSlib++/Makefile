@@ -18,7 +18,7 @@ LIBRARY_LIBS = lzma.lib z.lib
 else
 CCFLAGS += -std=c++17 -I../include
 LIBRARY_CCFLAGS += -DEXPORT_SDDSPP
-COMPRESSION_LIBS = -lz -llzma
+COMPRESSION_LIBS = $(Z_LIB) $(LZMA_LIB)
 TEST_EXECUTABLE_OUTPUT = -o $@
 endif
 
@@ -43,7 +43,7 @@ DIFFERENTIAL_LIBS = $(LIB_DIR)/SDDS1.lib $(LIB_DIR)/rpnlib.lib \
 else
 DIFFERENTIAL_LIBS = $(LIB_DIR)/libSDDS1.a $(LIB_DIR)/librpnlib.a \
                     $(LIB_DIR)/libmdbmth.a $(LIB_DIR)/libmdblib.a \
-                    -lz -llzma -lgsl -lgslcblas -lm
+                    $(COMPRESSION_LIBS) $(GSL_LIB) $(GSLCBLAS_LIB) -lm
 endif
 
 $(LIBRARY) $(LIBRARY_OBJS): | $(OBJ_DIR)
