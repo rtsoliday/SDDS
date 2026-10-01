@@ -74,6 +74,17 @@ Formula checks cover exact long64/ulong64 fill series and expressions beyond
 rejected without changing data; representable subnormal values remain valid.
 Checks also cover unchanged sorts and array resizes preserving Redo and the
 saved state, pending viewer edits on Escape/reject, and subnormal heatmap bounds.
+Long-string checks open and commit values beyond 32,767 characters in each table
+and the array viewer, then save and reload them. Array action checks cover formula
+sequence numbers across unequal array lengths, rectangular keyboard paste from
+an active cell editor, and viewer Undo/Redo with pending edits in the main window.
+Fixed-parameter checks cover literal backslashes, quotes, whitespace and all 256
+character bytes in ASCII/binary and plain/gzip/xz saves, including loading and
+resaving escaped definitions. Definition checks reject inserted names containing
+NUL, preserve field lengths beyond one million, and keep Undo/Redo and the saved
+state when attribute dialogs are accepted without changes.
+Editing other parameter attributes also preserves empty fixed strings and fixed
+zero-byte characters.
 
 Executables are built under the platform object directory (`O.Linux-x86_64` on
 Linux). The plotting probe is named `test-bin/sddsplot` there; only the test

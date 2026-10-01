@@ -56,6 +56,382 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** Fixed definitions must preserve literal data, and dialogs must preserve valid metadata. */
+  static void fixedTextAndDefinitions(const QString &root) {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      failures += !ok;
+    };
+    for (const QString &kind : {QString("Parameter"), QString("Column"), QString("Array")}) {
+      SDDSEditor editor;
+      require(editor.ensureDataset(), "initialize inserted name fixture");
+      acceptDialog("New " + kind, [](QDialog *dialog) {
+        dialog->findChild<QLineEdit *>()->setText(QString("Prefix") + QChar(0) + "Suffix");
+      });
+      if (kind == "Parameter")
+        editor.insertParameter();
+      else if (kind == "Column")
+        editor.insertColumn();
+      else
+        editor.insertArray();
+      check(editor.dataset.layout.n_parameters == 0 && editor.dataset.layout.n_columns == 0 &&
+                editor.dataset.layout.n_arrays == 0 && editor.undoStack->count() == 0 && !editor.dirty,
+            "an inserted name containing NUL is rejected without truncation or mutation");
+    }
+    for (const QString &kind : {QString("Column"), QString("Array")}) {
+      SDDSEditor editor;
+      setup(editor);
+      if (kind == "Column")
+        editor.dataset.layout.column_definition[0].field_length =
+            editor.dataset.original_layout.column_definition[0].field_length = 2000000;
+      else
+        editor.dataset.layout.array_definition[0].field_length =
+            editor.dataset.original_layout.array_definition[0].field_length = 2000000;
+      applyCellEditWithUndo(editor.undoStack, editor.columnModel, editor.columnModel->index(0, 0), "9");
+      editor.undoStack->undo();
+      editor.dirty = false;
+      acceptDialog(kind + " Attributes", [&](QDialog *dialog) {
+        check(dialog->findChild<QSpinBox *>()->value() == 2000000,
+              "attribute dialog displays the full valid field length");
+      });
+      if (kind == "Column")
+        editor.editColumnAttributesAt(0);
+      else
+        editor.editArrayAttributesAt(0);
+      const int length = kind == "Column" ? editor.dataset.layout.column_definition[0].field_length
+                                           : editor.dataset.layout.array_definition[0].field_length;
+      check(length == 2000000 && editor.undoStack->canRedo() && !editor.dirty,
+            "accepting unchanged attributes preserves field length, Redo and saved state");
+    }
+    {
+      SDDSEditor editor;
+      require(editor.ensureDataset(), "initialize fixed character dialog fixture");
+      acceptDialog("New Parameter", [](QDialog *dialog) {
+        const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        fields[0]->setText("Character");
+        fields[5]->setText(QString(QChar(255)));
+        for (QRadioButton *button : dialog->findChildren<QRadioButton *>())
+          if (button->text() == "character")
+            button->setChecked(true);
+      });
+      editor.insertParameter();
+      require(editor.dataset.layout.n_parameters == 1, "insert non-ASCII fixed character through dialog");
+      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      acceptDialog("Parameter Attributes", [&](QDialog *dialog) {
+        const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        check(fields[5]->text() == QString(QChar(255)), "fixed character attributes show its Latin-1 byte");
+        fields[5]->setText(QString(QChar(0)));
+      });
+      editor.editParameterAttributes();
+      check(editor.pages[0].parameters[0] == QString(QChar(0)), "fixed character attributes accept a zero byte");
+      editor.undoStack->undo();
+      check(editor.pages[0].parameters[0] == QString(QChar(255)), "fixed character attribute edit undoes correctly");
+      editor.undoStack->redo();
+      const QString path = root + "/fixed-character-dialog.sdds";
+      SDDSEditor loaded;
+      check(editor.writeFile(path) && loaded.loadFile(path) && loaded.pages[0].parameters[0].isEmpty(),
+            "a zero byte entered through fixed attributes survives save and reload");
+      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      acceptDialog("Parameter Attributes", [&](QDialog *dialog) {
+        const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        check(fields[5]->text() == QString(QChar(0)), "zero fixed character remains represented in attributes");
+        fields[2]->setText("unit");
+      });
+      editor.editParameterAttributes();
+      check(editor.dataset.layout.parameter_definition[0].fixed_value != nullptr,
+            "editing other attributes preserves a fixed zero character");
+    }
+    {
+      SDDSEditor editor;
+      require(editor.ensureDataset(), "initialize empty fixed string fixture");
+      char empty[] = "";
+      require(SDDS_DefineParameter(&editor.dataset, "Empty", nullptr, nullptr, nullptr, nullptr,
+                                   SDDS_STRING, empty) >= 0, "define empty fixed string");
+      require(SDDS_SaveLayout(&editor.dataset), "save empty fixed string layout");
+      editor.pages[0].parameters = {QString()};
+      editor.populateModels();
+      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      acceptDialog("Parameter Attributes", [](QDialog *dialog) {
+        dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[2]->setText("unit");
+      });
+      editor.editParameterAttributes();
+      check(editor.dataset.layout.parameter_definition[0].fixed_value != nullptr &&
+                editor.dataset.layout.parameter_definition[0].fixed_value[0] == '\0',
+            "editing other attributes preserves an empty fixed string");
+    }
+    for (bool ascii : {true, false}) {
+      SDDSEditor editor;
+      require(editor.ensureDataset(), "initialize fixed string fixture");
+      QString literal = "\"quoted\" C:\\temp\\new ! &end\n\t";
+      if (localEncodingPreserves(QString(QChar(0x00E9))))
+        literal += QChar(0x00E9);
+      acceptDialog("New Parameter", [literal](QDialog *dialog) {
+        const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        fields[0]->setText("Literal");
+        fields[5]->setText(literal);
+      });
+      editor.insertParameter();
+      require(editor.dataset.layout.n_parameters == 1, "insert fixed literal string");
+      const int history = editor.undoStack->count();
+      editor.dirty = false;
+      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      acceptDialog("Parameter Attributes", [&](QDialog *dialog) {
+        const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        check(fields[5]->text() == literal, "fixed string attributes show literal text");
+      });
+      editor.editParameterAttributes();
+      check(editor.undoStack->count() == history && !editor.dirty,
+            "accepting unchanged parameter attributes preserves undo and saved state");
+      editor.asciiBtn->setChecked(ascii);
+      editor.binaryBtn->setChecked(!ascii);
+      for (const QString &suffix : {QString("sdds"), QString("sdds.gz"), QString("sdds.xz")}) {
+        const QString path = root + QString("/fixed-literal-%1.").arg(ascii ? "ascii" : "binary") + suffix;
+        const bool saved = editor.writeFile(path);
+        check(saved, "save fixed literal string");
+        if (saved) {
+          SDDSEditor loaded;
+          const bool opened = loaded.loadFile(path);
+          check(opened && loaded.pages[0].parameters[0] == literal, "fixed literal string survives save and reload");
+          if (opened) {
+            const QString second = root + QString("/fixed-literal-again-%1.").arg(ascii ? "ascii" : "binary") + suffix;
+            const bool resaved = loaded.writeFile(second);
+            SDDSEditor again;
+            check(resaved && again.loadFile(second) && again.pages[0].parameters[0] == literal,
+                  "loading and resaving a fixed escaped string preserves its literal value");
+          }
+        }
+      }
+    }
+    for (bool ascii : {true, false}) {
+      SDDSEditor editor;
+      require(editor.ensureDataset(), "initialize fixed character fixture");
+      char initial[] = "A";
+      for (int byte = 0; byte < 256; ++byte) {
+        const QByteArray name = QString("Byte%1").arg(byte).toLatin1();
+        require(SDDS_DefineParameter(&editor.dataset, name.constData(), nullptr, nullptr, nullptr,
+                                     nullptr, SDDS_CHARACTER, initial) >= 0, "define fixed character");
+        editor.pages[0].parameters.append(QString(QChar(byte)));
+      }
+      require(SDDS_SaveLayout(&editor.dataset), "save fixed character layout");
+      editor.populateModels();
+      editor.asciiBtn->setChecked(ascii);
+      editor.binaryBtn->setChecked(!ascii);
+      for (const QString &suffix : {QString("sdds"), QString("sdds.gz"), QString("sdds.xz")}) {
+        const QString path = root + QString("/fixed-bytes-%1.").arg(ascii ? "ascii" : "binary") + suffix;
+        const bool saved = editor.writeFile(path);
+        check(saved, "save every fixed character byte");
+        if (saved) {
+          SDDSEditor loaded;
+          const bool opened = loaded.loadFile(path);
+          bool same = opened && loaded.pages[0].parameters.size() == 256;
+          if (same) {
+            for (int byte = 0; byte < 256; ++byte) {
+              // As in other character fields, the editor displays a zero byte as empty.
+              const QString expected = byte == 0 ? QString() : QString(QChar(byte));
+              same = same && loaded.pages[0].parameters[byte] == expected;
+            }
+          }
+          check(same, "all 256 fixed character bytes survive plain/gzip/xz round trips");
+        }
+      }
+    }
+    require(failures == 0, "fixed text and definition regressions");
+  }
+
+  /** Exercise long text, padded array selections and paste through a live delegate. */
+  static void longTextAndArrayActions(const QString &root) {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      failures += !ok;
+    };
+    const QString longText = QString(40000, QLatin1Char('x')) + "tail";
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.column_definition[0].type = SDDS_STRING;
+      editor.dataset.original_layout.column_definition[0].type = SDDS_STRING;
+      editor.dataset.layout.array_definition[0].type = SDDS_STRING;
+      editor.dataset.original_layout.array_definition[0].type = SDDS_STRING;
+      require(SDDS_DefineParameter(&editor.dataset, "P", nullptr, nullptr, nullptr,
+                                   nullptr, SDDS_STRING, nullptr) >= 0, "define long string parameter");
+      require(SDDS_SaveLayout(&editor.dataset), "save long string layout");
+      editor.pages[0].parameters = {longText};
+      editor.pages[0].columns[0][0] = longText;
+      editor.pages[0].arrays[0].values[0] = longText;
+      editor.populateModels();
+      editor.show();
+      for (QTableView *view : {editor.paramView, editor.columnView, editor.arrayView}) {
+        const QModelIndex index = view->model()->index(0, 0);
+        view->openPersistentEditor(index);
+        QLineEdit *cell = qobject_cast<QLineEdit *>(view->indexWidget(index));
+        require(cell, "open long string cell editor");
+        check(cell->text() == longText, "delegate opens the entire string beyond 32767 characters");
+        editor.flushPendingEdits();
+        check(index.data(Qt::EditRole).toString() == longText && editor.undoStack->count() == 0,
+              "opening and committing an unchanged long string preserves data and undo");
+      }
+      editor.openArrayViewer(0);
+      auto *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      const QModelIndex index = viewer->sliceModel()->index(0, 0);
+      viewer->table()->openPersistentEditor(index);
+      QLineEdit *cell = qobject_cast<QLineEdit *>(viewer->table()->indexWidget(index));
+      require(cell, "open long string viewer editor");
+      check(cell->text() == longText, "array viewer opens the entire long string");
+      editor.flushPendingEdits();
+      check(editor.pages[0].arrays[0].values[0] == longText, "viewer commit preserves the long string");
+      require(editor.writeFile(root + "/long-text-actions.sdds"), "save long string action fixture");
+      SDDSEditor loaded;
+      require(loaded.loadFile(root + "/long-text-actions.sdds"), "reload long string action fixture");
+      check(loaded.pages[0].parameters[0] == longText && loaded.pages[0].columns[0][0] == longText &&
+                loaded.pages[0].arrays[0].values[0] == longText, "long strings survive editing and file round trip");
+    }
+    for (const QString &kind : {QString("Parameter"), QString("Column"), QString("Array")}) {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineParameter(&editor.dataset, "P", nullptr, nullptr, nullptr,
+                                   nullptr, SDDS_STRING, nullptr) >= 0, "define attribute parameter");
+      require(SDDS_SaveLayout(&editor.dataset), "save attribute fixture layout");
+      editor.pages[0].parameters = {"value"};
+      char **description = kind == "Parameter" ? &editor.dataset.layout.parameter_definition[0].description
+          : kind == "Column" ? &editor.dataset.layout.column_definition[0].description
+                             : &editor.dataset.layout.array_definition[0].description;
+      char **savedDescription = kind == "Parameter" ? &editor.dataset.original_layout.parameter_definition[0].description
+          : kind == "Column" ? &editor.dataset.original_layout.column_definition[0].description
+                             : &editor.dataset.original_layout.array_definition[0].description;
+      require(replaceSharedLayoutString(description, savedDescription, longText), "install long description");
+      editor.populateModels();
+      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      acceptDialog(kind + " Attributes", [&](QDialog *dialog) {
+        const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        check(fields[3]->text() == longText, "attribute dialog opens the entire long description");
+      });
+      if (kind == "Parameter")
+        editor.editParameterAttributes();
+      else if (kind == "Column")
+        editor.editColumnAttributesAt(0);
+      else
+        editor.editArrayAttributesAt(0);
+      check(QString::fromLocal8Bit(*description) == longText, "accepting attributes preserves the long description");
+    }
+    for (const QString &action : {QString("Fill"), QString("Numerical"), QString("Text"), QString("Delete")}) {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineArray(&editor.dataset, "Short", nullptr, nullptr, nullptr,
+                               nullptr, SDDS_DOUBLE, 0, 1, nullptr) >= 0, "define shorter array");
+      require(SDDS_SaveLayout(&editor.dataset), "save shorter array layout");
+      ArrayStore shortArray;
+      shortArray.dims = {2};
+      shortArray.values = {"50", "60"};
+      editor.pages[0].arrays.append(shortArray);
+      editor.populateModels();
+      editor.show();
+      editor.activateWindow();
+      editor.arrayView->setFocus();
+      if (action == "Delete") {
+        applyCellEditWithUndo(editor.undoStack, editor.arrayModel, editor.arrayModel->index(0, 0), "11");
+        editor.undoStack->undo();
+        editor.dirty = false;
+        editor.arrayView->setCurrentIndex(editor.arrayModel->index(3, 1));
+        editor.deleteCells();
+        check(editor.undoStack->canRedo() && editor.undoStack->count() == 1 && !editor.dirty,
+              "delete on array padding preserves Redo and saved state");
+        continue;
+      }
+      editor.arrayView->selectAll();
+      if (action == "Fill") {
+        acceptDialog("Fill Series", [](QDialog *dialog) {
+          const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+          fields[0]->setText("0");
+          fields[1]->setText("1");
+        });
+        editor.fillSeries(editor.arrayView);
+      } else if (action == "Numerical") {
+        acceptDialog("Apply Numerical Expression", [](QDialog *dialog) { dialog->findChild<QLineEdit *>()->setText("i"); });
+        editor.applyNumericalExpression(editor.arrayView);
+      } else {
+        acceptDialog("Apply Text Formula", [](QDialog *dialog) { dialog->findChild<QLineEdit *>()->setText("${i}"); });
+        editor.applyTextFormula(editor.arrayView);
+      }
+      check(editor.pages[0].arrays[0].values == QVector<QString>({"0", "2", "4", "5"}) &&
+                editor.pages[0].arrays[1].values == QVector<QString>({"1", "3"}),
+            "formula sequence numbers count editable cells rather than padding");
+      editor.undoStack->undo();
+      check(editor.pages[0].arrays[0].values == QVector<QString>({"10", "20", "30", "40"}) &&
+                editor.pages[0].arrays[1].values == shortArray.values, "padded-array formula undoes as one step");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.openArrayViewer(0);
+      auto *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      const QModelIndex index = viewer->sliceModel()->index(0, 0);
+      viewer->table()->setCurrentIndex(index);
+      viewer->table()->openPersistentEditor(index);
+      QLineEdit *cell = qobject_cast<QLineEdit *>(viewer->table()->indexWidget(index));
+      require(cell, "open viewer editor for rectangular paste");
+      cell->setText("123");
+      QApplication::clipboard()->setText("1\t2\n3\t4");
+      const QKeySequence pasteSequence(QKeySequence::Paste);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+      const int pasteKey = pasteSequence[0].toCombined();
+#else
+      const int pasteKey = pasteSequence[0];
+#endif
+      QKeyEvent paste(QEvent::KeyPress, pasteKey & ~int(Qt::KeyboardModifierMask),
+                      Qt::KeyboardModifiers(pasteKey & int(Qt::KeyboardModifierMask)));
+      QApplication::sendEvent(cell, &paste);
+      // Release modifiers too: Qt table selection consults their global state.
+      QKeyEvent release(QEvent::KeyRelease, pasteKey & ~int(Qt::KeyboardModifierMask), Qt::NoModifier);
+      QApplication::sendEvent(viewer->table(), &release);
+      viewer->finishEditing();
+      check(editor.pages[0].arrays[0].values == QVector<QString>({"1", "2", "3", "4"}),
+            "keyboard paste in an active viewer editor fills the rectangle");
+      editor.undoStack->undo();
+      check(editor.pages[0].arrays[0].values == QVector<QString>({"123", "20", "30", "40"}),
+            "viewer paste preserves the pending edit as a separate undo step");
+      editor.undoStack->undo();
+      check(editor.pages[0].arrays[0].values == QVector<QString>({"10", "20", "30", "40"}),
+            "viewer pending edit can also be undone");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.show();
+      editor.openArrayViewer(0);
+      auto *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      require(viewer->sliceModel()->setData(viewer->sliceModel()->index(0, 0), "11"), "seed shared undo history");
+      const QModelIndex index = editor.columnModel->index(0, 0);
+      editor.columnView->openPersistentEditor(index);
+      QLineEdit *cell = qobject_cast<QLineEdit *>(editor.columnView->indexWidget(index));
+      require(cell, "open main table pending editor for viewer Undo");
+      cell->setText("123");
+      viewer->findChild<QAction *>("arrayViewerUndo")->trigger();
+      editor.flushPendingEdits();
+      check(editor.pages[0].columns[0][0] == "3" && editor.pages[0].arrays[0].values[0] == "11",
+            "viewer Undo commits all windows and undoes the latest pending edit");
+      viewer->findChild<QAction *>("arrayViewerRedo")->trigger();
+      check(editor.pages[0].columns[0][0] == "123" && editor.pages[0].arrays[0].values[0] == "11",
+            "viewer Redo restores the main table edit");
+      editor.openArrayViewer(0);
+      auto *other = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      const QModelIndex pending = viewer->sliceModel()->index(0, 1);
+      viewer->table()->openPersistentEditor(pending);
+      cell = qobject_cast<QLineEdit *>(viewer->table()->indexWidget(pending));
+      require(cell, "open pending editor in a second array window");
+      cell->setText("222");
+      other->findChild<QAction *>("arrayViewerUndo")->trigger();
+      editor.flushPendingEdits();
+      check(editor.pages[0].arrays[0].values == QVector<QString>({"11", "20", "30", "40"}),
+            "viewer Undo also commits pending edits in another viewer");
+      other->findChild<QAction *>("arrayViewerRedo")->trigger();
+      check(editor.pages[0].arrays[0].values == QVector<QString>({"11", "222", "30", "40"}),
+            "viewer Redo restores the other viewer's edit");
+    }
+    require(failures == 0, "long text and array action regressions");
+  }
+
   /** SDDS names use the same local encoding as values, including on Windows. */
   static void definitionNameEncoding() {
     SDDSEditor editor;
@@ -2363,6 +2739,8 @@ int main(int argc, char **argv) {
   SDDSEditorTests::displayAndRangeFixes();
   SDDSEditorTests::definitionAndPageFixes(artifacts.path());
   SDDSEditorTests::namesAndExactNumbers(artifacts.path());
+  SDDSEditorTests::longTextAndArrayActions(artifacts.path());
+  SDDSEditorTests::fixedTextAndDefinitions(artifacts.path());
   fprintf(stdout, "PASS all sddseditor regressions\n");
   return 0;
 }

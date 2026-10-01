@@ -261,8 +261,9 @@ void ArraySliceModel::setHeatmap(bool enabled, bool validRange, long double mini
 
 /** Build the slice controls and connect updates to the shared source model. */
 ArrayViewer::ArrayViewer(QAbstractItemModel *source, QUndoStack *undo, State state,
-                         ArraySliceModel::Edit edit, ArraySliceModel::Validate validate, QWidget *parent)
-    : QDialog(parent, Qt::Window), getState(std::move(state)), undo(undo) {
+                         ArraySliceModel::Edit edit, ArraySliceModel::Validate validate,
+                         std::function<void()> commitEdits, QWidget *parent)
+    : QDialog(parent, Qt::Window), getState(std::move(state)), undo(undo), commitEdits(std::move(commitEdits)) {
   setAttribute(Qt::WA_DeleteOnClose);
   setWindowModality(Qt::NonModal);
   resize(900, 620);
@@ -278,7 +279,7 @@ ArrayViewer::ArrayViewer(QAbstractItemModel *source, QUndoStack *undo, State sta
   QAction *copySlice = toolbar->addAction(tr("Copy slice"));
   connect(copy, &QAction::triggered, this, [this]() { copySelection(); });
   connect(copySlice, &QAction::triggered, this, [this]() { copySelection(true); });
-  connect(paste, &QAction::triggered, this, [this]() { finishEditing(); pasteText(QApplication::clipboard()->text()); });
+  connect(paste, &QAction::triggered, this, [this]() { pasteText(QApplication::clipboard()->text()); });
   toolbar->addSeparator();
   QAction *undoAction = new QAction(tr("Undo"), this);
   QAction *redoAction = new QAction(tr("Redo"), this);
@@ -288,8 +289,8 @@ ArrayViewer::ArrayViewer(QAbstractItemModel *source, QUndoStack *undo, State sta
   redoAction->setEnabled(undo->canRedo());
   connect(undo, &QUndoStack::canUndoChanged, undoAction, &QAction::setEnabled);
   connect(undo, &QUndoStack::canRedoChanged, redoAction, &QAction::setEnabled);
-  connect(undoAction, &QAction::triggered, this, [this]() { finishEditing(); this->undo->undo(); });
-  connect(redoAction, &QAction::triggered, this, [this]() { finishEditing(); this->undo->redo(); });
+  connect(undoAction, &QAction::triggered, this, [this]() { this->commitEdits(); this->undo->undo(); });
+  connect(redoAction, &QAction::triggered, this, [this]() { this->commitEdits(); this->undo->redo(); });
   undoAction->setShortcut(QKeySequence::Undo);
   redoAction->setShortcut(QKeySequence::Redo);
   toolbar->addAction(undoAction);
@@ -655,6 +656,8 @@ void ArrayViewer::copySelection(bool wholeSlice) {
 
 /** Validate the entire rectangle before applying it as one shared undo operation. */
 bool ArrayViewer::pasteText(const QString &text) {
+  // Commit delegates in every window before mutating their shared data/history.
+  commitEdits();
   const QModelIndex start = grid->currentIndex();
   if (!start.isValid())
     return false;

@@ -557,6 +557,48 @@ static bool parseLongDoubleStrict(const QString &text, long double *out) {
   return true;
 }
 
+/** Encode literal fixed text for SDDS_ScanData, keeping character fields as single bytes. */
+static QString fixedValueForDefinition(const QString &text, int32_t type) {
+  if (SDDS_NUMERIC_TYPE(type))
+    return text.trimmed().isEmpty() ? QStringLiteral("0") : text;
+  const QByteArray bytes = type == SDDS_CHARACTER
+                              ? (text.isEmpty() ? QByteArray(1, '\0') : text.toLatin1())
+                              : text.toLocal8Bit();
+  QString result;
+  for (unsigned char byte : bytes) {
+    // Escape token delimiters, SDDS comments/escapes, controls and non-ASCII bytes.
+    if (byte <= 32 || byte > 126 || byte == '\\' || byte == '"' || byte == '!' || byte == '&')
+      result += '\\' + QString::number(byte, 8).rightJustified(3, '0');
+    else
+      result += QLatin1Char(byte);
+  }
+  return result;
+}
+
+/** Decode fixed text exactly as the SDDS reader does before displaying or validating it. */
+static QString fixedValueForDisplay(const PARAMETER_DEFINITION &definition) {
+  if (!definition.fixed_value)
+    return QString();
+  if (definition.type != SDDS_STRING && definition.type != SDDS_CHARACTER)
+    return QString::fromLocal8Bit(definition.fixed_value);
+  QByteArray encoded(definition.fixed_value);
+  char character = '\0';
+  char *string = nullptr;
+  void *value = definition.type == SDDS_CHARACTER ? static_cast<void *>(&character)
+                                                : static_cast<void *>(&string);
+  const bool ok = SDDS_ScanData(encoded.data(), definition.type, 0, value, 0, 1);
+  const QString result = !ok ? QString::fromLocal8Bit(definition.fixed_value)
+      : definition.type == SDDS_CHARACTER ? QString(QChar(static_cast<unsigned char>(character)))
+                                           : sddsValueToString(value, 0, definition.type);
+  free(string);
+  return result;
+}
+
+/** Treat absent and empty optional metadata identically when checking for a real edit. */
+static bool definitionTextMatches(const char *stored, const QString &text) {
+  return QString::fromLocal8Bit(stored ? stored : "") == text;
+}
+
 static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
                                  int pageIndex, QString *errorText) {
   const int pcount = layout.n_parameters;
@@ -575,7 +617,7 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
   // Parameters
   for (int i = 0; i < pcount; ++i) {
     const PARAMETER_DEFINITION &pdef = layout.parameter_definition[i];
-    const QString val = pdef.fixed_value ? QString::fromLocal8Bit(pdef.fixed_value)
+    const QString val = pdef.fixed_value ? fixedValueForDisplay(pdef)
                                          : pd.parameters[i];
     const int32_t type = pdef.type;
     if (!validateTextForType(val, type, false)) {
@@ -974,6 +1016,15 @@ static QModelIndexList visibleSelectedIndexes(const QTableView *view, bool curre
       visible.append(idx);
   }
   return visible;
+}
+
+/** Mutation tools must not count read-only cells, including shorter arrays' padding. */
+static QModelIndexList editableSelectedIndexes(const QTableView *view, bool currentWhenEmpty = false) {
+  QModelIndexList indexes = visibleSelectedIndexes(view, currentWhenEmpty);
+  indexes.erase(std::remove_if(indexes.begin(), indexes.end(), [view](const QModelIndex &index) {
+    return !(view->model()->flags(index) & Qt::ItemIsEditable);
+  }), indexes.end());
+  return indexes;
 }
 
 static QVector<int> selectedRowsOrFallback(QTableView *view, int maxRows,
@@ -2308,7 +2359,10 @@ void pushStructuralUndoCommand(SDDSEditor *editor,
 
 class CaretOnDoubleClickLineEdit : public QLineEdit {
 public:
-  explicit CaretOnDoubleClickLineEdit(QWidget *parent = nullptr) : QLineEdit(parent) {}
+  explicit CaretOnDoubleClickLineEdit(QWidget *parent = nullptr) : QLineEdit(parent) {
+    // setEditorData() uses setText(), which otherwise silently truncates SDDS strings.
+    setMaxLength(std::numeric_limits<int>::max());
+  }
 
   void setMultiCellPasteHandler(std::function<void()> handler) {
     multiCellPasteHandler = std::move(handler);
@@ -3310,15 +3364,19 @@ private:
 class SDDSItemDelegate : public QStyledItemDelegate {
 public:
   using TypeFunc = std::function<int(const QModelIndex &)>;
-  SDDSItemDelegate(TypeFunc tf, QUndoStack *stack, QObject *parent = nullptr)
-      : QStyledItemDelegate(parent), typeFunc(std::move(tf)), undoStack(stack) {}
+  SDDSItemDelegate(TypeFunc tf, QUndoStack *stack, QObject *parent = nullptr,
+                   std::function<void()> pasteHandler = {})
+      : QStyledItemDelegate(parent), typeFunc(std::move(tf)), undoStack(stack),
+        multiCellPasteHandler(std::move(pasteHandler)) {}
 
   QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
                         const QModelIndex &index) const override {
     Q_UNUSED(option);
     Q_UNUSED(index);
     CaretOnDoubleClickLineEdit *editor = new CaretOnDoubleClickLineEdit(parent);
-    if (QWidget *window = parent ? parent->window() : nullptr) {
+    if (multiCellPasteHandler) {
+      editor->setMultiCellPasteHandler(multiCellPasteHandler);
+    } else if (QWidget *window = parent ? parent->window() : nullptr) {
       if (SDDSEditor *sddsEditor = qobject_cast<SDDSEditor *>(window)) {
         editor->setMultiCellPasteHandler([sddsEditor]() {
           QMetaObject::invokeMethod(sddsEditor, "paste", Qt::DirectConnection);
@@ -3370,6 +3428,7 @@ public:
 private:
   TypeFunc typeFunc;
   QUndoStack *undoStack;
+  std::function<void()> multiCellPasteHandler;
 };
 
 SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
@@ -4791,7 +4850,7 @@ void SDDSEditor::deleteCells() {
   if (!view)
     return;
   flushPendingEdits();
-  QModelIndexList indexes = visibleSelectedIndexes(view);
+  QModelIndexList indexes = editableSelectedIndexes(view);
   if (indexes.isEmpty())
     return;
   bool macroStarted = false;
@@ -6768,9 +6827,7 @@ void SDDSEditor::commitModels() {
                   i < dataset.original_layout.n_parameters
               ? &dataset.original_layout.parameter_definition[i]
               : nullptr;
-      QString fixedValue = val;
-      if (SDDS_NUMERIC_TYPE(def->type) && fixedValue.trimmed().isEmpty())
-        fixedValue = "0";
+      const QString fixedValue = fixedValueForDefinition(val, def->type);
       if (savedDef && QString::fromLocal8Bit(def->fixed_value) != fixedValue) {
         if (!replaceSharedLayoutString(&def->fixed_value,
                                        &savedDef->fixed_value,
@@ -6823,7 +6880,7 @@ void SDDSEditor::editParameterAttributes() {
   QLineEdit units(QString::fromLocal8Bit(def->units ? def->units : ""), &dlg);
   QLineEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
   QLineEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
-  QLineEdit fixed(QString::fromLocal8Bit(def->fixed_value ? def->fixed_value : ""), &dlg);
+  QLineEdit fixed(fixedValueForDisplay(*def), &dlg);
   QHBoxLayout *typeLayout = new QHBoxLayout();
   QButtonGroup typeGroup(&dlg);
   QMap<int, QRadioButton *> btns;
@@ -6866,7 +6923,7 @@ void SDDSEditor::editParameterAttributes() {
                                 return dataset.layout.parameter_definition[i].name;
                               }))
     return;
-  if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text(), fixed.text()}))
+  if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text()}))
     return;
   const int32_t tval = typeGroup.checkedId();
   if (!fixed.text().isEmpty() &&
@@ -6883,6 +6940,14 @@ void SDDSEditor::editParameterAttributes() {
                          tr("Saved parameter layout is inconsistent"));
     return;
   }
+
+  if (definitionTextMatches(def->name, name.text()) &&
+      definitionTextMatches(def->symbol, symbol.text()) &&
+      definitionTextMatches(def->units, units.text()) &&
+      definitionTextMatches(def->description, desc.text()) &&
+      definitionTextMatches(def->format_string, fmt.text()) &&
+      fixedValueForDisplay(*def) == fixed.text() && def->type == tval)
+    return;
 
   StructuralSnapshot before;
   if (!captureStructuralSnapshot(this, &before))
@@ -6922,7 +6987,10 @@ void SDDSEditor::editParameterAttributes() {
     return;
   if (!replaceField(&def->format_string, &savedDef->format_string, fmt.text()))
     return;
-  if (!replaceField(&def->fixed_value, &savedDef->fixed_value, fixed.text()))
+  const bool hasFixedValue = !fixed.text().isEmpty() ||
+                            (def->fixed_value && fixedValueForDisplay(*def).isEmpty());
+  if (!replaceField(&def->fixed_value, &savedDef->fixed_value,
+                    hasFixedValue ? fixedValueForDefinition(fixed.text(), tval) : QString(), !hasFixedValue))
     return;
   def->type = savedDef->type = tval;
   if (def->fixed_value) {
@@ -6962,7 +7030,7 @@ void SDDSEditor::editColumnAttributesAt(int col) {
   QLineEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
   QSpinBox length(&dlg);
   // Negative string field lengths are valid; clamping them would change the definition.
-  length.setRange(-1000000, 1000000);
+  length.setRange(-std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max());
   length.setValue(def->field_length);
   QHBoxLayout *typeLayout = new QHBoxLayout();
   QButtonGroup typeGroup(&dlg);
@@ -7016,6 +7084,14 @@ void SDDSEditor::editColumnAttributesAt(int col) {
                          tr("Saved column layout is inconsistent"));
     return;
   }
+
+  if (definitionTextMatches(def->name, name.text()) &&
+      definitionTextMatches(def->symbol, symbol.text()) &&
+      definitionTextMatches(def->units, units.text()) &&
+      definitionTextMatches(def->description, desc.text()) &&
+      definitionTextMatches(def->format_string, fmt.text()) &&
+      def->field_length == length.value() && def->type == typeGroup.checkedId())
+    return;
 
   StructuralSnapshot before;
   if (!captureStructuralSnapshot(this, &before))
@@ -7087,7 +7163,7 @@ void SDDSEditor::editArrayAttributesAt(int col) {
   QLineEdit group(QString::fromLocal8Bit(def->group_name ? def->group_name : ""), &dlg);
   QSpinBox length(&dlg);
   // Negative string field lengths are valid; clamping them would change the definition.
-  length.setRange(-1000000, 1000000);
+  length.setRange(-std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max());
   length.setValue(def->field_length);
   QSpinBox dimsCount(&dlg);
   dimsCount.setRange(1, 1000000);
@@ -7161,6 +7237,16 @@ void SDDSEditor::editArrayAttributesAt(int col) {
                          tr("Saved array layout is inconsistent"));
     return;
   }
+
+  if (definitionTextMatches(def->name, name.text()) &&
+      definitionTextMatches(def->symbol, symbol.text()) &&
+      definitionTextMatches(def->units, units.text()) &&
+      definitionTextMatches(def->description, desc.text()) &&
+      definitionTextMatches(def->format_string, fmt.text()) &&
+      definitionTextMatches(def->group_name, group.text()) &&
+      def->field_length == length.value() && def->dimensions == dimCnt &&
+      def->type == typeGroup.checkedId())
+    return;
 
   StructuralSnapshot before;
   if (!captureStructuralSnapshot(this, &before))
@@ -7545,10 +7631,12 @@ void SDDSEditor::openArrayViewer(int column) {
       [this, type](const QModelIndex &index, const QString &text) {
         return applyCellEditWithUndo(undoStack, arrayModel, index, canonicalizeForDisplay(text, type()));
       },
-      [type](const QString &text) { return validateTextForType(text, type(), false); }, this);
+      [type](const QString &text) { return validateTextForType(text, type(), false); },
+      [this]() { flushPendingEdits(); }, this);
   // The slice model creates undo commands against flat source coordinates.
   viewer->table()->setItemDelegate(new SDDSItemDelegate(
-      [type](const QModelIndex &) { return type(); }, nullptr, viewer->table()));
+      [type](const QModelIndex &) { return type(); }, nullptr, viewer->table(),
+      [viewer]() { viewer->pasteText(QApplication::clipboard()->text()); }));
   QShortcut *save = new QShortcut(QKeySequence::Save, viewer);
   connect(save, &QShortcut::activated, this, &SDDSEditor::saveFile);
   arrayViewers.erase(std::remove_if(arrayViewers.begin(), arrayViewers.end(),
@@ -8629,7 +8717,10 @@ void SDDSEditor::insertParameter() {
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
     return;
-  if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text(), fixed.text()}))
+  if (!validateDefinitionName(this, name.text(), "parameter", -1, dataset.layout.n_parameters,
+                              [this](int i) { return dataset.layout.parameter_definition[i].name; }))
+    return;
+  if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text()}))
     return;
   // Same check as the attribute editor; otherwise the file cannot be saved later.
   if (!fixed.text().isEmpty() &&
@@ -8645,7 +8736,7 @@ void SDDSEditor::insertParameter() {
   QByteArray baUnits = units.text().toLocal8Bit();
   QByteArray baDesc = desc.text().toLocal8Bit();
   QByteArray baFmt = fmt.text().toLocal8Bit();
-  QByteArray baFixed = fixed.text().toLocal8Bit();
+  QByteArray baFixed = fixedValueForDefinition(fixed.text(), typeGroup.checkedId()).toLocal8Bit();
 
   if (SDDS_DefineParameter(&dataset, baName.constData(),
                            symbol.text().isEmpty() ? NULL : baSym.constData(),
@@ -8728,6 +8819,9 @@ void SDDSEditor::insertColumn() {
   connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
+    return;
+  if (!validateDefinitionName(this, name.text(), "column", -1, dataset.layout.n_columns,
+                              [this](int i) { return dataset.layout.column_definition[i].name; }))
     return;
   if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text()}))
     return;
@@ -8824,6 +8918,9 @@ void SDDSEditor::insertArray() {
   connect(&buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   connect(&buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
   if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
+    return;
+  if (!validateDefinitionName(this, name.text(), "array", -1, dataset.layout.n_arrays,
+                              [this](int i) { return dataset.layout.array_definition[i].name; }))
     return;
   if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text(), group.text()}))
     return;
@@ -9339,7 +9436,7 @@ void SDDSEditor::fillSeries(QTableView *view) {
   }
 
   flushPendingEdits();
-  QModelIndexList selection = visibleSelectedIndexes(view, true);
+  QModelIndexList selection = editableSelectedIndexes(view, true);
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Fill Series"), tr("Select one or more cells first."));
     return;
@@ -9431,7 +9528,7 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
   }
 
   flushPendingEdits();
-  QModelIndexList selection = visibleSelectedIndexes(view, true);
+  QModelIndexList selection = editableSelectedIndexes(view, true);
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Apply Numerical Expression"), tr("Select one or more cells first."));
     return;
@@ -9575,7 +9672,7 @@ void SDDSEditor::applyTextFormula(QTableView *view) {
   }
 
   flushPendingEdits();
-  QModelIndexList selection = visibleSelectedIndexes(view, true);
+  QModelIndexList selection = editableSelectedIndexes(view, true);
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Apply Text Formula"), tr("Select one or more cells first."));
     return;

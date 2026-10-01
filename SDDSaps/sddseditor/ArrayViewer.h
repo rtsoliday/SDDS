@@ -74,7 +74,8 @@ class ArrayViewer : public QDialog {
 public:
   using State = std::function<ArrayViewerState()>;
   ArrayViewer(QAbstractItemModel *source, QUndoStack *undo, State state,
-              ArraySliceModel::Edit edit, ArraySliceModel::Validate validate, QWidget *parent);
+              ArraySliceModel::Edit edit, ArraySliceModel::Validate validate,
+              std::function<void()> commitEdits, QWidget *parent);
   void refresh();
   void copySelection(bool wholeSlice = false);
   bool pasteText(const QString &text);
@@ -94,6 +95,7 @@ private:
   ArrayViewerState state;
   ArraySliceModel *model;
   QUndoStack *undo;
+  std::function<void()> commitEdits;
   QTableView *grid;
   QComboBox *rowChoice;
   QComboBox *columnChoice;
