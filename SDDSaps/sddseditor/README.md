@@ -67,7 +67,10 @@ viewers, CSV validation and unequal array lengths, and main-window Undo/Redo
 with a pending viewer edit. Further checks cover newlines inside CSV text,
 fixed parameters on inserted pages, negative (trimmed) string field lengths in
 attribute editors and type changes, and edits that change nothing adding no
-Undo step.
+Undo step. Name checks cover row filters on bracketed (`[Q[0]]`), case-sensitive
+and `i`/`row` column names, and plotting columns whose names contain brackets.
+Formula checks cover exact long64/ulong64 fill series and expressions beyond
+2^53, and NaN results.
 
 Executables are built under the platform object directory (`O.Linux-x86_64` on
 Linux). The plotting probe is named `test-bin/sddsplot` there; only the test
@@ -132,6 +135,15 @@ preserve the original order of equal values, with NaN and invalid numeric text
 after valid numbers in either direction. Column definition changes immediately
 refresh an active row filter; renaming a referenced column disables that filter
 and shows all rows.
+
+Row filters match column names case-sensitively first, then ignoring case.
+Write a name in brackets when it is not a plain identifier, including names
+that contain brackets (`[Q[0]] > 0`); a bracketed name always refers to a
+column, even one named `row`, `i`, `true` or `false`. Fill Series and numerical
+expressions compute integer cells exactly with 64-bit integers, so long64 and
+ulong64 values keep every digit on platforms whose long double is only 64 bits
+wide (such as MSVC). Expressions that produce NaN or infinity store `nan`,
+`inf` or `-inf` in floating-point cells.
 
 The parameter table lists Name, Type, Units, Value and Description. Only the
 value can be edited; double-click the type to change it, or units/description

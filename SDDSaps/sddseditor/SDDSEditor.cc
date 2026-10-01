@@ -461,9 +461,15 @@ static QString shortestFloatText(float value) {
 /*
  * Enough digits to convert back to the same long double.  QString::asprintf
  * would convert the value to double, losing the extra precision of 80-bit or
- * 128-bit long doubles, so format with the C library.
+ * 128-bit long doubles, so format with the C library.  The C library spells
+ * NaN as "-nan" or "-nan(ind)", which the numeric validators reject, so use
+ * the spellings that Qt and strtold both accept for nonfinite values.
  */
 static QString longDoubleToText(long double value) {
+  if (std::isnan(value))
+    return QStringLiteral("nan");
+  if (std::isinf(value))
+    return value < 0 ? QStringLiteral("-inf") : QStringLiteral("inf");
   char buffer[128];
   const int written = snprintf(buffer, sizeof(buffer), "%.*Lg",
                                std::numeric_limits<long double>::max_digits10, value);
@@ -1324,6 +1330,235 @@ static bool evaluateExpressionText(const QString &expression,
   return parser.parse(out);
 }
 
+/*
+ * Where long double is no wider than double (MSVC, Apple silicon), it cannot
+ * hold every 64-bit integer, so 9007199254740993 + 0 would become ...992.
+ * Integer cells are therefore computed exactly as a sign and a 64-bit
+ * magnitude, which covers both long64 and ulong64.
+ */
+struct ExactInteger {
+  bool negative;
+  quint64 magnitude;
+};
+
+static ExactInteger exactInteger(bool negative, quint64 magnitude) {
+  return {negative && magnitude != 0, magnitude};
+}
+
+/** Accept optionally signed decimal digits; an empty cell is zero, as when saved. */
+static bool parseExactInteger(const QString &text, ExactInteger *out) {
+  QString digits = text.trimmed();
+  if (digits.isEmpty()) {
+    *out = exactInteger(false, 0);
+    return true;
+  }
+  const bool negative = digits.startsWith('-');
+  if (negative || digits.startsWith('+'))
+    digits.remove(0, 1);
+  if (digits.isEmpty())
+    return false;
+  for (QChar ch : digits)
+    if (ch < QLatin1Char('0') || ch > QLatin1Char('9'))
+      return false;
+  bool ok = false;
+  const quint64 magnitude = digits.toULongLong(&ok);
+  if (!ok)
+    return false;
+  *out = exactInteger(negative, magnitude);
+  return true;
+}
+
+static QString exactIntegerText(const ExactInteger &value) {
+  const QString digits = QString::number(value.magnitude);
+  return value.negative ? QStringLiteral("-") + digits : digits;
+}
+
+static bool exactAdd(const ExactInteger &a, const ExactInteger &b, ExactInteger *out) {
+  if (a.negative == b.negative) {
+    if (a.magnitude > std::numeric_limits<quint64>::max() - b.magnitude)
+      return false;
+    *out = exactInteger(a.negative, a.magnitude + b.magnitude);
+  } else if (a.magnitude >= b.magnitude) {
+    *out = exactInteger(a.negative, a.magnitude - b.magnitude);
+  } else {
+    *out = exactInteger(b.negative, b.magnitude - a.magnitude);
+  }
+  return true;
+}
+
+static bool exactMultiply(const ExactInteger &a, const ExactInteger &b, ExactInteger *out) {
+  if (a.magnitude != 0 && b.magnitude > std::numeric_limits<quint64>::max() / a.magnitude)
+    return false;
+  *out = exactInteger(a.negative != b.negative, a.magnitude * b.magnitude);
+  return true;
+}
+
+struct ExactIntegerContext {
+  ExactInteger x;
+  ExactInteger a;
+  bool hasX;
+  bool hasA;
+  int i;
+  int row;
+  int col;
+  int dr;
+  int dc;
+};
+
+/*
+ * The integer subset of ExpressionParser's grammar.  Anything outside it
+ * (fractions, '^', functions other than abs, pi, e, inexact division,
+ * overflow or a syntax error) fails, and the caller falls back to
+ * ExpressionParser, which computes the value or reports the error.
+ */
+class ExactIntegerExpressionParser {
+public:
+  ExactIntegerExpressionParser(const QString &expression, const ExactIntegerContext &context)
+      : text(expression), ctx(context), pos(0), ok(true) {}
+
+  bool parse(ExactInteger *out) {
+    skipWs();
+    const ExactInteger value = parseExpression();
+    skipWs();
+    if (!ok || pos != text.size())
+      return false;
+    *out = value;
+    return true;
+  }
+
+private:
+  ExactInteger parseExpression() {
+    ExactInteger lhs = parseTerm();
+    while (ok) {
+      skipWs();
+      if (match('+'))
+        ok = exactAdd(lhs, parseTerm(), &lhs) && ok;
+      else if (match('-'))
+        ok = exactAdd(lhs, negate(parseTerm()), &lhs) && ok;
+      else
+        break;
+    }
+    return lhs;
+  }
+
+  ExactInteger parseTerm() {
+    ExactInteger lhs = parseUnary();
+    while (ok) {
+      skipWs();
+      if (match('*')) {
+        ok = exactMultiply(lhs, parseUnary(), &lhs) && ok;
+      } else if (match('/')) {
+        const ExactInteger rhs = parseUnary();
+        if (rhs.magnitude == 0 || lhs.magnitude % rhs.magnitude != 0) {
+          ok = false;
+          break;
+        }
+        lhs = exactInteger(lhs.negative != rhs.negative, lhs.magnitude / rhs.magnitude);
+      } else {
+        break;
+      }
+    }
+    return lhs;
+  }
+
+  ExactInteger parseUnary() {
+    skipWs();
+    if (match('+'))
+      return parseUnary();
+    if (match('-'))
+      return negate(parseUnary());
+    const ExactInteger value = parsePrimary();
+    skipWs();
+    if (pos < text.size() && text[pos] == '^')
+      ok = false;
+    return value;
+  }
+
+  ExactInteger parsePrimary() {
+    skipWs();
+    if (match('(')) {
+      const ExactInteger value = parseExpression();
+      skipWs();
+      if (!match(')'))
+        ok = false;
+      return value;
+    }
+    if (pos < text.size() && text[pos] >= QLatin1Char('0') && text[pos] <= QLatin1Char('9')) {
+      const int start = pos;
+      while (pos < text.size() && text[pos] >= QLatin1Char('0') && text[pos] <= QLatin1Char('9'))
+        ++pos;
+      // "1.5", "1e3" and "0x10" are not plain integers.
+      ExactInteger value = exactInteger(false, 0);
+      if ((pos < text.size() && (text[pos] == '.' || text[pos].isLetterOrNumber() || text[pos] == '_')) ||
+          !parseExactInteger(text.mid(start, pos - start), &value))
+        ok = false;
+      return value;
+    }
+    if (pos < text.size() && (text[pos].isLetter() || text[pos] == '_')) {
+      const int start = pos;
+      while (pos < text.size() && (text[pos].isLetterOrNumber() || text[pos] == '_'))
+        ++pos;
+      const QString ident = text.mid(start, pos - start).toLower();
+      skipWs();
+      if (match('(')) {
+        ExactInteger arg = parseExpression();
+        skipWs();
+        if (!match(')') || ident != "abs")
+          ok = false;
+        arg.negative = false;
+        return arg;
+      }
+      return variableValue(ident);
+    }
+    ok = false;
+    return exactInteger(false, 0);
+  }
+
+  ExactInteger variableValue(const QString &ident) {
+    auto fromInt = [](int value) {
+      return exactInteger(value < 0, value < 0 ? 0 - static_cast<quint64>(value) : static_cast<quint64>(value));
+    };
+    if (ident == "x" && ctx.hasX)
+      return ctx.x;
+    if (ident == "a" && ctx.hasA)
+      return ctx.a;
+    if (ident == "i")
+      return fromInt(ctx.i);
+    if (ident == "row")
+      return fromInt(ctx.row);
+    if (ident == "col")
+      return fromInt(ctx.col);
+    if (ident == "dr")
+      return fromInt(ctx.dr);
+    if (ident == "dc")
+      return fromInt(ctx.dc);
+    ok = false;
+    return exactInteger(false, 0);
+  }
+
+  static ExactInteger negate(const ExactInteger &value) {
+    return exactInteger(!value.negative, value.magnitude);
+  }
+
+  void skipWs() {
+    while (pos < text.size() && text[pos].isSpace())
+      ++pos;
+  }
+
+  bool match(QChar ch) {
+    if (pos < text.size() && text[pos] == ch) {
+      ++pos;
+      return true;
+    }
+    return false;
+  }
+
+  QString text;
+  ExactIntegerContext ctx;
+  int pos;
+  bool ok;
+};
+
 struct RowFilterValue {
   QString text;
   bool hasNumber;
@@ -1392,11 +1627,14 @@ enum class RowFilterTokenKind {
 struct RowFilterToken {
   RowFilterTokenKind kind;
   QString text;
+  /* Written as [name]: always a column, never a row variable or true/false. */
+  bool bracketed = false;
 };
 
 class RowFilterParser {
 public:
-  using Resolver = std::function<bool(const QString &, QString *)>;
+  /* Resolve (identifier, column only) to its text for the current row. */
+  using Resolver = std::function<bool(const QString &, bool, QString *)>;
 
   RowFilterParser(const QString &expression, Resolver resolver)
       : input(expression), pos(0), resolver(std::move(resolver)) {
@@ -1535,7 +1773,7 @@ private:
 
     if (current.kind == RowFilterTokenKind::Identifier) {
       const QString ident = current.text;
-      const QString lowered = ident.toLower();
+      const QString lowered = current.bracketed ? QString() : ident.toLower();
       if (lowered == "true") {
         out->text = "1";
         out->hasNumber = true;
@@ -1552,7 +1790,7 @@ private:
       }
 
       QString resolved;
-      if (!resolver(ident, &resolved)) {
+      if (!resolver(ident, current.bracketed, &resolved)) {
         if (errorText)
           *errorText = QObject::tr("Unknown row variable/column '%1'").arg(ident);
         return false;
@@ -1704,16 +1942,22 @@ private:
     return {RowFilterTokenKind::Invalid, QString()};
   }
 
+  /* SDDS names may contain brackets ("Q[0]"), so nested pairs belong to the name. */
   RowFilterToken readBracketIdentifier() {
     ++pos;
     const int start = pos;
-    while (pos < input.size() && input[pos] != ']')
-      ++pos;
+    int depth = 1;
+    for (; pos < input.size(); ++pos) {
+      if (input[pos] == '[')
+        ++depth;
+      else if (input[pos] == ']' && --depth == 0)
+        break;
+    }
     if (pos >= input.size())
       return {RowFilterTokenKind::Invalid, QString()};
     const QString ident = input.mid(start, pos - start).trimmed();
     ++pos;
-    return {RowFilterTokenKind::Identifier, ident};
+    return {RowFilterTokenKind::Identifier, ident, true};
   }
 
   void next() {
@@ -7330,12 +7574,21 @@ void SDDSEditor::plotColumn(int column) {
     }
   }
 
+  // sddsplot treats *, ? and [...] in names as wildcards, so "Q[0]" would
+  // match "Q0" instead; escaped, the name matches only itself.
+  QString literalName;
+  for (QChar ch : colName) {
+    if (ch == '*' || ch == '?' || ch == '[' || ch == ']')
+      literalName += '\\';
+    literalName += ch;
+  }
+
   QStringList args;
   args << "-split=page" << "-sep=page" << snapshot->filePath("plot.sdds");
   if (hasTime) {
-    args << QString("-col=Time,%1").arg(colName) << "-tick=xtime";
+    args << QString("-col=Time,%1").arg(literalName) << "-tick=xtime";
   } else {
-    args << QString("-col=%1").arg(colName);
+    args << QString("-col=%1").arg(literalName);
   }
 
   QProcess *process = new QProcess(this);
@@ -8856,7 +9109,10 @@ void SDDSEditor::filterColumnRows() {
     QString columnName =
         QString::fromLocal8Bit(dataset.layout.column_definition[selectedColumn].name);
     const QRegularExpression identRe(QStringLiteral("^[A-Za-z_][A-Za-z0-9_]*$"));
-    if (!identRe.match(columnName).hasMatch())
+    // A bare row, i, true or false would mean the row index or a constant.
+    const QString lowered = columnName.toLower();
+    if (!identRe.match(columnName).hasMatch() || lowered == "row" || lowered == "i" ||
+        lowered == "true" || lowered == "false")
       columnName = QStringLiteral("[%1]").arg(columnName);
     selectedColumnDefault = QStringLiteral("%1 > 0").arg(columnName);
   }
@@ -8943,8 +9199,12 @@ bool SDDSEditor::applyColumnRowFilter(QString *errorText, int *visibleRows) {
   }
 
   const PageStore &pd = pages[currentPage];
+  // SDDS names are case sensitive, so "x" must not find column "X" when both
+  // exist; fall back to ignoring case only when no name matches exactly.
+  QHash<QString, int> exactColumnLookup;
   QHash<QString, int> columnLookup;
-  columnLookup.reserve(dataset.layout.n_columns * 2 + 1);
+  exactColumnLookup.reserve(dataset.layout.n_columns + 1);
+  columnLookup.reserve(dataset.layout.n_columns + 1);
   for (int c = 0; c < dataset.layout.n_columns; ++c) {
     const char *name = dataset.layout.column_definition[c].name;
     if (!name)
@@ -8952,21 +9212,26 @@ bool SDDSEditor::applyColumnRowFilter(QString *errorText, int *visibleRows) {
     const QString n = QString::fromLocal8Bit(name).trimmed();
     if (n.isEmpty())
       continue;
-    columnLookup.insert(n.toLower(), c);
+    exactColumnLookup.insert(n, c);
+    if (!columnLookup.contains(n.toLower()))
+      columnLookup.insert(n.toLower(), c);
   }
 
-  auto resolverForRow = [&](int row, const QString &ident, QString *outText) -> bool {
+  auto resolverForRow = [&](int row, const QString &ident, bool columnOnly, QString *outText) -> bool {
     if (!outText)
       return false;
     const QString lowered = ident.toLower();
-    if (lowered == "row" || lowered == "i") {
+    if (!columnOnly && (lowered == "row" || lowered == "i")) {
       *outText = QString::number(row);
       return true;
     }
 
-    auto it = columnLookup.constFind(lowered);
-    if (it == columnLookup.constEnd())
-      return false;
+    auto it = exactColumnLookup.constFind(ident);
+    if (it == exactColumnLookup.constEnd()) {
+      it = columnLookup.constFind(lowered);
+      if (it == columnLookup.constEnd())
+        return false;
+    }
 
     const int col = it.value();
     if (col < 0 || col >= pd.columns.size()) {
@@ -8985,8 +9250,8 @@ bool SDDSEditor::applyColumnRowFilter(QString *errorText, int *visibleRows) {
   const QString expression = rowFilterExpression;
   for (int r = 0; r < rows; ++r) {
     RowFilterParser parser(expression,
-                           [&](const QString &ident, QString *value) {
-                             return resolverForRow(r, ident, value);
+                           [&](const QString &ident, bool columnOnly, QString *value) {
+                             return resolverForRow(r, ident, columnOnly, value);
                            });
     bool pass = false;
     QString parseError;
@@ -9088,6 +9353,10 @@ void SDDSEditor::fillSeries(QTableView *view) {
 
   lastFillSeriesStart = startEdit.text();
   lastFillSeriesStep = stepEdit.text();
+  ExactInteger exactStart = exactInteger(false, 0);
+  ExactInteger exactStep = exactStart;
+  const bool exactSeries = parseExactInteger(startEdit.text(), &exactStart) &&
+                           parseExactInteger(stepEdit.text(), &exactStep);
 
   struct Pending { QModelIndex idx; QString value; };
   QVector<Pending> updates;
@@ -9112,7 +9381,14 @@ void SDDSEditor::fillSeries(QTableView *view) {
       return;
     }
 
-    QString newText = numericResultText(start + step * static_cast<long double>(i), type);
+    QString newText;
+    ExactInteger exactValue = exactStart;
+    if (SDDS_INTEGER_TYPE(type) && exactSeries &&
+        exactMultiply(exactStep, exactInteger(false, static_cast<quint64>(i)), &exactValue) &&
+        exactAdd(exactStart, exactValue, &exactValue))
+      newText = exactIntegerText(exactValue);
+    else
+      newText = numericResultText(start + step * static_cast<long double>(i), type);
     if (!validateTextForType(newText, type, true))
       return;
     updates.append({idx, newText});
@@ -9188,6 +9464,8 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
   const QString anchorText = anchor.data(Qt::EditRole).toString();
   long double aValue = 0.0L;
   parseLongDoubleStrict(anchorText, &aValue);
+  ExactInteger exactA = exactInteger(false, 0);
+  const bool hasExactA = parseExactInteger(anchorText, &exactA);
   const int minRow = anchor.row();
   const int minCol = anchor.column();
 
@@ -9231,13 +9509,30 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
     ctx.dr = idx.row() - minRow;
     ctx.dc = idx.column() - minCol;
 
-    long double result = 0.0L;
-    if (!evaluateExpressionText(expr, ctx, &result)) {
-      QMessageBox::warning(this, tr("Apply Numerical Expression"), tr("Failed to evaluate expression."));
-      return;
+    QString newText;
+    if (SDDS_INTEGER_TYPE(type)) {
+      ExactIntegerContext exactCtx;
+      exactCtx.x = exactA;
+      exactCtx.hasX = parseExactInteger(idx.data(Qt::EditRole).toString(), &exactCtx.x);
+      exactCtx.hasA = hasExactA;
+      exactCtx.a = exactA;
+      exactCtx.i = ctx.i;
+      exactCtx.row = ctx.row;
+      exactCtx.col = ctx.col;
+      exactCtx.dr = ctx.dr;
+      exactCtx.dc = ctx.dc;
+      ExactInteger exactResult = exactA;
+      if (ExactIntegerExpressionParser(expr, exactCtx).parse(&exactResult))
+        newText = exactIntegerText(exactResult);
     }
-
-    QString newText = numericResultText(result, type);
+    if (newText.isEmpty()) {
+      long double result = 0.0L;
+      if (!evaluateExpressionText(expr, ctx, &result)) {
+        QMessageBox::warning(this, tr("Apply Numerical Expression"), tr("Failed to evaluate expression."));
+        return;
+      }
+      newText = numericResultText(result, type);
+    }
     if (!validateTextForType(newText, type, true))
       return;
     updates.append({idx, newText});
@@ -9518,7 +9813,8 @@ void SDDSEditor::showHelp() {
                        " - Filter/View... (Ctrl+Shift+R): show rows matching expression without deleting data\n"
                        " - Clear Filter/View: return to full row view\n"
                        " - Expression operators: &&, ||, !, ==, !=, <, <=, >, >=\n"
-                       " - Use [Column Name] for names containing spaces\n\n"
+                       " - Use [Column Name] for names containing spaces or punctuation, such as [Q[0]];\n"
+                       "   a bracketed name is always a column, even if it is row, i, true or false\n\n"
                        "Variables reference\n"
                        " - x / ${x}: current cell value\n"
                        " - a / ${a}: anchor value (first selected cell)\n"

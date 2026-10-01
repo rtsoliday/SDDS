@@ -2077,6 +2077,139 @@ public:
     }
     require(failures == 0, "definition and page regressions");
   }
+
+  /** Bracketed and case-sensitive filter names, literal plot names, exact integers, NaN results. */
+  static void namesAndExactNumbers(const QString &root) {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      if (!ok)
+        ++failures;
+    };
+    {
+      SDDSEditor editor;
+      setup(editor);
+      for (const char *name : {"Q[0]", "x", "i"})
+        require(SDDS_DefineColumn(&editor.dataset, name, nullptr, nullptr, nullptr, nullptr,
+                                  SDDS_DOUBLE, 0) >= 0, "define filter name column");
+      require(SDDS_SaveLayout(&editor.dataset), "save filter name layout");
+      editor.pages[0].columns = {{"3", "1", "2"}, {"5", "0", "7"}, {"0", "10", "0"}, {"7", "7", "0"}};
+      editor.populateModels();
+      int visible = 0;
+      auto filter = [&](const QString &expression) {
+        editor.rowFilterExpression = expression;
+        editor.rowFilterActive = true;
+        return editor.applyColumnRowFilter(nullptr, &visible);
+      };
+      check(filter("[Q[0]] > 1") && visible == 2 && editor.columnView->isRowHidden(1),
+            "a bracketed filter name may itself contain brackets");
+      check(filter("x > 5") && visible == 1 && !editor.columnView->isRowHidden(1),
+            "a filter name matches its own case before a differently cased column");
+      check(filter("X > 2") && visible == 1 && !editor.columnView->isRowHidden(0),
+            "an uppercase filter name keeps its own column");
+      check(filter("[i] == 7") && visible == 2 && editor.columnView->isRowHidden(2),
+            "a bracketed name is the column even when it matches a row variable");
+      check(filter("i == 2") && visible == 1 && !editor.columnView->isRowHidden(2),
+            "a bare i is still the row index");
+      editor.clearColumnRowFilter();
+      for (int column : {1, 3}) {
+        editor.rowFilterExpression.clear();
+        editor.columnView->setCurrentIndex(editor.columnModel->index(0, column));
+        acceptDialog("Filter/View Rows", [](QDialog *) {});
+        editor.filterColumnRows();
+        if (column == 1)
+          check(editor.rowFilterActive && editor.rowFilterExpression == "[Q[0]] > 0" &&
+                    editor.visibleColumnRows == 2,
+                "the suggested filter for a column named with brackets works");
+        else
+          check(editor.rowFilterActive && editor.rowFilterExpression == "[i] > 0" &&
+                    !editor.columnView->isRowHidden(0) && editor.columnView->isRowHidden(2),
+                "the suggested filter for a column named i filters that column");
+        editor.clearColumnRowFilter();
+      }
+
+      const QString capture = root + "/bracket-plot.sdds";
+      const QByteArray oldPath = qgetenv("PATH");
+      qputenv("PATH", QFile::encodeName(QCoreApplication::applicationDirPath() + "/test-bin") + QDir::listSeparator().toLatin1() + oldPath);
+      qputenv("SDDSEDITOR_PLOT_CAPTURE", QFile::encodeName(capture));
+      editor.plotColumn(1);
+      QElapsedTimer timer;
+      timer.start();
+      while (!editor.findChildren<QProcess *>().isEmpty() && timer.elapsed() < 10000) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      }
+      qputenv("PATH", oldPath);
+      qunsetenv("SDDSEDITOR_PLOT_CAPTURE");
+      require(QFileInfo::exists(capture + ".args"), "plot helper records bracketed name arguments");
+      check(readFile(capture + ".args").split('\n').contains("-col=Q\\[0\\]"),
+            "plot escapes sddsplot wildcard characters in a column name");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineColumn(&editor.dataset, "U", nullptr, nullptr, nullptr, nullptr,
+                                SDDS_ULONG64, 0) >= 0, "define ulong64 column");
+      require(SDDS_DefineColumn(&editor.dataset, "D", nullptr, nullptr, nullptr, nullptr,
+                                SDDS_DOUBLE, 0) >= 0, "define double column");
+      require(SDDS_SaveLayout(&editor.dataset), "save exact integer layout");
+      editor.pages[0].columns = {{"0", "0", "0"}, {"0", "0", "0"}, {"4", "-1", "0"}};
+      editor.populateModels();
+      auto selectColumn = [&](int column) {
+        editor.columnView->setCurrentIndex(editor.columnModel->index(0, column));
+        editor.columnView->selectionModel()->select(
+            QItemSelection(editor.columnModel->index(0, column), editor.columnModel->index(2, column)),
+            QItemSelectionModel::ClearAndSelect);
+      };
+      auto fill = [&](int column, const QString &start, const QString &step) {
+        selectColumn(column);
+        acceptDialog("Fill Series", [start, step](QDialog *dialog) {
+          const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+          fields[0]->setText(start);
+          fields[1]->setText(step);
+        });
+        editor.fillSeries(editor.columnView);
+      };
+      auto apply = [&](int column, const QString &expression) {
+        selectColumn(column);
+        acceptDialog("Apply Numerical Expression", [expression](QDialog *dialog) {
+          dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[0]->setText(expression);
+        });
+        editor.applyNumericalExpression(editor.columnView);
+      };
+      fill(0, "9007199254740993", "1");
+      check(editor.pages[0].columns[0] ==
+                QVector<QString>({"9007199254740993", "9007199254740994", "9007199254740995"}),
+            "a long64 fill series beyond 2^53 is exact");
+      fill(1, "18446744073709551613", "1");
+      check(editor.pages[0].columns[1] ==
+                QVector<QString>({"18446744073709551613", "18446744073709551614", "18446744073709551615"}),
+            "a ulong64 fill series up to its maximum is exact");
+      apply(0, "x + 2*i - 1");
+      check(editor.pages[0].columns[0] ==
+                QVector<QString>({"9007199254740992", "9007199254740995", "9007199254740998"}),
+            "integer expressions keep every digit of long64 values");
+      apply(1, "-(a - x) + 0 * row");
+      check(editor.pages[0].columns[1] ==
+                QVector<QString>({"0", "1", "2"}),
+            "integer expressions use the exact anchor value");
+      editor.pages[0].columns[0] = {"6", "8", "10"};
+      apply(0, "x / 2 + abs(-dr)");
+      check(editor.pages[0].columns[0] == QVector<QString>({"3", "5", "7"}),
+            "divisible integer expressions and abs are computed exactly");
+      apply(2, "sqrt(x)");
+      check(editor.pages[0].columns[2] == QVector<QString>({"2", "nan", "0"}),
+            "a NaN expression result is stored as nan");
+      check(numericResultText(-std::numeric_limits<long double>::quiet_NaN(), SDDS_DOUBLE) == "nan" &&
+                numericResultText(-std::numeric_limits<long double>::infinity(), SDDS_FLOAT) == "-inf" &&
+                validateTextForType(numericResultText(-std::numeric_limits<long double>::infinity(), SDDS_FLOAT),
+                                    SDDS_FLOAT, false) &&
+                !validateTextForType(numericResultText(std::numeric_limits<long double>::quiet_NaN(), SDDS_LONG),
+                                     SDDS_LONG, false),
+            "nonfinite results use text the validators accept for floating types only");
+    }
+    require(failures == 0, "name and exact number regressions");
+  }
 };
 
 /** Run the named regressions and retain fixtures under the build directory. */
@@ -2125,6 +2258,7 @@ int main(int argc, char **argv) {
   SDDSEditorTests::menuAndTextFixes();
   SDDSEditorTests::displayAndRangeFixes();
   SDDSEditorTests::definitionAndPageFixes(artifacts.path());
+  SDDSEditorTests::namesAndExactNumbers(artifacts.path());
   fprintf(stdout, "PASS all sddseditor regressions\n");
   return 0;
 }
