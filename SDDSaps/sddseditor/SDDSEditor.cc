@@ -269,6 +269,17 @@ class SingleClickEditTableView : public QTableView {
 public:
   explicit SingleClickEditTableView(QWidget *parent = nullptr) : QTableView(parent) {}
 
+  /** Commit delegate editors even when another window owns keyboard focus. */
+  void finishEditing() {
+    const auto editors = viewport()->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+    for (QLineEdit *editor : editors) {
+      if (!editor->isHidden()) {
+        commitData(editor);
+        closeEditor(editor, QAbstractItemDelegate::NoHint);
+      }
+    }
+  }
+
 private:
   QPoint pressPos;
   QPersistentModelIndex pressIndex;
@@ -392,6 +403,8 @@ static QString truncateForMessage(const QString &text, int maxLen = 80) {
  * 0.10000000000000001.
  */
 static QString shortestDoubleText(double value) {
+  if (value == 0 && std::signbit(value))
+    return QStringLiteral("-0");
 #if QT_VERSION >= QT_VERSION_CHECK(5, 7, 0)
   return QString::number(value, 'g', QLocale::FloatingPointShortest);
 #else
@@ -401,6 +414,8 @@ static QString shortestDoubleText(double value) {
 
 /* Qt has no shortest float formatter; try increasing precision until the text round-trips. */
 static QString shortestFloatText(float value) {
+  if (value == 0 && std::signbit(value))
+    return QStringLiteral("-0");
   if (std::isfinite(value)) {
     for (int precision = std::numeric_limits<float>::digits10;
          precision < std::numeric_limits<float>::max_digits10; ++precision) {
@@ -665,10 +680,10 @@ static bool validateTextForType(const QString &text, int type,
       }
     }
   } else if (type == SDDS_CHARACTER) {
-    if (!text.isEmpty() && text.size() != 1) {
+    if (!text.isEmpty() && (text.size() != 1 || text[0].unicode() > 255)) {
       if (showMessage)
         QMessageBox::warning(nullptr, QObject::tr("SDDS"),
-                             QObject::tr("Character field must have length 1"));
+                             QObject::tr("Character field must contain one Latin-1 character (one byte)"));
       return false;
     }
   }
@@ -857,7 +872,7 @@ static void collectSelectedColumns(QTableView *view, QSet<int> *columns) {
  * the row filter also covers those rows in the selection model, so edits and
  * deletions must not use selectionModel()->selectedIndexes() directly.
  */
-static QModelIndexList visibleSelectedIndexes(const QTableView *view) {
+static QModelIndexList visibleSelectedIndexes(const QTableView *view, bool currentWhenEmpty = false) {
   QModelIndexList visible;
   if (!view || !view->selectionModel())
     return visible;
@@ -866,6 +881,11 @@ static QModelIndexList visibleSelectedIndexes(const QTableView *view) {
   for (const QModelIndex &idx : selected)
     if (idx.isValid() && !view->isRowHidden(idx.row()) && !view->isColumnHidden(idx.column()))
       visible.append(idx);
+  if (visible.isEmpty() && currentWhenEmpty) {
+    const QModelIndex idx = view->currentIndex();
+    if (idx.isValid() && !view->isRowHidden(idx.row()) && !view->isColumnHidden(idx.column()))
+      visible.append(idx);
+  }
   return visible;
 }
 
@@ -3932,6 +3952,7 @@ void SDDSEditor::markDirty() {
 }
 
 bool SDDSEditor::maybeSave() {
+  commitModels();
   if (!dirty)
     return true;
   QMessageBox::StandardButton ret = QMessageBox::warning(
@@ -5323,7 +5344,15 @@ bool SDDSEditor::writeHDF(const QString &path) {
     }
   }
 
-  QByteArray fname = QFile::encodeName(path);
+  const QFileInfo destination(path);
+  const QString finalPath = destination.isSymLink() ? destination.symLinkTarget() : destination.absoluteFilePath();
+  QTemporaryDir staging(QFileInfo(finalPath).absolutePath() + "/.sddseditor-hdf-XXXXXX");
+  if (!staging.isValid()) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to create HDF staging directory"));
+    return false;
+  }
+  const QString stagedPath = staging.filePath("export.h5");
+  QByteArray fname = QFile::encodeName(stagedPath);
   hid_t file = H5Fcreate(fname.constData(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
   if (file < 0) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to create HDF file"));
@@ -5349,6 +5378,8 @@ bool SDDSEditor::writeHDF(const QString &path) {
     QByteArray objectName(name ? name : "");
     objectName.replace("%", "%25");
     objectName.replace("/", "%2F");
+    if (objectName == ".")
+      objectName = "%2E";
     hid_t ds = H5Dcreate1(grp, objectName.constData(), dtype, space, H5P_DEFAULT);
     if (ds < 0)
       return false;
@@ -5757,6 +5788,25 @@ bool SDDSEditor::writeHDF(const QString &path) {
     return false;
   }
 
+  QFile input(stagedPath);
+  QSaveFile output(finalPath);
+  output.setDirectWriteFallback(false);
+  if (!input.open(QIODevice::ReadOnly) || !output.open(QIODevice::WriteOnly)) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to prepare HDF output replacement"));
+    return false;
+  }
+  while (!input.atEnd()) {
+    const QByteArray chunk = input.read(1024 * 1024);
+    if (input.error() != QFileDevice::NoError || output.write(chunk) != chunk.size()) {
+      QMessageBox::warning(this, tr("SDDS"), tr("Failed while copying staged HDF output"));
+      return false;
+    }
+  }
+  if (!output.commit()) {
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to replace HDF output file"));
+    return false;
+  }
+
   return true;
 }
 
@@ -5940,10 +5990,11 @@ void SDDSEditor::loadPage(int page) {
 }
 
 void SDDSEditor::flushPendingEdits() {
-  if (QWidget *fw = QApplication::focusWidget()) {
-    fw->clearFocus();
-    qApp->processEvents();
-  }
+  for (QTableView *view : {paramView, columnView, arrayView})
+    static_cast<SingleClickEditTableView *>(view)->finishEditing();
+  for (const QPointer<QDialog> &viewer : arrayViewers)
+    if (viewer)
+      static_cast<ArrayViewer *>(viewer.data())->finishEditing();
 }
 
 void SDDSEditor::populateModels() {
@@ -7309,6 +7360,7 @@ void SDDSEditor::searchColumn(int column) {
   };
   connect(patternEdit, &QLineEdit::textChanged, dlg, invalidateMatches);
   connect(columnModel, &QAbstractItemModel::dataChanged, dlg, invalidateMatches);
+  connect(this, &SDDSEditor::columnRowVisibilityChanged, dlg, invalidateMatches);
   // A model/header change may replace the page, column identity, or data type.
   connect(columnModel, &QAbstractItemModel::modelReset, dlg, &QDialog::close);
   connect(columnModel, &QAbstractItemModel::headerDataChanged, dlg, &QDialog::close);
@@ -7348,7 +7400,7 @@ void SDDSEditor::searchColumn(int column) {
     lastReplaceText = replaceEdit->text();
     for (int r = 0; r < columnModel->rowCount(); ++r) {
       QModelIndex idx = columnModel->index(r, column);
-      if (!idx.isValid())
+      if (!idx.isValid() || columnView->isRowHidden(r))
         continue;
       QString val = idx.data(Qt::EditRole).toString();
       int pos = 0;
@@ -7403,7 +7455,12 @@ void SDDSEditor::searchColumn(int column) {
     int replaced = 0;
     bool warned = false;
     bool macroStarted = false;
-    for (int r = 0; r < columnModel->rowCount(); ++r) {
+    // Edits can change the filter. Keep the target rows fixed for this operation.
+    QVector<int> targetRows;
+    for (int r = 0; r < columnModel->rowCount(); ++r)
+      if (!columnView->isRowHidden(r))
+        targetRows.append(r);
+    for (int r : targetRows) {
       QModelIndex idx = columnModel->index(r, column);
       if (!idx.isValid())
         continue;
@@ -8711,6 +8768,7 @@ void SDDSEditor::refreshColumnRowFilter(bool showMessageOnError) {
     rowFilterActive = false;
     visibleColumnRows = columnModel->rowCount();
     updateFilterIndicator();
+    emit columnRowVisibilityChanged();
     if (showMessageOnError) {
       QMessageBox::warning(this, tr("Row Filter"),
                            errorText.isEmpty() ? tr("Failed to apply row filter") : errorText);
@@ -8722,6 +8780,7 @@ void SDDSEditor::refreshColumnRowFilter(bool showMessageOnError) {
 
   visibleColumnRows = visibleRows;
   updateFilterIndicator();
+  emit columnRowVisibilityChanged();
   if (rowFilterActive && showMessageOnError) {
     const int totalRows = columnModel->rowCount();
     message(tr("Row filter active: %1/%2 rows visible")
@@ -8740,12 +8799,7 @@ void SDDSEditor::fillSeries(QTableView *view) {
     return;
   }
 
-  QModelIndexList selection = visibleSelectedIndexes(view);
-  if (selection.isEmpty()) {
-    QModelIndex idx = view->currentIndex();
-    if (idx.isValid())
-      selection << idx;
-  }
+  QModelIndexList selection = visibleSelectedIndexes(view, true);
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Fill Series"), tr("Select one or more cells first."));
     return;
@@ -8833,12 +8887,7 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
     return;
   }
 
-  QModelIndexList selection = visibleSelectedIndexes(view);
-  if (selection.isEmpty()) {
-    QModelIndex idx = view->currentIndex();
-    if (idx.isValid())
-      selection << idx;
-  }
+  QModelIndexList selection = visibleSelectedIndexes(view, true);
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Apply Numerical Expression"), tr("Select one or more cells first."));
     return;
@@ -8970,12 +9019,7 @@ void SDDSEditor::applyTextFormula(QTableView *view) {
     return;
   }
 
-  QModelIndexList selection = visibleSelectedIndexes(view);
-  if (selection.isEmpty()) {
-    QModelIndex idx = view->currentIndex();
-    if (idx.isValid())
-      selection << idx;
-  }
+  QModelIndexList selection = visibleSelectedIndexes(view, true);
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Apply Text Formula"), tr("Select one or more cells first."));
     return;

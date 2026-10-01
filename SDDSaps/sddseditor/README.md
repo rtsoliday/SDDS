@@ -14,6 +14,10 @@ and HDF, numeric row filters, search invalidation, plotting unsaved edits, and
 parameter panel sizing when opening files, resizing the window, and manually
 dragging splitter handles (including empty array panels).
 
+Additional regressions cover pending main-table and array-viewer edits, filtered
+search/replace and formula operations, all 256 character bytes and Unicode strings
+in plain/gzip/xz saves, signed zero, failed HDF exports and HDF names of `.`.
+
 Executables are built under the platform object directory (`O.Linux-x86_64` on
 Linux). The plotting probe is named `test-bin/sddsplot` there; only the test
 process prepends that directory to its PATH. It copies the plot input and records
@@ -24,8 +28,9 @@ The test prints each result and its fixture directory. Fixtures are retained in
 `O.*/test-artifacts-*` for inspection, and the normal `make clean` target removes
 them with the object directory. Versioned symlink checks run on Unix platforms.
 
-The editor stages SDDS saves beside the destination before replacing it. Failed
-saves preserve the existing file. Versioned symlink saves select an unused version
+The editor stages SDDS saves and HDF exports beside the destination before
+replacing it. Failed saves and exports preserve the existing file. Versioned
+symlink saves select an unused version
 and create it exclusively before replacing the link. Plot snapshots use a private
 temporary directory retained until the plotting process ends.
 
@@ -55,12 +60,17 @@ Attributes edits the definition of the current cell's parameter, column or array
 
 Floating-point values are shown with the fewest digits that convert back to
 exactly the same number (0.1, not 0.10000000000000001). Rows hidden by the row
-filter are never changed: copy, paste, delete, fill and formula operations act
-only on visible rows, and a paste fills successive visible rows. Resizing an
+filter are never changed: copy, paste, delete, search/replace, fill and formula
+operations act only on visible rows, and a paste fills successive visible rows. Resizing an
 array keeps each element at its indices. Export HDF writes `/` and `%` in SDDS
-names as `%2F` and `%25`, because HDF5 uses `/` as a path separator. Column and
+names as `%2F` and `%25`, because HDF5 uses `/` as a path separator. A name of
+`.` is written as `%2E`, because HDF5 reserves it for the current group. Column and
 array headers have an **Attributes...** menu item, so definitions without rows
 can still be edited.
+
+Character fields hold a single byte, displayed as Latin-1. Characters outside
+that range must use a string field. Floating-point formatting preserves negative
+zero as `-0`.
 
 Copying a non-contiguous selection copies the rectangle around it. Other
 programs receive empty fields for the unselected cells. Pasting inside the

@@ -55,7 +55,9 @@
  * @return Returns 1 on success; 0 on error (e.g., if data or fp is NULL, or an unknown data type is specified).
  */
 int32_t SDDS_WriteTypedValue(void *data, int64_t index, int32_t type, char *format, FILE *fp) {
-  char c, *s;
+  /* Byte values must stay nonnegative for ctype and three-digit octal escapes. */
+  unsigned char c;
+  char *s;
   short hasWhitespace;
 
   if (!data) {
@@ -178,7 +180,8 @@ int32_t SDDS_WriteTypedValue(void *data, int64_t index, int32_t type, char *form
  *       For string and character types, special characters like '!', '\\', and '"' are escaped appropriately.
  */
 int32_t SDDS_LZMAWriteTypedValue(void *data, int64_t index, int32_t type, char *format, struct lzmafile *lzmafp) {
-  char c, *s;
+  unsigned char c;
+  char *s;
   short hasWhitespace;
 
   if (!data) {
@@ -302,7 +305,8 @@ int32_t SDDS_LZMAWriteTypedValue(void *data, int64_t index, int32_t type, char *
  *       For string and character types, special characters like '!', '\\', and '"' are escaped appropriately.
  */
 int32_t SDDS_GZipWriteTypedValue(void *data, int64_t index, int32_t type, char *format, gzFile gzfp) {
-  char c, *s;
+  unsigned char c;
+  char *s;
   short hasWhitespace;
 
   if (!data) {

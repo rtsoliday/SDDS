@@ -130,10 +130,10 @@ This supplement is generated from repository evidence and leaves the handwritten
 - `fftpack/Makefile`: Build system entry point or dependency manifest
 
 ## Build and test
-- Documented setup/build commands: `make -f Makefile.MSVC all`, `make -j`, `make`.
+- Documented setup/build commands: `make -j`, `make`.
 - Detected build systems: GNU Make.
-- Documented test commands: `pytest -q`, `make tests`.
-- Likely run commands or operator entry points: `./sdds_write_demo output.sdds`, `./sdds_read_demo input.sdds`, `./nnphi_test`, `./nnai_test`.
+- Test command from the repository root: `make test`, which builds the project and runs the C++ library tests and pytest suite. Use `pytest -q` to rerun only the Python suite after building.
+- Demo executables are installed at `bin/<OS>-<ARCH>/sdds_write_demo` and `bin/<OS>-<ARCH>/sdds_read_demo`; substitute the platform directory produced by the build and pass the output or input SDDS filename, respectively.
 
 ## Operational warnings
 - Legacy compatibility paths are still present; confirm which mode is actually in use before changing defaults.

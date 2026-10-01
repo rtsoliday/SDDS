@@ -77,6 +77,9 @@ public:
   ~SDDSEditor();
   bool loadFile(const QString &path);
 
+signals:
+  void columnRowVisibilityChanged();
+
 private slots:
   void openFile();
   void saveFile();

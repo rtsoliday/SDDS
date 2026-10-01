@@ -53,6 +53,232 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** Regressions for pending edits, filtered operations and lossless byte/number storage. */
+  static void editingSafety(const QString &root) {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      if (!ok)
+        ++failures;
+    };
+    auto acceptOptional = [](const QString &title, std::function<void(QDialog *)> configure) {
+      QTimer::singleShot(0, [title, configure]() {
+        for (QWidget *widget : QApplication::topLevelWidgets())
+          if (QDialog *dialog = qobject_cast<QDialog *>(widget))
+            if (!qobject_cast<QMessageBox *>(dialog) && dialog->isVisible() && dialog->windowTitle() == title) {
+              configure(dialog);
+              dialog->accept();
+              return;
+            }
+      });
+    };
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.show();
+      editor.activateWindow();
+      editor.columnView->setFocus();
+      QCoreApplication::processEvents();
+      editor.columnView->edit(editor.columnModel->index(0, 0));
+      QCoreApplication::processEvents();
+      QLineEdit *cell = editor.columnView->viewport()->findChild<QLineEdit *>();
+      require(cell, "open pending cell editor");
+      require(!cell->isHidden(), "pending cell editor is shown");
+      cell->setText("123");
+      require(!editor.dirty && editor.pages[0].columns[0][0] == "3", "cell edit is still pending");
+      bool prompted = false;
+      QTimer::singleShot(0, [&]() {
+        for (QWidget *widget : QApplication::topLevelWidgets())
+          if (QMessageBox *box = qobject_cast<QMessageBox *>(widget)) {
+            prompted = true;
+            box->done(QMessageBox::Cancel);
+          }
+      });
+      const bool canClose = editor.maybeSave();
+      QCoreApplication::processEvents();
+      check(prompted && !canClose && editor.pages[0].columns[0][0] == "123",
+            "closing checks and commits the pending cell before asking to save");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.openArrayViewer(0);
+      ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      viewer->table()->edit(viewer->sliceModel()->index(0, 0));
+      QCoreApplication::processEvents();
+      QLineEdit *cell = viewer->table()->viewport()->findChild<QLineEdit *>();
+      require(cell && !cell->isHidden(), "open pending array viewer editor");
+      cell->setText("456");
+      const QString path = root + "/pending-array-edit.sdds";
+      require(editor.writeFile(path), "save with a pending array viewer edit");
+      SDDSEditor loaded;
+      require(loaded.loadFile(path), "reload pending viewer edit");
+      check(loaded.pages[0].arrays[0].values[0] == "456", "Save commits array viewer editors");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.pages[0].columns[0] = {"1", "1", "1"};
+      editor.populateModels();
+      editor.rowFilterActive = true;
+      editor.rowFilterExpression = "row == 1";
+      editor.refreshColumnRowFilter(false);
+      editor.searchColumn(0);
+      QDialog *dialog = editor.searchColumnDialog;
+      const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+      fields[0]->setText("1");
+      fields[1]->setText("2");
+      for (QPushButton *button : dialog->findChildren<QPushButton *>())
+        if (button->text() == "Replace All")
+          button->click();
+      check(editor.pages[0].columns[0] == QVector<QString>({"1", "2", "1"}),
+            "Replace All preserves hidden rows");
+      editor.undoStack->undo();
+      check(editor.pages[0].columns[0] == QVector<QString>({"1", "1", "1"}),
+            "filtered Replace All is undone as one operation");
+      editor.undoStack->redo();
+      check(editor.pages[0].columns[0] == QVector<QString>({"1", "2", "1"}),
+            "filtered Replace All redo preserves hidden rows");
+      fields[0]->setText("2");
+      fields[1]->setText("3");
+      for (QPushButton *button : dialog->findChildren<QPushButton *>())
+        if (button->text() == "Search")
+          button->click();
+      editor.pages[0].columns[0] = {"1", "2", "2"};
+      editor.rowFilterExpression = "row == 2";
+      editor.refreshColumnRowFilter(false);
+      for (QPushButton *button : dialog->findChildren<QPushButton *>())
+        if (button->text() == "Replace")
+          button->click();
+      check(editor.pages[0].columns[0] == QVector<QString>({"1", "2", "3"}),
+            "changing filters invalidates search matches before Replace");
+      editor.rowFilterExpression = "row == 1";
+      editor.refreshColumnRowFilter(false);
+      dialog->close();
+      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      editor.pages[0].columns[0] = {"1", "2", "1"};
+      editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+      acceptOptional("Fill Series", [](QDialog *dlg) {
+        const auto edits = dlg->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        edits[0]->setText("9");
+        edits[1]->setText("1");
+      });
+      editor.fillSeries(editor.columnView);
+      check(editor.pages[0].columns[0][0] == "1", "Fill Series ignores a hidden current cell");
+      editor.pages[0].columns[0][0] = "1";
+      acceptOptional("Apply Numerical Expression", [](QDialog *dlg) {
+        dlg->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[0]->setText("x + 10");
+      });
+      editor.applyNumericalExpression(editor.columnView);
+      check(editor.pages[0].columns[0][0] == "1", "numerical expressions ignore a hidden current cell");
+      editor.pages[0].columns[0][0] = "1";
+      acceptOptional("Apply Text Formula", [](QDialog *dlg) {
+        dlg->findChild<QLineEdit *>()->setText("8");
+      });
+      editor.applyTextFormula(editor.columnView);
+      check(editor.pages[0].columns[0][0] == "1", "text formulas ignore a hidden current cell");
+    }
+    check(!validateTextForType(QString(QChar(0x03A9)), SDDS_CHARACTER, false),
+          "character fields reject characters that cannot fit in one SDDS byte");
+    check(validateTextForType(QString(QChar(0x00E9)), SDDS_CHARACTER, false),
+          "character fields accept all Latin-1 bytes");
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.column_definition[0].type = SDDS_CHARACTER;
+      require(SDDS_SaveLayout(&editor.dataset), "save character layout");
+      editor.pages[0].columns[0] = {QString(QChar(0x03A9)), "a", "b"};
+      const QString path = root + "/preserved-character.sdds";
+      putFile(path, "original character bytes");
+      check(!editor.writeFile(path) && readFile(path) == "original character bytes",
+            "unrepresentable characters cannot silently overwrite saved data");
+      require(SDDS_DefineParameter(&editor.dataset, "Text", nullptr, nullptr, nullptr, nullptr,
+                                   SDDS_STRING, nullptr) >= 0, "define Unicode text parameter");
+      require(SDDS_SaveLayout(&editor.dataset), "save text layout");
+      editor.pages[0].parameters = {QString::fromUtf8("café Ω")};
+      editor.pages[0].columns[0].clear();
+      for (int byte = 0; byte < 256; ++byte)
+        editor.pages[0].columns[0].append(byte ? QString(QChar(byte)) : QString());
+      editor.populateModels();
+      for (bool ascii : {false, true}) {
+        editor.asciiBtn->setChecked(ascii);
+        editor.binaryBtn->setChecked(!ascii);
+        for (const QString &suffix : {QString(".sdds"), QString(".sdds.gz"), QString(".sdds.xz")}) {
+          const QString output = root + QString("/character-bytes-%1").arg(ascii) + suffix;
+          require(editor.writeFile(output), "save character bytes and Unicode strings");
+          SDDSEditor loaded;
+          require(loaded.loadFile(output), "reload character bytes and Unicode strings");
+          check(loaded.pages[0].columns[0] == editor.pages[0].columns[0] &&
+                loaded.pages[0].parameters == editor.pages[0].parameters,
+                "all 256 character bytes and Unicode strings round-trip");
+        }
+      }
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.array_definition[0].dimensions = 33;
+      require(SDDS_SaveLayout(&editor.dataset), "save high-rank array layout");
+      editor.pages[0].arrays[0].dims = QVector<int>(33, 1);
+      editor.pages[0].arrays[0].values = {"10"};
+      editor.populateModels();
+      const QString path = root + "/preserved-export.h5";
+      putFile(path, "original export bytes");
+      check(!editor.writeHDF(path) && readFile(path) == "original export bytes",
+            "failed HDF export preserves the destination");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineColumn(&editor.dataset, ".", nullptr, nullptr, nullptr, nullptr,
+                                SDDS_LONG, 0) >= 0, "define dot-named column");
+      require(SDDS_DefineColumn(&editor.dataset, ".%2E", nullptr, nullptr, nullptr, nullptr,
+                                SDDS_LONG, 0) >= 0, "define distinct encoded column");
+      require(SDDS_SaveLayout(&editor.dataset), "save dot-named layout");
+      editor.pages[0].columns.append({"4", "5", "6"});
+      editor.pages[0].columns.append({"7", "8", "9"});
+      editor.populateModels();
+      const QString path = root + "/dot-names.h5";
+      const bool saved = editor.writeHDF(path);
+      check(saved, "HDF export supports the valid SDDS name dot");
+      if (saved) {
+        hid_t file = H5Fopen(QFile::encodeName(path).constData(), H5F_ACC_RDONLY, H5P_DEFAULT);
+        require(file >= 0, "read dot-name HDF export");
+        hid_t data = H5Dopen1(file, "page1/columns/%2E");
+        require(data >= 0, "dot name has an encoded HDF dataset");
+        int32_t values[3] = {};
+        require(H5Dread(data, H5T_NATIVE_INT32, H5S_ALL, H5S_ALL, H5P_DEFAULT, values) >= 0 &&
+                values[0] == 4 && values[2] == 6, "dot dataset contains its column values");
+        H5Dclose(data);
+        H5Fclose(file);
+      }
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.column_definition[0].type = SDDS_DOUBLE;
+      editor.dataset.layout.array_definition[0].type = SDDS_FLOAT;
+      require(SDDS_SaveLayout(&editor.dataset), "save signed-zero types");
+      editor.pages[0].columns[0] = {"-0", "0", "-0"};
+      editor.pages[0].arrays[0].values = {"-0", "0", "-0", "0"};
+      editor.populateModels();
+      check(canonicalizeForDisplay("-0", SDDS_DOUBLE) == "-0" &&
+            canonicalizeForDisplay("-0", SDDS_FLOAT) == "-0", "cell formatting preserves signed zero");
+      for (bool ascii : {false, true}) {
+        editor.asciiBtn->setChecked(ascii);
+        editor.binaryBtn->setChecked(!ascii);
+        const QString path = root + QString("/signed-zero-%1.sdds").arg(ascii);
+        require(editor.writeFile(path), "save signed-zero fixture");
+        SDDSEditor loaded;
+        require(loaded.loadFile(path), "reload signed-zero fixture");
+        check(loaded.pages[0].columns[0] == editor.pages[0].columns[0] &&
+              loaded.pages[0].arrays[0].values == editor.pages[0].arrays[0].values,
+              "file loading preserves negative zero in columns and arrays");
+      }
+    }
+    require(failures == 0, "editing safety regressions");
+  }
+
   /** Initialize a small dataset used by the integration tests. */
   static void setup(SDDSEditor &editor) {
     require(editor.ensureDataset(), "initialize editor");
@@ -1246,6 +1472,7 @@ int main(int argc, char **argv) {
       }
   });
   warnings.start(10);
+  SDDSEditorTests::editingSafety(artifacts.path());
   SDDSEditorTests::panelSizing(artifacts.path());
   const QString layoutInput = QFile::decodeName(qgetenv("SDDSEDITOR_LAYOUT_INPUT"));
   if (!layoutInput.isEmpty())

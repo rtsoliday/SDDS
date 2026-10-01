@@ -78,6 +78,7 @@ public:
   void refresh();
   void copySelection(bool wholeSlice = false);
   bool pasteText(const QString &text);
+  void finishEditing();
   QTableView *table() const { return grid; }
   ArraySliceModel *sliceModel() const { return model; }
 
@@ -87,7 +88,6 @@ private:
   void applySlice();
   void updateSelection();
   void changeAxis(bool rows, int axis);
-  void finishEditing();
   void updateHeatmap();
   void applyHeatmapRange();
   State getState;
