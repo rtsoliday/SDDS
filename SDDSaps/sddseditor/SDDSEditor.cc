@@ -825,6 +825,24 @@ static bool validateDefinitionName(QWidget *parent, const QString &name,
   return true;
 }
 
+/*
+ * A negative field length (fixed width with the padding removed on reading)
+ * is valid only for strings; SDDS refuses to define or copy any other such
+ * column or array, so the document could no longer be saved.
+ */
+static bool validateFieldLength(QWidget *parent, int32_t fieldLength, int32_t type) {
+  if (fieldLength >= 0 || type == SDDS_STRING)
+    return true;
+  QMessageBox::warning(parent, QObject::tr("SDDS"),
+                       QObject::tr("A negative field length is allowed only for string data"));
+  return false;
+}
+
+/** Keep the width when a type change would leave a negative field length invalid. */
+static int32_t fieldLengthForType(int32_t fieldLength, int32_t type) {
+  return fieldLength < 0 && type != SDDS_STRING ? -fieldLength : fieldLength;
+}
+
 static bool resyncSortedIndexName(SORTED_INDEX **indexes, int count,
                                   int definitionIndex, char *name) {
   if (!indexes || definitionIndex < 0 || definitionIndex >= count)
@@ -1066,6 +1084,30 @@ static bool applyCellEditWithUndo(QUndoStack *undoStack, QAbstractItemModel *mod
   else
     model->setData(index, newValue);
   return true;
+}
+
+/*
+ * Apply several {idx, value} edits as one undo step.  The macro is opened only
+ * for a real change: an empty one would add a no-op Undo entry and discard Redo.
+ */
+template <typename Edits>
+static bool applyCellEditsWithUndo(QUndoStack *undoStack, QAbstractItemModel *model,
+                                   const Edits &edits, const QString &label) {
+  bool changed = false;
+  bool macroStarted = false;
+  for (const auto &edit : edits) {
+    if (!(model->flags(edit.idx) & Qt::ItemIsEditable) ||
+        edit.idx.data(Qt::EditRole).toString() == edit.value)
+      continue;
+    if (undoStack && !macroStarted) {
+      undoStack->beginMacro(label);
+      macroStarted = true;
+    }
+    changed = applyCellEditWithUndo(undoStack, model, edit.idx, edit.value) || changed;
+  }
+  if (macroStarted)
+    undoStack->endMacro();
+  return changed;
 }
 
 struct ExpressionContext {
@@ -5905,7 +5947,8 @@ bool SDDSEditor::writeCSV(const QString &path) {
   const QString finalPath = destination.isSymLink() ? destination.symLinkTarget() : destination.absoluteFilePath();
   QSaveFile file(finalPath);
   file.setDirectWriteFallback(false);
-  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+  // Not QIODevice::Text: on Windows it would rewrite newlines inside quoted text values as CRLF.
+  if (!file.open(QIODevice::WriteOnly)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to open output"));
     return false;
   }
@@ -6619,7 +6662,8 @@ void SDDSEditor::editColumnAttributesAt(int col) {
   QLineEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
   QLineEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
   QSpinBox length(&dlg);
-  length.setRange(0, 1000000);
+  // Negative string field lengths are valid; clamping them would change the definition.
+  length.setRange(-1000000, 1000000);
   length.setValue(def->field_length);
   QHBoxLayout *typeLayout = new QHBoxLayout();
   QButtonGroup typeGroup(&dlg);
@@ -6664,6 +6708,8 @@ void SDDSEditor::editColumnAttributesAt(int col) {
                               }))
     return;
   if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text()}))
+    return;
+  if (!validateFieldLength(this, length.value(), typeGroup.checkedId()))
     return;
   if (!dataset.original_layout.column_definition ||
       col >= dataset.original_layout.n_columns) {
@@ -6741,7 +6787,8 @@ void SDDSEditor::editArrayAttributesAt(int col) {
   QLineEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
   QLineEdit group(QString::fromLocal8Bit(def->group_name ? def->group_name : ""), &dlg);
   QSpinBox length(&dlg);
-  length.setRange(0, 1000000);
+  // Negative string field lengths are valid; clamping them would change the definition.
+  length.setRange(-1000000, 1000000);
   length.setValue(def->field_length);
   QSpinBox dimsCount(&dlg);
   dimsCount.setRange(1, 1000000);
@@ -6791,6 +6838,8 @@ void SDDSEditor::editArrayAttributesAt(int col) {
                               }))
     return;
   if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text(), group.text()}))
+    return;
+  if (!validateFieldLength(this, length.value(), typeGroup.checkedId()))
     return;
   int32_t dimCnt = dimsCount.value();
   for (const PageStore &pd : pages) {
@@ -6988,6 +7037,9 @@ void SDDSEditor::changeColumnType(int column) {
     return;
   dataset.layout.column_definition[column].type = sddsType;
   dataset.original_layout.column_definition[column].type = sddsType;
+  dataset.layout.column_definition[column].field_length =
+      dataset.original_layout.column_definition[column].field_length =
+          fieldLengthForType(dataset.layout.column_definition[column].field_length, sddsType);
   columnModel->refreshHeaders(column, column);
   columnView->viewport()->update(); // alignment and formatting follow the type
   markDirty();
@@ -7948,6 +8000,9 @@ void SDDSEditor::changeArrayType(int column) {
     return;
   dataset.layout.array_definition[column].type = sddsType;
   dataset.original_layout.array_definition[column].type = sddsType;
+  dataset.layout.array_definition[column].field_length =
+      dataset.original_layout.array_definition[column].field_length =
+          fieldLengthForType(dataset.layout.array_definition[column].field_length, sddsType);
   arrayModel->refreshHeaders(column, column);
   arrayView->viewport()->update(); // alignment and formatting follow the type
   markDirty();
@@ -8277,7 +8332,7 @@ void SDDSEditor::insertColumn() {
   QLineEdit desc(&dlg);
   QLineEdit fmt(&dlg);
   QSpinBox length(&dlg);
-  length.setRange(0, 1000000);
+  length.setRange(-1000000, 1000000);
   length.setValue(0);
   QHBoxLayout *typeLayout = new QHBoxLayout();
   QButtonGroup typeGroup(&dlg);
@@ -8316,6 +8371,8 @@ void SDDSEditor::insertColumn() {
   if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
     return;
   if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text()}))
+    return;
+  if (!validateFieldLength(this, length.value(), typeGroup.checkedId()))
     return;
 
   QByteArray baName = name.text().toLocal8Bit();
@@ -8370,7 +8427,7 @@ void SDDSEditor::insertArray() {
   QLineEdit fmt(&dlg);
   QLineEdit group(&dlg);
   QSpinBox length(&dlg);
-  length.setRange(0, 1000000);
+  length.setRange(-1000000, 1000000);
   length.setValue(0);
   QHBoxLayout *typeLayout = new QHBoxLayout();
   QButtonGroup typeGroup(&dlg);
@@ -8410,6 +8467,8 @@ void SDDSEditor::insertArray() {
   if (dlg.exec() != QDialog::Accepted || name.text().isEmpty())
     return;
   if (!definitionTextEncodable(this, {symbol.text(), units.text(), desc.text(), fmt.text(), group.text()}))
+    return;
+  if (!validateFieldLength(this, length.value(), typeGroup.checkedId()))
     return;
 
   QByteArray baName = name.text().toLocal8Bit();
@@ -8974,15 +9033,7 @@ void SDDSEditor::fillSeries(QTableView *view) {
     updates.append({idx, newText});
   }
 
-  if (updates.isEmpty())
-    return;
-
-  bool changed = false;
-  undoStack->beginMacro(tr("Fill Series"));
-  for (const Pending &u : updates)
-    changed = applyCellEditWithUndo(undoStack, view->model(), u.idx, u.value) || changed;
-  undoStack->endMacro();
-  if (changed)
+  if (applyCellEditsWithUndo(undoStack, view->model(), updates, tr("Fill Series")))
     markDirty();
 }
 
@@ -9106,15 +9157,7 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
     updates.append({idx, newText});
   }
 
-  if (updates.isEmpty())
-    return;
-
-  bool changed = false;
-  undoStack->beginMacro(tr("Apply Numerical Expression"));
-  for (const Pending &u : updates)
-    changed = applyCellEditWithUndo(undoStack, view->model(), u.idx, u.value) || changed;
-  undoStack->endMacro();
-  if (changed)
+  if (applyCellEditsWithUndo(undoStack, view->model(), updates, tr("Apply Numerical Expression")))
     markDirty();
 }
 
@@ -9180,15 +9223,7 @@ void SDDSEditor::applyTextFormula(QTableView *view) {
     updates.append({idx, newText, type});
   }
 
-  if (updates.isEmpty())
-    return;
-
-  bool changed = false;
-  undoStack->beginMacro(tr("Apply Text Formula"));
-  for (const Pending &u : updates)
-    changed = applyCellEditWithUndo(undoStack, view->model(), u.idx, u.value) || changed;
-  undoStack->endMacro();
-  if (changed)
+  if (applyCellEditsWithUndo(undoStack, view->model(), updates, tr("Apply Text Formula")))
     markDirty();
 }
 

@@ -690,12 +690,22 @@ bool ArrayViewer::pasteText(const QString &text) {
       }
     }
   }
-  undo->beginMacro(tr("Paste array slice"));
-  for (int r = 0; r < rows.size(); ++r)
-    for (int c = 0; c < rows[r].size(); ++c)
-      if (!gaps.contains(qMakePair(r, c)))
-        model->setData(model->index(start.row() + r, start.column() + c), rows[r][c]);
-  undo->endMacro();
+  // Open the macro only for a real change; an empty one would be a no-op Undo step that discards Redo.
+  bool macroStarted = false;
+  for (int r = 0; r < rows.size(); ++r) {
+    for (int c = 0; c < rows[r].size(); ++c) {
+      const QModelIndex target = model->index(start.row() + r, start.column() + c);
+      if (gaps.contains(qMakePair(r, c)) || target.data(Qt::EditRole).toString() == rows[r][c])
+        continue;
+      if (!macroStarted) {
+        undo->beginMacro(tr("Paste array slice"));
+        macroStarted = true;
+      }
+      model->setData(target, rows[r][c]);
+    }
+  }
+  if (macroStarted)
+    undo->endMacro();
   notice->clear();
   return true;
 }

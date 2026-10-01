@@ -36,6 +36,9 @@ static void putFile(const QString &path, const QByteArray &contents) {
   require(file.write(contents) == contents.size(), "write fixture");
 }
 
+/** Accepts warnings so unattended tests never block; a test that answers a prompt itself pauses it. */
+static QTimer *messageBoxAccepter = nullptr;
+
 /** Operate a real editor dialog through Qt's event loop. */
 static void acceptDialog(const QString &title, std::function<void(QDialog *)> configure) {
   QTimer::singleShot(0, [title, configure]() {
@@ -213,14 +216,21 @@ public:
       cell->setText("123");
       require(!editor.dirty && editor.pages[0].columns[0][0] == "3", "cell edit is still pending");
       bool prompted = false;
-      QTimer::singleShot(0, [&]() {
+      QTimer answer;
+      QObject::connect(&answer, &QTimer::timeout, [&]() {
         for (QWidget *widget : QApplication::topLevelWidgets())
-          if (QMessageBox *box = qobject_cast<QMessageBox *>(widget)) {
-            prompted = true;
-            box->done(QMessageBox::Cancel);
-          }
+          if (QMessageBox *box = qobject_cast<QMessageBox *>(widget))
+            if (box->isVisible()) {
+              prompted = true;
+              box->done(QMessageBox::Cancel);
+            }
       });
+      // An overdue global accepter would otherwise answer the prompt first and choose "accept".
+      messageBoxAccepter->stop();
+      answer.start(0);
       const bool canClose = editor.maybeSave();
+      answer.stop();
+      messageBoxAccepter->start();
       QCoreApplication::processEvents();
       check(prompted && !canClose && editor.pages[0].columns[0][0] == "123",
             "closing checks and commits the pending cell before asking to save");
@@ -1651,6 +1661,133 @@ public:
     }
     fprintf(stdout, "PASS parameter metadata display, export names, subnormal long doubles, attribute encoding\n");
   }
+
+  /** Regressions for CSV newlines, fixed values on inserted pages, field lengths and no-op undo steps. */
+  static void definitionAndPageFixes(const QString &root) {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      if (!ok)
+        ++failures;
+    };
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineColumn(&editor.dataset, "Text", nullptr, nullptr, nullptr, nullptr,
+                                SDDS_STRING, 0) >= 0, "define CSV text column");
+      require(SDDS_SaveLayout(&editor.dataset), "save CSV text layout");
+      editor.pages[0].columns.append({"a\nb", "c", "d"});
+      editor.populateModels();
+      const QString path = root + "/newline.csv";
+      require(editor.writeCSV(path), "export text containing a newline");
+      const QByteArray csv = readFile(path);
+      check(csv.contains("3,\"a\nb\"\n") && !csv.contains('\r'),
+            "CSV keeps newlines inside text values and uses LF on every platform");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      char fixedValue[] = "5";
+      require(SDDS_DefineParameter(&editor.dataset, "F", nullptr, nullptr, nullptr, nullptr,
+                                   SDDS_DOUBLE, fixedValue) >= 0, "define fixed parameter");
+      require(SDDS_SaveLayout(&editor.dataset), "save fixed parameter layout");
+      editor.pages[0].parameters = {"5"};
+      editor.populateModels();
+      editor.insertPage();
+      require(editor.pages.size() == 2 && editor.currentPage == 1, "inserted page is shown");
+      check(editor.pages[1].parameters[0] == "5", "inserted page shows the fixed parameter value");
+      const QString path = root + "/inserted-page-fixed.sdds";
+      require(editor.writeFile(path), "save document with an inserted page");
+      check(QString(editor.dataset.layout.parameter_definition[0].fixed_value) == "5" &&
+                editor.pages[0].parameters[0] == "5",
+            "showing an inserted page does not overwrite the fixed value");
+      SDDSEditor loaded;
+      require(loaded.loadFile(path), "reload inserted-page document");
+      check(loaded.pages.size() == 2 && loaded.pages[1].parameters[0] == "5" &&
+                QString(loaded.dataset.layout.parameter_definition[0].fixed_value) == "5",
+            "inserted page saves the fixed parameter value");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineColumn(&editor.dataset, "S", nullptr, nullptr, nullptr, nullptr,
+                                SDDS_STRING, -10) >= 0, "define trimmed string column");
+      require(SDDS_DefineArray(&editor.dataset, "T", nullptr, nullptr, nullptr, nullptr,
+                               SDDS_STRING, -6, 1, nullptr) >= 0, "define trimmed string array");
+      require(SDDS_SaveLayout(&editor.dataset), "save trimmed string layout");
+      editor.pages[0].columns.append({"a", "b", "c"});
+      ArrayStore text;
+      text.dims = {1};
+      text.values = {"t"};
+      editor.pages[0].arrays.append(text);
+      editor.populateModels();
+      acceptDialog("Column Attributes", [](QDialog *dialog) {
+        dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[2]->setText("m");
+      });
+      editor.editColumnAttributesAt(1);
+      check(editor.dataset.layout.column_definition[1].field_length == -10 &&
+                QString(editor.dataset.layout.column_definition[1].units) == "m",
+            "column attribute editor keeps a negative string field length");
+      acceptDialog("Array Attributes", [](QDialog *dialog) {
+        dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[2]->setText("s");
+      });
+      editor.editArrayAttributesAt(1);
+      check(editor.dataset.layout.array_definition[1].field_length == -6 &&
+                QString(editor.dataset.layout.array_definition[1].units) == "s",
+            "array attribute editor keeps a negative string field length");
+      const int undoSteps = editor.undoStack->count();
+      acceptDialog("Column Attributes", [](QDialog *dialog) {
+        for (QRadioButton *button : dialog->findChildren<QRadioButton *>())
+          if (button->text() == "double")
+            button->setChecked(true);
+      });
+      editor.editColumnAttributesAt(1);
+      check(editor.dataset.layout.column_definition[1].type == SDDS_STRING &&
+                editor.undoStack->count() == undoSteps,
+            "a negative field length is refused for numeric columns");
+      editor.pages[0].columns[1] = {"1", "2", "3"};
+      acceptDialog("Column Type", [](QDialog *dialog) {
+        static_cast<QInputDialog *>(dialog)->setTextValue("double");
+      });
+      editor.changeColumnType(1);
+      check(editor.dataset.layout.column_definition[1].type == SDDS_DOUBLE &&
+                editor.dataset.layout.column_definition[1].field_length == 10 &&
+                editor.undoStack->undoText() == "Change Column Type",
+            "changing a trimmed string column to numeric keeps a valid field width and undo");
+      acceptDialog("Array Type", [](QDialog *dialog) {
+        static_cast<QInputDialog *>(dialog)->setTextValue("long");
+      });
+      editor.pages[0].arrays[1].values = {"7"};
+      editor.changeArrayType(1);
+      check(editor.dataset.layout.array_definition[1].field_length == 6 &&
+                editor.undoStack->undoText() == "Change Array Type",
+            "changing a trimmed string array to numeric keeps a valid field width and undo");
+      const QString path = root + "/field-length.sdds";
+      check(editor.writeFile(path), "document stays savable after the type changes");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.show();
+      applyCellEditWithUndo(editor.undoStack, editor.columnModel, editor.columnModel->index(0, 0), "9");
+      editor.undoStack->undo();
+      require(editor.undoStack->canRedo(), "redo is available before no-op edits");
+      editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+      acceptDialog("Apply Text Formula", [](QDialog *dialog) {
+        dialog->findChild<QLineEdit *>()->setText("${x}");
+      });
+      editor.applyTextFormula(editor.columnView);
+      check(editor.undoStack->canRedo() && editor.undoStack->index() == 0,
+            "a formula that changes nothing adds no undo step and keeps redo");
+      editor.openArrayViewer(0);
+      ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      viewer->table()->setCurrentIndex(viewer->sliceModel()->index(0, 0));
+      require(viewer->pasteText("10"), "paste the unchanged viewer value");
+      check(editor.undoStack->canRedo() && editor.undoStack->index() == 0,
+            "an array viewer paste that changes nothing adds no undo step and keeps redo");
+    }
+    require(failures == 0, "definition and page regressions");
+  }
 };
 
 /** Run the named regressions and retain fixtures under the build directory. */
@@ -1672,6 +1809,7 @@ int main(int argc, char **argv) {
       }
   });
   warnings.start(10);
+  messageBoxAccepter = &warnings;
   SDDSEditorTests::dataPreservation(artifacts.path());
   SDDSEditorTests::editingSafety(artifacts.path());
   SDDSEditorTests::panelSizing(artifacts.path());
@@ -1692,6 +1830,7 @@ int main(int argc, char **argv) {
   SDDSEditorTests::interfaceChrome(artifacts.path());
   SDDSEditorTests::menuAndTextFixes();
   SDDSEditorTests::displayAndRangeFixes();
+  SDDSEditorTests::definitionAndPageFixes(artifacts.path());
   fprintf(stdout, "PASS all sddseditor regressions\n");
   return 0;
 }

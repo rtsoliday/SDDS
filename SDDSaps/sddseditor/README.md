@@ -20,7 +20,10 @@ in plain/gzip/xz saves, signed zero, failed HDF exports and HDF names of `.`.
 They also cover literal token text in formulas, embedded NUL rejection, trailing
 empty clipboard rows, lossless transfers between the main tables and array
 viewers, CSV validation and unequal array lengths, and main-window Undo/Redo
-with a pending viewer edit.
+with a pending viewer edit. Further checks cover newlines inside CSV text,
+fixed parameters on inserted pages, negative (trimmed) string field lengths in
+attribute editors and type changes, and edits that change nothing adding no
+Undo step.
 
 Executables are built under the platform object directory (`O.Linux-x86_64` on
 Linux). The plotting probe is named `test-bin/sddsplot` there; only the test
