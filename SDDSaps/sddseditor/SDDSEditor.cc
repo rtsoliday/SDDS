@@ -459,6 +459,21 @@ static QString shortestFloatText(float value) {
 }
 
 /*
+ * Enough digits to convert back to the same long double.  QString::asprintf
+ * would convert the value to double, losing the extra precision of 80-bit or
+ * 128-bit long doubles, so format with the C library.
+ */
+static QString longDoubleToText(long double value) {
+  char buffer[128];
+  const int written = snprintf(buffer, sizeof(buffer), "%.*Lg",
+                               std::numeric_limits<long double>::max_digits10, value);
+  if (written <= 0)
+    return QString();
+  return QString::fromLatin1(
+      buffer, std::min<int>(written, static_cast<int>(sizeof(buffer)) - 1));
+}
+
+/*
  * Convert directly from the typed buffers owned by SDDS.  The SDDS
  * Get*InString helpers allocate one C string per value and the editor then
  * immediately copies every one into a QString.  Avoiding that intermediate
@@ -485,16 +500,8 @@ static QString sddsValueToString(const void *data, int64_t index, int32_t type) 
     return shortestFloatText(static_cast<const float *>(data)[index]);
   case SDDS_DOUBLE:
     return shortestDoubleText(static_cast<const double *>(data)[index]);
-  case SDDS_LONGDOUBLE: {
-    char buffer[128];
-    const int written = snprintf(buffer, sizeof(buffer), "%.*Lg",
-                                 std::numeric_limits<long double>::max_digits10,
-                                 static_cast<const long double *>(data)[index]);
-    if (written <= 0)
-      return QString();
-    return QString::fromLatin1(
-        buffer, std::min<int>(written, static_cast<int>(sizeof(buffer)) - 1));
-  }
+  case SDDS_LONGDOUBLE:
+    return longDoubleToText(static_cast<const long double *>(data)[index]);
   case SDDS_CHARACTER: {
     const char value = static_cast<const char *>(data)[index];
     return value ? QString::fromLatin1(&value, 1) : QString();
@@ -1816,11 +1823,6 @@ private:
   Resolver resolver;
   RowFilterToken current;
 };
-
-static QString longDoubleToText(long double value) {
-  return QString::asprintf("%.*Lg", std::numeric_limits<long double>::max_digits10,
-                           value);
-}
 
 /*
  * Text for a computed value stored in a cell of the given type.  Where long

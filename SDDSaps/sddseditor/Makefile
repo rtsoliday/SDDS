@@ -87,6 +87,11 @@ $(OBJ_DIR)/SDDSEditor_moc.h: SDDSEditor.h | $(OBJ_DIR)
 
 SDDSEditor.cc: $(OBJ_DIR)/SDDSEditor_moc.h
 
+# MSVC builds write no .d files, so name the header dependencies explicitly.
+$(OBJ_DIR)/main.$(OBJEXT): SDDSEditor.h
+$(OBJ_DIR)/SDDSEditor.$(OBJEXT): SDDSEditor.h ArrayViewer.h $(OBJ_DIR)/SDDSEditor_moc.h
+$(OBJ_DIR)/ArrayViewer.$(OBJEXT): ArrayViewer.h
+
 $(OBJ_DIR)/sddseditor$(EXEEXT): $(sddseditor_OBJS) $(LIBRARY) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddseditor_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 	cp -f $@ $(BIN_DIR)/
@@ -94,7 +99,7 @@ $(OBJ_DIR)/sddseditor$(EXEEXT): $(sddseditor_OBJS) $(LIBRARY) $(PROD_DEPS)
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 # Checked-in regression programs; all executables and fixtures stay in OBJ_DIR.
-$(OBJ_DIR)/SDDSEditorTests.$(OBJEXT): SDDSEditor.cc SDDSEditor.h $(OBJ_DIR)/SDDSEditor_moc.h
+$(OBJ_DIR)/SDDSEditorTests.$(OBJEXT): SDDSEditor.cc SDDSEditor.h ArrayViewer.h $(OBJ_DIR)/SDDSEditor_moc.h
 
 $(OBJ_DIR)/sddseditor_tests$(EXEEXT): $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT) $(OBJ_DIR)/ArrayViewer.$(OBJEXT) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT) $(OBJ_DIR)/ArrayViewer.$(OBJEXT) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
