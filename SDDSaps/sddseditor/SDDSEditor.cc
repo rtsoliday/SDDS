@@ -93,6 +93,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonValue>
+#include <QScopedValueRollback>
 
 /*
  * On Windows, some headers define min/max as macros, which breaks code like
@@ -108,6 +109,18 @@
 #endif
 
 static bool validateTextForType(const QString &text, int type, bool showMessage);
+
+/** Text values may exceed QLineEdit's default 32,767-character edit limit. */
+class SDDSTextEdit : public QLineEdit {
+public:
+  explicit SDDSTextEdit(QWidget *parent = nullptr) : QLineEdit(parent) {
+    setMaxLength(std::numeric_limits<int>::max());
+  }
+
+  SDDSTextEdit(const QString &text, QWidget *parent) : SDDSTextEdit(parent) {
+    setText(text);
+  }
+};
 
 static void configureEditorPopupDialog(QDialog *dialog, const QWidget *owner,
                                        Qt::WindowModality modality = Qt::WindowModal) {
@@ -253,6 +266,8 @@ public:
     dialog.setWindowTitle(title);
     dialog.setLabelText(label);
     dialog.setTextEchoMode(echo);
+    if (QLineEdit *line = dialog.findChild<QLineEdit *>())
+      line->setMaxLength(std::numeric_limits<int>::max());
     dialog.setTextValue(text);
     dialog.setInputMethodHints(inputMethodHints);
     configureEditorPopupDialog(&dialog, parent);
@@ -1211,10 +1226,16 @@ struct ExpressionContext {
   int dc;
 };
 
+static bool integerLiteralFitsLongDouble(const QString &text);
+
+// Bound recursive syntax independently of text length and platform stack size.
+static const int MAX_EXPRESSION_NESTING = 256;
+
 class ExpressionParser {
 public:
-  ExpressionParser(const QString &expression, const ExpressionContext &context)
-      : text(expression), ctx(context), pos(0), ok(true) {}
+  ExpressionParser(const QString &expression, const ExpressionContext &context,
+                   bool exactIntegerLiterals = false)
+      : text(expression), ctx(context), pos(0), ok(true), depth(0), exactIntegerLiterals(exactIntegerLiterals) {}
 
   bool parse(long double *out) {
     if (!out)
@@ -1234,9 +1255,9 @@ private:
     while (ok) {
       skipWs();
       if (match('+'))
-        lhs += parseTerm();
+        lhs = checkedResult(lhs + parseTerm());
       else if (match('-'))
-        lhs -= parseTerm();
+        lhs = checkedResult(lhs - parseTerm());
       else
         break;
     }
@@ -1248,14 +1269,14 @@ private:
     while (ok) {
       skipWs();
       if (match('*'))
-        lhs *= parseUnary();
+        lhs = checkedResult(lhs * parseUnary());
       else if (match('/')) {
         long double rhs = parseUnary();
         if (rhs == 0.0L) {
           ok = false;
           return 0.0L;
         }
-        lhs /= rhs;
+        lhs = checkedResult(lhs / rhs);
       } else
         break;
     }
@@ -1269,12 +1290,17 @@ private:
     skipWs();
     if (match('^')) {
       long double expv = parseUnary();
-      base = powl(base, expv);
+      base = checkedResult(powl(base, expv));
     }
     return base;
   }
 
   long double parseUnary() {
+    if (depth >= MAX_EXPRESSION_NESTING) {
+      ok = false;
+      return 0.0L;
+    }
+    QScopedValueRollback<int> depthGuard(depth, depth + 1);
     skipWs();
     if (match('+'))
       return parseUnary();
@@ -1306,13 +1332,21 @@ private:
           ok = false;
           return 0.0L;
         }
-        return applyFunction(ident, arg);
+        return checkedResult(applyFunction(ident, arg));
       }
       return variableValue(ident);
     }
 
     ok = false;
     return 0.0L;
+  }
+
+  /** Reject integer fallback before a large intermediate can round and then cancel. */
+  long double checkedResult(long double value) {
+    if (exactIntegerLiterals && std::isfinite(value) &&
+        fabsl(value) >= ldexpl(1.0L, std::numeric_limits<long double>::digits - 1))
+      ok = false;
+    return value;
   }
 
   long double parseNumber() {
@@ -1322,6 +1356,12 @@ private:
     errno = 0;
     long double value = strtold(start, &end);
     if (end == start || longDoubleOutOfRange(value)) {
+      ok = false;
+      return 0.0L;
+    }
+    // Large literals can cancel to a small, apparently valid integer after rounding.
+    if (exactIntegerLiterals && fabsl(value) >= ldexpl(1.0L, std::numeric_limits<long double>::digits - 1) &&
+        !integerLiteralFitsLongDouble(QString::fromLocal8Bit(start, static_cast<int>(end - start)))) {
       ok = false;
       return 0.0L;
     }
@@ -1399,12 +1439,14 @@ private:
   ExpressionContext ctx;
   int pos;
   bool ok;
+  int depth;
+  bool exactIntegerLiterals;
 };
 
 static bool evaluateExpressionText(const QString &expression,
                                    const ExpressionContext &ctx,
-                                   long double *out) {
-  ExpressionParser parser(expression, ctx);
+                                   long double *out, bool exactIntegerLiterals = false) {
+  ExpressionParser parser(expression, ctx, exactIntegerLiterals);
   return parser.parse(out);
 }
 
@@ -1451,6 +1493,27 @@ static QString exactIntegerText(const ExactInteger &value) {
   return value.negative ? QStringLiteral("-") + digits : digits;
 }
 
+/** Test the significant bits instead of converting a rounded value back to an integer. */
+static bool exactIntegerFitsLongDouble(const ExactInteger &value) {
+  quint64 magnitude = value.magnitude;
+  if (magnitude == 0)
+    return true;
+  while ((magnitude & 1) == 0)
+    magnitude >>= 1;
+  int bits = 0;
+  while (magnitude) {
+    ++bits;
+    magnitude >>= 1;
+  }
+  return bits <= std::numeric_limits<long double>::digits;
+}
+
+/** Only plain integer literals participate in the exact expression grammar. */
+static bool integerLiteralFitsLongDouble(const QString &text) {
+  ExactInteger value = exactInteger(false, 0);
+  return parseExactInteger(text, &value) && exactIntegerFitsLongDouble(value);
+}
+
 static bool exactAdd(const ExactInteger &a, const ExactInteger &b, ExactInteger *out) {
   if (a.negative == b.negative) {
     if (a.magnitude > std::numeric_limits<quint64>::max() - b.magnitude)
@@ -1485,14 +1548,14 @@ struct ExactIntegerContext {
 
 /*
  * The integer subset of ExpressionParser's grammar.  Anything outside it
- * (fractions, '^', functions other than abs, pi, e, inexact division,
+ * (fractions, '^', functions other than abs/floor/ceil, pi, e, inexact division,
  * overflow or a syntax error) fails, and the caller falls back to
  * ExpressionParser, which computes the value or reports the error.
  */
 class ExactIntegerExpressionParser {
 public:
   ExactIntegerExpressionParser(const QString &expression, const ExactIntegerContext &context)
-      : text(expression), ctx(context), pos(0), ok(true) {}
+      : text(expression), ctx(context), pos(0), ok(true), depth(0) {}
 
   bool parse(ExactInteger *out) {
     skipWs();
@@ -1540,6 +1603,11 @@ private:
   }
 
   ExactInteger parseUnary() {
+    if (depth >= MAX_EXPRESSION_NESTING) {
+      ok = false;
+      return exactInteger(false, 0);
+    }
+    QScopedValueRollback<int> depthGuard(depth, depth + 1);
     skipWs();
     if (match('+'))
       return parseUnary();
@@ -1581,9 +1649,10 @@ private:
       if (match('(')) {
         ExactInteger arg = parseExpression();
         skipWs();
-        if (!match(')') || ident != "abs")
+        if (!match(')') || (ident != "abs" && ident != "floor" && ident != "ceil"))
           ok = false;
-        arg.negative = false;
+        if (ident == "abs")
+          arg.negative = false;
         return arg;
       }
       return variableValue(ident);
@@ -1635,6 +1704,7 @@ private:
   ExactIntegerContext ctx;
   int pos;
   bool ok;
+  int depth;
 };
 
 struct RowFilterValue {
@@ -1719,7 +1789,7 @@ public:
   using Resolver = std::function<bool(const QString &, bool, QString *)>;
 
   RowFilterParser(const QString &expression, Resolver resolver)
-      : input(expression), pos(0), resolver(std::move(resolver)) {
+      : input(expression), pos(0), resolver(std::move(resolver)), depth(0) {
     next();
   }
 
@@ -1780,6 +1850,12 @@ private:
   }
 
   bool parseUnary(bool *out, QString *errorText) {
+    if (depth >= MAX_EXPRESSION_NESTING) {
+      if (errorText)
+        *errorText = QObject::tr("Filter expression is nested too deeply");
+      return false;
+    }
+    QScopedValueRollback<int> depthGuard(depth, depth + 1);
     if (current.kind == RowFilterTokenKind::Not) {
       next();
       bool inner = false;
@@ -2150,6 +2226,7 @@ private:
   QString input;
   int pos;
   Resolver resolver;
+  int depth;
   RowFilterToken current;
 };
 
@@ -2385,12 +2462,9 @@ void pushStructuralUndoCommand(SDDSEditor *editor,
                                                       label));
 }
 
-class CaretOnDoubleClickLineEdit : public QLineEdit {
+class CaretOnDoubleClickLineEdit : public SDDSTextEdit {
 public:
-  explicit CaretOnDoubleClickLineEdit(QWidget *parent = nullptr) : QLineEdit(parent) {
-    // setEditorData() uses setText(), which otherwise silently truncates SDDS strings.
-    setMaxLength(std::numeric_limits<int>::max());
-  }
+  explicit CaretOnDoubleClickLineEdit(QWidget *parent = nullptr) : SDDSTextEdit(parent) {}
 
   void setMultiCellPasteHandler(std::function<void()> handler) {
     multiCellPasteHandler = std::move(handler);
@@ -4926,6 +5000,14 @@ void SDDSEditor::openFile() {
   loadFile(path);
 }
 
+/** Partial initializations own definition strings through the working layout until saved. */
+static bool terminateIncompleteDataset(SDDS_DATASET *partial) {
+  SDDS_DeferSavingLayout(partial, 0);
+  if (!SDDS_SaveLayout(partial))
+    return false;
+  return SDDS_Terminate(partial);
+}
+
 bool SDDSEditor::loadFile(const QString &path) {
   if (!localEncodingPreserves(path)) {
     QMessageBox::warning(this, tr("SDDS"),
@@ -4939,6 +5021,7 @@ bool SDDSEditor::loadFile(const QString &path) {
                             const_cast<char *>(path.toLocal8Bit().constData()))) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to open file"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    terminateIncompleteDataset(&in);
     return false;
   }
 
@@ -5893,6 +5976,24 @@ bool SDDSEditor::writeDatasetFile(const QString &path) {
   if (!SDDS_Terminate(&out)) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to finish output file"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return false;
+  }
+  // SDDS can write definition text larger than its header parser accepts.
+  // Check the staged header before an unreadable file replaces the destination.
+  SDDS_DATASET verification;
+  memset(&verification, 0, sizeof(verification));
+  const bool readable = SDDS_InitializeInput(
+      &verification, const_cast<char *>(path.toLocal8Bit().constData()));
+  if (!readable) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+  }
+  const bool closed = readable ? SDDS_Terminate(&verification)
+                               : terminateIncompleteDataset(&verification);
+  if (!readable || !closed) {
+    QMessageBox::warning(this, tr("SDDS"),
+                         tr("The saved layout cannot be read by SDDS. Definition text or fixed values may be too long. "
+                            "Shorten these fields or store long text in a non-fixed string parameter. "
+                            "The destination file has not been replaced."));
     return false;
   }
   return true;
@@ -6986,12 +7087,12 @@ void SDDSEditor::editParameterAttributes() {
   configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
   // Decode as the fields are encoded on OK (local 8-bit), or unchanged non-ASCII text is corrupted.
-  QLineEdit name(QString::fromLocal8Bit(def->name ? def->name : ""), &dlg);
-  QLineEdit symbol(QString::fromLocal8Bit(def->symbol ? def->symbol : ""), &dlg);
-  QLineEdit units(QString::fromLocal8Bit(def->units ? def->units : ""), &dlg);
-  QLineEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
-  QLineEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
-  QLineEdit fixed(fixedValueForDisplay(*def), &dlg);
+  SDDSTextEdit name(QString::fromLocal8Bit(def->name ? def->name : ""), &dlg);
+  SDDSTextEdit symbol(QString::fromLocal8Bit(def->symbol ? def->symbol : ""), &dlg);
+  SDDSTextEdit units(QString::fromLocal8Bit(def->units ? def->units : ""), &dlg);
+  SDDSTextEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
+  SDDSTextEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
+  SDDSTextEdit fixed(fixedValueForDisplay(*def), &dlg);
   QHBoxLayout *typeLayout = new QHBoxLayout();
   QButtonGroup typeGroup(&dlg);
   QMap<int, QRadioButton *> btns;
@@ -7142,11 +7243,11 @@ void SDDSEditor::editColumnAttributesAt(int col) {
   dlg.setWindowTitle(tr("Column Attributes"));
   configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
-  QLineEdit name(QString::fromLocal8Bit(def->name ? def->name : ""), &dlg);
-  QLineEdit symbol(QString::fromLocal8Bit(def->symbol ? def->symbol : ""), &dlg);
-  QLineEdit units(QString::fromLocal8Bit(def->units ? def->units : ""), &dlg);
-  QLineEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
-  QLineEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
+  SDDSTextEdit name(QString::fromLocal8Bit(def->name ? def->name : ""), &dlg);
+  SDDSTextEdit symbol(QString::fromLocal8Bit(def->symbol ? def->symbol : ""), &dlg);
+  SDDSTextEdit units(QString::fromLocal8Bit(def->units ? def->units : ""), &dlg);
+  SDDSTextEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
+  SDDSTextEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
   QSpinBox length(&dlg);
   // Negative string field lengths are valid; clamping them would change the definition.
   length.setRange(-std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max());
@@ -7281,12 +7382,12 @@ void SDDSEditor::editArrayAttributesAt(int col) {
   dlg.setWindowTitle(tr("Array Attributes"));
   configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
-  QLineEdit name(QString::fromLocal8Bit(def->name ? def->name : ""), &dlg);
-  QLineEdit symbol(QString::fromLocal8Bit(def->symbol ? def->symbol : ""), &dlg);
-  QLineEdit units(QString::fromLocal8Bit(def->units ? def->units : ""), &dlg);
-  QLineEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
-  QLineEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
-  QLineEdit group(QString::fromLocal8Bit(def->group_name ? def->group_name : ""), &dlg);
+  SDDSTextEdit name(QString::fromLocal8Bit(def->name ? def->name : ""), &dlg);
+  SDDSTextEdit symbol(QString::fromLocal8Bit(def->symbol ? def->symbol : ""), &dlg);
+  SDDSTextEdit units(QString::fromLocal8Bit(def->units ? def->units : ""), &dlg);
+  SDDSTextEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
+  SDDSTextEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
+  SDDSTextEdit group(QString::fromLocal8Bit(def->group_name ? def->group_name : ""), &dlg);
   QSpinBox length(&dlg);
   // Negative string field lengths are valid; clamping them would change the definition.
   length.setRange(-std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max());
@@ -8022,9 +8123,9 @@ void SDDSEditor::searchColumn(int column) {
   QFormLayout *form = new QFormLayout();
   layout->addLayout(form);
 
-  QLineEdit *patternEdit = new QLineEdit(dlg);
+  QLineEdit *patternEdit = new SDDSTextEdit(dlg);
   patternEdit->setText(lastSearchPattern);
-  QLineEdit *replaceEdit = new QLineEdit(dlg);
+  QLineEdit *replaceEdit = new SDDSTextEdit(dlg);
   replaceEdit->setText(lastReplaceText);
   form->addRow(tr("Find"), patternEdit);
   form->addRow(tr("Replace With"), replaceEdit);
@@ -8369,9 +8470,9 @@ void SDDSEditor::searchArray(int column) {
   configureEditorPopupDialog(&dlg, this);
   QVBoxLayout layout(&dlg);
   QFormLayout form;
-  QLineEdit patternEdit(&dlg);
+  SDDSTextEdit patternEdit(&dlg);
   patternEdit.setText(lastSearchPattern);
-  QLineEdit replaceEdit(&dlg);
+  SDDSTextEdit replaceEdit(&dlg);
   replaceEdit.setText(lastReplaceText);
   form.addRow(tr("Find"), &patternEdit);
   form.addRow(tr("Replace With"), &replaceEdit);
@@ -8818,12 +8919,12 @@ void SDDSEditor::insertParameter() {
   dlg.setWindowTitle(tr("New Parameter"));
   configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
-  QLineEdit name(&dlg);
-  QLineEdit symbol(&dlg);
-  QLineEdit units(&dlg);
-  QLineEdit desc(&dlg);
-  QLineEdit fmt(&dlg);
-  QLineEdit fixed(&dlg);
+  SDDSTextEdit name(&dlg);
+  SDDSTextEdit symbol(&dlg);
+  SDDSTextEdit units(&dlg);
+  SDDSTextEdit desc(&dlg);
+  SDDSTextEdit fmt(&dlg);
+  SDDSTextEdit fixed(&dlg);
   QHBoxLayout *typeLayout = new QHBoxLayout();
   QButtonGroup typeGroup(&dlg);
   QMap<int, QRadioButton *> btns;
@@ -8919,11 +9020,11 @@ void SDDSEditor::insertColumn() {
   dlg.setWindowTitle(tr("New Column"));
   configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
-  QLineEdit name(&dlg);
-  QLineEdit symbol(&dlg);
-  QLineEdit units(&dlg);
-  QLineEdit desc(&dlg);
-  QLineEdit fmt(&dlg);
+  SDDSTextEdit name(&dlg);
+  SDDSTextEdit symbol(&dlg);
+  SDDSTextEdit units(&dlg);
+  SDDSTextEdit desc(&dlg);
+  SDDSTextEdit fmt(&dlg);
   QSpinBox length(&dlg);
   length.setRange(-1000000, 1000000);
   length.setValue(0);
@@ -9016,12 +9117,12 @@ void SDDSEditor::insertArray() {
   dlg.setWindowTitle(tr("New Array"));
   configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
-  QLineEdit name(&dlg);
-  QLineEdit symbol(&dlg);
-  QLineEdit units(&dlg);
-  QLineEdit desc(&dlg);
-  QLineEdit fmt(&dlg);
-  QLineEdit group(&dlg);
+  SDDSTextEdit name(&dlg);
+  SDDSTextEdit symbol(&dlg);
+  SDDSTextEdit units(&dlg);
+  SDDSTextEdit desc(&dlg);
+  SDDSTextEdit fmt(&dlg);
+  SDDSTextEdit group(&dlg);
   QSpinBox length(&dlg);
   length.setRange(-1000000, 1000000);
   length.setValue(0);
@@ -9398,7 +9499,7 @@ void SDDSEditor::filterColumnRows() {
   QVBoxLayout layout(&dlg);
 
   QLabel prompt(tr("Expression (non-destructive view filter):"), &dlg);
-  QLineEdit exprEdit(defaultExpression, &dlg);
+  SDDSTextEdit exprEdit(defaultExpression, &dlg);
   QLabel help(tr("Examples: X>0 && Status==\"OK\"    or    [Beam Current] >= 100"), &dlg);
 
   layout.addWidget(&prompt);
@@ -9598,8 +9699,8 @@ void SDDSEditor::fillSeries(QTableView *view) {
   dlg.setWindowTitle(tr("Fill Series"));
   configureEditorPopupDialog(&dlg, this);
   QFormLayout form(&dlg);
-  QLineEdit startEdit(lastFillSeriesStart, &dlg);
-  QLineEdit stepEdit(lastFillSeriesStep, &dlg);
+  SDDSTextEdit startEdit(lastFillSeriesStart, &dlg);
+  SDDSTextEdit stepEdit(lastFillSeriesStep, &dlg);
   form.addRow(tr("Start"), &startEdit);
   form.addRow(tr("Step"), &stepEdit);
   QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
@@ -9654,8 +9755,25 @@ void SDDSEditor::fillSeries(QTableView *view) {
         exactMultiply(exactStep, exactInteger(false, static_cast<quint64>(i)), &exactValue) &&
         exactAdd(exactStart, exactValue, &exactValue))
       newText = exactIntegerText(exactValue);
-    else
-      newText = numericResultText(start + step * static_cast<long double>(i), type);
+    else {
+      long double result = start + step * static_cast<long double>(i);
+      if (SDDS_INTEGER_TYPE(type)) {
+        // As in numerical expressions, check literals and intermediates before
+        // a fractional or rounded large value can become a valid integer.
+        ExpressionContext ctx = {};
+        ctx.i = i;
+        const QString expression = QStringLiteral("(%1) + (%2) * i")
+            .arg(startEdit.text().trimmed().isEmpty() ? QStringLiteral("0") : startEdit.text(),
+                 stepEdit.text().trimmed().isEmpty() ? QStringLiteral("0") : stepEdit.text());
+        if (!evaluateExpressionText(expression, ctx, &result, true)) {
+          QMessageBox::warning(this, tr("Fill Series"),
+                               tr("This series cannot be evaluated without losing integer precision. "
+                                  "Use integer start and step values, or change the destination type to floating point."));
+          return;
+        }
+      }
+      newText = numericResultText(result, type);
+    }
     if (!validateTextForType(newText, type, true))
       return;
     updates.append({idx, newText});
@@ -9692,7 +9810,7 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
   exprDlg.setWindowTitle(tr("Apply Numerical Expression"));
   QVBoxLayout exprLayout(&exprDlg);
   QLabel exprLabel(tr("Expression:"), &exprDlg);
-  QLineEdit exprEdit(lastNumericalExpression, &exprDlg);
+  SDDSTextEdit exprEdit(lastNumericalExpression, &exprDlg);
   exprLayout.addWidget(&exprLabel);
   exprLayout.addWidget(&exprEdit);
   QPlainTextEdit exprHelp(&exprDlg);
@@ -9726,6 +9844,8 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
   if (expr.isEmpty())
     return;
   lastNumericalExpression = expr;
+  const bool usesX = expr.contains(QRegularExpression(QStringLiteral("\\bx\\b"), QRegularExpression::CaseInsensitiveOption));
+  const bool usesA = expr.contains(QRegularExpression(QStringLiteral("\\ba\\b"), QRegularExpression::CaseInsensitiveOption));
 
   const QModelIndex anchor = selection.first();
   const QString anchorText = anchor.data(Qt::EditRole).toString();
@@ -9777,6 +9897,7 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
     ctx.dc = idx.column() - minCol;
 
     QString newText;
+    bool roundedIntegerOperand = false;
     if (SDDS_INTEGER_TYPE(type)) {
       ExactIntegerContext exactCtx;
       exactCtx.x = exactA;
@@ -9791,11 +9912,32 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
       ExactInteger exactResult = exactA;
       if (ExactIntegerExpressionParser(expr, exactCtx).parse(&exactResult))
         newText = exactIntegerText(exactResult);
+      roundedIntegerOperand = (usesX && exactCtx.hasX && !exactIntegerFitsLongDouble(exactCtx.x)) ||
+                              (usesA && exactCtx.hasA && !exactIntegerFitsLongDouble(exactCtx.a));
     }
     if (newText.isEmpty()) {
+      if (roundedIntegerOperand) {
+        QMessageBox::warning(this, tr("Apply Numerical Expression"),
+                             tr("This expression would lose precision in a 64-bit integer operand. "
+                                "Use integer literals with +, -, *, exact division, or abs, "
+                                "or change the destination type to floating point."));
+        return;
+      }
       long double result = 0.0L;
-      if (!evaluateExpressionText(expr, ctx, &result)) {
-        QMessageBox::warning(this, tr("Apply Numerical Expression"), tr("Failed to evaluate expression."));
+      if (!evaluateExpressionText(expr, ctx, &result, SDDS_INTEGER_TYPE(type))) {
+        QMessageBox::warning(this, tr("Apply Numerical Expression"),
+                             SDDS_INTEGER_TYPE(type)
+                                 ? tr("The expression is invalid or cannot be evaluated without losing integer precision.")
+                                 : tr("Failed to evaluate expression."));
+        return;
+      }
+      // Beyond this bound the spacing is at least one, so a fractional result
+      // may have rounded into an integer that the cell validator would accept.
+      if (SDDS_INTEGER_TYPE(type) && std::isfinite(result) &&
+          fabsl(result) >= ldexpl(1.0L, std::numeric_limits<long double>::digits - 1)) {
+        QMessageBox::warning(this, tr("Apply Numerical Expression"),
+                             tr("This integer result is too large to verify using floating-point arithmetic. "
+                                "Use an exact integer expression."));
         return;
       }
       newText = numericResultText(result, type);

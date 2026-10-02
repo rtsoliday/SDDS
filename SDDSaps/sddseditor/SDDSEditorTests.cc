@@ -6,13 +6,24 @@
  * @copyright Copyright (c) 2026 UChicago Argonne, LLC.
  * @license See LICENSE in the repository root.
  */
+// Match SDDSlib's compression configuration when constructing malformed fixtures.
+#ifndef zLib
+#define zLib
+#endif
 #include "SDDSEditor.cc"
+extern "C" {
+#include "../../SDDSlib/SDDS_internal.h"
+}
 #undef QMessageBox
 #undef QInputDialog
 #include <QElapsedTimer>
 #include <QBrush>
 #include <QCheckBox>
 #include <clocale>
+#ifndef _WIN32
+#include <cerrno>
+#include <sys/wait.h>
+#endif
 
 /** Fail with a named assertion that is attributable to this test program. */
 static void require(bool condition, const char *message) {
@@ -34,6 +45,24 @@ static void putFile(const QString &path, const QByteArray &contents) {
   QFile file(path);
   require(file.open(QIODevice::WriteOnly), "open fixture for writing");
   require(file.write(contents) == contents.size(), "write fixture");
+}
+
+/** Write invalid headers through the compression APIs used by the SDDS reader. */
+static void putCompressedFile(const QString &path, const QByteArray &contents) {
+  const QByteArray name = path.toLocal8Bit();
+  if (path.endsWith(".gz")) {
+    gzFile file = gzopen(name.constData(), "wb");
+    require(file && gzwrite(file, contents.constData(), static_cast<unsigned>(contents.size())) == contents.size(),
+            "write gzip header fixture");
+    require(gzclose(file) == Z_OK, "close gzip header fixture");
+  } else if (path.endsWith(".xz")) {
+    auto *file = static_cast<struct lzmafile *>(lzma_open(name.constData(), "wb"));
+    require(file && lzma_write(file, contents.constData(), static_cast<size_t>(contents.size())) == contents.size(),
+            "write xz header fixture");
+    require(lzma_close(file) == 0, "close xz header fixture");
+  } else {
+    putFile(path, contents);
+  }
 }
 
 /** Create a real symbolic link; Windows allows this with Developer Mode or elevation. */
@@ -67,6 +96,419 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** User-entered formulas must not exhaust the process stack. */
+  static void expressionNesting() {
+    const QString nested = QString(1000000, QLatin1Char('(')) + "1" +
+                           QString(1000000, QLatin1Char(')'));
+    ExpressionContext context = {};
+    long double number = 0;
+    require(!evaluateExpressionText(nested, context, &number),
+            "excessively nested numerical expressions are rejected safely");
+    ExactIntegerContext integerContext = {};
+    ExactInteger integer = exactInteger(false, 0);
+    require(!ExactIntegerExpressionParser(nested, integerContext).parse(&integer),
+            "excessively nested exact integer expressions are rejected safely");
+    bool pass = false;
+    QString error;
+    RowFilterParser filter(nested, [](const QString &, bool, QString *) { return false; });
+    require(!filter.parse(&pass, &error) && !error.isEmpty(),
+            "excessively nested row filters report an error safely");
+    require(evaluateExpressionText("-2^2 + abs(-3)", context, &number) && number == -1,
+            "ordinary expression precedence and nested functions remain valid");
+    require(!evaluateExpressionText(QString(1000, QLatin1Char('-')) + "1", context, &number),
+            "unary signs respect the nesting limit");
+    QString powers;
+    for (int i = 0; i < 1000; ++i)
+      powers += "1^";
+    require(!evaluateExpressionText(powers + "1", context, &number),
+            "right-associative powers respect the nesting limit");
+    require(!ExactIntegerExpressionParser(QString(1000, QLatin1Char('-')) + "1", integerContext).parse(&integer),
+            "exact integer unary signs respect the nesting limit");
+    RowFilterParser negations(QString(1000, QLatin1Char('!')) + "true",
+                              [](const QString &, bool, QString *) { return false; });
+    require(!negations.parse(&pass, &error), "filter negations respect the nesting limit");
+    fprintf(stdout, "PASS bounded expression and filter nesting\n");
+  }
+
+  /** Integer fill must not accept fractions rounded away by native long double. */
+  static void integerSeriesPrecision() {
+    SDDSEditor editor;
+    setup(editor);
+    editor.dataset.layout.column_definition[0].type = SDDS_ULONG64;
+    require(SDDS_SaveLayout(&editor.dataset), "save unsigned series layout");
+    editor.columnView->selectColumn(0);
+    const int bits = std::numeric_limits<long double>::digits;
+    const QString boundary = bits <= 64
+        ? QString::number(quint64(1) << (bits - 1)) : QString();
+    if (!boundary.isEmpty()) {
+      acceptDialog("Fill Series", [boundary](QDialog *dialog) {
+        const auto fields = dialog->findChildren<QLineEdit *>();
+        fields[0]->setText(boundary + ".25");
+        fields[1]->setText("0");
+      });
+      editor.fillSeries(editor.columnView);
+      require(editor.pages[0].columns[0] == QVector<QString>({"3", "1", "2"}) &&
+                  editor.undoStack->count() == 0 && !editor.dirty,
+              "fractional series input cannot round into a valid large integer");
+    }
+    acceptDialog("Fill Series", [](QDialog *dialog) {
+      const auto fields = dialog->findChildren<QLineEdit *>();
+      fields[0]->setText("18446744073709551613");
+      fields[1]->setText("1");
+    });
+    editor.fillSeries(editor.columnView);
+    require(editor.pages[0].columns[0] == QVector<QString>({"18446744073709551613",
+                "18446744073709551614", "18446744073709551615"}),
+            "exact integer series still reaches the unsigned maximum");
+    editor.undoStack->undo();
+    acceptDialog("Fill Series", [](QDialog *dialog) {
+      const auto fields = dialog->findChildren<QLineEdit *>();
+      fields[0]->setText("1.0");
+      fields[1]->setText("2.0");
+    });
+    editor.fillSeries(editor.columnView);
+    require(editor.pages[0].columns[0] == QVector<QString>({"1", "3", "5"}),
+            "ordinary decimal fill inputs retain their behavior");
+    fprintf(stdout, "PASS integer fill series precision and exact upper bound\n");
+  }
+
+  /** The xz line reader must preserve blank lines, final bytes and EOF semantics. */
+  static void xzInputLines(const QString &root) {
+    const QString path = root + "/line-reader.xz";
+    putCompressedFile(path, "\n \nfirst\nlast");
+    auto *file = static_cast<struct lzmafile *>(lzma_open(path.toLocal8Bit().constData(), "rb"));
+    require(file, "open xz line reader fixture");
+    char buffer[32];
+    for (const QByteArray &expected : {QByteArray("\n"), QByteArray(" \n"), QByteArray("first\n"), QByteArray("last")}) {
+      require(lzma_gets(buffer, sizeof(buffer), file) && QByteArray(buffer) == expected,
+              "xz lines preserve blank lines and a final line without a newline");
+    }
+    require(!lzma_gets(buffer, sizeof(buffer), file) && !lzma_gets(buffer, sizeof(buffer), file),
+            "xz line reader returns null consistently at EOF");
+    require(lzma_close(file) == 0, "close xz line reader fixture");
+    file = static_cast<struct lzmafile *>(lzma_open(path.toLocal8Bit().constData(), "rb"));
+    require(file, "reopen xz fixture for bounded reads");
+    QByteArray contents;
+    while (lzma_gets(buffer, 3, file))
+      contents += buffer;
+    require(contents == "\n \nfirst\nlast", "bounded xz line reads preserve every byte");
+    require(lzma_close(file) == 0, "close bounded xz line reader fixture");
+
+    for (const QString &suffix : {QString(".sdds"), QString(".sdds.gz"), QString(".sdds.xz")}) {
+      const QString input = root + "/blank-page-separator" + suffix;
+      putCompressedFile(input, "SDDS1\n&column name=X, type=long, &end\n"
+                               "&data mode=ascii, no_row_counts=1, &end\n1\n2\n\n3\n4");
+      SDDSEditor editor;
+      require(editor.loadFile(input), "load ASCII pages separated by a blank line");
+      require(editor.pages.size() == 2 && editor.pages[0].columns[0] == QVector<QString>({"1", "2"}) &&
+                  editor.pages[1].columns[0] == QVector<QString>({"3", "4"}),
+              "compressed input preserves blank page separators and final rows");
+    }
+    fprintf(stdout, "PASS xz line boundaries, final rows, page separators and EOF\n");
+  }
+
+  /** Failed SDDS initialization must release its stream as well as preserve the current document. */
+  static void failedInputCleanup(const QString &root) {
+    const QString probePath = root + "/descriptor-probe.txt";
+    putFile(probePath, "descriptor probe");
+    auto nextDescriptor = [&]() {
+      FILE *file = std::fopen(probePath.toLocal8Bit().constData(), "rb");
+      require(file, "open stream descriptor probe");
+#ifdef _WIN32
+      const int descriptor = _fileno(file);
+#else
+      const int descriptor = fileno(file);
+#endif
+      std::fclose(file);
+      return descriptor;
+    };
+    SDDSEditor editor;
+    setup(editor);
+    const QString included = root + "/invalid-include.sdds";
+    putFile(included, "&column name=X, type=invalid, &end\n");
+    const QVector<QByteArray> headers = {
+        "SDDS1\n&column name=X, type=long, &end\n",
+        "SDDS1\n&column name=X, type=long, &end\n&data mode=invalid, &end\n",
+        "SDDS1\n!# big-endian\n!# little-endian\n&data mode=ascii, &end\n",
+        "SDDS1\n&include filename=\"" + included.toLocal8Bit() + "\", &end\n"};
+    for (const QString &suffix : {QString(".sdds"), QString(".sdds.gz"), QString(".sdds.xz")}) {
+      for (int fixture = 0; fixture < headers.size(); ++fixture) {
+        const QString path = root + QString("/invalid-header-%1").arg(fixture) + suffix;
+        putCompressedFile(path, headers[fixture]);
+        const int before = nextDescriptor();
+        for (int attempt = 0; attempt < 3; ++attempt)
+          require(!editor.loadFile(path), "reject malformed input header");
+        require(editor.pages[0].columns[0] == QVector<QString>({"3", "1", "2"}) && !editor.dirty,
+                "failed input preserves the current document and saved state");
+        const int after = nextDescriptor();
+        fprintf(stdout, "%s failed input releases stream descriptors (%d -> %d): %s\n",
+                before == after ? "PASS" : "FAIL", before, after, qPrintable(path));
+        require(before == after, "failed input must not leak file descriptors");
+      }
+    }
+#ifndef _WIN32
+    // Exercise the same popen ownership used for legacy decompressor streams.
+    // The shell reports its PID so the check cannot reap an unrelated child.
+    for (const char *command : {"printf '%s\\nnot SDDS\\n' \"$$\"",
+                                "printf '%s\\nSDDS1\\n&data mode=invalid, &end\\n' \"$$\""}) {
+      fprintf(stdout, "pipe cleanup fixture: %s\n", command);
+      FILE *stream = popen(command, "r");
+      require(stream, "open malformed layout pipe fixture");
+      char pidLine[32];
+      long childPid = 0;
+      require(fgets(pidLine, sizeof(pidLine), stream) && sscanf(pidLine, "%ld", &childPid) == 1 && childPid > 0,
+              "read malformed layout pipe child PID");
+      SDDS_DATASET partial = {};
+      partial.layout.fp = stream;
+      partial.layout.popenUsed = 1;
+      require(!SDDS_ReadLayout(&partial, stream), "reject malformed layout from a process pipe");
+      require(!partial.layout.fp, "failed pipe layout clears the stream handle");
+      int status;
+      pid_t waited;
+      do {
+        errno = 0;
+        waited = waitpid(static_cast<pid_t>(childPid), &status, 0);
+      } while (waited == -1 && errno == EINTR);
+      const int waitError = errno;
+      require(terminateIncompleteDataset(&partial), "terminate failed process-pipe input");
+      SDDS_ClearErrors();
+      require(waited == -1 && waitError == ECHILD, "failed pipe layout must reap its child process");
+    }
+    fprintf(stdout, "PASS failed process-pipe input reaps its child processes\n");
+#endif
+  }
+
+  /** Inexact fallback must not round an odd long64 value into a valid integer result. */
+  static void integerFallbackPrecision() {
+    SDDSEditor editor;
+    setup(editor);
+    editor.pages[0].columns[0] = {"9007199254740993"};
+    editor.populateModels();
+    editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+    acceptDialog("Apply Numerical Expression", [](QDialog *dialog) {
+      dialog->findChild<QLineEdit *>()->setText("x / 2");
+    });
+    editor.applyNumericalExpression(editor.columnView);
+    require(editor.pages[0].columns[0][0] == "9007199254740993" && editor.undoStack->count() == 0 && !editor.dirty,
+            "a fractional long64 formula cannot round into a valid integer and change the cell");
+    if (std::numeric_limits<long double>::digits <= 64) {
+      const QString boundary = QString::number(quint64(1) << (std::numeric_limits<long double>::digits - 1));
+      acceptDialog("Apply Numerical Expression", [boundary](QDialog *dialog) {
+        dialog->findChild<QLineEdit *>()->setText(boundary + ".5 - " + boundary);
+      });
+      editor.applyNumericalExpression(editor.columnView);
+      require(editor.pages[0].columns[0][0] == "9007199254740993" && editor.undoStack->count() == 0 && !editor.dirty,
+              "a large fractional literal cannot round to an integer before cancellation");
+      acceptDialog("Apply Numerical Expression", [boundary](QDialog *dialog) {
+        dialog->findChild<QLineEdit *>()->setText("(" + boundary + " + 0.5)^1 - " + boundary);
+      });
+      editor.applyNumericalExpression(editor.columnView);
+      require(editor.pages[0].columns[0][0] == "9007199254740993" && editor.undoStack->count() == 0 && !editor.dirty,
+              "a large intermediate cannot round to an integer before cancellation");
+    }
+    if (std::numeric_limits<long double>::digits < 64) {
+      for (const QString &expression : {QString("9007199254740993 - 9007199254740992 + 0.0"),
+                                        QString("9007199254740993.0 - 9007199254740992.0"),
+                                        QString("9007199254740994 / 1.5")}) {
+        acceptDialog("Apply Numerical Expression", [expression](QDialog *dialog) {
+          dialog->findChild<QLineEdit *>()->setText(expression);
+        });
+        editor.applyNumericalExpression(editor.columnView);
+        require(editor.pages[0].columns[0][0] == "9007199254740993" && editor.undoStack->count() == 0 && !editor.dirty,
+                "floating fallback cannot silently round large integer literals or fractional results");
+      }
+    }
+    acceptDialog("Apply Numerical Expression", [](QDialog *dialog) {
+      dialog->findChild<QLineEdit *>()->setText("floor(x) + 2");
+    });
+    editor.applyNumericalExpression(editor.columnView);
+    require(editor.pages[0].columns[0][0] == "9007199254740995", "large integral floor results use exact arithmetic");
+    editor.undoStack->undo();
+    acceptDialog("Apply Numerical Expression", [](QDialog *dialog) {
+      dialog->findChild<QLineEdit *>()->setText("sqrt(16)");
+    });
+    editor.applyNumericalExpression(editor.columnView);
+    require(editor.pages[0].columns[0][0] == "4", "unused large cell values do not prevent a safe floating fallback");
+    editor.undoStack->undo();
+    acceptDialog("Apply Numerical Expression", [](QDialog *dialog) {
+      dialog->findChild<QLineEdit *>()->setText("ceil(x)");
+    });
+    editor.applyNumericalExpression(editor.columnView);
+    require(editor.pages[0].columns[0][0] == "9007199254740993" && editor.undoStack->canRedo(),
+            "large integral ceil is an exact no-op that preserves Redo");
+    fprintf(stdout, "PASS integer fallback preserves unrepresentable inputs\n");
+  }
+
+  /** Attribute dialogs must preserve definitions beyond QLineEdit's default limit. */
+  static void longDefinitionText(const QString &root) {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      failures += !ok;
+    };
+    const QString text = QString(40000, QLatin1Char('a')) + " tail";
+    const QString edited = text + " edited";
+    QByteArray bytes = text.toLocal8Bit();
+    SDDSEditor editor;
+    setup(editor);
+    require(SDDS_DefineParameter(&editor.dataset, "Fixed", bytes.constData(), bytes.constData(),
+                                 bytes.constData(), nullptr, SDDS_STRING, bytes.data()) >= 0,
+            "define long fixed string and parameter metadata");
+    require(replaceSharedLayoutString(&editor.dataset.layout.column_definition[0].description,
+                                      &editor.dataset.original_layout.column_definition[0].description, text),
+            "set long column description");
+    require(replaceSharedLayoutString(&editor.dataset.layout.array_definition[0].description,
+                                      &editor.dataset.original_layout.array_definition[0].description, text),
+            "set long array description");
+    require(replaceSharedLayoutString(&editor.dataset.layout.array_definition[0].group_name,
+                                      &editor.dataset.original_layout.array_definition[0].group_name, text),
+            "set long array group");
+    require(SDDS_SaveLayout(&editor.dataset), "save long definition fixture layout");
+    editor.pages[0].parameters = {text};
+    editor.populateModels();
+    editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+
+    acceptDialog("Parameter Attributes", [&](QDialog *dialog) {
+      const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+      check(fields[1]->text() == text && fields[2]->text() == text && fields[3]->text() == text &&
+                fields[5]->text() == text, "parameter attributes display complete long text and fixed values");
+    });
+    editor.editParameterAttributes();
+    check(editor.undoStack->count() == 0 && !editor.dirty && editor.pages[0].parameters[0] == text,
+          "accepting unchanged long parameter attributes preserves data and history");
+    acceptDialog("Column Attributes", [&](QDialog *dialog) {
+      const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+      check(fields[3]->text() == text, "column attributes display the complete long description");
+      fields[2]->setText("m");
+      fields[3]->setText(edited);
+    });
+    editor.editColumnAttributesAt(0);
+    check(QString::fromLocal8Bit(editor.dataset.layout.column_definition[0].description) == edited,
+          "editing a long column description keeps every character");
+    acceptDialog("Array Attributes", [&](QDialog *dialog) {
+      const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+      check(fields[3]->text() == text && fields[5]->text() == text,
+            "array attributes display complete long descriptions and group names");
+      fields[2]->setText("s");
+      fields[5]->setText(edited);
+    });
+    editor.editArrayAttributesAt(0);
+    check(QString::fromLocal8Bit(editor.dataset.layout.array_definition[0].description) == text &&
+              QString::fromLocal8Bit(editor.dataset.layout.array_definition[0].group_name) == edited,
+          "editing a long array group name keeps every character");
+    editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+    acceptDialog("Parameter Attributes", [&](QDialog *dialog) {
+      const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+      fields[2]->setText("kg");
+      fields[5]->setText(edited);
+    });
+    editor.editParameterAttributes();
+    check(editor.pages[0].parameters[0] == edited &&
+              QString::fromLocal8Bit(editor.dataset.layout.parameter_definition[0].description) == text,
+          "editing a long fixed string keeps every character and unchanged metadata");
+    editor.undoStack->undo();
+    editor.undoStack->redo();
+    check(editor.pages[0].parameters[0] == edited,
+          "long fixed strings survive structural undo and redo");
+    for (bool ascii : {true, false}) {
+      editor.asciiBtn->setChecked(ascii);
+      editor.binaryBtn->setChecked(!ascii);
+      const QString path = root + (ascii ? "/long-definitions-ascii.sdds" : "/long-definitions-binary.sdds");
+      putFile(path, "original file");
+      editor.dirty = true;
+      check(!editor.writeFile(path) && readFile(path) == "original file" && editor.dirty,
+            "an unreadable oversized layout cannot replace the destination or mark the document saved");
+    }
+    require(failures == 0, "long definition text regressions");
+  }
+
+  /** Saving floating-point cells as ASCII must preserve the exact stored values. */
+  static void asciiPrecision(const QString &root) {
+    const QByteArray originalLongDoubleMode = qgetenv("SDDS_LONGDOUBLE_64BITS");
+    if (sizeof(long double) == sizeof(double))
+      qputenv("SDDS_LONGDOUBLE_64BITS", "1"); // Native SDDS encoding on MSVC and Apple Silicon.
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      failures += !ok;
+    };
+    SDDSEditor editor;
+    setup(editor);
+    editor.dataset.layout.column_definition[0].type = SDDS_DOUBLE;
+    editor.dataset.layout.array_definition[0].type = SDDS_LONGDOUBLE;
+    require(SDDS_DefineParameter(&editor.dataset, "P", nullptr, nullptr, nullptr,
+                                 nullptr, SDDS_DOUBLE, nullptr) >= 0, "define precision parameter");
+    require(SDDS_SaveLayout(&editor.dataset), "save floating-point precision fixture layout");
+    const QString doubleText = shortestDoubleText(std::nextafter(1.0, 2.0));
+    const QString longDoubleText = longDoubleToText(std::nextafter(1.0L, 2.0L));
+    editor.pages[0].parameters = {doubleText};
+    editor.pages[0].columns[0] = {doubleText, shortestDoubleText(std::nextafter(0.1, 0.0)), "-0"};
+    editor.pages[0].arrays[0].values = {longDoubleText, longDoubleToText(-std::nextafter(1.0L, 2.0L)),
+                                      longDoubleToText(std::nextafter(0.1L, 0.0L)), "-0"};
+    editor.populateModels();
+    for (const QString &suffix : {QString(".sdds"), QString(".sdds.gz"), QString(".sdds.xz")}) {
+      for (bool ascii : {true, false}) {
+        editor.asciiBtn->setChecked(ascii);
+        editor.binaryBtn->setChecked(!ascii);
+        const QString path = root + (ascii ? "/exact-ascii" : "/exact-binary") + suffix;
+        require(editor.writeFile(path), "save exact floating-point fixture");
+        SDDSEditor loaded;
+        require(loaded.loadFile(path), "reload exact floating-point fixture");
+        check(loaded.pages[0].parameters == editor.pages[0].parameters &&
+                  loaded.pages[0].columns == editor.pages[0].columns &&
+                  loaded.pages[0].arrays[0].values == editor.pages[0].arrays[0].values,
+              ascii ? "ASCII saves preserve every floating-point digit and signed zero"
+                    : "binary saves preserve every floating-point digit and signed zero");
+      }
+    }
+    if (originalLongDoubleMode.isNull())
+      qunsetenv("SDDS_LONGDOUBLE_64BITS");
+    else
+      qputenv("SDDS_LONGDOUBLE_64BITS", originalLongDoubleMode);
+    require(failures == 0, "ASCII floating-point precision regressions");
+  }
+
+  /** Long replacement text and formula templates must reach string cells intact. */
+  static void longTextTools(const QString &root) {
+    const QString text = QString(40000, QLatin1Char('t')) + " tail";
+    SDDSEditor editor;
+    setup(editor);
+    editor.dataset.layout.column_definition[0].type = SDDS_STRING;
+    require(SDDS_SaveLayout(&editor.dataset), "save long text tool fixture layout");
+    editor.pages[0].columns[0] = {"prefix", "prefix", "prefix"};
+    editor.populateModels();
+    editor.show();
+    editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+    editor.lastTextFormula = text;
+    acceptDialog("Apply Text Formula", [&](QDialog *dialog) {
+      QLineEdit *field = dialog->findChild<QLineEdit *>();
+      require(field && field->text() == text, "formula dialog keeps a long saved template");
+      field->setText(text + " formula");
+    });
+    editor.applyTextFormula(editor.columnView);
+    require(editor.pages[0].columns[0][0] == text + " formula", "formula stores the complete long template");
+    editor.searchColumn(0);
+    QDialog *search = editor.searchColumnDialog.data();
+    require(search, "open long replacement dialog");
+    const auto fields = search->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+    fields[0]->setText("prefix");
+    fields[1]->setText(text);
+    for (QPushButton *button : search->findChildren<QPushButton *>())
+      if (button->text() == "Replace All")
+        button->click();
+    require(editor.pages[0].columns[0][1] == text && editor.pages[0].columns[0][2] == text,
+            "search replacement stores the complete long text");
+    search->close();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    const QString path = root + "/long-text-tools.sdds";
+    require(editor.writeFile(path), "save long formula and replacement values");
+    SDDSEditor loaded;
+    require(loaded.loadFile(path), "reload long formula and replacement values");
+    require(loaded.pages[0].columns == editor.pages[0].columns,
+            "long formula and replacement values round-trip without truncation");
+    fprintf(stdout, "PASS long formula templates, replacements and string round trips\n");
+  }
+
   /** Array shape edits keep data, row filters reject stray signs, and rows need a column. */
   static void shapeFilterAndRowFixes() {
     int failures = 0;
@@ -2927,6 +3369,14 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::expressionNesting();
+  SDDSEditorTests::integerSeriesPrecision();
+  SDDSEditorTests::xzInputLines(artifacts.path());
+  SDDSEditorTests::integerFallbackPrecision();
+  SDDSEditorTests::failedInputCleanup(artifacts.path());
+  SDDSEditorTests::asciiPrecision(artifacts.path());
+  SDDSEditorTests::longDefinitionText(artifacts.path());
+  SDDSEditorTests::longTextTools(artifacts.path());
   SDDSEditorTests::windowsAndEncodingFixes(artifacts.path());
   SDDSEditorTests::portabilityAndEditingFixes();
   SDDSEditorTests::definitionNameEncoding();

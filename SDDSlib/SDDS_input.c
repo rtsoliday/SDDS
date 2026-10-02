@@ -38,6 +38,43 @@
 
 #define DEBUG 0
 
+/** Close a top-level layout stream and clear its handle for safe failure cleanup.
+ * Recursive include streams are owned and closed by the including reader.
+ * Process pipes must also wait for their child through pclose.
+ */
+static void closeLayoutFile(SDDS_DATASET *dataset, FILE *fp) {
+  if (dataset->layout.depth != 0)
+    return;
+  if (dataset->layout.fp == fp) {
+    dataset->layout.fp = NULL;
+#if !defined(vxWorks)
+    if (dataset->layout.popenUsed) {
+      pclose(fp);
+      return;
+    }
+#endif
+  }
+  fclose(fp);
+}
+
+/** Close compressed layout input without leaving a dangling stream pointer. */
+static void closeLzmaLayoutFile(SDDS_DATASET *dataset, struct lzmafile *fp) {
+  if (dataset->layout.lzmafp == fp) {
+    dataset->layout.lzmafp = NULL;
+    dataset->layout.fp = NULL;
+  }
+  lzma_close(fp);
+}
+
+#if defined(zLib)
+/** Close gzip layout input without leaving a dangling stream pointer. */
+static void closeGzipLayoutFile(SDDS_DATASET *dataset, gzFile fp) {
+  if (dataset->layout.gzfp == fp)
+    dataset->layout.gzfp = NULL;
+  gzclose(fp);
+}
+#endif
+
 /**
  * Initializes a SDDS_DATASET structure for use in reading data from a SDDS file. This involves opening the file and reading the SDDS header.
  *
@@ -532,22 +569,22 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
       return 0;
     }
     if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_ReadLayout")) {
-      fclose(fp);
+      closeLayoutFile(SDDS_dataset, fp);
       return (0);
     }
     SDDS_dataset->layout.layout_written = 1; /* it is already in the file */
     if (!fgets(SDDS_dataset->layout.s, SDDS_MAXLINE, fp)) {
-      fclose(fp);
+      closeLayoutFile(SDDS_dataset, fp);
       SDDS_SetError("Unable to read layout--no header lines found (SDDS_ReadLayout)");
       return (0);
     }
     if (strncmp(SDDS_dataset->layout.s, "SDDS", 4) != 0) {
-      fclose(fp);
+      closeLayoutFile(SDDS_dataset, fp);
       SDDS_SetError("Unable to read layout--no header lines found (SDDS_ReadLayout)");
       return (0);
     }
     if (sscanf(SDDS_dataset->layout.s + 4, "%" SCNd32, &SDDS_dataset->layout.version) != 1) {
-      fclose(fp);
+      closeLayoutFile(SDDS_dataset, fp);
       SDDS_SetError("Unable to read layout--no version number on first line (SDDS_ReadLayout)");
       return (0);
     }
@@ -567,21 +604,21 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
     switch (match_string(groupName, SDDS_command, SDDS_NUM_COMMANDS, EXACT_MATCH)) {
     case SDDS_DESCRIPTION_COMMAND:
       if (!SDDS_ProcessDescription(SDDS_dataset, ptr + 1)) {
-        fclose(fp);
+        closeLayoutFile(SDDS_dataset, fp);
         SDDS_SetError("Unable to process description (SDDS_ReadLayout)");
         return (0);
       }
       break;
     case SDDS_COLUMN_COMMAND:
       if (!SDDS_ProcessColumnDefinition(SDDS_dataset, ptr + 1)) {
-        fclose(fp);
+        closeLayoutFile(SDDS_dataset, fp);
         SDDS_SetError("Unable to process column definition (SDDS_ReadLayout)");
         return (0);
       }
       break;
     case SDDS_PARAMETER_COMMAND:
       if (!SDDS_ProcessParameterDefinition(SDDS_dataset, ptr + 1)) {
-        fclose(fp);
+        closeLayoutFile(SDDS_dataset, fp);
         SDDS_SetError("Unable to process parameter definition (SDDS_ReadLayout)");
         return (0);
       }
@@ -589,7 +626,7 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
     case SDDS_ASSOCIATE_COMMAND:
 #if RW_ASSOCIATES != 0
       if (!SDDS_ProcessAssociateDefinition(SDDS_dataset, ptr + 1)) {
-        fclose(fp);
+        closeLayoutFile(SDDS_dataset, fp);
         SDDS_SetError("Unable to process associate definition (SDDS_ReadLayout)");
         return (0);
       }
@@ -597,13 +634,13 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
       break;
     case SDDS_DATA_COMMAND:
       if (!SDDS_ProcessDataMode(SDDS_dataset, ptr + 1)) {
-        fclose(fp);
+        closeLayoutFile(SDDS_dataset, fp);
         SDDS_SetError("Unable to process data mode (SDDS_ReadLayout)");
         return (0);
       }
       if (SDDS_dataset->layout.data_command_seen) {
         /* should never happen */
-        fclose(fp);
+        closeLayoutFile(SDDS_dataset, fp);
         SDDS_SetError("Unable to read layout--multiple data commands (SDDS_ReadLayout)");
         return (0);
       }
@@ -636,7 +673,7 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
       return (1);
     case SDDS_INCLUDE_COMMAND:
       if (!(fp1 = SDDS_ProcessIncludeCommand(SDDS_dataset, ptr + 1))) {
-        fclose(fp);
+        closeLayoutFile(SDDS_dataset, fp);
         SDDS_SetError("Unable to process include command (SDDS_ReadLayout)");
         return (0);
       }
@@ -653,13 +690,13 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
       break;
     case SDDS_ARRAY_COMMAND:
       if (!SDDS_ProcessArrayDefinition(SDDS_dataset, ptr + 1)) {
-        fclose(fp);
+        closeLayoutFile(SDDS_dataset, fp);
         SDDS_SetError("Unable to process array definition (SDDS_ReadLayout)");
         return (0);
       }
       break;
     default:
-      fclose(fp);
+      closeLayoutFile(SDDS_dataset, fp);
       sprintf(buffer, "Unknown layout entry %s given (SDDS_ReadLayout)", groupName);
       SDDS_SetError(buffer);
       return (0);
@@ -695,22 +732,22 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
       return 0;
     }
     if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_LZMAReadLayout")) {
-      lzma_close(lzmafp);
+      closeLzmaLayoutFile(SDDS_dataset, lzmafp);
       return (0);
     }
     SDDS_dataset->layout.layout_written = 1; /* it is already in the file */
     if (!lzma_gets(SDDS_dataset->layout.s, SDDS_MAXLINE, lzmafp)) {
-      lzma_close(lzmafp);
+      closeLzmaLayoutFile(SDDS_dataset, lzmafp);
       SDDS_SetError("Unable to read layout--no header lines found (SDDS_LZMAReadLayout)");
       return (0);
     }
     if (strncmp(SDDS_dataset->layout.s, "SDDS", 4) != 0) {
-      lzma_close(lzmafp);
+      closeLzmaLayoutFile(SDDS_dataset, lzmafp);
       SDDS_SetError("Unable to read layout--no header lines found (SDDS_LZMAReadLayout)");
       return (0);
     }
     if (sscanf(SDDS_dataset->layout.s + 4, "%" SCNd32, &SDDS_dataset->layout.version) != 1) {
-      lzma_close(lzmafp);
+      closeLzmaLayoutFile(SDDS_dataset, lzmafp);
       SDDS_SetError("Unable to read layout--no version number on first line (SDDS_LZMAReadLayout)");
       return (0);
     }
@@ -730,21 +767,21 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
     switch (match_string(groupName, SDDS_command, SDDS_NUM_COMMANDS, EXACT_MATCH)) {
     case SDDS_DESCRIPTION_COMMAND:
       if (!SDDS_ProcessDescription(SDDS_dataset, ptr + 1)) {
-        lzma_close(lzmafp);
+        closeLzmaLayoutFile(SDDS_dataset, lzmafp);
         SDDS_SetError("Unable to process description (SDDS_LZMAReadLayout)");
         return (0);
       }
       break;
     case SDDS_COLUMN_COMMAND:
       if (!SDDS_ProcessColumnDefinition(SDDS_dataset, ptr + 1)) {
-        lzma_close(lzmafp);
+        closeLzmaLayoutFile(SDDS_dataset, lzmafp);
         SDDS_SetError("Unable to process column definition (SDDS_LZMAReadLayout)");
         return (0);
       }
       break;
     case SDDS_PARAMETER_COMMAND:
       if (!SDDS_ProcessParameterDefinition(SDDS_dataset, ptr + 1)) {
-        lzma_close(lzmafp);
+        closeLzmaLayoutFile(SDDS_dataset, lzmafp);
         SDDS_SetError("Unable to process parameter definition (SDDS_LZMAReadLayout)");
         return (0);
       }
@@ -752,7 +789,7 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
     case SDDS_ASSOCIATE_COMMAND:
 #if RW_ASSOCIATES != 0
       if (!SDDS_ProcessAssociateDefinition(SDDS_dataset, ptr + 1)) {
-        lzma_close(lzmafp);
+        closeLzmaLayoutFile(SDDS_dataset, lzmafp);
         SDDS_SetError("Unable to process associate definition (SDDS_LZMAReadLayout)");
         return (0);
       }
@@ -760,13 +797,13 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
       break;
     case SDDS_DATA_COMMAND:
       if (!SDDS_ProcessDataMode(SDDS_dataset, ptr + 1)) {
-        lzma_close(lzmafp);
+        closeLzmaLayoutFile(SDDS_dataset, lzmafp);
         SDDS_SetError("Unable to process data mode (SDDS_LZMAReadLayout)");
         return (0);
       }
       if (SDDS_dataset->layout.data_command_seen) {
         /* should never happen */
-        lzma_close(lzmafp);
+        closeLzmaLayoutFile(SDDS_dataset, lzmafp);
         SDDS_SetError("Unable to read layout--multiple data commands (SDDS_LZMAReadLayout)");
         return (0);
       }
@@ -799,7 +836,7 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
       return (1);
     case SDDS_INCLUDE_COMMAND:
       if (!(fp1 = SDDS_ProcessIncludeCommand(SDDS_dataset, ptr + 1))) {
-        lzma_close(lzmafp);
+        closeLzmaLayoutFile(SDDS_dataset, lzmafp);
         SDDS_SetError("Unable to process include command (SDDS_LZMAReadLayout)");
         return (0);
       }
@@ -816,13 +853,13 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
       break;
     case SDDS_ARRAY_COMMAND:
       if (!SDDS_ProcessArrayDefinition(SDDS_dataset, ptr + 1)) {
-        lzma_close(lzmafp);
+        closeLzmaLayoutFile(SDDS_dataset, lzmafp);
         SDDS_SetError("Unable to process array definition (SDDS_LZMAReadLayout)");
         return (0);
       }
       break;
     default:
-      lzma_close(lzmafp);
+      closeLzmaLayoutFile(SDDS_dataset, lzmafp);
       sprintf(buffer, "Unknown layout entry %s given (SDDS_LZMAReadLayout)", groupName);
       SDDS_SetError(buffer);
       return (0);
@@ -858,22 +895,22 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
     return 0;
   }
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_GZipReadLayout")) {
-    gzclose(gzfp);
+    closeGzipLayoutFile(SDDS_dataset, gzfp);
     return (0);
   }
   SDDS_dataset->layout.layout_written = 1; /* it is already in the file */
   if (!gzgets(gzfp, SDDS_dataset->layout.s, SDDS_MAXLINE)) {
-    gzclose(gzfp);
+    closeGzipLayoutFile(SDDS_dataset, gzfp);
     SDDS_SetError("Unable to read layout--no header lines found (SDDS_GZipReadLayout)");
     return (0);
   }
   if (strncmp(SDDS_dataset->layout.s, "SDDS", 4) != 0) {
-    gzclose(gzfp);
+    closeGzipLayoutFile(SDDS_dataset, gzfp);
     SDDS_SetError("Unable to read layout--no header lines found (SDDS_GZipReadLayout)");
     return (0);
   }
   if (sscanf(SDDS_dataset->layout.s + 4, "%" SCNd32, &SDDS_dataset->layout.version) != 1) {
-    gzclose(gzfp);
+    closeGzipLayoutFile(SDDS_dataset, gzfp);
     SDDS_SetError("Unable to read layout--no version number on first line (SDDS_GZipReadLayout)");
     return (0);
   }
@@ -893,21 +930,21 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
     switch (match_string(groupName, SDDS_command, SDDS_NUM_COMMANDS, EXACT_MATCH)) {
     case SDDS_DESCRIPTION_COMMAND:
       if (!SDDS_ProcessDescription(SDDS_dataset, ptr + 1)) {
-        gzclose(gzfp);
+        closeGzipLayoutFile(SDDS_dataset, gzfp);
         SDDS_SetError("Unable to process description (SDDS_GZipReadLayout)");
         return (0);
       }
       break;
     case SDDS_COLUMN_COMMAND:
       if (!SDDS_ProcessColumnDefinition(SDDS_dataset, ptr + 1)) {
-        gzclose(gzfp);
+        closeGzipLayoutFile(SDDS_dataset, gzfp);
         SDDS_SetError("Unable to process column definition (SDDS_GZipReadLayout)");
         return (0);
       }
       break;
     case SDDS_PARAMETER_COMMAND:
       if (!SDDS_ProcessParameterDefinition(SDDS_dataset, ptr + 1)) {
-        gzclose(gzfp);
+        closeGzipLayoutFile(SDDS_dataset, gzfp);
         SDDS_SetError("Unable to process parameter definition (SDDS_GZipReadLayout)");
         return (0);
       }
@@ -915,7 +952,7 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
     case SDDS_ASSOCIATE_COMMAND:
 #  if RW_ASSOCIATES != 0
       if (!SDDS_ProcessAssociateDefinition(SDDS_dataset, ptr + 1)) {
-        gzclose(gzfp);
+        closeGzipLayoutFile(SDDS_dataset, gzfp);
         SDDS_SetError("Unable to process associate definition (SDDS_GZipReadLayout)");
         return (0);
       }
@@ -923,13 +960,13 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
       break;
     case SDDS_DATA_COMMAND:
       if (!SDDS_ProcessDataMode(SDDS_dataset, ptr + 1)) {
-        gzclose(gzfp);
+        closeGzipLayoutFile(SDDS_dataset, gzfp);
         SDDS_SetError("Unable to process data mode (SDDS_GZipReadLayout)");
         return (0);
       }
       if (SDDS_dataset->layout.data_command_seen) {
         /* should never happen */
-        gzclose(gzfp);
+        closeGzipLayoutFile(SDDS_dataset, gzfp);
         SDDS_SetError("Unable to read layout--multiple data commands (SDDS_GZipReadLayout)");
         return (0);
       }
@@ -962,7 +999,7 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
       return (1);
     case SDDS_INCLUDE_COMMAND:
       if (!(fp1 = SDDS_ProcessIncludeCommand(SDDS_dataset, ptr + 1))) {
-        gzclose(gzfp);
+        closeGzipLayoutFile(SDDS_dataset, gzfp);
         SDDS_SetError("Unable to process include command (SDDS_GZipReadLayout)");
         return (0);
       }
@@ -979,13 +1016,13 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
       break;
     case SDDS_ARRAY_COMMAND:
       if (!SDDS_ProcessArrayDefinition(SDDS_dataset, ptr + 1)) {
-        gzclose(gzfp);
+        closeGzipLayoutFile(SDDS_dataset, gzfp);
         SDDS_SetError("Unable to process array definition (SDDS_GZipReadLayout)");
         return (0);
       }
       break;
     default:
-      gzclose(gzfp);
+      closeGzipLayoutFile(SDDS_dataset, gzfp);
       sprintf(buffer, "Unknown layout entry %s given (SDDS_GZipReadLayout)", groupName);
       SDDS_SetError(buffer);
       return (0);

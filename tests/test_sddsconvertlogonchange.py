@@ -34,15 +34,16 @@ CN1 CN2
   "option, expected, pipe",
   [
     ("-binary", "640cd3141b2491489099b451d29f51f699cd388bf221498ba758d2a21a924a7d", False),
-    ("-ascii", "8dc06008f96a6e91ccf7b49469afcf8c01328ae4817ace52b4ba5578801cec4b", False),
-    ("-double", "8dc06008f96a6e91ccf7b49469afcf8c01328ae4817ace52b4ba5578801cec4b", False),
-    ("-float", "a8223ee05e3b25eb6771646c4f76edc71e4efddab1e7cad783fbe8cceb6899ad", False),
-    ("-snapshot=0", "febea2138d01248bfe9d9f2da08eb44c632502510646c9729b57097efa6d3f0f", False),
-    ("-minimumInterval=1.1", "febea2138d01248bfe9d9f2da08eb44c632502510646c9729b57097efa6d3f0f", False),
-    ("-time=start=1", "1afea6b8523e34153528e51aa1c253055786b28018774a6c19d2827df8ba2076", False),
-    ("-delete=RB2", "77dfd7838963d64164371a2e8047420a60e8f64b0dee35fad91f94cbf5896939", False),
-    ("-retain=RB1", "77dfd7838963d64164371a2e8047420a60e8f64b0dee35fad91f94cbf5896939", False),
-    ("-pipe=output", "8dc06008f96a6e91ccf7b49469afcf8c01328ae4817ace52b4ba5578801cec4b", True),
+    # ASCII snapshots include all 17 significant digits of double values.
+    ("-ascii", "90c555bf10f90a8c7ae5c9b7d03684bd00b0392c976dcde9260a92c58c7361ff", False),
+    ("-double", "90c555bf10f90a8c7ae5c9b7d03684bd00b0392c976dcde9260a92c58c7361ff", False),
+    ("-float", "3f8c484b1faa7d71fcfadf425f538aad38781f85c2ca1ba4ebd2c8806c7b9b28", False),
+    ("-snapshot=0", "342847524b7099a2f833ea13f49904f1c415c7236d2d9817b1188d04ed3f9134", False),
+    ("-minimumInterval=1.1", "342847524b7099a2f833ea13f49904f1c415c7236d2d9817b1188d04ed3f9134", False),
+    ("-time=start=1", "78a1d45dd197f15f6673ac6236d36ce511d4a3405d1acce601eb8abf43d9ed82", False),
+    ("-delete=RB2", "5e47729aca86d8b654532e314d8964c0be0e0f35f3f6ceac95798f37ab46942d", False),
+    ("-retain=RB1", "5e47729aca86d8b654532e314d8964c0be0e0f35f3f6ceac95798f37ab46942d", False),
+    ("-pipe=output", "90c555bf10f90a8c7ae5c9b7d03684bd00b0392c976dcde9260a92c58c7361ff", True),
   ],
 )
 def test_sddsconvertlogonchange(tmp_path, option, expected, pipe):

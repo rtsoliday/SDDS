@@ -94,6 +94,28 @@ an array's number of dimensions. Row filter checks reject a stray sign or dot
 before an operator, and inserting rows into a document without columns changes
 nothing.
 
+Long-text checks also cover editing definitions, fixed values, search replacements
+and formula templates beyond 32,767 characters. Staged saves verify that SDDS can
+read the generated header before replacing a destination; oversized definitions
+are rejected while preserving the file and unsaved edits. Floating-point checks
+require exact ASCII and binary round trips in plain/gzip/xz files, using each
+platform's native long-double precision (the tests select the library's 64-bit
+long-double mode on MSVC and Apple Silicon).
+
+Input failure checks repeatedly open truncated headers, invalid modes, conflicting
+byte-order declarations and broken includes in plain/gzip/xz files. They verify
+that streams are released and the current document is preserved. The xz checks
+also cover blank page separators, final lines without a newline, bounded line
+reads and end of file. Integer-expression checks reject floating-point fallback
+that would round a large operand, literal, intermediate or fractional result into a valid
+integer, and retain exact `floor`/`ceil` operations and ordinary small formulas.
+Fill Series also rejects integer calculations that would silently round away a
+fraction, while retaining exact series up to the unsigned 64-bit maximum.
+Formula and row-filter parsers bound recursive nesting to 256 levels so excessive
+parentheses, unary operators or chained powers produce an error instead of
+exhausting the process stack. Regressions cover million-level nested input and
+ordinary expressions with functions and operator precedence.
+
 Executables are built under the platform object directory (`O.Linux-x86_64` on
 Linux). The plotting probe is named `test-bin/sddsplot` there; only the test
 process prepends that directory to its PATH. It copies the plot input and records
@@ -159,6 +181,12 @@ stores them that way. Attribute dialogs rewrite only the fields you change. Floa
 zero as `-0`. String fields and definition text reject embedded NUL characters,
 which the SDDS text format cannot preserve.
 
+ASCII saves retain enough digits to recover the exact floating-point value.
+Long text can be edited without truncation, but SDDS header limits still apply
+to definitions and fixed values. A save that would produce an unreadable header
+leaves the destination intact and reports how to shorten the definition or use
+a non-fixed string parameter.
+
 Copying a non-contiguous selection copies the rectangle around it. Other
 programs receive empty fields for the unselected cells. Pasting inside the
 editor or an array viewer leaves the matching target cells unchanged.
@@ -172,10 +200,13 @@ Row filters match column names case-sensitively first, then ignoring case.
 Write a name in brackets when it is not a plain identifier, including names
 that contain brackets (`[Q[0]] > 0`); a bracketed name always refers to a
 column, even one named `row`, `i`, `true` or `false`. Fill Series and numerical
-expressions compute integer cells exactly with 64-bit integers, so long64 and
-ulong64 values keep every digit on platforms whose long double is only 64 bits
-wide (such as MSVC). Expressions that produce NaN or infinity store `nan`,
-`inf` or `-inf` in floating-point cells.
+expressions using integer literals, +, -, *, exact division, abs, floor and ceil
+compute integer cells with exact 64-bit arithmetic. Other expressions use the
+platform's floating-point arithmetic; integer destinations reject fallback when
+a large operand or literal would lose precision, or when an intermediate or result is too large
+to distinguish integers from fractions. This keeps long64 and ulong64 values
+from silently rounding on MSVC and Apple Silicon. Expressions that produce NaN
+or infinity store `nan`, `inf` or `-inf` in floating-point cells.
 
 The parameter table lists Name, Type, Units, Value and Description. Only the
 value can be edited; double-click the type to change it, or units/description

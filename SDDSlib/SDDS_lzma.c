@@ -223,6 +223,8 @@ char *lzma_gets(char *s, int size, struct lzmafile *file) {
   if (s == NULL || size < 1)
     return NULL;
   s[0] = '\0';
+  if (size == 1)
+    return NULL;
   lstr = &file->str;
   lstr->next_out = (void *)s;
 
@@ -249,24 +251,20 @@ char *lzma_gets(char *s, int size, struct lzmafile *file) {
       fprintf(stderr, "lzma_gets error: decoding failed: %d\n", ret);
       return NULL;
     }
-    if (ret == LZMA_STREAM_END) { /* EOF */
-      s[i + 1] = '\0';
+    // A decoder call may consume only compression metadata and produce no
+    // character. Count only bytes actually written, as fgets does.
+    if (lstr->avail_out == 0) {
+      ++i;
+      s[i] = '\0';
+      if (s[i - 1] == '\n')
+        break;
+    }
+    if (ret == LZMA_STREAM_END)
       break;
-    }
-    if (s[i] == 10) { /* 10 is the value for \n */
-      if (i > 0) {    /* we sometimes get \10\10 */
-        if ((i == 1) && (s[0] == 32)) {
-          /* when uncompressing the lzma stream we some times end 
-		     up with \10\32\10 instead of a simple \10 */
-        } else {
-          s[i + 1] = '\0';
-          break;
-        }
-      }
-    }
-    i++;
   }
-  return s;
+  // Returning an empty string at EOF makes header readers loop forever.
+  s[i] = '\0';
+  return i ? s : NULL;
 }
 
 /* lzma_write writes up to 'count' bytes from the buffer 'buf' 

@@ -23,6 +23,7 @@
 #include "SDDS_internal.h"
 #include "mdb.h"
 #include <ctype.h>
+#include <float.h>
 
 #undef DEBUG
 
@@ -37,6 +38,17 @@
    other, it is okay that they share this buffer.
 */
 #define INITIAL_BIG_BUFFER_SIZE SDDS_MAXLINE
+
+/* Enough decimal digits to round-trip native long doubles, including MSVC's
+ * 64-bit type and Unix 80-bit/128-bit types. Older C libraries lack the C11
+ * type-specific macro; DECIMAL_DIG or LDBL_DIG + 3 is a safe fallback. */
+#if defined(LDBL_DECIMAL_DIG)
+#  define SDDS_LONGDOUBLE_DECIMAL_DIG LDBL_DECIMAL_DIG
+#elif defined(DECIMAL_DIG)
+#  define SDDS_LONGDOUBLE_DECIMAL_DIG DECIMAL_DIG
+#else
+#  define SDDS_LONGDOUBLE_DECIMAL_DIG (LDBL_DIG + 3)
+#endif
 
 /**
  * @brief Writes a typed value to an ASCII file stream.
@@ -91,14 +103,13 @@ int32_t SDDS_WriteTypedValue(void *data, int64_t index, int32_t type, char *form
     fprintf(fp, format ? format : "%15.8e", *((float *)data + index));
     break;
   case SDDS_DOUBLE:
-    fprintf(fp, format ? format : "%22.15e", *((double *)data + index));
+    fprintf(fp, format ? format : "%22.16e", *((double *)data + index));
     break;
   case SDDS_LONGDOUBLE:
-    if (LDBL_DIG == 18) {
-      fprintf(fp, format ? format : "%22.18Le", *((long double *)data + index));
-    } else {
-      fprintf(fp, format ? format : "%22.15Le", *((long double *)data + index));
-    }
+    if (format)
+      fprintf(fp, format, *((long double *)data + index));
+    else
+      fprintf(fp, "%22.*Le", SDDS_LONGDOUBLE_DECIMAL_DIG - 1, *((long double *)data + index));
     break;
   case SDDS_STRING:
     /* ignores format string */
@@ -215,14 +226,13 @@ int32_t SDDS_LZMAWriteTypedValue(void *data, int64_t index, int32_t type, char *
     lzma_printf(lzmafp, format ? format : "%15.8e", *((float *)data + index));
     break;
   case SDDS_DOUBLE:
-    lzma_printf(lzmafp, format ? format : "%22.15e", *((double *)data + index));
+    lzma_printf(lzmafp, format ? format : "%22.16e", *((double *)data + index));
     break;
   case SDDS_LONGDOUBLE:
-    if (LDBL_DIG == 18) {
-      lzma_printf(lzmafp, format ? format : "%22.18Le", *((long double *)data + index));
-    } else {
-      lzma_printf(lzmafp, format ? format : "%22.15Le", *((long double *)data + index));
-    }
+    if (format)
+      lzma_printf(lzmafp, format, *((long double *)data + index));
+    else
+      lzma_printf(lzmafp, "%22.*Le", SDDS_LONGDOUBLE_DECIMAL_DIG - 1, *((long double *)data + index));
     break;
   case SDDS_STRING:
     /* ignores format string */
@@ -340,14 +350,13 @@ int32_t SDDS_GZipWriteTypedValue(void *data, int64_t index, int32_t type, char *
     gzprintf(gzfp, format ? format : "%15.8e", *((float *)data + index));
     break;
   case SDDS_DOUBLE:
-    gzprintf(gzfp, format ? format : "%22.15e", *((double *)data + index));
+    gzprintf(gzfp, format ? format : "%22.16e", *((double *)data + index));
     break;
   case SDDS_LONGDOUBLE:
-    if (LDBL_DIG == 18) {
-      gzprintf(gzfp, format ? format : "%22.18Le", *((long double *)data + index));
-    } else {
-      gzprintf(gzfp, format ? format : "%22.15Le", *((long double *)data + index));
-    }
+    if (format)
+      gzprintf(gzfp, format, *((long double *)data + index));
+    else
+      gzprintf(gzfp, "%22.*Le", SDDS_LONGDOUBLE_DECIMAL_DIG - 1, *((long double *)data + index));
     break;
   case SDDS_STRING:
     /* ignores format string */
