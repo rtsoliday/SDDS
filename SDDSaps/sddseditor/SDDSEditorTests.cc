@@ -36,6 +36,17 @@ static void putFile(const QString &path, const QByteArray &contents) {
   require(file.write(contents) == contents.size(), "write fixture");
 }
 
+/** Create a real symbolic link; Windows allows this with Developer Mode or elevation. */
+static bool makeSymbolicLink(const QString &target, const QString &link) {
+#ifdef _WIN32
+  const std::wstring from = QDir::toNativeSeparators(link).toStdWString();
+  const std::wstring to = QDir::toNativeSeparators(target).toStdWString();
+  return CreateSymbolicLinkW(from.c_str(), to.c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0;
+#else
+  return QFile::link(target, link);
+#endif
+}
+
 /** Accepts warnings so unattended tests never block; a test that answers a prompt itself pauses it. */
 static QTimer *messageBoxAccepter = nullptr;
 
@@ -56,6 +67,88 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** Array shape edits keep data, row filters reject stray signs, and rows need a column. */
+  static void shapeFilterAndRowFixes() {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      failures += !ok;
+    };
+    {
+      SDDSEditor editor;
+      setup(editor);
+      const int large = 1500000;
+      editor.pages[0].arrays[0].dims = {large, 1};
+      editor.pages[0].arrays[0].values = QVector<QString>(large);
+      editor.pages[0].arrays[0].values[large - 1] = "7";
+      editor.populateModels();
+      editor.dirty = false;
+      const int history = editor.undoStack->count();
+      acceptDialog("Resize Array", [&](QDialog *dialog) {
+        check(dialog->findChildren<QSpinBox *>()[0]->value() == large,
+              "the resize dialog shows a dimension above one million");
+      });
+      editor.resizeArray(0);
+      check(editor.pages[0].arrays[0].dims == QVector<int>({large, 1}) &&
+                editor.pages[0].arrays[0].values.size() == large &&
+                editor.pages[0].arrays[0].values[large - 1] == "7" &&
+                editor.undoStack->count() == history && !editor.dirty,
+            "accepting an unchanged resize keeps every element of a large array");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      auto setDimensions = [&](int count) {
+        acceptDialog("Array Attributes", [count](QDialog *dialog) {
+          dialog->findChildren<QSpinBox *>()[1]->setValue(count);
+        });
+        editor.editArrayAttributesAt(0);
+      };
+      setDimensions(1);
+      check(editor.pages[0].arrays[0].dims == QVector<int>({2}) &&
+                editor.pages[0].arrays[0].values == QVector<QString>({"10", "30"}),
+            "removing a dimension keeps the elements whose dropped index is 0");
+      setDimensions(3);
+      check(editor.pages[0].arrays[0].dims == QVector<int>({2, 1, 1}) &&
+                editor.pages[0].arrays[0].values == QVector<QString>({"10", "30"}),
+            "adding dimensions keeps every element at its indices");
+      editor.undoStack->undo();
+      editor.undoStack->undo();
+      check(editor.pages[0].arrays[0].dims == QVector<int>({2, 2}) &&
+                editor.pages[0].arrays[0].values == QVector<QString>({"10", "20", "30", "40"}),
+            "dimension count edits undo to the original shape and values");
+    }
+    {
+      auto parses = [](const QString &expression) {
+        RowFilterParser parser(expression, [](const QString &, bool, QString *value) {
+          *value = "5";
+          return true;
+        });
+        bool pass = false;
+        QString error;
+        return parser.parse(&pass, &error);
+      };
+      check(!parses("X ->= 1") && !parses("X > 0 .&& X < 9") && !parses("X +== 5"),
+            "row filters reject a stray sign or dot before an operator");
+      check(parses("X >= -1") && parses("X > .5 && X < +9"),
+            "row filters still read signed and fractional numbers");
+    }
+    {
+      SDDSEditor editor;
+      require(editor.ensureDataset(), "initialize document without columns");
+      // Answer the row count prompt if one appears, so a regression fails instead of blocking.
+      QTimer::singleShot(0, []() {
+        for (QWidget *widget : QApplication::topLevelWidgets())
+          if (QInputDialog *dialog = qobject_cast<QInputDialog *>(widget))
+            dialog->accept();
+      });
+      editor.insertColumnRows();
+      check(editor.undoStack->count() == 0 && !editor.dirty,
+            "inserting rows without columns adds no Undo step and leaves the document unmodified");
+    }
+    require(failures == 0, "array shape, row filter and row insertion regressions");
+  }
+
   /** Fixed definitions must preserve literal data, and dialogs must preserve valid metadata. */
   static void fixedTextAndDefinitions(const QString &root) {
     int failures = 0;
@@ -1516,15 +1609,22 @@ public:
         require(reloaded.pages[0].arrays[0].values == editor.pages[0].arrays[0].values, "array round trip");
       }
     }
-#ifndef _WIN32
     putFile(root + "/version.001", "version one");
     putFile(root + "/version.002", "version two");
-    require(QFile::link(root + "/version.001", root + "/current"), "create version link");
-    require(editor.writeFile(root + "/current"), "save next unused version");
-    require(readFile(root + "/version.001") == "version one", "preserve linked version");
-    require(readFile(root + "/version.002") == "version two", "preserve intervening version");
-    require(QFileInfo(root + "/current").symLinkTarget() == root + "/version.003", "link advances past collision");
+    if (makeSymbolicLink(root + "/version.001", root + "/current")) {
+      require(editor.writeFile(root + "/current"), "save next unused version");
+      require(readFile(root + "/version.001") == "version one", "preserve linked version");
+      require(readFile(root + "/version.002") == "version two", "preserve intervening version");
+      require(QFileInfo(root + "/current").symLinkTarget() == root + "/version.003", "link advances past collision");
+      SDDSEditor reloaded;
+      require(reloaded.loadFile(root + "/current"), "reload through the updated version link");
+    } else {
+#ifdef _WIN32
+      fprintf(stdout, "SKIP versioned symlink save: this account cannot create symbolic links\n");
+#else
+      require(false, "create version link");
 #endif
+    }
     fprintf(stdout, "PASS transactional saves, compression, version collisions\n");
   }
 
@@ -2689,6 +2789,122 @@ public:
     }
     require(failures == 0, "name and exact number regressions");
   }
+
+  /** Closing with open tool windows, non-ASCII export paths, viewer paste history, raw definition text. */
+  static void windowsAndEncodingFixes(const QString &root) {
+    int failures = 0;
+    auto check = [&](bool ok, const char *label) {
+      fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+      failures += !ok;
+    };
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.show();
+      editor.searchColumn(0);
+      editor.openArrayViewer(0);
+      QPointer<QDialog> search = editor.searchColumnDialog.data();
+      QPointer<QDialog> viewer = editor.arrayViewers.last();
+      QCoreApplication::processEvents();
+      require(search && search->isVisible() && !search->parentWidget() && viewer && viewer->isVisible(),
+              "open the parentless search dialog and an array viewer");
+      editor.dirty = false;
+      editor.close();
+      QCoreApplication::processEvents();
+      check(!editor.isVisible() && (!search || !search->isVisible()) && (!viewer || !viewer->isVisible()),
+            "closing the editor closes its search dialog and array viewers");
+      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+    {
+      // HDF5 decodes Windows file names as UTF-8; the ANSI name fails here.
+      SDDSEditor editor;
+      setup(editor);
+      const QString directory = root + "/hdf-" + QString::fromUtf8("d\xC3\xA9j\xC3\xA0");
+      require(QDir().mkpath(directory), "create non-ASCII HDF export directory");
+      const QString path = directory + "/export.h5";
+      check(editor.writeHDF(path) && QFileInfo(path).size() > 0,
+            "HDF export works in a directory with a non-ASCII name");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.column_definition[0].type = SDDS_STRING;
+      require(SDDS_SaveLayout(&editor.dataset), "save CSV encoding layout");
+      const QString micro = QString::fromUtf8("\xC2\xB5s");
+      editor.pages[0].columns[0] = {micro, "a", "b"};
+      editor.populateModels();
+      const QString path = root + "/encoding.csv";
+      require(editor.writeCSV(path), "export non-ASCII CSV text");
+      if (localEncodingPreserves(micro))
+        check(readFile(path).contains("\n" + micro.toLocal8Bit() + "\n"),
+              "CSV text uses the same local encoding as SDDS text with Qt 5 and Qt 6");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      applyCellEditWithUndo(editor.undoStack, editor.arrayModel, editor.arrayModel->index(1, 0), "21");
+      editor.undoStack->undo();
+      editor.openArrayViewer(0);
+      ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      viewer->table()->setCurrentIndex(viewer->sliceModel()->index(0, 0));
+      const int history = editor.undoStack->index();
+      require(viewer->pasteText("10.0"), "paste differently formatted equal value into the viewer");
+      const bool stored = editor.pages[0].arrays[0].values[0] == "10.0" &&
+                          editor.undoStack->index() == history + 1;
+      editor.undoStack->undo();
+      check(stored && editor.pages[0].arrays[0].values[0] == "10",
+            "a viewer paste never leaves an empty undo step: pasted text is stored and undoable");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineParameter(&editor.dataset, "P", "sym", "m", "old", "%g", SDDS_DOUBLE, nullptr) >= 0,
+              "define attribute text parameter");
+      require(SDDS_SaveLayout(&editor.dataset), "save attribute text layout");
+      editor.pages[0].parameters = {"1"};
+      editor.populateModels();
+      const PARAMETER_DEFINITION &parameter = editor.dataset.layout.parameter_definition[0];
+      const char *parameterName = parameter.name;
+      const char *parameterUnits = parameter.units;
+      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      acceptDialog("Parameter Attributes", [](QDialog *dialog) {
+        dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[3]->setText("new");
+      });
+      editor.editParameterAttributes();
+      check(QByteArray(parameter.description) == "new" && parameter.name == parameterName &&
+                parameter.units == parameterUnits,
+            "editing a parameter description keeps the other stored attribute bytes");
+      const COLUMN_DEFINITION &column = editor.dataset.layout.column_definition[0];
+      const char *columnName = column.name;
+      acceptDialog("Column Attributes", [](QDialog *dialog) {
+        dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[2]->setText("mm");
+      });
+      editor.editColumnAttributesAt(0);
+      check(QByteArray(column.units) == "mm" && column.name == columnName,
+            "editing column units keeps the stored column name");
+      const ARRAY_DEFINITION &array = editor.dataset.layout.array_definition[0];
+      const char *arrayName = array.name;
+      acceptDialog("Array Attributes", [](QDialog *dialog) {
+        dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[5]->setText("group");
+      });
+      editor.editArrayAttributesAt(0);
+      check(QByteArray(array.group_name) == "group" && array.name == arrayName &&
+                SDDS_GetArrayIndex(&editor.dataset, const_cast<char *>("A")) == 0,
+            "editing an array group keeps the stored array name and index");
+    }
+    {
+      // Bytes that do not decode (Latin-1 in a UTF-8 locale) are reported when loading.
+      const QString path = root + "/undecodable.sdds";
+      putFile(path, "SDDS1\n&column name=S, type=string, &end\n&data mode=ascii, &end\n1\n\xFF\xFE\n");
+      const QByteArray stored("\xFF\xFE");
+      const bool lossy = QString::fromLocal8Bit(stored).toLocal8Bit() != stored;
+      SDDSEditor editor;
+      require(editor.loadFile(path), "load text with non-UTF-8 bytes");
+      check(editor.consoleEdit->toPlainText().contains("not valid in this system's character encoding") == lossy,
+            "loading warns exactly when stored text cannot be preserved in this locale");
+    }
+    require(failures == 0, "window and encoding regressions");
+  }
 };
 
 /** Run the named regressions and retain fixtures under the build directory. */
@@ -2711,6 +2927,7 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::windowsAndEncodingFixes(artifacts.path());
   SDDSEditorTests::portabilityAndEditingFixes();
   SDDSEditorTests::definitionNameEncoding();
   SDDSEditorTests::pendingTableActions();
@@ -2741,6 +2958,7 @@ int main(int argc, char **argv) {
   SDDSEditorTests::namesAndExactNumbers(artifacts.path());
   SDDSEditorTests::longTextAndArrayActions(artifacts.path());
   SDDSEditorTests::fixedTextAndDefinitions(artifacts.path());
+  SDDSEditorTests::shapeFilterAndRowFixes();
   fprintf(stdout, "PASS all sddseditor regressions\n");
   return 0;
 }

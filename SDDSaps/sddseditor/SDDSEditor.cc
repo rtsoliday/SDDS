@@ -414,6 +414,23 @@ static bool localEncodingPreserves(const QString &text) {
   return true;
 }
 
+/*
+ * True when stored text changes on a decode/encode round trip, such as
+ * Latin-1 bytes in a UTF-8 locale.  Such text is shown with replacement
+ * characters, which a save would then store instead of the original bytes.
+ */
+static bool localTextLosesBytes(const char *text) {
+  if (!text)
+    return false;
+  for (const char *p = text; *p; ++p) {
+    if (static_cast<unsigned char>(*p) >= 0x80) {
+      const QByteArray bytes(text);
+      return QString::fromLocal8Bit(bytes).toLocal8Bit() != bytes;
+    }
+  }
+  return false;
+}
+
 static QString unencodableTextMessage() {
   return QObject::tr("Text contains a NUL character or characters that cannot be saved in this system's character encoding");
 }
@@ -820,18 +837,21 @@ static int dimProduct(const QVector<int> &dims) {
 /**
  * Copy array values into a new shape so every surviving element keeps its
  * coordinates (SDDS stores the last dimension fastest).  New cells are empty.
+ * Dimensions added or removed at the end have index 0, matching the length-1
+ * dimensions the attribute editor appends.
  */
 static QVector<QString> reshapeArrayValues(const QVector<QString> &values,
                                            const QVector<int> &oldDims,
                                            const QVector<int> &newDims,
                                            int newSize) {
   QVector<QString> result(std::max(0, newSize));
-  if (oldDims.size() != newDims.size() || dimProduct(oldDims) != values.size()) {
+  if (oldDims.isEmpty() || newDims.isEmpty() || dimProduct(oldDims) != values.size()) {
     for (int i = 0; i < result.size() && i < values.size(); ++i)
       result[i] = values[i];
     return result;
   }
   const int count = oldDims.size();
+  const int axes = std::max(count, static_cast<int>(newDims.size()));
   QVector<int> coord(count, 0);
   for (int flat = 0; flat < values.size(); ++flat) {
     int rest = flat;
@@ -841,9 +861,14 @@ static QVector<QString> reshapeArrayValues(const QVector<QString> &values,
     }
     int64_t target = 0;
     bool inside = true;
-    for (int d = 0; d < count && inside; ++d) {
-      inside = coord[d] < newDims[d];
-      target = target * newDims[d] + coord[d];
+    for (int d = 0; d < axes && inside; ++d) {
+      const int index = d < count ? coord[d] : 0;
+      if (d >= newDims.size()) {
+        inside = index == 0;
+        continue;
+      }
+      inside = index < newDims[d];
+      target = target * newDims[d] + index;
     }
     if (inside && target < result.size())
       result[static_cast<int>(target)] = values[flat];
@@ -2046,11 +2071,14 @@ private:
     }
 
     if (ch.isDigit() || ch == '.' || ch == '+' || ch == '-') {
+      const int start = pos;
       RowFilterToken token = readNumber();
       if (token.kind != RowFilterTokenKind::Invalid) {
         current = token;
         return;
       }
+      // Report a stray sign or dot instead of skipping it, so "X ->= 1" is not read as "X >= 1".
+      pos = start;
     }
 
     if (ch == '"' || ch == '\'') {
@@ -3896,6 +3924,12 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   connect(pasteSc, &QShortcut::activated, this, &SDDSEditor::paste);
   QShortcut *delSc = new QShortcut(QKeySequence::Delete, this);
   connect(delSc, &QShortcut::activated, this, &SDDSEditor::deleteCells);
+#if defined(Q_OS_MACOS)
+  // QKeySequence::Delete is forward delete (fn+Delete) on macOS; the key labeled
+  // Delete sends Backspace.  Open cell editors still receive it as text editing.
+  QShortcut *backspaceSc = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
+  connect(backspaceSc, &QShortcut::activated, this, &SDDSEditor::deleteCells);
+#endif
 
   setCentralWidget(central);
   resize(1200, 800);
@@ -4437,10 +4471,19 @@ void SDDSEditor::updateWindowTitle() {
 }
 
 void SDDSEditor::closeEvent(QCloseEvent *event) {
-  if (maybeSave())
-    event->accept();
-  else
+  if (!maybeSave()) {
     event->ignore();
+    return;
+  }
+  // The search dialog has no parent window, so it would otherwise stay open,
+  // and keep the application running, after the editor window closes.
+  if (searchColumnDialog)
+    searchColumnDialog->close();
+  const QVector<QPointer<QDialog>> viewers = arrayViewers;
+  for (const QPointer<QDialog> &viewer : viewers)
+    if (viewer)
+      viewer->close();
+  event->accept();
 }
 
 QTableView *SDDSEditor::focusedTable() const {
@@ -4927,6 +4970,11 @@ bool SDDSEditor::loadFile(const QString &path) {
   QVector<PageStore> newPages;
   int pageIndex = 0;
   int32_t readResult = 0;
+  int64_t undecodableValues = 0;
+  auto countUndecodable = [&undecodableValues](const void *data, int64_t count) {
+    for (int64_t i = 0; data && i < count; ++i)
+      undecodableValues += localTextLosesBytes(static_cast<char *const *>(data)[i]);
+  };
   while ((readResult = SDDS_ReadPage(&in)) > 0) {
     ++pageIndex;
     progress.setLabelText(tr("Loading %1 (page %2)…").arg(QFileInfo(path).fileName()).arg(pageIndex));
@@ -4976,6 +5024,8 @@ bool SDDSEditor::loadFile(const QString &path) {
       pd.parameters[i] = sddsValueToString(
           in.parameter ? in.parameter[i] : nullptr, 0,
           in.layout.parameter_definition[i].type);
+      if (in.layout.parameter_definition[i].type == SDDS_STRING)
+        countUndecodable(in.parameter ? in.parameter[i] : nullptr, 1);
       ++doneUnits;
       updateConvertedProgress(doneUnits);
     }
@@ -4990,6 +5040,8 @@ bool SDDSEditor::loadFile(const QString &path) {
         if (((r + 1) & (progressStride - 1)) == 0)
           updateConvertedProgress(doneUnits + r + 1);
       }
+      if (type == SDDS_STRING)
+        countUndecodable(data, rows);
       doneUnits += rows;
       updateConvertedProgress(doneUnits);
     }
@@ -5013,6 +5065,8 @@ bool SDDSEditor::loadFile(const QString &path) {
         if (((static_cast<int64_t>(i) + 1) & (progressStride - 1)) == 0)
           updateConvertedProgress(doneUnits + i + 1);
       }
+      if (adef.type == SDDS_STRING)
+        countUndecodable(source ? source->data : nullptr, valueCount);
       doneUnits += valueCount;
       updateConvertedProgress(doneUnits);
     }
@@ -5088,7 +5142,44 @@ bool SDDSEditor::loadFile(const QString &path) {
   loadProgressDialog = nullptr;
   progress.close();
   QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  if (undecodableValues > 0) {
+    const QString warning =
+        tr("%1 text value(s) contain bytes that are not valid in this system's character encoding. "
+           "They are shown with replacement characters, and saving the file will store those "
+           "characters instead of the original bytes.")
+            .arg(undecodableValues);
+    message(warning);
+    QMessageBox::warning(this, tr("SDDS"), warning);
+  }
   return true;
+}
+
+/*
+ * Point the symbolic link at linkPath to target by creating a new link at
+ * stagingPath and renaming it over the old one.  On Windows QFile::link makes
+ * a .lnk shortcut, which SDDS cannot read, and rename() refuses to replace an
+ * existing file, so use the native calls there.
+ */
+static bool replaceSymbolicLink(const QString &linkPath, const QString &target,
+                                const QString &stagingPath) {
+#if defined(_WIN32)
+#ifndef SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE
+#define SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE 0x2
+#endif
+  const std::wstring staging = QDir::toNativeSeparators(stagingPath).toStdWString();
+  const std::wstring destination = QDir::toNativeSeparators(target).toStdWString();
+  const std::wstring link = QDir::toNativeSeparators(linkPath).toStdWString();
+  // Developer Mode allows unprivileged links; Windows before 10.0.14972 rejects the flag.
+  bool created = CreateSymbolicLinkW(staging.c_str(), destination.c_str(),
+                                     SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0;
+  if (!created && GetLastError() == ERROR_INVALID_PARAMETER)
+    created = CreateSymbolicLinkW(staging.c_str(), destination.c_str(), 0) != 0;
+  return created && MoveFileExW(staging.c_str(), link.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+#else
+  return QFile::link(target, stagingPath) &&
+         std::rename(QFile::encodeName(stagingPath).constData(),
+                     QFile::encodeName(linkPath).constData()) == 0;
+#endif
 }
 
 bool SDDSEditor::writeFile(const QString &path) {
@@ -5163,9 +5254,7 @@ bool SDDSEditor::writeFile(const QString &path) {
     // Rename the replacement link over the old one; never remove it first.
     QTemporaryDir links(fi.absolutePath() + "/.sddseditor-link-XXXXXX");
     const QString linkPath = links.filePath("link");
-    if (!links.isValid() || !QFile::link(finalPath, linkPath) ||
-        std::rename(QFile::encodeName(linkPath).constData(),
-                    QFile::encodeName(fi.absoluteFilePath()).constData()) != 0) {
+    if (!links.isValid() || !replaceSymbolicLink(fi.absoluteFilePath(), finalPath, linkPath)) {
       QMessageBox::warning(this, tr("SDDS"),
                            tr("Saved %1, but could not update the original symlink").arg(finalPath));
       return false;
@@ -5830,8 +5919,25 @@ bool SDDSEditor::writeHDF(const QString &path) {
     return false;
   }
   const QString stagedPath = staging.filePath("export.h5");
-  QByteArray fname = QFile::encodeName(stagedPath);
-  hid_t file = H5Fcreate(fname.constData(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+  hid_t file = -1;
+#ifdef _WIN32
+  /*
+   * HDF5 1.10.6 and later decode Windows file names as UTF-8, so the ANSI
+   * name fails in a directory such as C:\Users\José.  Older versions use the
+   * ANSI name; a misdecoded name cannot match the existing staging directory.
+   */
+  const QByteArray utf8Name = stagedPath.toUtf8();
+  if (utf8Name != QFile::encodeName(stagedPath)) {
+    H5E_auto2_t errorReport = nullptr;
+    void *errorData = nullptr;
+    H5Eget_auto2(H5E_DEFAULT, &errorReport, &errorData);
+    H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
+    file = H5Fcreate(utf8Name.constData(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+    H5Eset_auto2(H5E_DEFAULT, errorReport, errorData);
+  }
+#endif
+  if (file < 0)
+    file = H5Fcreate(QFile::encodeName(stagedPath).constData(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
   if (file < 0) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to create HDF file"));
     return false;
@@ -6312,6 +6418,11 @@ bool SDDSEditor::writeCSV(const QString &path) {
   }
 
   QTextStream out(&file);
+  // Write the local 8-bit encoding used for SDDS text, as Qt 5 streams do by
+  // default; Qt 6 streams default to UTF-8, which differs on Windows.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+  out.setEncoding(QStringConverter::System);
+#endif
 
   auto escape = [](const QString &txt) {
     QString t = txt;
@@ -6965,27 +7076,35 @@ void SDDSEditor::editParameterAttributes() {
     restoreStructuralSnapshot(this, before);
     return false;
   };
+  // Rewrite only edited text.  Unchanged bytes that do not decode in this
+  // locale (Latin-1 in a UTF-8 locale) would come back as replacement characters.
+  auto replaceText = [&](char **workingField, char **savedField, const QString &value) {
+    return definitionTextMatches(*workingField, value) ||
+           replaceField(workingField, savedField, value);
+  };
 
-  if (!replaceField(&def->name, &savedDef->name, name.text(), false))
-    return;
-  if (!resyncSortedIndexName(dataset.layout.parameter_index,
-                             dataset.layout.n_parameters, row,
-                             def->name) ||
-      !resyncSortedIndexName(dataset.original_layout.parameter_index,
-                             dataset.original_layout.n_parameters, row,
-                             savedDef->name)) {
-    QMessageBox::warning(this, tr("SDDS"),
-                         tr("Failed to update parameter name index"));
-    restoreStructuralSnapshot(this, before);
-    return;
+  if (!definitionTextMatches(def->name, name.text())) {
+    if (!replaceField(&def->name, &savedDef->name, name.text(), false))
+      return;
+    if (!resyncSortedIndexName(dataset.layout.parameter_index,
+                               dataset.layout.n_parameters, row,
+                               def->name) ||
+        !resyncSortedIndexName(dataset.original_layout.parameter_index,
+                               dataset.original_layout.n_parameters, row,
+                               savedDef->name)) {
+      QMessageBox::warning(this, tr("SDDS"),
+                           tr("Failed to update parameter name index"));
+      restoreStructuralSnapshot(this, before);
+      return;
+    }
   }
-  if (!replaceField(&def->symbol, &savedDef->symbol, symbol.text()))
+  if (!replaceText(&def->symbol, &savedDef->symbol, symbol.text()))
     return;
-  if (!replaceField(&def->units, &savedDef->units, units.text()))
+  if (!replaceText(&def->units, &savedDef->units, units.text()))
     return;
-  if (!replaceField(&def->description, &savedDef->description, desc.text()))
+  if (!replaceText(&def->description, &savedDef->description, desc.text()))
     return;
-  if (!replaceField(&def->format_string, &savedDef->format_string, fmt.text()))
+  if (!replaceText(&def->format_string, &savedDef->format_string, fmt.text()))
     return;
   const bool hasFixedValue = !fixed.text().isEmpty() ||
                             (def->fixed_value && fixedValueForDisplay(*def).isEmpty());
@@ -7108,27 +7227,34 @@ void SDDSEditor::editColumnAttributesAt(int col) {
     restoreStructuralSnapshot(this, before);
     return false;
   };
+  // Rewrite only edited text, as for parameters.
+  auto replaceText = [&](char **workingField, char **savedField, const QString &value) {
+    return definitionTextMatches(*workingField, value) ||
+           replaceField(workingField, savedField, value);
+  };
 
-  if (!replaceField(&def->name, &savedDef->name, name.text(), false))
-    return;
-  if (!resyncSortedIndexName(dataset.layout.column_index,
-                             dataset.layout.n_columns, col,
-                             def->name) ||
-      !resyncSortedIndexName(dataset.original_layout.column_index,
-                             dataset.original_layout.n_columns, col,
-                             savedDef->name)) {
-    QMessageBox::warning(this, tr("SDDS"),
-                         tr("Failed to update column name index"));
-    restoreStructuralSnapshot(this, before);
-    return;
+  if (!definitionTextMatches(def->name, name.text())) {
+    if (!replaceField(&def->name, &savedDef->name, name.text(), false))
+      return;
+    if (!resyncSortedIndexName(dataset.layout.column_index,
+                               dataset.layout.n_columns, col,
+                               def->name) ||
+        !resyncSortedIndexName(dataset.original_layout.column_index,
+                               dataset.original_layout.n_columns, col,
+                               savedDef->name)) {
+      QMessageBox::warning(this, tr("SDDS"),
+                           tr("Failed to update column name index"));
+      restoreStructuralSnapshot(this, before);
+      return;
+    }
   }
-  if (!replaceField(&def->symbol, &savedDef->symbol, symbol.text()))
+  if (!replaceText(&def->symbol, &savedDef->symbol, symbol.text()))
     return;
-  if (!replaceField(&def->units, &savedDef->units, units.text()))
+  if (!replaceText(&def->units, &savedDef->units, units.text()))
     return;
-  if (!replaceField(&def->description, &savedDef->description, desc.text()))
+  if (!replaceText(&def->description, &savedDef->description, desc.text()))
     return;
-  if (!replaceField(&def->format_string, &savedDef->format_string, fmt.text()))
+  if (!replaceText(&def->format_string, &savedDef->format_string, fmt.text()))
     return;
   def->field_length = savedDef->field_length = length.value();
   def->type = savedDef->type = typeGroup.checkedId();
@@ -7263,42 +7389,54 @@ void SDDSEditor::editArrayAttributesAt(int col) {
     restoreStructuralSnapshot(this, before);
     return false;
   };
+  // Rewrite only edited text, as for parameters.
+  auto replaceText = [&](char **workingField, char **savedField, const QString &value) {
+    return definitionTextMatches(*workingField, value) ||
+           replaceField(workingField, savedField, value);
+  };
 
-  if (!replaceField(&def->name, &savedDef->name, name.text(), false))
-    return;
-  if (!resyncSortedIndexName(dataset.layout.array_index,
-                             dataset.layout.n_arrays, col,
-                             def->name) ||
-      !resyncSortedIndexName(dataset.original_layout.array_index,
-                             dataset.original_layout.n_arrays, col,
-                             savedDef->name)) {
-    QMessageBox::warning(this, tr("SDDS"),
-                         tr("Failed to update array name index"));
-    restoreStructuralSnapshot(this, before);
-    return;
+  if (!definitionTextMatches(def->name, name.text())) {
+    if (!replaceField(&def->name, &savedDef->name, name.text(), false))
+      return;
+    if (!resyncSortedIndexName(dataset.layout.array_index,
+                               dataset.layout.n_arrays, col,
+                               def->name) ||
+        !resyncSortedIndexName(dataset.original_layout.array_index,
+                               dataset.original_layout.n_arrays, col,
+                               savedDef->name)) {
+      QMessageBox::warning(this, tr("SDDS"),
+                           tr("Failed to update array name index"));
+      restoreStructuralSnapshot(this, before);
+      return;
+    }
   }
-  if (!replaceField(&def->symbol, &savedDef->symbol, symbol.text()))
+  if (!replaceText(&def->symbol, &savedDef->symbol, symbol.text()))
     return;
-  if (!replaceField(&def->units, &savedDef->units, units.text()))
+  if (!replaceText(&def->units, &savedDef->units, units.text()))
     return;
-  if (!replaceField(&def->description, &savedDef->description, desc.text()))
+  if (!replaceText(&def->description, &savedDef->description, desc.text()))
     return;
-  if (!replaceField(&def->format_string, &savedDef->format_string, fmt.text()))
+  if (!replaceText(&def->format_string, &savedDef->format_string, fmt.text()))
     return;
-  if (!replaceField(&def->group_name, &savedDef->group_name, group.text()))
+  if (!replaceText(&def->group_name, &savedDef->group_name, group.text()))
     return;
   def->dimensions = savedDef->dimensions = dimCnt;
   for (PageStore &pd : pages) {
     if (col >= pd.arrays.size())
       continue;
     ArrayStore &as = pd.arrays[col];
-    int old = as.dims.size();
-    as.dims.resize(dimCnt);
+    const int old = as.dims.size();
+    if (old == dimCnt)
+      continue;
+    QVector<int> newDims = as.dims;
+    newDims.resize(dimCnt);
     for (int i = old; i < dimCnt; ++i)
-      as.dims[i] = 1;
-    int newSize = dimProduct(as.dims);
+      newDims[i] = 1;
+    // Keep each element at its indices, as Resize does; dropped dimensions keep index 0.
+    const int newSize = dimProduct(newDims);
     if (newSize >= 0)
-      as.values.resize(newSize);
+      as.values = reshapeArrayValues(as.values, as.dims, newDims, newSize);
+    as.dims = newDims;
   }
   def->field_length = savedDef->field_length = length.value();
   def->type = savedDef->type = typeGroup.checkedId();
@@ -7627,9 +7765,13 @@ void SDDSEditor::openArrayViewer(int column) {
     const int index = state().column;
     return index >= 0 ? dataset.layout.array_definition[index].type : SDDS_STRING;
   };
+  // The delegate canonicalizes typed text.  A paste stores its text as the main
+  // tables do, so the viewer's unchanged-cell check (made before it opens an
+  // undo macro) agrees with this edit; otherwise "1.50" over "1.5" would leave
+  // an empty Undo step and discard Redo.
   ArrayViewer *viewer = new ArrayViewer(arrayModel, undoStack, state,
-      [this, type](const QModelIndex &index, const QString &text) {
-        return applyCellEditWithUndo(undoStack, arrayModel, index, canonicalizeForDisplay(text, type()));
+      [this](const QModelIndex &index, const QString &text) {
+        return applyCellEditWithUndo(undoStack, arrayModel, index, text);
       },
       [type](const QString &text) { return validateTextForType(text, type(), false); },
       [this]() { flushPendingEdits(); }, this);
@@ -8180,7 +8322,8 @@ void SDDSEditor::resizeArray(int column) {
   QVector<QSpinBox *> boxes(def->dimensions);
   for (int i = 0; i < def->dimensions; ++i) {
     QSpinBox *sb = new QSpinBox(&dlg);
-    sb->setRange(0, 1000000);
+    // A lower cap would silently shrink larger loaded dimensions on OK; dimProduct checks the total.
+    sb->setRange(0, std::numeric_limits<int>::max());
     sb->setValue(i < as.dims.size() ? as.dims[i] : 1);
     form.addRow(tr("Dim %1").arg(i + 1), sb);
     boxes[i] = sb;
@@ -9119,6 +9262,11 @@ void SDDSEditor::deleteArrayIndexes(const QVector<int> &selectedArrays) {
 void SDDSEditor::insertColumnRows() {
   if (!datasetLoaded)
     return;
+  // Rows belong to columns; without one the insertion would only add an empty Undo step.
+  if (dataset.layout.n_columns <= 0) {
+    QMessageBox::information(this, tr("Insert Rows"), tr("Insert a column before inserting rows."));
+    return;
+  }
 
   commitModels();
 

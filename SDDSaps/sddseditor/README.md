@@ -84,7 +84,15 @@ resaving escaped definitions. Definition checks reject inserted names containing
 NUL, preserve field lengths beyond one million, and keep Undo/Redo and the saved
 state when attribute dialogs are accepted without changes.
 Editing other parameter attributes also preserves empty fixed strings and fixed
-zero-byte characters.
+zero-byte characters. Window and encoding checks cover closing the editor while
+its search dialog and array viewers are open, HDF export into a directory with a
+non-ASCII name, CSV text encoding, array viewer pastes of differently formatted
+equal values, attribute edits leaving unchanged definition text untouched, and
+the load warning for text the system encoding cannot represent. Shape checks
+cover accepting the Resize dialog for a dimension above one million and changing
+an array's number of dimensions. Row filter checks reject a stray sign or dot
+before an operator, and inserting rows into a document without columns changes
+nothing.
 
 Executables are built under the platform object directory (`O.Linux-x86_64` on
 Linux). The plotting probe is named `test-bin/sddsplot` there; only the test
@@ -94,12 +102,15 @@ window. It does not replace the installed `sddsplot`.
 
 The test prints each result and its fixture directory. Fixtures are retained in
 `O.*/test-artifacts-*` for inspection, and the normal `make clean` target removes
-them with the object directory. Versioned symlink checks run on Unix platforms.
+them with the object directory. Versioned symlink checks run on Unix platforms,
+and on Windows when the account can create symbolic links (Developer Mode or an
+elevated prompt); otherwise they are reported as skipped.
 
 The editor stages SDDS saves, CSV exports and HDF exports beside the destination before
 replacing it. Failed saves and exports preserve the existing file. Versioned
 symlink saves select an unused version
-and create it exclusively before replacing the link. Plot snapshots use a private
+and create it exclusively before replacing the link. On Windows the replacement
+is a native symbolic link (not a `.lnk` shortcut), which needs the same permission. Plot snapshots use a private
 temporary directory retained until the plotting process ends.
 
 When column rows or array elements are present, the parameter panel initially
@@ -130,14 +141,21 @@ Floating-point values are shown with the fewest digits that convert back to
 exactly the same number (0.1, not 0.10000000000000001). Rows hidden by the row
 filter are never changed: copy, paste, delete, search/replace, fill and formula
 operations act only on visible rows, and a paste fills successive visible rows. Resizing an
-array keeps each element at its indices. Export HDF writes `/` and `%` in SDDS
+array keeps each element at its indices, and so does changing its number of
+dimensions in the attribute editor: added dimensions have length 1, and removing
+dimensions keeps the elements whose removed indices are 0. Delete clears the
+selected cells; on macOS the Delete (backspace) key does too. Export HDF writes `/` and `%` in SDDS
 names as `%2F` and `%25`, because HDF5 uses `/` as a path separator. A name of
 `.` is written as `%2E`, because HDF5 reserves it for the current group. Column and
 array headers have an **Attributes...** menu item, so definitions without rows
 can still be edited.
 
 Character fields hold a single byte, displayed as Latin-1. Characters outside
-that range must use a string field. Floating-point formatting preserves negative
+that range must use a string field. String data and CSV exports use the system's
+local 8-bit encoding with both Qt 5 and Qt 6. If a file contains text that this
+encoding cannot represent (for example Latin-1 bytes on a UTF-8 system), loading
+it shows a warning: those characters appear as replacement characters and a save
+stores them that way. Attribute dialogs rewrite only the fields you change. Floating-point formatting preserves negative
 zero as `-0`. String fields and definition text reject embedded NUL characters,
 which the SDDS text format cannot preserve.
 
