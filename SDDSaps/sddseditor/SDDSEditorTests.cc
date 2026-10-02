@@ -366,7 +366,7 @@ public:
     require(SDDS_SaveLayout(&editor.dataset), "save long definition fixture layout");
     editor.pages[0].parameters = {text};
     editor.populateModels();
-    editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+    editor.paramView->setCurrentIndex(editor.parameterValueCell(0));
 
     acceptDialog("Parameter Attributes", [&](QDialog *dialog) {
       const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
@@ -396,7 +396,7 @@ public:
     check(QString::fromLocal8Bit(editor.dataset.layout.array_definition[0].description) == text &&
               QString::fromLocal8Bit(editor.dataset.layout.array_definition[0].group_name) == edited,
           "editing a long array group name keeps every character");
-    editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+    editor.paramView->setCurrentIndex(editor.parameterValueCell(0));
     acceptDialog("Parameter Attributes", [&](QDialog *dialog) {
       const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
       fields[2]->setText("kg");
@@ -652,7 +652,7 @@ public:
       });
       editor.insertParameter();
       require(editor.dataset.layout.n_parameters == 1, "insert non-ASCII fixed character through dialog");
-      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      editor.paramView->setCurrentIndex(editor.parameterValueCell(0));
       acceptDialog("Parameter Attributes", [&](QDialog *dialog) {
         const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
         check(fields[5]->text() == QString(QChar(255)), "fixed character attributes show its Latin-1 byte");
@@ -667,7 +667,7 @@ public:
       SDDSEditor loaded;
       check(editor.writeFile(path) && loaded.loadFile(path) && loaded.pages[0].parameters[0].isEmpty(),
             "a zero byte entered through fixed attributes survives save and reload");
-      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      editor.paramView->setCurrentIndex(editor.parameterValueCell(0));
       acceptDialog("Parameter Attributes", [&](QDialog *dialog) {
         const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
         check(fields[5]->text() == QString(QChar(0)), "zero fixed character remains represented in attributes");
@@ -686,7 +686,7 @@ public:
       require(SDDS_SaveLayout(&editor.dataset), "save empty fixed string layout");
       editor.pages[0].parameters = {QString()};
       editor.populateModels();
-      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      editor.paramView->setCurrentIndex(editor.parameterValueCell(0));
       acceptDialog("Parameter Attributes", [](QDialog *dialog) {
         dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[2]->setText("unit");
       });
@@ -710,7 +710,7 @@ public:
       require(editor.dataset.layout.n_parameters == 1, "insert fixed literal string");
       const int history = editor.undoStack->count();
       editor.dirty = false;
-      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      editor.paramView->setCurrentIndex(editor.parameterValueCell(0));
       acceptDialog("Parameter Attributes", [&](QDialog *dialog) {
         const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
         check(fields[5]->text() == literal, "fixed string attributes show literal text");
@@ -798,7 +798,7 @@ public:
       editor.populateModels();
       editor.show();
       for (QTableView *view : {editor.paramView, editor.columnView, editor.arrayView}) {
-        const QModelIndex index = view->model()->index(0, 0);
+        const QModelIndex index = view == editor.paramView ? editor.parameterValueCell(0) : view->model()->index(0, 0);
         view->openPersistentEditor(index);
         QLineEdit *cell = qobject_cast<QLineEdit *>(view->indexWidget(index));
         require(cell, "open long string cell editor");
@@ -837,7 +837,7 @@ public:
                              : &editor.dataset.original_layout.array_definition[0].description;
       require(replaceSharedLayoutString(description, savedDescription, longText), "install long description");
       editor.populateModels();
-      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      editor.paramView->setCurrentIndex(editor.parameterValueCell(0));
       acceptDialog(kind + " Attributes", [&](QDialog *dialog) {
         const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
         check(fields[3]->text() == longText, "attribute dialog opens the entire long description");
@@ -2566,6 +2566,116 @@ public:
     fprintf(stdout, "PASS sparse copy and paste\n");
   }
 
+  /** Parameters wrap into side-by-side groups while editing tools keep parameter order. */
+  static void parameterGrid(const QString &root) {
+    SDDSEditor editor;
+    setup(editor);
+    for (int i = 0; i < 12; ++i)
+      require(SDDS_DefineParameter(&editor.dataset, qPrintable(QString("P%1").arg(i)), nullptr, nullptr, nullptr,
+                                   nullptr, i % 3 == 2 ? SDDS_STRING : SDDS_LONG, nullptr) >= 0,
+              "define grid parameter");
+    require(SDDS_SaveLayout(&editor.dataset), "save grid layout");
+    editor.pages[0].parameters.clear();
+    for (int i = 0; i < 12; ++i)
+      editor.pages[0].parameters.append(i % 3 == 2 ? QString("s%1").arg(i) : QString::number(i));
+    editor.populateModels();
+    editor.resize(1400, 800);
+    editor.show();
+    editor.activateWindow();
+    QCoreApplication::processEvents();
+
+    ParameterGridModel *grid = editor.paramGrid;
+    require(grid->groupCount() > 1, "a wide panel wraps parameters into groups");
+    const int per = grid->rowsPerGroup();
+    require(per * grid->groupCount() >= 12 && per * (grid->groupCount() - 1) < 12,
+            "groups hold every parameter once");
+    for (int i = 0; i < 12; ++i) {
+      const QModelIndex cell = editor.parameterValueCell(i);
+      require(grid->parameterRow(cell) == i && cell.data().toString() == editor.pages[0].parameters[i],
+              "grid cells map to their parameters");
+      require(grid->mapFromSource(editor.paramModel->index(i, ParameterPageModel::ValueColumn)) == cell,
+              "parameter values map back to their grid cells");
+    }
+    require(!(grid->flags(grid->cellFor(0, ParameterGridModel::NameField)) & Qt::ItemIsSelectable),
+            "parameter names are not selectable cells");
+    require(editor.paramView->rowHeight(0) * per + editor.paramView->horizontalHeader()->height() <=
+                editor.paramView->height(),
+            "the compact parameter panel shows every grid row");
+    editor.grab().save(root + "/parameter-grid.png");
+
+    // Copy and paste follow parameter order across the boundary between groups.
+    editor.paramView->setFocus();
+    QCoreApplication::processEvents();
+    require(QApplication::focusWidget() == editor.paramView, "parameter grid has focus");
+    QItemSelectionModel *selection = editor.paramView->selectionModel();
+    selection->clearSelection();
+    selection->select(editor.parameterValueCell(per - 1), QItemSelectionModel::Select);
+    selection->select(editor.parameterValueCell(per), QItemSelectionModel::Select);
+    editor.copy();
+    require(QApplication::clipboard()->text() ==
+                editor.pages[0].parameters[per - 1] + "\n" + editor.pages[0].parameters[per],
+            "copying across groups lists parameters in order");
+    const QVector<QString> original = editor.pages[0].parameters;
+    QApplication::clipboard()->setText("100\n101");
+    editor.paramView->setCurrentIndex(editor.parameterValueCell(per - 1));
+    editor.paste();
+    require(editor.pages[0].parameters[per - 1] == "100" && editor.pages[0].parameters[per] == "101",
+            "paste fills successive parameters across groups");
+
+    // Undo targets the same parameters after the grid reflows.
+    const int groupsBefore = grid->groupCount();
+    editor.resize(760, 800);
+    QCoreApplication::processEvents();
+    require(grid->groupCount() < groupsBefore, "a narrower panel uses fewer groups");
+    editor.undoStack->undo();
+    require(editor.pages[0].parameters == original, "undo after reflow restores the pasted parameters");
+    require(applyCellEditWithUndo(editor.undoStack, grid, editor.parameterValueCell(4), "44"),
+            "edit through the grid");
+    editor.resize(1400, 800);
+    QCoreApplication::processEvents();
+    editor.undoStack->undo();
+    require(editor.pages[0].parameters[4] == "4", "grid edits undo by parameter after reflow");
+
+    // Selection survives a reflow.
+    selection->clearSelection();
+    selection->select(editor.parameterValueCell(7), QItemSelectionModel::Select);
+    editor.resize(760, 800);
+    QCoreApplication::processEvents();
+    require(editor.selectedParameterRows() == QSet<int>({7}), "reflow keeps the selected parameter");
+
+    // Move Up/Down replaces dragging row headers.
+    editor.paramView->selectionModel()->clearSelection();
+    editor.paramView->setCurrentIndex(editor.parameterValueCell(1));
+    editor.moveParameters(1, -1);
+    require(QString(editor.dataset.layout.parameter_definition[0].name) == "P1" &&
+                editor.pages[0].parameters[0] == "1",
+            "move up reorders definitions and values");
+    require(grid->parameterRow(editor.paramView->currentIndex()) == 0, "the moved parameter stays current");
+    editor.moveParameters(0, 1);
+    require(QString(editor.dataset.layout.parameter_definition[1].name) == "P1", "move down");
+    editor.undoStack->undo();
+    editor.undoStack->undo();
+    require(QString(editor.dataset.layout.parameter_definition[0].name) == "P0" &&
+                editor.pages[0].parameters == original,
+            "undo restores the parameter order");
+
+    // The outline lists definitions and filters them by name.
+    QCoreApplication::processEvents();
+    QTreeWidgetItem *parameters = editor.outlineTree->topLevelItem(0);
+    require(parameters->childCount() == 12, "outline lists every parameter");
+    editor.outlineFilter->setText("P1");
+    int shown = 0;
+    for (int i = 0; i < parameters->childCount(); ++i)
+      shown += parameters->child(i)->isHidden() ? 0 : 1;
+    require(shown == 3, "outline filter keeps matching names");
+    editor.outlineFilter->clear();
+    editor.navigateToOutlineItem(parameters->child(9));
+    require(grid->parameterRow(editor.paramView->currentIndex()) == 9, "outline selects the parameter");
+    require(editor.cellStatusLabel->text().contains("P9"), "status bar names the current parameter");
+    editor.dirty = false;
+    fprintf(stdout, "PASS parameter grid wrapping, clipboard, undo, reordering and outline\n");
+  }
+
   /** Toolbar, panel headers, filter chip, status bar and themes reflect editor state. */
   static void interfaceChrome(const QString &root) {
     SDDSEditor editor;
@@ -2585,15 +2695,34 @@ public:
     require(params->index(0, ParameterPageModel::UnitsColumn).data().toString() == "MeV", "parameter units column");
     require(params->index(0, ParameterPageModel::DescriptionColumn).data().toString() == "Beam energy",
             "parameter description column");
-    require(!editor.paramView->isColumnHidden(ParameterPageModel::UnitsColumn), "used units column is shown");
+    ParameterGridModel *grid = editor.paramGrid;
+    require(grid->fieldCount() == 5 && grid->fieldAt(2) == ParameterGridModel::UnitsField &&
+                grid->fieldAt(4) == ParameterGridModel::DescriptionField,
+            "used units and description fields are shown");
+    require(grid->index(0, 0).data().toString() == "Energy", "parameter grid shows the name");
     const QModelIndex typeCell = params->index(0, ParameterPageModel::TypeColumn);
     require(!(params->flags(typeCell) & (Qt::ItemIsEditable | Qt::ItemIsSelectable)), "metadata cells are read-only");
     const int undoCount = editor.undoStack->count();
     require(!applyCellEditWithUndo(editor.undoStack, params, typeCell, "long"), "metadata edits are rejected");
     require(editor.undoStack->count() == undoCount, "rejected metadata edit adds no undo entry");
-    editor.paramView->setCurrentIndex(typeCell);
-    require(editor.paramView->currentIndex().column() == ParameterPageModel::ValueColumn,
+    editor.paramView->setCurrentIndex(grid->cellFor(0, ParameterGridModel::TypeField));
+    require(grid->fieldAt(editor.paramView->currentIndex().column()) == ParameterGridModel::ValueField,
             "clicking metadata keeps the value cell current");
+    editor.paramView->setCurrentIndex(grid->cellFor(0, ParameterGridModel::NameField));
+    require(grid->fieldAt(editor.paramView->currentIndex().column()) == ParameterGridModel::ValueField,
+            "clicking a name keeps the value cell current");
+    require(editor.columnModel->headerData(0, Qt::Horizontal, HeaderTypeRole).toInt() == SDDS_LONG64,
+            "column header carries the type for its badge");
+    require(editor.arrayModel->headerData(0, Qt::Horizontal, HeaderShapeRole).toString() ==
+                QString("2") + QChar(0x00D7) + "2",
+            "array header carries the shape chip");
+    require(editor.outlineTree->topLevelItem(1)->childCount() == 1 &&
+                editor.outlineTree->topLevelItem(1)->child(0)->text(0) == "X",
+            "outline lists the columns");
+    editor.navigateToOutlineItem(editor.outlineTree->topLevelItem(0)->child(0));
+    require(editor.paramGrid->parameterRow(editor.paramView->currentIndex()) == 0,
+            "outline entries select their parameter");
+    require(editor.outlineVersionValue->text().startsWith("SDDS"), "outline shows the SDDS version");
 
     require(editor.columnModel->headerData(0, Qt::Horizontal, HeaderSubtitleRole).toString() == "long64",
             "column header subtitle shows type");
@@ -2623,10 +2752,12 @@ public:
 
     editor.unreadMessages = 0;
     editor.message("checked");
-    require(editor.messagesButton->text() == "Messages (1)", "hidden log counts unread messages");
+    BadgeToolButton *messages = static_cast<BadgeToolButton *>(editor.messagesButton);
+    require(messages->badge() == 1 && messages->accessibleName().contains("1 unread"),
+            "hidden log counts unread messages");
     editor.messagesButton->setChecked(true);
     QCoreApplication::processEvents();
-    require(editor.consoleDock->isVisible() && editor.messagesButton->text() == "Messages",
+    require(editor.consoleDock->isVisible() && messages->badge() == 0,
             "opening the log clears the unread count");
 
     editor.grab().save(root + "/interface-light.png");
@@ -3461,7 +3592,7 @@ public:
       const PARAMETER_DEFINITION &parameter = editor.dataset.layout.parameter_definition[0];
       const char *parameterName = parameter.name;
       const char *parameterUnits = parameter.units;
-      editor.paramView->setCurrentIndex(editor.paramModel->index(0, 0));
+      editor.paramView->setCurrentIndex(editor.parameterValueCell(0));
       acceptDialog("Parameter Attributes", [](QDialog *dialog) {
         dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[3]->setText("new");
       });
@@ -3554,6 +3685,7 @@ int main(int argc, char **argv) {
   SDDSEditorTests::plot(artifacts.path());
   SDDSEditorTests::reviewFixes(artifacts.path());
   SDDSEditorTests::sparseClipboard();
+  SDDSEditorTests::parameterGrid(artifacts.path());
   SDDSEditorTests::interfaceChrome(artifacts.path());
   SDDSEditorTests::helpWindow(artifacts.path());
   SDDSEditorTests::aboutDialog(artifacts.path());

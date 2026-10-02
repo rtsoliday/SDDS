@@ -17,6 +17,7 @@
 #include <QRadioButton>
 #include <QStandardItemModel>
 #include <QVector>
+#include <QSet>
 #include <QString>
 #include <QPoint>
 #include <QUndoStack>
@@ -24,6 +25,8 @@
 #include <QCloseEvent>
 
 class QTimer;
+class QTreeWidget;
+class QTreeWidgetItem;
 
 class QSplitter;
 class QDialog;
@@ -39,6 +42,7 @@ class DataPanel;
 class EditorHelpDialog;
 class TwoLineHeaderView;
 class ParameterPageModel;
+class ParameterGridModel;
 class ColumnPageModel;
 class ArrayPageModel;
 class StructuralChangeCommand;
@@ -110,7 +114,6 @@ private slots:
   void clonePage();
   void insertPage();
   void deletePage();
-  void parameterHeaderMenuRequested(const QPoint &pos);
   void parameterCellMenuRequested(const QPoint &pos);
   void columnHeaderMenuRequested(const QPoint &pos);
   void columnCellMenuRequested(const QPoint &pos);
@@ -120,7 +123,6 @@ private slots:
   void plotColumn(int column);
   void restartApp();
   void showHelp();
-  void parameterMoved(int logical, int oldVisual, int newVisual);
   void columnMoved(int logical, int oldVisual, int newVisual);
   void arrayMoved(int logical, int oldVisual, int newVisual);
 
@@ -155,7 +157,22 @@ private:
   void bindIcon(QObject *target, int kind, int tone = 0);
   void updateStatusBar();
   void updateFilterIndicator();
-  void updateParameterColumns();
+  void layoutParameterGrid();
+  QModelIndex parameterSourceIndex(const QModelIndex &index) const;
+  QModelIndex parameterValueCell(int row) const;
+  QSet<int> selectedParameterRows() const;
+  QVector<int> parameterRowsOrFallback(int fallbackRow) const;
+  QAbstractItemModel *editModel(QTableView *view) const;
+  QModelIndexList editIndexes(QTableView *view, const QModelIndexList &indexes) const;
+  void moveParameters(int row, int delta);
+  bool reorderParameters(const QVector<int> &order);
+  void buildOutline();
+  void rebuildOutline();
+  void updateOutlineIcons();
+  void updateOutlineSummary();
+  void filterOutline(const QString &text);
+  void syncOutlineSelection();
+  void navigateToOutlineItem(QTreeWidgetItem *item);
   void findInColumnPanel();
   void updateColumnSearchScope();
   void flushPendingEdits();
@@ -230,6 +247,25 @@ private:
   DataPanel *colBox;
   DataPanel *arrayBox;
   QSplitter *dataSplitter;
+  QSplitter *bodySplitter{nullptr};
+  ParameterGridModel *paramGrid{nullptr};
+  QTimer *parameterLayoutTimer{nullptr};
+  bool layingOutParameters{false};
+  int lastParameterLayoutWidth{-1};
+  bool parameterPanelFitted{false};
+  int lastParameterFitHeight{-1};
+
+  /* Outline sidebar: file summary and a filterable list of definitions. */
+  QFrame *outlinePanel{nullptr};
+  QLabel *outlineFileIcon{nullptr};
+  QLabel *outlineFileName{nullptr};
+  QLabel *outlineDescription{nullptr};
+  QLabel *outlinePagesValue{nullptr};
+  QLabel *outlineRowsValue{nullptr};
+  QLabel *outlineVersionValue{nullptr};
+  QLineEdit *outlineFilter{nullptr};
+  QTreeWidget *outlineTree{nullptr};
+  QTimer *outlineTimer{nullptr};
   QFrame *filterChip;
   QToolButton *filterChipText;
   QLineEdit *columnSearchEdit;
@@ -287,7 +323,6 @@ private:
   QVector<int> lastParameterSelectionRows;
   QVector<int> lastColumnSelectionColumns;
   QVector<int> lastArraySelectionColumns;
-  QVector<int> pendingParameterHeaderRows;
   QVector<int> pendingColumnHeaderColumns;
   QVector<int> pendingArrayHeaderColumns;
 };

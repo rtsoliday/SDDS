@@ -60,6 +60,9 @@
 #include <QCoreApplication>
 #include <QProgressDialog>
 #include <QAbstractTableModel>
+#include <QAbstractProxyModel>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <functional>
 #include <memory>
 #include <cstdlib>
@@ -1006,24 +1009,6 @@ static QVector<int> sortedValidIndexesDescending(const QSet<int> &values,
   return result;
 }
 
-static void collectSelectedRows(QTableView *view, QSet<int> *rows) {
-  if (!view || !rows)
-    return;
-  QItemSelectionModel *selection = view->selectionModel();
-  if (!selection)
-    return;
-
-  const QModelIndexList selectedRows = selection->selectedRows();
-  for (const QModelIndex &idx : selectedRows)
-    if (idx.isValid())
-      rows->insert(idx.row());
-
-  const QModelIndexList selectedIndexes = selection->selectedIndexes();
-  for (const QModelIndex &idx : selectedIndexes)
-    if (idx.isValid())
-      rows->insert(idx.row());
-}
-
 static void collectSelectedColumns(QTableView *view, QSet<int> *columns) {
   if (!view || !columns)
     return;
@@ -1071,24 +1056,6 @@ static QModelIndexList editableSelectedIndexes(const QTableView *view, bool curr
     return !(view->model()->flags(index) & Qt::ItemIsEditable);
   }), indexes.end());
   return indexes;
-}
-
-static QVector<int> selectedRowsOrFallback(QTableView *view, int maxRows,
-                                           int fallbackRow) {
-  QSet<int> selected;
-  collectSelectedRows(view, &selected);
-  if (fallbackRow >= 0 && fallbackRow < maxRows) {
-    if (selected.contains(fallbackRow))
-      return sortedValidIndexesDescending(selected, maxRows);
-    return QVector<int>(1, fallbackRow);
-  }
-  if (!selected.isEmpty())
-    return sortedValidIndexesDescending(selected, maxRows);
-
-  const QModelIndex current = view ? view->currentIndex() : QModelIndex();
-  if (current.isValid() && current.row() >= 0 && current.row() < maxRows)
-    return QVector<int>(1, current.row());
-  return QVector<int>();
 }
 
 static QVector<int> selectedColumnsOrFallback(QTableView *view, int maxColumns,
@@ -1162,6 +1129,14 @@ public:
                  const QString &oldVal, const QString &newVal)
       : m(model), row(index.row()), column(index.column()), oldValue(oldVal), newValue(newVal) {
     setText(QObject::tr("Edit Cell"));
+    // Proxy coordinates change when the parameter grid reflows; keep source cells.
+    QModelIndex target = index;
+    while (QAbstractProxyModel *proxy = qobject_cast<QAbstractProxyModel *>(m.data())) {
+      target = proxy->mapToSource(target);
+      m = proxy->sourceModel();
+      row = target.row();
+      column = target.column();
+    }
   }
 
   void undo() override { apply(oldValue); }
@@ -2504,6 +2479,10 @@ private:
 
 /* Header data role holding the muted second header line (type, shape, units). */
 static const int HeaderSubtitleRole = Qt::UserRole + 41;
+/* Header roles drawn as a type badge, an array shape chip and muted units. */
+static const int HeaderTypeRole = Qt::UserRole + 42;
+static const int HeaderShapeRole = Qt::UserRole + 43;
+static const int HeaderUnitsRole = Qt::UserRole + 44;
 
 /* Private clipboard format: JSON rows of cell strings, null where a cell was not selected. */
 static const char *const editorCellsMime = "application/x-sddseditor-cells";
@@ -2552,6 +2531,9 @@ static QFont preferredTableFont() {
 struct EditorTheme {
   QColor win, chrome, surface, header, border, grid, text, muted;
   QColor accent, accentSoft, accentText, onAccent, zebra, warn, hover;
+  QColor gridSoft, ok, hatch;
+  /* Type badges: integer, floating-point and text families. */
+  QColor intBg, intFg, fltBg, fltFg, txtBg, txtFg;
 };
 
 static EditorTheme editorTheme(bool dark) {
@@ -2572,6 +2554,15 @@ static EditorTheme editorTheme(bool dark) {
     t.zebra = QColor("#1F2228");
     t.warn = QColor("#F0A04B");
     t.hover = QColor("#2A2F37");
+    t.gridSoft = QColor("#202328");
+    t.ok = QColor("#4CC27E");
+    t.hatch = QColor("#2E333B");
+    t.intBg = QColor("#1F2D4A");
+    t.intFg = QColor("#A9C3FF");
+    t.fltBg = QColor("#16342B");
+    t.fltFg = QColor("#85DCC0");
+    t.txtBg = QColor("#3A2C14");
+    t.txtFg = QColor("#F0C47E");
   } else {
     t.win = QColor("#F4F5F7");
     t.chrome = QColor("#FBFBFC");
@@ -2588,8 +2579,75 @@ static EditorTheme editorTheme(bool dark) {
     t.zebra = QColor("#FAFBFC");
     t.warn = QColor("#A6520A");
     t.hover = QColor("#ECEFF3");
+    t.gridSoft = QColor("#F3F4F6");
+    t.ok = QColor("#1F8A4C");
+    t.hatch = QColor("#E1E4EA");
+    t.intBg = QColor("#E8EFFD");
+    t.intFg = QColor("#1F4FB2");
+    t.fltBg = QColor("#E1F3EB");
+    t.fltFg = QColor("#0E6A4E");
+    t.txtBg = QColor("#FCEED6");
+    t.txtFg = QColor("#8A4A00");
   }
   return t;
+}
+
+/** Badge colors for an SDDS type: integers, floating point, or text. */
+static void typeBadgeColors(const EditorTheme &t, int32_t type, QColor *bg, QColor *fg) {
+  if (type == SDDS_STRING || type == SDDS_CHARACTER) {
+    *bg = t.txtBg;
+    *fg = t.txtFg;
+  } else if (type == SDDS_FLOAT || type == SDDS_DOUBLE || type == SDDS_LONGDOUBLE) {
+    *bg = t.fltBg;
+    *fg = t.fltFg;
+  } else {
+    *bg = t.intBg;
+    *fg = t.intFg;
+  }
+}
+
+static QFont badgeFont(QFont font) {
+  font.setPointSizeF(std::max<qreal>(7.0, font.pointSizeF() - 1.5));
+  font.setWeight(QFont::DemiBold);
+  return font;
+}
+
+static QSize badgeSize(const QFont &font, const QString &text) {
+  const QFontMetrics fm(font);
+  return QSize(textAdvance(fm, text) + 12, fm.height() + 2);
+}
+
+/**
+ * Paint a rounded badge with its top-left corner at @p topLeft and return its
+ * width.  An invalid @p border draws no outline.
+ */
+static int paintBadge(QPainter *painter, const QPoint &topLeft, const QString &text, const QFont &font,
+                      const QColor &bg, const QColor &fg, const QColor &border = QColor()) {
+  const QSize size = badgeSize(font, text);
+  const QRectF rect{QPointF(topLeft), QSizeF(size)};
+  painter->save();
+  painter->setRenderHint(QPainter::Antialiasing);
+  painter->setPen(border.isValid() ? QPen(border, 1) : QPen(Qt::NoPen));
+  painter->setBrush(bg);
+  painter->drawRoundedRect(border.isValid() ? rect.adjusted(0.5, 0.5, -0.5, -0.5) : rect, 4, 4);
+  painter->setFont(font);
+  painter->setPen(fg);
+  painter->drawText(rect, Qt::AlignCenter, text);
+  painter->restore();
+  return size.width();
+}
+
+/** Diagonal hatching that lines up across neighboring cells. */
+static void paintHatch(QPainter *painter, const QRect &rect, const QColor &color) {
+  const int spacing = 6;
+  painter->save();
+  painter->setClipRect(rect);
+  painter->setRenderHint(QPainter::Antialiasing, false);
+  painter->setPen(QPen(color, 1));
+  const int first = (rect.left() + rect.top()) / spacing * spacing - spacing;
+  for (int s = first; s <= rect.right() + rect.bottom() + spacing; s += spacing)
+    painter->drawLine(QPoint(s - rect.top(), rect.top()), QPoint(s - rect.bottom() - 1, rect.bottom() + 1));
+  painter->restore();
 }
 
 static QPalette editorPalette(const EditorTheme &t, QPalette pal) {
@@ -2636,8 +2694,13 @@ static QString editorStyleSheet(const EditorTheme &t) {
       "QToolBar#mainToolBar QToolButton:pressed { background: @border; }"
       "QToolBar#mainToolBar QToolButton:checked { background: @accentSoft; color: @accentText; }"
       "QToolBar#mainToolBar QToolButton:disabled { color: @muted; }"
-      "QToolBar#mainToolBar QToolButton#pageNav { border: 1px solid @border; background: @surface; padding: 3px; }"
-      "QToolBar#mainToolBar QToolButton#pageNav:hover { background: @hover; }"
+      "QFrame#pageStepper { background: @surface; border: 1px solid @border; border-radius: 7px; }"
+      "QFrame#pageStepper QFrame#stepperRule { background: @border; border: none; }"
+      "QToolBar#mainToolBar QFrame#pageStepper QToolButton#pageNav { border: none; border-radius: 0px; background: transparent; padding: 3px 5px; }"
+      "QToolBar#mainToolBar QFrame#pageStepper QToolButton#pageNav:hover { background: @hover; }"
+      "QFrame#pageStepper QComboBox#pageCombo { border: none; background: transparent; color: @text; padding: 1px 4px 1px 8px; }"
+      "QFrame#pageStepper QComboBox#pageCombo:hover { background: @hover; }"
+      "QFrame#pageStepper QLabel#pageCountLabel { color: @muted; padding: 0px 8px 0px 0px; background: transparent; }"
       "QLabel#toolbarLabel { color: @muted; padding: 0px 4px; }"
       "QFrame#formatSwitch { background: @header; border: 1px solid @border; border-radius: 7px; }"
       "QToolBar#mainToolBar QFrame#formatSwitch QToolButton { border-radius: 5px; padding: 3px 12px; color: @muted; }"
@@ -2662,8 +2725,9 @@ static QString editorStyleSheet(const EditorTheme &t) {
       "QFrame#dataPanel QHeaderView::section { background: @header; color: @text; border: none;"
       "  border-right: 1px solid @grid; border-bottom: 1px solid @border; padding: 0px 8px; }"
       "QFrame#dataPanel QHeaderView::section:vertical { color: @muted; border-right: 1px solid @border;"
-      "  border-bottom: 1px solid @grid; padding: 0px 6px; }"
+      "  border-bottom: 1px solid @grid; padding: 0px 8px; }"
       "QFrame#dataPanel QHeaderView::section:checked { background: @accentSoft; color: @accentText; }"
+      "QFrame#dataPanel QHeaderView::section:vertical:checked { background: @header; color: @accentText; font-weight: bold; }"
       "QFrame#dataPanel QTableCornerButton::section { background: @header; border: none;"
       "  border-right: 1px solid @border; border-bottom: 1px solid @border; }"
       "QStatusBar { background: @chrome; border-top: 1px solid @border; color: @muted; }"
@@ -2673,7 +2737,25 @@ static QString editorStyleSheet(const EditorTheme &t) {
       "QToolButton#messagesButton { border: 1px solid @border; border-radius: 5px; background: @surface;"
       "  color: @text; padding: 1px 8px; margin: 2px 4px; }"
       "QToolButton#messagesButton:checked { background: @accentSoft; color: @accentText; }"
-      "QDockWidget#messagesDock QPlainTextEdit { background: @surface; color: @text; border: none; }");
+      "QToolButton#messagesButton[badged=\"true\"] { padding-right: 34px; }"
+      "QDockWidget#messagesDock QPlainTextEdit { background: @surface; color: @text; border: none; }"
+      "QFrame#outlinePanel { background: @chrome; border: none; border-right: 1px solid @border; }"
+      "QFrame#outlineSummary { background: transparent; border: none; border-bottom: 1px solid @border; }"
+      "QLabel#outlineFileIcon { background: @accentSoft; border-radius: 8px; }"
+      "QLabel#outlineFileName { color: @text; font-weight: bold; }"
+      "QLabel#outlineDescription { color: @muted; }"
+      "QFrame#outlineStat { background: @surface; border: 1px solid @border; border-radius: 6px; }"
+      "QFrame#outlineStat QLabel { background: transparent; border: none; }"
+      "QLabel#outlineStatValue { color: @text; font-weight: bold; }"
+      "QLabel#outlineStatLabel { color: @muted; }"
+      "QLineEdit#outlineFilter { background: @surface; border: 1px solid @border; border-radius: 6px; padding: 3px 4px; color: @text; }"
+      "QLineEdit#outlineFilter:focus { border-color: @accent; }"
+      "QTreeWidget#outlineTree { background: transparent; border: none; color: @text; outline: 0; }"
+      "QTreeWidget#outlineTree { show-decoration-selected: 1; }"
+      "QTreeWidget#outlineTree::item { padding: 2px 4px; border: none; }"
+      "QTreeWidget#outlineTree::item:hover, QTreeWidget#outlineTree::branch:hover { background: @hover; }"
+      "QTreeWidget#outlineTree::item:selected, QTreeWidget#outlineTree::branch:selected { background: @accentSoft; color: @accentText; }"
+      "QSplitter#bodySplitter::handle { background: transparent; }");
   return themedStyleSheet(css, t);
 }
 
@@ -2681,7 +2763,8 @@ static QString editorStyleSheet(const EditorTheme &t) {
 static QString themedStyleSheet(QString css, const EditorTheme &t) {
   const QList<QPair<QString, QColor>> tokens = {
       {"@win", t.win}, {"@chrome", t.chrome}, {"@surface", t.surface}, {"@header", t.header},
-      {"@border", t.border}, {"@grid", t.grid}, {"@text", t.text}, {"@muted", t.muted},
+      {"@border", t.border}, {"@gridSoft", t.gridSoft}, {"@grid", t.grid}, {"@text", t.text}, {"@muted", t.muted},
+      {"@ok", t.ok}, {"@hatch", t.hatch},
       {"@accentSoft", t.accentSoft}, {"@accentText", t.accentText}, {"@accent", t.accent},
       {"@zebra", t.zebra}, {"@warn", t.warn}, {"@hover", t.hover}};
   // Longer names first, so "@accent" does not consume "@accentSoft".
@@ -2742,6 +2825,9 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "<b>Columns</b> (rows of tabular data) and <b>Arrays</b> (multidimensional data). "
       "Click a panel title, or use the <b>View</b> menu, to collapse or expand a panel. "
       "Drag the gap between panels to resize them.</li>"
+      "<li>The <b>outline</b> on the left summarizes the file and lists every parameter, column "
+      "and array with its type. Type a name in its filter box, and click an entry to show it. "
+      "<b>View &#8250; Outline</b> %3 hides or shows it.</li>"
       "<li>When a file has several pages, change pages with the toolbar arrows or the page list.</li>"
       "<li>Click a cell and type to change a value.</li>"
       "<li><b>Save</b> with <b>File &#8250; Save</b> %2 or <b>File &#8250; Save as...</b>. "
@@ -2751,7 +2837,7 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "before discarding unsaved changes.</p>"
       "<p class=\"note\">To create a new file, insert a parameter, column or array without opening "
       "a file, then save it.</p>")
-      .arg(helpKey(QKeySequence::Open), helpKey(QKeySequence::Save))});
+      .arg(helpKey(QKeySequence::Open), helpKey(QKeySequence::Save), helpKey("Ctrl+Shift+O"))});
 
   topics.append({QStringLiteral("edit"), SDDSEditor::tr("Editing data"), SDDSEditor::tr(
       "<h3>Cells</h3>"
@@ -2766,11 +2852,16 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "Changing pages clears the Undo history.</li>"
       "</ul>"
       "<h3>Parameters</h3>"
-      "<p>The parameter table lists Name, Type, Units, Value and Description. Only the value is "
-      "edited in the table: double-click the type to change it, or the units or description to "
-      "open the parameter's attributes. Drag a row number to reorder parameters.</p>"
+      "<p>Parameters are listed as Name, Type, Units, Value and Description, in side-by-side "
+      "groups when the panel is wide enough; the list runs down each group before the next. "
+      "Only the value is edited in the table: double-click the type to change it, or the name, "
+      "units or description to open the parameter's attributes. Copy, paste and the formula "
+      "tools treat parameters as one list in order. Right-click a parameter and choose "
+      "<b>Move Up</b> or <b>Move Down</b> to reorder parameters.</p>"
       "<h3>Columns and arrays</h3>"
-      "<p>Each header shows the name with its type, units and, for arrays, the shape. "
+      "<p>Each header shows the name with a colored type badge (blue for integers, green for "
+      "floating point, amber for text), the units and, for arrays, the shape. Hatched cells lie "
+      "past the end of an array shorter than the longest one. "
       "Double-click a header to change the type, drag it to reorder, or right-click it for more "
       "actions (see <a href=\"#menus\">Right-click menus</a>).</p>"
       "<p class=\"note\">Floating-point values are shown with the fewest digits that reproduce "
@@ -2796,7 +2887,7 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
 
   topics.append({QStringLiteral("menus"), SDDSEditor::tr("Right-click menus"),
       helpTable(SDDSEditor::tr("<th>Right-click</th><th>Actions</th>"), SDDSEditor::tr(
-          "<tr><td>Parameter row or value</td><td>Attributes, Delete</td></tr>"
+          "<tr><td>Parameter</td><td>Attributes, Change Type, Move Up, Move Down, Delete</td></tr>"
           "<tr><td>Column header or cell</td><td>Attributes, Plot from file, Sort ascending, "
           "Sort descending, Search/Replace, Filter/View, Clear Filter/View, formula tools, Delete</td></tr>"
           "<tr><td>Column row number</td><td>Insert, Delete, Filter/View, Clear Filter/View, "
@@ -2932,7 +3023,8 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "<li>Messages appear briefly in the status bar and are kept in the message log. Open the "
       "log with the <b>Messages</b> button or <b>View &#8250; Messages</b> %1; the button counts "
       "unread messages.</li>"
-      "<li>The <b>View</b> menu also shows or hides the toolbar, the status bar and each panel.</li>"
+      "<li>The <b>View</b> menu also shows or hides the toolbar, the status bar, the outline "
+      "and each panel.</li>"
       "<li>The editor uses a light or dark appearance to match the desktop.</li>"
       "<li><b>File &#8250; Restart</b> %2 restarts the editor after offering to save changes.</li>"
       "</ul>")
@@ -2960,6 +3052,7 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       {SDDSEditor::tr("Apply Numerical Expression"), exprKey},
       {SDDSEditor::tr("Apply Text Formula"), textKey},
       {SDDSEditor::tr("Show or hide messages"), helpKey("Ctrl+Shift+L")},
+      {SDDSEditor::tr("Show or hide the outline"), helpKey("Ctrl+Shift+O")},
       {SDDSEditor::tr("Help"), helpKey(QKeySequence::HelpContents)},
       {SDDSEditor::tr("Find in this help"), helpKey(QKeySequence::Find)},
       {SDDSEditor::tr("Next / previous match in this help"),
@@ -3585,7 +3678,7 @@ private:
 enum EditorIcon {
   IconOpen, IconSave, IconUndo, IconRedo, IconPrev, IconNext, IconFilter, IconPlot,
   IconGrid, IconPlus, IconSliders, IconTerminal, IconClose, IconSearch,
-  IconChevronDown, IconChevronRight
+  IconChevronDown, IconChevronRight, IconFile
 };
 
 enum IconTone { ToneText, ToneMuted, ToneAccent };
@@ -3657,6 +3750,12 @@ static QPainterPath editorIconPath(int kind) {
   case IconChevronRight:
     p.moveTo(9, 6); p.lineTo(15, 12); p.lineTo(9, 18);
     break;
+  case IconFile:
+    p.moveTo(14, 3); p.lineTo(6, 3); p.lineTo(6, 21); p.lineTo(19, 21); p.lineTo(19, 8);
+    p.closeSubpath();
+    p.moveTo(14, 3); p.lineTo(14, 8); p.lineTo(19, 8);
+    p.moveTo(9, 13); p.lineTo(16, 13); p.moveTo(9, 17); p.lineTo(14, 17);
+    break;
   default:
     break;
   }
@@ -3693,7 +3792,7 @@ static QIcon makeEditorIcon(int kind, const QColor &color, const QColor &disable
 /** Card holding one data table with a header bar that collapses the table. */
 class DataPanel : public QFrame {
 public:
-  static const int HeaderHeight = 34;
+  static const int HeaderHeight = 38;
   static const int BottomInset = 5;
 
   DataPanel(const QString &title, QWidget *parent = nullptr)
@@ -3789,23 +3888,34 @@ private:
   QIcon collapsedIcon;
 };
 
-/** Horizontal header drawing a bold name with a muted type/units line. */
+/**
+ * Horizontal header drawing a bold name above a type badge, an array shape chip
+ * and muted units.  Models without HeaderTypeRole get a muted subtitle line.
+ */
 class TwoLineHeaderView : public QHeaderView {
 public:
   explicit TwoLineHeaderView(QWidget *parent = nullptr)
-      : QHeaderView(Qt::Horizontal, parent) {
+      : QHeaderView(Qt::Horizontal, parent), theme(editorTheme(false)) {
     setSectionsClickable(true);
     setHighlightSections(true);
   }
 
-  void setColors(const QColor &text, const QColor &muted, const QColor &accentText) {
-    textColor = text;
-    mutedColor = muted;
-    highlightColor = accentText;
+  void setTheme(const EditorTheme &t) {
+    theme = t;
     viewport()->update();
   }
 
 protected:
+  /* Sections stop at the last column; extend the header band across the view. */
+  void paintEvent(QPaintEvent *event) override {
+    {
+      QPainter painter(viewport());
+      painter.fillRect(viewport()->rect(), theme.header);
+      painter.fillRect(QRect(0, viewport()->height() - 1, viewport()->width(), 1), theme.border);
+    }
+    QHeaderView::paintEvent(event);
+  }
+
   void paintSection(QPainter *painter, const QRect &rect, int logicalIndex) const override {
     if (!rect.isValid() || !model())
       return;
@@ -3834,35 +3944,54 @@ protected:
     painter->restore();
 
     const QString title = model()->headerData(logicalIndex, orientation(), Qt::DisplayRole).toString();
-    const QString subtitle = model()->headerData(logicalIndex, orientation(), HeaderSubtitleRole).toString();
     const QVariant alignValue = model()->headerData(logicalIndex, orientation(), Qt::TextAlignmentRole);
     const Qt::Alignment hAlign = (alignValue.isValid() ? Qt::Alignment(alignValue.toInt()) : defaultAlignment()) &
                                  Qt::AlignHorizontal_Mask;
-    const QRect textRect = rect.adjusted(8, 2, -8, -2);
+    const QRect textRect = rect.adjusted(10, 2, -10, -2);
     const QFont titleFont = sectionTitleFont();
-    const QFont subFont = subtitleFont();
     const QFontMetrics titleFm(titleFont);
-    const QFontMetrics subFm(subFont);
+    const int detailHeight = detailLineHeight();
 
     painter->save();
     painter->setClipRect(rect);
-    int top = textRect.top();
-    if (subtitle.isEmpty())
-      top += (textRect.height() - titleFm.height()) / 2;
-    else
-      top += (textRect.height() - titleFm.height() - subFm.height()) / 2;
+    if (highlighted)
+      painter->fillRect(QRect(rect.left(), rect.bottom() - 1, rect.width(), 2), theme.accent);
+    const int gap = 4;
+    int top = textRect.top() + (textRect.height() - titleFm.height() - gap - detailHeight) / 2;
     painter->setFont(titleFont);
-    painter->setPen(highlighted && highlightColor.isValid() ? highlightColor
-                    : textColor.isValid() ? textColor : palette().color(QPalette::WindowText));
+    painter->setPen(highlighted ? theme.accentText : theme.text);
     painter->drawText(QRect(textRect.left(), top, textRect.width(), titleFm.height()),
                       int(hAlign | Qt::AlignVCenter),
                       titleFm.elidedText(title, Qt::ElideRight, textRect.width()));
-    if (!subtitle.isEmpty()) {
-      painter->setFont(subFont);
-      painter->setPen(mutedColor.isValid() ? mutedColor : palette().color(QPalette::Disabled, QPalette::WindowText));
-      painter->drawText(QRect(textRect.left(), top + titleFm.height(), textRect.width(), subFm.height()),
-                        int(hAlign | Qt::AlignVCenter),
-                        subFm.elidedText(subtitle, Qt::ElideRight, textRect.width()));
+    top += titleFm.height() + gap;
+
+    const QVector<DetailPart> parts = detailParts(logicalIndex);
+    int x = textRect.left();
+    if (hAlign & Qt::AlignRight)
+      x = textRect.right() + 1 - detailWidth(parts);
+    else if (hAlign & Qt::AlignHCenter)
+      x = textRect.left() + (textRect.width() - detailWidth(parts)) / 2;
+    x = std::max(x, textRect.left());
+    for (const DetailPart &part : parts) {
+      if (part.kind == DetailText) {
+        const QFont f = subtitleFont();
+        const QFontMetrics fm(f);
+        painter->setFont(f);
+        painter->setPen(theme.muted);
+        painter->drawText(QRect(x, top, textRect.right() + 1 - x, detailHeight), int(Qt::AlignLeft | Qt::AlignVCenter),
+                          fm.elidedText(part.text, Qt::ElideRight, std::max(0, textRect.right() + 1 - x)));
+        x += textAdvance(fm, part.text) + gap;
+        continue;
+      }
+      const QFont f = badgeFont(font());
+      const int y = top + (detailHeight - badgeSize(f, part.text).height()) / 2;
+      if (part.kind == DetailBadge) {
+        QColor bg, fg;
+        typeBadgeColors(theme, part.type, &bg, &fg);
+        x += paintBadge(painter, QPoint(x, y), part.text, f, bg, fg) + gap;
+      } else {
+        x += paintBadge(painter, QPoint(x, y), part.text, f, theme.surface, theme.muted, theme.border) + gap;
+      }
     }
     painter->restore();
   }
@@ -3871,15 +4000,55 @@ protected:
     if (!model())
       return QHeaderView::sectionSizeFromContents(logicalIndex);
     const QString title = model()->headerData(logicalIndex, orientation(), Qt::DisplayRole).toString();
-    const QString subtitle = model()->headerData(logicalIndex, orientation(), HeaderSubtitleRole).toString();
     const QFontMetrics titleFm(sectionTitleFont());
-    const QFontMetrics subFm(subtitleFont());
-    const int width = std::max(textAdvance(titleFm, title), textAdvance(subFm, subtitle)) + 20;
-    const int height = titleFm.height() + subFm.height() + 8;
+    const int width = std::max(textAdvance(titleFm, title), detailWidth(detailParts(logicalIndex))) + 22;
+    const int height = titleFm.height() + detailLineHeight() + 14;
     return QSize(width, height);
   }
 
 private:
+  enum DetailKind { DetailBadge, DetailShape, DetailText };
+  struct DetailPart {
+    DetailKind kind;
+    QString text;
+    int type;
+  };
+
+  /* The type badge, shape chip and units, or the plain subtitle as a fallback. */
+  QVector<DetailPart> detailParts(int logicalIndex) const {
+    QVector<DetailPart> parts;
+    const QVariant type = model()->headerData(logicalIndex, orientation(), HeaderTypeRole);
+    if (!type.isValid()) {
+      const QString subtitle = model()->headerData(logicalIndex, orientation(), HeaderSubtitleRole).toString();
+      if (!subtitle.isEmpty())
+        parts.append({DetailText, subtitle, 0});
+      return parts;
+    }
+    parts.append({DetailBadge, QString::fromLocal8Bit(SDDS_GetTypeName(type.toInt())), type.toInt()});
+    const QString shape = model()->headerData(logicalIndex, orientation(), HeaderShapeRole).toString();
+    if (!shape.isEmpty())
+      parts.append({DetailShape, shape, 0});
+    const QString units = model()->headerData(logicalIndex, orientation(), HeaderUnitsRole).toString();
+    if (!units.isEmpty())
+      parts.append({DetailText, units, 0});
+    return parts;
+  }
+
+  int detailWidth(const QVector<DetailPart> &parts) const {
+    int width = 0;
+    for (const DetailPart &part : parts) {
+      if (width)
+        width += 4;
+      width += part.kind == DetailText ? textAdvance(QFontMetrics(subtitleFont()), part.text)
+                                       : badgeSize(badgeFont(font()), part.text).width();
+    }
+    return width;
+  }
+
+  int detailLineHeight() const {
+    return std::max(QFontMetrics(subtitleFont()).height(), badgeSize(badgeFont(font()), QStringLiteral("x")).height());
+  }
+
   QFont sectionTitleFont() const {
     QFont f = font();
     f.setBold(true);
@@ -3892,9 +4061,7 @@ private:
     return f;
   }
 
-  QColor textColor;
-  QColor mutedColor;
-  QColor highlightColor;
+  EditorTheme theme;
 };
 
 /** Splitter handle drawn as a small grip between panel cards. */
@@ -4072,11 +4239,226 @@ public:
     emit headerDataChanged(Qt::Vertical, first, last);
   }
 
+  int32_t typeAt(int row) const {
+    if (!dataset || row < 0 || row >= dataset->layout.n_parameters)
+      return SDDS_STRING;
+    return dataset->layout.parameter_definition[row].type;
+  }
+
 private:
   SDDS_DATASET *dataset;
   QVector<PageStore> *pages;
   int *currentPage;
   QColor mutedColor;
+};
+
+/**
+ * Parameters wrapped into side-by-side groups so short parameter lists use
+ * the panel width.  Each group shows Name | Type | [Units] | Value |
+ * [Description] for consecutive parameters, filling the first group top to
+ * bottom before the next.  Edits go to the source ParameterPageModel, which
+ * remains the only store of parameter values.
+ */
+class ParameterGridModel : public QAbstractProxyModel {
+public:
+  enum Field { NameField, TypeField, UnitsField, ValueField, DescriptionField };
+
+  explicit ParameterGridModel(ParameterPageModel *source, QObject *parent = nullptr)
+      : QAbstractProxyModel(parent), params(source) {
+    fields = {NameField, TypeField, ValueField};
+    QAbstractProxyModel::setSourceModel(source);
+    connect(source, &QAbstractItemModel::modelAboutToBeReset, this, [this]() { beginResetModel(); });
+    connect(source, &QAbstractItemModel::modelReset, this, [this]() { endResetModel(); });
+    connect(source, &QAbstractItemModel::layoutAboutToBeChanged, this, [this]() { beginResetModel(); });
+    connect(source, &QAbstractItemModel::layoutChanged, this, [this]() { endResetModel(); });
+    connect(source, &QAbstractItemModel::rowsAboutToBeInserted, this, [this]() { beginResetModel(); });
+    connect(source, &QAbstractItemModel::rowsInserted, this, [this]() { endResetModel(); });
+    connect(source, &QAbstractItemModel::rowsAboutToBeRemoved, this, [this]() { beginResetModel(); });
+    connect(source, &QAbstractItemModel::rowsRemoved, this, [this]() { endResetModel(); });
+    connect(source, &QAbstractItemModel::dataChanged, this,
+            [this](const QModelIndex &topLeft, const QModelIndex &bottomRight, const QVector<int> &roles) {
+              // Type and units also change the value's alignment and formatting.
+              for (int row = topLeft.row(); row <= bottomRight.row(); ++row)
+                emitRowChanged(row, roles);
+            });
+    connect(source, &QAbstractItemModel::headerDataChanged, this,
+            [this](Qt::Orientation orientation, int first, int last) {
+              if (orientation == Qt::Vertical)
+                for (int row = first; row <= last; ++row)
+                  emitRowChanged(row, {});
+            });
+  }
+
+  /** Change the group count and optional fields; resets the model only when they change. */
+  bool setLayout(int groupCount, bool showUnits, bool showDescription) {
+    QVector<int> wanted = {NameField, TypeField};
+    if (showUnits)
+      wanted << UnitsField;
+    wanted << ValueField;
+    if (showDescription)
+      wanted << DescriptionField;
+    groupCount = std::max(1, groupCount);
+    if (groupCount == groups && wanted == fields)
+      return false;
+    beginResetModel();
+    groups = groupCount;
+    fields = wanted;
+    endResetModel();
+    return true;
+  }
+
+  int groupCount() const { return groups; }
+  int fieldCount() const { return fields.size(); }
+  int fieldAt(int column) const {
+    return column >= 0 && !fields.isEmpty() ? fields[column % fields.size()] : -1;
+  }
+  int rowsPerGroup() const {
+    const int count = params->rowCount();
+    return count > 0 ? (count + groups - 1) / groups : 0;
+  }
+
+  /** Parameter (source row) shown in a grid cell, or -1 for an empty cell. */
+  int parameterRow(const QModelIndex &index) const {
+    if (!index.isValid() || index.model() != this || fields.isEmpty())
+      return -1;
+    const int row = index.column() / fields.size() * rowsPerGroup() + index.row();
+    return row < params->rowCount() ? row : -1;
+  }
+
+  QModelIndex cellFor(int parameter, int field) const {
+    const int per = rowsPerGroup();
+    const int position = fields.indexOf(field);
+    if (per <= 0 || position < 0 || parameter < 0 || parameter >= params->rowCount())
+      return QModelIndex();
+    return index(parameter % per, parameter / per * fields.size() + position);
+  }
+
+  QModelIndex mapToSource(const QModelIndex &proxyIndex) const override {
+    const int row = parameterRow(proxyIndex);
+    const int column = sourceColumn(fieldAt(proxyIndex.column()));
+    if (row < 0 || column < 0)
+      return QModelIndex();
+    return params->index(row, column);
+  }
+
+  QModelIndex mapFromSource(const QModelIndex &sourceIndex) const override {
+    if (!sourceIndex.isValid() || sourceIndex.model() != params)
+      return QModelIndex();
+    for (int field : fields)
+      if (sourceColumn(field) == sourceIndex.column())
+        return cellFor(sourceIndex.row(), field);
+    return QModelIndex();
+  }
+
+  QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override {
+    if (parent.isValid() || row < 0 || column < 0 || row >= rowCount() || column >= columnCount())
+      return QModelIndex();
+    return createIndex(row, column);
+  }
+
+  QModelIndex parent(const QModelIndex &) const override { return QModelIndex(); }
+  QModelIndex sibling(int row, int column, const QModelIndex &) const override { return index(row, column); }
+  bool hasChildren(const QModelIndex &parent = QModelIndex()) const override {
+    return !parent.isValid() && rowCount() > 0;
+  }
+
+  int rowCount(const QModelIndex &parent = QModelIndex()) const override {
+    return parent.isValid() ? 0 : rowsPerGroup();
+  }
+
+  int columnCount(const QModelIndex &parent = QModelIndex()) const override {
+    return parent.isValid() ? 0 : groups * fields.size();
+  }
+
+  QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override {
+    const int row = parameterRow(index);
+    if (row < 0)
+      return QVariant();
+    const int field = fieldAt(index.column());
+    if (field == NameField) {
+      if (role == Qt::DisplayRole || role == Qt::EditRole)
+        return params->headerData(row, Qt::Vertical, Qt::DisplayRole);
+      if (role == Qt::ToolTipRole)
+        return params->headerData(row, Qt::Vertical, Qt::ToolTipRole);
+      if (role == Qt::FontRole && hasNameFont)
+        return nameFont;
+      return QVariant();
+    }
+    if (field == ValueField && role == Qt::TextAlignmentRole)
+      return SDDS_NUMERIC_TYPE(params->typeAt(row)) ? int(Qt::AlignRight | Qt::AlignVCenter)
+                                                    : int(Qt::AlignLeft | Qt::AlignVCenter);
+    if ((field == UnitsField || field == DescriptionField) && role == Qt::FontRole && hasNameFont)
+      return nameFont;
+    return params->data(mapToSource(index), role);
+  }
+
+  bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override {
+    const QModelIndex source = mapToSource(index);
+    return source.isValid() && params->setData(source, value, role);
+  }
+
+  Qt::ItemFlags flags(const QModelIndex &index) const override {
+    const int row = parameterRow(index);
+    if (row < 0)
+      return Qt::NoItemFlags;
+    if (fieldAt(index.column()) == NameField)
+      return Qt::ItemIsEnabled;
+    return params->flags(mapToSource(index));
+  }
+
+  QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override {
+    if (orientation != Qt::Horizontal || role != Qt::DisplayRole)
+      return QVariant();
+    switch (fieldAt(section)) {
+    case NameField:
+      return tr("Name");
+    case TypeField:
+      return tr("Type");
+    case UnitsField:
+      return tr("Units");
+    case ValueField:
+      return tr("Value");
+    case DescriptionField:
+      return tr("Description");
+    default:
+      return QVariant();
+    }
+  }
+
+  /** Names and descriptions use the interface font rather than the table font. */
+  void setNameFont(const QFont &font) {
+    nameFont = font;
+    hasNameFont = true;
+  }
+
+private:
+  static int sourceColumn(int field) {
+    switch (field) {
+    case TypeField:
+      return ParameterPageModel::TypeColumn;
+    case UnitsField:
+      return ParameterPageModel::UnitsColumn;
+    case ValueField:
+      return ParameterPageModel::ValueColumn;
+    case DescriptionField:
+      return ParameterPageModel::DescriptionColumn;
+    default:
+      return -1;
+    }
+  }
+
+  void emitRowChanged(int parameter, const QVector<int> &roles) {
+    const QModelIndex first = cellFor(parameter, fields.first());
+    if (!first.isValid())
+      return;
+    emit dataChanged(first, index(first.row(), first.column() + fields.size() - 1), roles);
+  }
+
+  ParameterPageModel *params;
+  QVector<int> fields;
+  int groups{1};
+  QFont nameFont;
+  bool hasNameFont{false};
 };
 
 static QVariant numericAlignment(int32_t type) {
@@ -4187,6 +4569,10 @@ public:
       case HeaderSubtitleRole:
         return joinSubtitle({QString::fromLocal8Bit(SDDS_GetTypeName(def.type)),
                              def.units ? QString::fromLocal8Bit(def.units) : QString()});
+      case HeaderTypeRole:
+        return def.type;
+      case HeaderUnitsRole:
+        return def.units ? QString::fromLocal8Bit(def.units) : QString();
       case Qt::TextAlignmentRole:
         return numericAlignment(def.type);
       case Qt::ToolTipRole:
@@ -4315,17 +4701,16 @@ public:
       switch (role) {
       case Qt::DisplayRole:
         return QString::fromLocal8Bit(def.name);
-      case HeaderSubtitleRole: {
-        QStringList dims;
-        if (pages && currentPage && *currentPage >= 0 && *currentPage < pages->size() &&
-            section < (*pages)[*currentPage].arrays.size()) {
-          for (int d : (*pages)[*currentPage].arrays[section].dims)
-            dims << QString::number(d);
-        }
+      case HeaderSubtitleRole:
         return joinSubtitle({QString::fromLocal8Bit(SDDS_GetTypeName(def.type)),
-                             dims.join(QChar(0x00D7)),
+                             shapeText(section),
                              def.units ? QString::fromLocal8Bit(def.units) : QString()});
-      }
+      case HeaderTypeRole:
+        return def.type;
+      case HeaderShapeRole:
+        return shapeText(section);
+      case HeaderUnitsRole:
+        return def.units ? QString::fromLocal8Bit(def.units) : QString();
       case Qt::TextAlignmentRole:
         return numericAlignment(def.type);
       case Qt::ToolTipRole:
@@ -4349,7 +4734,28 @@ public:
     emit headerDataChanged(Qt::Horizontal, first, last);
   }
 
+  /** True for padding cells below an array shorter than the longest one. */
+  bool isPadding(const QModelIndex &index) const {
+    if (!index.isValid() || !pages || !currentPage || *currentPage < 0 || *currentPage >= pages->size())
+      return false;
+    const PageStore &pd = (*pages)[*currentPage];
+    if (index.column() < 0 || index.column() >= pd.arrays.size())
+      return false;
+    return index.row() >= pd.arrays[index.column()].values.size();
+  }
+
 private:
+  /** Dimensions on the current page, as "4×2". */
+  QString shapeText(int section) const {
+    QStringList dims;
+    if (pages && currentPage && *currentPage >= 0 && *currentPage < pages->size() &&
+        section < (*pages)[*currentPage].arrays.size()) {
+      for (int d : (*pages)[*currentPage].arrays[section].dims)
+        dims << QString::number(d);
+    }
+    return dims.join(QChar(0x00D7));
+  }
+
   void recomputeMaxLen() {
     maxLen = 0;
     if (!pages || !currentPage)
@@ -4399,6 +4805,55 @@ public:
     option->text = canonicalizeForDisplay(option->text, typeFunc(index));
   }
 
+  /*
+   * Optional decorations: padding cells drawn as hatching, cells drawn as a
+   * type badge (badgeType returns the SDDS type, or 0 for ordinary text),
+   * and light grid lines with a stronger rule after cells where groupEnd is
+   * true.  Without them the delegate paints like QStyledItemDelegate.
+   */
+  void setTheme(const EditorTheme &t) { theme = t; hasTheme = true; }
+  void setGridLines(bool on) { gridLines = on; }
+  void setPaddingFunc(std::function<bool(const QModelIndex &)> f) { isPadding = std::move(f); }
+  void setBadgeFunc(std::function<int(const QModelIndex &)> f) { badgeType = std::move(f); }
+  void setGroupEndFunc(std::function<bool(const QModelIndex &)> f) { groupEnd = std::move(f); }
+
+  void paint(QPainter *painter, const QStyleOptionViewItem &option,
+             const QModelIndex &index) const override {
+    if (!hasTheme) {
+      QStyledItemDelegate::paint(painter, option, index);
+      return;
+    }
+    if (isPadding && isPadding(index)) {
+      // Padding has no text; the base paint keeps selection and focus visible.
+      QStyledItemDelegate::paint(painter, option, index);
+      paintHatch(painter, option.rect, theme.hatch);
+    } else if (const int type = badgeType ? badgeType(index) : 0) {
+      QStyleOptionViewItem opt(option);
+      initStyleOption(&opt, index);
+      opt.text.clear();
+      const QWidget *widget = option.widget;
+      QStyle *style = widget ? widget->style() : QApplication::style();
+      style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, widget);
+      QColor bg, fg;
+      typeBadgeColors(theme, type, &bg, &fg);
+      // Badges use the interface font, as in the column headers.
+      const QFont font = badgeFont(QApplication::font());
+      const QString text = QString::fromLocal8Bit(SDDS_GetTypeName(type));
+      const QSize size = badgeSize(font, text);
+      paintBadge(painter, QPoint(option.rect.left() + 8, option.rect.center().y() - size.height() / 2 + 1),
+                 text, font, bg, fg);
+    } else {
+      QStyledItemDelegate::paint(painter, option, index);
+    }
+    // The focus ring already outlines the current cell.
+    if (gridLines && !(option.state & QStyle::State_HasFocus)) {
+      const QRect r = option.rect;
+      painter->fillRect(QRect(r.left(), r.bottom(), r.width(), 1), theme.grid);
+      const bool strong = groupEnd && groupEnd(index);
+      painter->fillRect(QRect(r.right(), r.top(), 1, r.height()), strong ? theme.border : theme.gridSoft);
+    }
+  }
+
   void setEditorData(QWidget *editor, const QModelIndex &index) const override {
     QLineEdit *line = qobject_cast<QLineEdit *>(editor);
     if (!line) {
@@ -4436,6 +4891,63 @@ private:
   TypeFunc typeFunc;
   QUndoStack *undoStack;
   std::function<void()> multiCellPasteHandler;
+  EditorTheme theme;
+  bool hasTheme{false};
+  bool gridLines{false};
+  std::function<bool(const QModelIndex &)> isPadding;
+  std::function<int(const QModelIndex &)> badgeType;
+  std::function<bool(const QModelIndex &)> groupEnd;
+};
+
+/**
+ * Tool button with a count badge in its right padding.  The style sheet
+ * reserves the padding while the "badged" property is true.
+ */
+class BadgeToolButton : public QToolButton {
+public:
+  explicit BadgeToolButton(QWidget *parent = nullptr) : QToolButton(parent) {}
+
+  void setBadge(int value, const QColor &background, const QColor &foreground) {
+    const bool changed = (value > 0) != (count > 0);
+    count = value;
+    bg = background;
+    fg = foreground;
+    if (changed) {
+      setProperty("badged", count > 0);
+      style()->unpolish(this);
+      style()->polish(this);
+      updateGeometry();
+    }
+    update();
+  }
+
+  int badge() const { return count; }
+
+protected:
+  void paintEvent(QPaintEvent *event) override {
+    QToolButton::paintEvent(event);
+    if (count <= 0)
+      return;
+    QPainter painter(this);
+    const QString text = count > 99 ? QStringLiteral("99+") : QString::number(count);
+    QFont f = badgeFont(font());
+    const QFontMetrics fm(f);
+    const int height = fm.height() + 1;
+    const int width = std::max(height, textAdvance(fm, text) + 8);
+    const QRectF rect(this->width() - width - 10, (this->height() - height) / 2.0, width, height);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(bg);
+    painter.drawRoundedRect(rect, height / 2.0, height / 2.0);
+    painter.setFont(f);
+    painter.setPen(fg);
+    painter.drawText(rect, Qt::AlignCenter, text);
+  }
+
+private:
+  int count{0};
+  QColor bg;
+  QColor fg;
 };
 
 SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
@@ -4518,7 +5030,17 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   QWidget *central = new QWidget(this);
   central->setObjectName("centralArea");
   central->setAttribute(Qt::WA_StyledBackground, true);
-  QVBoxLayout *mainLayout = new QVBoxLayout(central);
+  // The outline sidebar sits beside the data panels (see buildOutline).
+  QHBoxLayout *centralLayout = new QHBoxLayout(central);
+  centralLayout->setContentsMargins(0, 0, 0, 0);
+  centralLayout->setSpacing(0);
+  bodySplitter = new QSplitter(Qt::Horizontal, central);
+  bodySplitter->setObjectName("bodySplitter");
+  bodySplitter->setHandleWidth(1);
+  bodySplitter->setChildrenCollapsible(false);
+  centralLayout->addWidget(bodySplitter);
+  QWidget *dataArea = new QWidget(bodySplitter);
+  QVBoxLayout *mainLayout = new QVBoxLayout(dataArea);
   mainLayout->setContentsMargins(10, 8, 10, 8);
 
   // Page navigation and save format live in the toolbar (see buildToolBar).
@@ -4601,16 +5123,16 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
                        [this]() { return paramView; }, &SDDSEditor::editParameterAttributes,
                        tr("Select a parameter to edit its attributes"));
   paramModel = new ParameterPageModel(&dataset, &pages, &currentPage, this);
+  paramGrid = new ParameterGridModel(paramModel, this);
+  paramGrid->setNameFont(QApplication::font());
   paramView = new SingleClickEditTableView(paramBox);
   paramView->setFont(tableFont);
-  paramView->setModel(paramModel);
+  paramView->setModel(paramGrid);
   paramView->setSelectionMode(QAbstractItemView::ExtendedSelection);
   connect(paramView->selectionModel(), &QItemSelectionModel::selectionChanged,
           this, [this](const QItemSelection &, const QItemSelection &) {
-            QSet<int> selected;
-            collectSelectedRows(paramView, &selected);
             lastParameterSelectionRows = sortedValidIndexesDescending(
-                selected, dataset.layout.n_parameters);
+                selectedParameterRows(), dataset.layout.n_parameters);
           });
   // A model reset clears the selection without emitting selectionChanged, and
   // the cached rows would then name different (or deleted) parameters.
@@ -4621,61 +5143,73 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
             if (!updatingModels)
               markDirty();
           });
-  paramView->setItemDelegate(new SDDSItemDelegate(
+  SDDSItemDelegate *paramDelegate = new SDDSItemDelegate(
       [this](const QModelIndex &idx) {
         // Units and descriptions are text; numeric formatting would rewrite "1E3" as "1000".
-        return idx.column() == ParameterPageModel::ValueColumn
-                   ? dataset.layout.parameter_definition[idx.row()].type
+        const QModelIndex source = parameterSourceIndex(idx);
+        return source.isValid() && source.column() == ParameterPageModel::ValueColumn
+                   ? paramModel->typeAt(source.row())
                    : SDDS_STRING;
       },
-      undoStack, paramView));
-  // Shown as Name | Type | Units | Value | Description.  Only the display order
-  // changes; the value stays logical column 0 for editing and clipboard code.
-  // Value and description share the width; type and units fit their text.
+      undoStack, paramView);
+  paramDelegate->setGridLines(true);
+  paramDelegate->setBadgeFunc([this](const QModelIndex &idx) {
+    const QModelIndex source = parameterSourceIndex(idx);
+    return source.isValid() && source.column() == ParameterPageModel::TypeColumn ? paramModel->typeAt(source.row()) : 0;
+  });
+  paramDelegate->setGroupEndFunc([this](const QModelIndex &idx) {
+    return idx.model() == paramGrid && (idx.column() + 1) % paramGrid->fieldCount() == 0 &&
+           idx.column() + 1 < paramGrid->columnCount();
+  });
+  paramView->setItemDelegate(paramDelegate);
+  // Each group shows Name | Type | Units | Value | Description; layoutParameterGrid
+  // chooses the number of groups and their widths from the panel width.
   QHeaderView *paramHeader = paramView->horizontalHeader();
   paramHeader->setFont(QApplication::font());
   paramHeader->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-  paramHeader->moveSection(paramHeader->visualIndex(ParameterPageModel::TypeColumn), 0);
-  paramHeader->moveSection(paramHeader->visualIndex(ParameterPageModel::UnitsColumn), 1);
-  paramHeader->setSectionResizeMode(ParameterPageModel::ValueColumn, QHeaderView::Stretch);
-  paramHeader->setSectionResizeMode(ParameterPageModel::TypeColumn, QHeaderView::ResizeToContents);
-  paramHeader->setSectionResizeMode(ParameterPageModel::UnitsColumn, QHeaderView::ResizeToContents);
-  paramHeader->setSectionResizeMode(ParameterPageModel::DescriptionColumn, QHeaderView::Stretch);
+  paramHeader->setSectionResizeMode(QHeaderView::Fixed);
+  paramHeader->setStretchLastSection(false);
+  paramHeader->setHighlightSections(false);
   paramView->setAlternatingRowColors(true);
   paramView->setShowGrid(false);
   paramView->setWordWrap(false);
+  paramView->verticalHeader()->hide();
   paramView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
-  paramView->verticalHeader()->setDefaultSectionSize(rowHeight);
-  paramView->verticalHeader()->setSectionsMovable(true);
+  paramView->verticalHeader()->setDefaultSectionSize(rowHeight + 2);
   paramView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
-  connect(paramView->verticalHeader(), &QHeaderView::sectionDoubleClicked, this,
-          &SDDSEditor::changeParameterType);
-  connect(paramView->verticalHeader(), &QHeaderView::sectionMoved, this,
-          &SDDSEditor::parameterMoved);
-  paramView->verticalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
-  paramView->verticalHeader()->installEventFilter(this);
-  connect(paramView->verticalHeader(), &QHeaderView::customContextMenuRequested,
-          this, &SDDSEditor::parameterHeaderMenuRequested);
+  paramView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  paramView->viewport()->installEventFilter(this);
   paramView->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(paramView, &QTableView::customContextMenuRequested,
           this, &SDDSEditor::parameterCellMenuRequested);
-  // Metadata cells are read-only: keep the value cell current and use
+  // Names and metadata are read-only: keep the value cell current and use
   // double-click to open the matching definition editor.
   connect(paramView->selectionModel(), &QItemSelectionModel::currentChanged, this,
           [this](const QModelIndex &current, const QModelIndex &) {
-            if (current.isValid() && current.column() != ParameterPageModel::ValueColumn)
+            const int row = paramGrid->parameterRow(current);
+            if (row >= 0 && paramGrid->fieldAt(current.column()) != ParameterGridModel::ValueField)
               paramView->selectionModel()->setCurrentIndex(
-                  paramModel->index(current.row(), ParameterPageModel::ValueColumn),
+                  paramGrid->cellFor(row, ParameterGridModel::ValueField),
                   QItemSelectionModel::ClearAndSelect);
           });
   connect(paramView, &QTableView::doubleClicked, this, [this](const QModelIndex &index) {
-    if (!index.isValid() || index.column() == ParameterPageModel::ValueColumn)
+    const int row = paramGrid->parameterRow(index);
+    const int field = paramGrid->fieldAt(index.column());
+    if (row < 0 || field == ParameterGridModel::ValueField)
       return;
-    if (index.column() == ParameterPageModel::TypeColumn)
-      changeParameterType(index.row());
+    if (field == ParameterGridModel::TypeField)
+      changeParameterType(row);
     else
       editParameterAttributes();
   });
+  parameterLayoutTimer = new QTimer(this);
+  parameterLayoutTimer->setSingleShot(true);
+  connect(parameterLayoutTimer, &QTimer::timeout, this, &SDDSEditor::layoutParameterGrid);
+  // Values and definitions change the widths each group needs.
+  connect(paramModel, &QAbstractItemModel::dataChanged, parameterLayoutTimer,
+          [this]() { parameterLayoutTimer->start(0); });
+  connect(paramModel, &QAbstractItemModel::headerDataChanged, parameterLayoutTimer,
+          [this]() { parameterLayoutTimer->start(0); });
   paramBox->setBody(paramView);
   dataSplitter->addWidget(paramBox);
 
@@ -4768,11 +5302,14 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
             if (rowFilterActive)
               refreshColumnRowFilter(false);
           });
-  columnView->setItemDelegate(new SDDSItemDelegate(
+  SDDSItemDelegate *columnDelegate = new SDDSItemDelegate(
       [this](const QModelIndex &idx) {
         return dataset.layout.column_definition[idx.column()].type;
       },
-      undoStack, columnView));
+      undoStack, columnView);
+  columnDelegate->setGridLines(true);
+  columnView->setItemDelegate(columnDelegate);
+  columnView->setShowGrid(false);
   /*
    * ResizeToContents can scan the model as soon as it is reset.  Keep the
    * header interactive and perform one explicitly bounded sizing pass after
@@ -4853,11 +5390,16 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
             if (!updatingModels)
               markDirty();
           });
-  arrayView->setItemDelegate(new SDDSItemDelegate(
+  SDDSItemDelegate *arrayDelegate = new SDDSItemDelegate(
       [this](const QModelIndex &idx) {
         return dataset.layout.array_definition[idx.column()].type;
       },
-      undoStack, arrayView));
+      undoStack, arrayView);
+  arrayDelegate->setGridLines(true);
+  // Cells past the end of a shorter array are hatched, unlike empty strings.
+  arrayDelegate->setPaddingFunc([this](const QModelIndex &idx) { return arrayModel->isPadding(idx); });
+  arrayView->setItemDelegate(arrayDelegate);
+  arrayView->setShowGrid(false);
   arrayView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
   arrayView->horizontalHeader()->setResizeContentsPrecision(200);
   arrayView->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -4895,6 +5437,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   dataSplitter->setStretchFactor(0, 0);
   dataSplitter->setStretchFactor(1, 1);
   dataSplitter->setStretchFactor(2, 1);
+  buildOutline();
 
   // shortcuts for copy/paste
   QShortcut *copySc = new QShortcut(QKeySequence::Copy, this);
@@ -5031,6 +5574,11 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   messagesAct->setText(tr("Messages"));
   messagesAct->setShortcut(QKeySequence(tr("Ctrl+Shift+L")));
   viewMenu->addAction(messagesAct);
+  QAction *outlineAct = viewMenu->addAction(tr("Outline"));
+  outlineAct->setCheckable(true);
+  outlineAct->setChecked(true);
+  outlineAct->setShortcut(QKeySequence(tr("Ctrl+Shift+O")));
+  connect(outlineAct, &QAction::toggled, outlinePanel, &QWidget::setVisible);
   viewMenu->addSeparator();
   for (DataPanel *panel : {paramBox, colBox, arrayBox}) {
     QAction *panelAct = viewMenu->addAction(panel->toggleButton()->text());
@@ -5105,7 +5653,18 @@ void SDDSEditor::buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoA
   }
   mainToolBar->addSeparator();
 
-  addLabel(tr("Page"));
+  // One stepper control: ‹ | Page 1 ▾ of 2 | ›
+  QFrame *pageStepper = new QFrame(mainToolBar);
+  pageStepper->setObjectName("pageStepper");
+  QHBoxLayout *stepperLayout = new QHBoxLayout(pageStepper);
+  stepperLayout->setContentsMargins(1, 1, 1, 1);
+  stepperLayout->setSpacing(0);
+  auto addStepperRule = [pageStepper, stepperLayout]() {
+    QFrame *rule = new QFrame(pageStepper);
+    rule->setObjectName("stepperRule");
+    rule->setFixedWidth(1);
+    stepperLayout->addWidget(rule);
+  };
   pagePrevBtn = new QToolButton(mainToolBar);
   pagePrevBtn->setObjectName("pageNav");
   pagePrevBtn->setToolTip(tr("Previous page"));
@@ -5126,10 +5685,16 @@ void SDDSEditor::buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoA
     if (pageCombo->currentIndex() + 1 < pageCombo->count())
       pageCombo->setCurrentIndex(pageCombo->currentIndex() + 1);
   });
-  mainToolBar->addWidget(pagePrevBtn);
-  mainToolBar->addWidget(pageCombo);
-  mainToolBar->addWidget(pageNextBtn);
-  pageCountLabel = addLabel(QString());
+  pageCountLabel = new QLabel(pageStepper);
+  pageCountLabel->setObjectName("pageCountLabel");
+  pageCombo->setParent(pageStepper);
+  stepperLayout->addWidget(pagePrevBtn);
+  addStepperRule();
+  stepperLayout->addWidget(pageCombo);
+  stepperLayout->addWidget(pageCountLabel);
+  addStepperRule();
+  stepperLayout->addWidget(pageNextBtn);
+  mainToolBar->addWidget(pageStepper);
   mainToolBar->addSeparator();
 
   // Checked while a row filter is active.
@@ -5163,7 +5728,7 @@ void SDDSEditor::buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoA
   QWidget *spacer = new QWidget(mainToolBar);
   spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
   mainToolBar->addWidget(spacer);
-  addLabel(tr("Save as"));
+  addLabel(tr("Save format"));
   QFrame *formatSwitch = new QFrame(mainToolBar);
   formatSwitch->setObjectName("formatSwitch");
   QHBoxLayout *formatLayout = new QHBoxLayout(formatSwitch);
@@ -5206,8 +5771,9 @@ void SDDSEditor::buildStatusBar() {
   undoStatusLabel = new QLabel(bar);
   undoStatusLabel->setObjectName("undoStatusLabel");
   bar->addPermanentWidget(undoStatusLabel);
-  messagesButton = new QToolButton(bar);
+  messagesButton = new BadgeToolButton(bar);
   messagesButton->setObjectName("messagesButton");
+  messagesButton->setText(tr("Messages"));
   messagesButton->setCheckable(true);
   messagesButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
   messagesButton->setIconSize(QSize(13, 13));
@@ -5269,9 +5835,14 @@ void SDDSEditor::updateStatusBar() {
   arrayBox->setCountText(locale.toString(acount));
 
   const bool wasModified = modifiedLabel->property("modified").toBool();
-  if (wasModified != dirty || modifiedLabel->text().isEmpty()) {
+  if (wasModified != dirty || modifiedLabel->text().isEmpty() || applyingTheme) {
     modifiedLabel->setProperty("modified", dirty);
-    modifiedLabel->setText(dirty ? QString("%1 %2").arg(QChar(0x25CF)).arg(tr("Modified")) : tr("Saved"));
+    // A green dot marks a saved document; the label turns orange when modified.
+    const EditorTheme t = editorTheme(darkPalette);
+    modifiedLabel->setTextFormat(Qt::RichText);
+    modifiedLabel->setText(dirty ? QString("%1 %2").arg(QChar(0x25CF)).arg(tr("Modified"))
+                                 : QString("<span style=\"color:%1\">%2</span> %3")
+                                       .arg(t.ok.name(), QString(QChar(0x25CF)), tr("Saved")));
     modifiedLabel->style()->unpolish(modifiedLabel);
     modifiedLabel->style()->polish(modifiedLabel);
   }
@@ -5289,14 +5860,22 @@ void SDDSEditor::updateStatusBar() {
   QTableView *view = lastCellView.data();
   const QModelIndex current = view ? view->currentIndex() : QModelIndex();
   if (loaded && current.isValid()) {
-    if (view == paramView && current.row() < pcount)
-      cell = tr("Parameter %1").arg(QString::fromLocal8Bit(dataset.layout.parameter_definition[current.row()].name));
-    else if (view == columnView && current.column() < ccount)
-      cell = tr("Row %1 %2 %3").arg(locale.toString(current.row() + 1), middleDot(),
-                                   QString::fromLocal8Bit(dataset.layout.column_definition[current.column()].name));
-    else if (view == arrayView && current.column() < acount)
-      cell = tr("Element %1 %2 %3").arg(locale.toString(current.row() + 1), middleDot(),
-                                       QString::fromLocal8Bit(dataset.layout.array_definition[current.column()].name));
+    const int parameter = view == paramView ? paramGrid->parameterRow(current) : -1;
+    if (view == paramView && parameter >= 0 && parameter < pcount) {
+      const PARAMETER_DEFINITION &def = dataset.layout.parameter_definition[parameter];
+      cell = tr("Parameter %1 %2 %3").arg(QString::fromLocal8Bit(def.name), middleDot(),
+                                         QString::fromLocal8Bit(SDDS_GetTypeName(def.type)));
+    } else if (view == columnView && current.column() < ccount) {
+      const COLUMN_DEFINITION &def = dataset.layout.column_definition[current.column()];
+      cell = tr("Row %1 %2 %3 %2 %4").arg(locale.toString(current.row() + 1), middleDot(),
+                                         QString::fromLocal8Bit(def.name),
+                                         QString::fromLocal8Bit(SDDS_GetTypeName(def.type)));
+    } else if (view == arrayView && current.column() < acount) {
+      const ARRAY_DEFINITION &def = dataset.layout.array_definition[current.column()];
+      cell = tr("Element %1 %2 %3 %2 %4").arg(locale.toString(current.row() + 1), middleDot(),
+                                             QString::fromLocal8Bit(def.name),
+                                             QString::fromLocal8Bit(SDDS_GetTypeName(def.type)));
+    }
   }
   cellStatusLabel->setText(cell);
   cellStatusLabel->setVisible(!cell.isEmpty());
@@ -5313,7 +5892,11 @@ void SDDSEditor::updateStatusBar() {
   undoStatusLabel->setText(undoText.isEmpty() ? QString() : tr("Undo: %1").arg(undoText));
   undoStatusLabel->setVisible(!undoText.isEmpty());
 
-  messagesButton->setText(unreadMessages > 0 ? tr("Messages (%1)").arg(unreadMessages) : tr("Messages"));
+  const EditorTheme t = editorTheme(darkPalette);
+  static_cast<BadgeToolButton *>(messagesButton)->setBadge(unreadMessages, t.accent, t.onAccent);
+  messagesButton->setAccessibleName(unreadMessages > 0 ? tr("Messages, %n unread", nullptr, unreadMessages)
+                                                       : tr("Messages"));
+  updateOutlineSummary();
 }
 
 /** Show the active row filter beside the Columns title and sync the toolbar. */
@@ -5334,19 +5917,491 @@ void SDDSEditor::updateFilterIndicator() {
   updateStatusBar();
 }
 
-/** Hide parameter metadata columns that no definition uses. */
-void SDDSEditor::updateParameterColumns() {
+/** Map a parameter grid cell (or a ParameterPageModel index) to ParameterPageModel. */
+QModelIndex SDDSEditor::parameterSourceIndex(const QModelIndex &index) const {
+  if (index.model() == paramModel)
+    return index;
+  return paramGrid->mapToSource(index);
+}
+
+/** The grid cell showing a parameter's value. */
+QModelIndex SDDSEditor::parameterValueCell(int row) const {
+  return paramGrid->cellFor(row, ParameterGridModel::ValueField);
+}
+
+/** Parameters with a selected cell in the grid. */
+QSet<int> SDDSEditor::selectedParameterRows() const {
+  QSet<int> rows;
+  if (!paramView->selectionModel())
+    return rows;
+  for (const QModelIndex &idx : paramView->selectionModel()->selectedIndexes()) {
+    const int row = paramGrid->parameterRow(idx);
+    if (row >= 0)
+      rows.insert(row);
+  }
+  return rows;
+}
+
+/** Selected parameters, or @p fallbackRow when it is not part of the selection. */
+QVector<int> SDDSEditor::parameterRowsOrFallback(int fallbackRow) const {
+  const int count = dataset.layout.n_parameters;
+  const QSet<int> selected = selectedParameterRows();
+  if (fallbackRow >= 0 && fallbackRow < count) {
+    if (selected.contains(fallbackRow))
+      return sortedValidIndexesDescending(selected, count);
+    return QVector<int>(1, fallbackRow);
+  }
+  if (!selected.isEmpty())
+    return sortedValidIndexesDescending(selected, count);
+  const int current = paramGrid->parameterRow(paramView->currentIndex());
+  if (current >= 0 && current < count)
+    return QVector<int>(1, current);
+  return QVector<int>();
+}
+
+/*
+ * Cells that copy, paste, delete and the formula tools act on, in model
+ * coordinates: parameter grid cells map to ParameterPageModel, so the tools
+ * see one parameter per row as they did before the grid wrapped them.
+ */
+QAbstractItemModel *SDDSEditor::editModel(QTableView *view) const {
+  return view == paramView ? static_cast<QAbstractItemModel *>(paramModel) : view->model();
+}
+
+QModelIndexList SDDSEditor::editIndexes(QTableView *view, const QModelIndexList &indexes) const {
+  if (view != paramView)
+    return indexes;
+  QModelIndexList mapped;
+  mapped.reserve(indexes.size());
+  for (const QModelIndex &idx : indexes) {
+    const QModelIndex source = paramGrid->mapToSource(idx);
+    if (source.isValid())
+      mapped.append(source);
+  }
+  return mapped;
+}
+
+/**
+ * Choose how many parameter groups fit side by side and size their fields.
+ * Each group needs room for its widest name, type badge, units, value and
+ * description; spare width goes to the values.  Groups hold at least three
+ * parameters so short lists stay readable.
+ */
+void SDDSEditor::layoutParameterGrid() {
+  if (!paramGrid || layingOutParameters)
+    return;
+  QScopedValueRollback<bool> guard(layingOutParameters, true);
   bool anyUnits = false;
   bool anyDescription = false;
-  if (datasetLoaded) {
-    for (int i = 0; i < dataset.layout.n_parameters; ++i) {
-      const PARAMETER_DEFINITION &def = dataset.layout.parameter_definition[i];
-      anyUnits = anyUnits || (def.units && *def.units);
-      anyDescription = anyDescription || (def.description && *def.description);
+  const int count = datasetLoaded ? dataset.layout.n_parameters : 0;
+  const QFontMetrics nameFm(QApplication::font());
+  const QFontMetrics valueFm(paramView->font());
+  const QFont typeFont = badgeFont(QApplication::font());
+  // Bound the sizing scan; later rows still fit or elide.
+  const int scanned = std::min(count, 5000);
+  int nameWidth = textAdvance(nameFm, tr("Name"));
+  int typeWidth = 0;
+  int unitsWidth = 0;
+  int valueWidth = 0;
+  int descriptionWidth = 0;
+  const PageStore *page = currentPage >= 0 && currentPage < pages.size() ? &pages[currentPage] : nullptr;
+  for (int i = 0; i < scanned; ++i) {
+    const PARAMETER_DEFINITION &def = dataset.layout.parameter_definition[i];
+    nameWidth = std::max(nameWidth, textAdvance(nameFm, QString::fromLocal8Bit(def.name ? def.name : "")));
+    typeWidth = std::max(typeWidth, badgeSize(typeFont, QString::fromLocal8Bit(SDDS_GetTypeName(def.type))).width());
+    if (def.units && *def.units) {
+      anyUnits = true;
+      unitsWidth = std::max(unitsWidth, textAdvance(nameFm, QString::fromLocal8Bit(def.units)));
+    }
+    if (def.description && *def.description) {
+      anyDescription = true;
+      descriptionWidth = std::max(descriptionWidth, textAdvance(nameFm, QString::fromLocal8Bit(def.description)));
+    }
+    if (page && i < page->parameters.size())
+      valueWidth = std::max(valueWidth, textAdvance(valueFm, canonicalizeForDisplay(page->parameters[i], def.type)));
+  }
+  const int pad = 20;
+  nameWidth = std::min(nameWidth + pad, 280);
+  typeWidth = std::max(typeWidth, textAdvance(nameFm, tr("Type"))) + pad;
+  unitsWidth = anyUnits ? std::min(std::max(unitsWidth, textAdvance(nameFm, tr("Units"))) + pad, 160) : 0;
+  valueWidth = std::min(std::max(valueWidth + pad, 90), 320);
+  descriptionWidth = anyDescription ? std::min(std::max(descriptionWidth + pad, 140), 360) : 0;
+  const int groupWidth = nameWidth + typeWidth + unitsWidth + valueWidth + descriptionWidth;
+
+  const int available = std::max(groupWidth, paramView->viewport()->width());
+  const int maxGroups = count > 0 ? std::max(1, std::min(6, (count + 2) / 3)) : 1;
+  const int groups = std::max(1, std::min(maxGroups, available / groupWidth));
+  const int rowsBefore = paramGrid->rowCount();
+
+  // Reflowing resets the grid; keep the selected parameters and current cell.
+  QVector<QModelIndex> selected;
+  for (const QModelIndex &idx : paramView->selectionModel()->selectedIndexes())
+    selected.append(paramGrid->mapToSource(idx));
+  const QModelIndex current = paramGrid->mapToSource(paramView->currentIndex());
+  if (groups != paramGrid->groupCount())
+    static_cast<SingleClickEditTableView *>(paramView)->finishEditing();
+  if (paramGrid->setLayout(groups, anyUnits, anyDescription)) {
+    QItemSelection selection;
+    for (const QModelIndex &source : selected) {
+      const QModelIndex cell = paramGrid->mapFromSource(source);
+      if (cell.isValid())
+        selection.select(cell, cell);
+    }
+    paramView->selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect);
+    const QModelIndex currentCell = paramGrid->mapFromSource(current);
+    if (currentCell.isValid())
+      paramView->selectionModel()->setCurrentIndex(currentCell, QItemSelectionModel::NoUpdate);
+  }
+
+  QHeaderView *header = paramView->horizontalHeader();
+  const int spare = std::max(0, paramView->viewport()->width() - groups * groupWidth) / groups;
+  for (int column = 0; column < paramGrid->columnCount(); ++column) {
+    int width = 0;
+    switch (paramGrid->fieldAt(column)) {
+    case ParameterGridModel::NameField: width = nameWidth; break;
+    case ParameterGridModel::TypeField: width = typeWidth; break;
+    case ParameterGridModel::UnitsField: width = unitsWidth; break;
+    case ParameterGridModel::ValueField: width = valueWidth + (anyDescription ? spare / 2 : spare); break;
+    case ParameterGridModel::DescriptionField: width = descriptionWidth + spare - spare / 2; break;
+    }
+    if (header->sectionSize(column) != width)
+      header->resizeSection(column, width);
+  }
+  lastParameterLayoutWidth = paramView->viewport()->width();
+
+  // A panel fitted to its rows follows the new row count.
+  if (paramGrid->rowCount() != rowsBefore && datasetLoaded && parameterPanelFitted &&
+      paramBox->height() == lastParameterFitHeight)
+    updatePanelSizing(dataset.layout.n_parameters, dataset.layout.n_columns, dataset.layout.n_arrays);
+}
+
+/** Outline rows show selection as a band; the dotted focus frame would split it. */
+class OutlineItemDelegate : public QStyledItemDelegate {
+public:
+  using QStyledItemDelegate::QStyledItemDelegate;
+
+protected:
+  void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override {
+    QStyledItemDelegate::initStyleOption(option, index);
+    option->state &= ~QStyle::State_HasFocus;
+  }
+};
+
+static void setOutlineAlignment(QTreeWidgetItem *item, int column, Qt::Alignment alignment) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 4, 0)
+  item->setTextAlignment(column, alignment);
+#else
+  item->setTextAlignment(column, int(alignment));
+#endif
+}
+
+void SDDSEditor::buildOutline() {
+  outlinePanel = new QFrame(bodySplitter);
+  outlinePanel->setObjectName("outlinePanel");
+  outlinePanel->setAttribute(Qt::WA_StyledBackground, true);
+  outlinePanel->setMinimumWidth(170);
+  QVBoxLayout *layout = new QVBoxLayout(outlinePanel);
+  layout->setContentsMargins(0, 0, 0, 0);
+  layout->setSpacing(0);
+
+  QFrame *summary = new QFrame(outlinePanel);
+  summary->setObjectName("outlineSummary");
+  QVBoxLayout *summaryLayout = new QVBoxLayout(summary);
+  summaryLayout->setContentsMargins(12, 12, 12, 12);
+  summaryLayout->setSpacing(10);
+  QHBoxLayout *fileRow = new QHBoxLayout();
+  fileRow->setSpacing(10);
+  outlineFileIcon = new QLabel(summary);
+  outlineFileIcon->setObjectName("outlineFileIcon");
+  outlineFileIcon->setFixedSize(32, 32);
+  outlineFileIcon->setAlignment(Qt::AlignCenter);
+  fileRow->addWidget(outlineFileIcon);
+  QVBoxLayout *fileText = new QVBoxLayout();
+  fileText->setSpacing(0);
+  outlineFileName = new QLabel(summary);
+  outlineFileName->setObjectName("outlineFileName");
+  outlineDescription = new QLabel(summary);
+  outlineDescription->setObjectName("outlineDescription");
+  QFont smallFont = outlineDescription->font();
+  smallFont.setPointSizeF(std::max<qreal>(7.0, smallFont.pointSizeF() - 1));
+  outlineDescription->setFont(smallFont);
+  for (QLabel *label : {outlineFileName, outlineDescription}) {
+    label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    label->setTextFormat(Qt::PlainText);
+    fileText->addWidget(label);
+  }
+  fileRow->addLayout(fileText, 1);
+  summaryLayout->addLayout(fileRow);
+  QHBoxLayout *stats = new QHBoxLayout();
+  stats->setSpacing(6);
+  auto addStat = [&](const QString &label) {
+    QFrame *box = new QFrame(summary);
+    box->setObjectName("outlineStat");
+    QVBoxLayout *boxLayout = new QVBoxLayout(box);
+    boxLayout->setContentsMargins(8, 4, 8, 4);
+    boxLayout->setSpacing(0);
+    QLabel *value = new QLabel(box);
+    value->setObjectName("outlineStatValue");
+    QLabel *caption = new QLabel(label, box);
+    caption->setObjectName("outlineStatLabel");
+    caption->setFont(smallFont);
+    boxLayout->addWidget(value);
+    boxLayout->addWidget(caption);
+    stats->addWidget(box, 1);
+    return value;
+  };
+  outlinePagesValue = addStat(tr("Pages"));
+  outlineRowsValue = addStat(tr("Rows"));
+  outlineVersionValue = addStat(tr("Version"));
+  summaryLayout->addLayout(stats);
+  layout->addWidget(summary);
+
+  outlineFilter = new QLineEdit(outlinePanel);
+  outlineFilter->setObjectName("outlineFilter");
+  outlineFilter->setPlaceholderText(tr("Filter names"));
+  outlineFilter->setClearButtonEnabled(true);
+  outlineFilter->setToolTip(tr("Show only parameters, columns and arrays whose names contain this text"));
+  QAction *filterIcon = outlineFilter->addAction(QIcon(), QLineEdit::LeadingPosition);
+  bindIcon(filterIcon, IconSearch, ToneMuted);
+  QWidget *filterBox = new QWidget(outlinePanel);
+  QVBoxLayout *filterLayout = new QVBoxLayout(filterBox);
+  filterLayout->setContentsMargins(10, 10, 10, 6);
+  filterLayout->addWidget(outlineFilter);
+  layout->addWidget(filterBox);
+
+  outlineTree = new QTreeWidget(outlinePanel);
+  outlineTree->setObjectName("outlineTree");
+  outlineTree->setColumnCount(2);
+  outlineTree->setHeaderHidden(true);
+  outlineTree->setRootIsDecorated(false);
+  outlineTree->setIndentation(16);
+  outlineTree->setUniformRowHeights(true);
+  outlineTree->setFrameShape(QFrame::NoFrame);
+  outlineTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  outlineTree->setSelectionMode(QAbstractItemView::SingleSelection);
+  outlineTree->setItemDelegate(new OutlineItemDelegate(outlineTree));
+  outlineTree->header()->setStretchLastSection(false);
+  outlineTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+  outlineTree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+  const QString groupNames[] = {tr("Parameters"), tr("Columns"), tr("Arrays")};
+  for (const QString &name : groupNames) {
+    QTreeWidgetItem *group = new QTreeWidgetItem(outlineTree, QStringList{name, QString()});
+    QFont bold = group->font(0);
+    bold.setBold(true);
+    group->setFont(0, bold);
+    group->setFlags(Qt::ItemIsEnabled);
+    setOutlineAlignment(group, 1, Qt::AlignRight | Qt::AlignVCenter);
+    group->setExpanded(true);
+  }
+  layout->addWidget(outlineTree, 1);
+  bodySplitter->insertWidget(0, outlinePanel);
+  bodySplitter->setStretchFactor(0, 0);
+  bodySplitter->setStretchFactor(1, 1);
+  bodySplitter->setSizes({230, 970});
+
+  outlineTimer = new QTimer(this);
+  outlineTimer->setSingleShot(true);
+  connect(outlineTimer, &QTimer::timeout, this, &SDDSEditor::rebuildOutline);
+  // Definitions are renamed, retyped, inserted, deleted and reordered through these.
+  for (QAbstractItemModel *model : {static_cast<QAbstractItemModel *>(paramModel),
+                                    static_cast<QAbstractItemModel *>(columnModel),
+                                    static_cast<QAbstractItemModel *>(arrayModel)}) {
+    connect(model, &QAbstractItemModel::modelReset, outlineTimer, [this]() { outlineTimer->start(0); });
+    connect(model, &QAbstractItemModel::headerDataChanged, outlineTimer, [this]() { outlineTimer->start(0); });
+  }
+  // Parameter types change through refreshMetadata's dataChanged.
+  connect(paramModel, &QAbstractItemModel::dataChanged, outlineTimer,
+          [this](const QModelIndex &, const QModelIndex &bottomRight) {
+            if (bottomRight.column() != ParameterPageModel::ValueColumn)
+              outlineTimer->start(0);
+          });
+  connect(outlineFilter, &QLineEdit::textChanged, this, &SDDSEditor::filterOutline);
+  connect(outlineTree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *item) {
+    if (!item->parent()) {
+      item->setExpanded(!item->isExpanded());
+      return;
+    }
+    navigateToOutlineItem(item);
+  });
+  connect(outlineTree, &QTreeWidget::itemExpanded, this, [this]() { updateOutlineIcons(); });
+  connect(outlineTree, &QTreeWidget::itemCollapsed, this, [this]() { updateOutlineIcons(); });
+  // Highlight the definition holding the current cell.
+  for (QTableView *view : {paramView, columnView, arrayView})
+    connect(view->selectionModel(), &QItemSelectionModel::currentChanged, this,
+            [this]() { syncOutlineSelection(); });
+}
+
+/** Item data: which panel (0-2) and definition index an outline entry names. */
+static const int OutlineKindRole = Qt::UserRole + 51;
+static const int OutlineIndexRole = Qt::UserRole + 52;
+
+void SDDSEditor::rebuildOutline() {
+  if (!outlineTree)
+    return;
+  const EditorTheme t = editorTheme(darkPalette);
+  const QLocale locale;
+  const int counts[] = {datasetLoaded ? dataset.layout.n_parameters : 0,
+                        datasetLoaded ? dataset.layout.n_columns : 0,
+                        datasetLoaded ? dataset.layout.n_arrays : 0};
+  QHash<int32_t, QIcon> dots;
+  auto dotFor = [&](int32_t type) {
+    if (!dots.contains(type)) {
+      QColor bg, fg;
+      typeBadgeColors(t, type, &bg, &fg);
+      const qreal ratio = devicePixelRatioF();
+      QPixmap pixmap(QSize(8, 8) * ratio);
+      pixmap.setDevicePixelRatio(ratio);
+      pixmap.fill(Qt::transparent);
+      QPainter painter(&pixmap);
+      painter.setRenderHint(QPainter::Antialiasing);
+      painter.setPen(Qt::NoPen);
+      painter.setBrush(fg);
+      painter.drawRoundedRect(QRectF(0.5, 0.5, 7, 7), 2, 2);
+      painter.end();
+      dots.insert(type, QIcon(pixmap));
+    }
+    return dots.value(type);
+  };
+  QSignalBlocker blocker(outlineTree);
+  outlineTree->setIconSize(QSize(8, 8));
+  for (int kind = 0; kind < 3; ++kind) {
+    QTreeWidgetItem *group = outlineTree->topLevelItem(kind);
+    qDeleteAll(group->takeChildren());
+    group->setText(1, locale.toString(counts[kind]));
+    group->setForeground(1, t.muted);
+    QList<QTreeWidgetItem *> children;
+    for (int i = 0; i < counts[kind]; ++i) {
+      const char *name = kind == 0 ? dataset.layout.parameter_definition[i].name
+                         : kind == 1 ? dataset.layout.column_definition[i].name
+                                     : dataset.layout.array_definition[i].name;
+      const int32_t type = kind == 0 ? dataset.layout.parameter_definition[i].type
+                           : kind == 1 ? dataset.layout.column_definition[i].type
+                                       : dataset.layout.array_definition[i].type;
+      QTreeWidgetItem *item = new QTreeWidgetItem(QStringList{QString::fromLocal8Bit(name ? name : ""),
+                                                              QString::fromLocal8Bit(SDDS_GetTypeName(type))});
+      item->setIcon(0, dotFor(type));
+      item->setForeground(1, t.muted);
+      setOutlineAlignment(item, 1, Qt::AlignRight | Qt::AlignVCenter);
+      item->setData(0, OutlineKindRole, kind);
+      item->setData(0, OutlineIndexRole, i);
+      item->setToolTip(0, item->text(0));
+      children.append(item);
+    }
+    group->addChildren(children);
+  }
+  updateOutlineIcons();
+  filterOutline(outlineFilter->text());
+  syncOutlineSelection();
+  updateOutlineSummary();
+}
+
+void SDDSEditor::updateOutlineIcons() {
+  if (!outlineTree)
+    return;
+  const EditorTheme t = editorTheme(darkPalette);
+  const QIcon expanded = makeEditorIcon(IconChevronDown, t.muted, t.muted);
+  const QIcon collapsed = makeEditorIcon(IconChevronRight, t.muted, t.muted);
+  for (int kind = 0; kind < outlineTree->topLevelItemCount(); ++kind) {
+    QTreeWidgetItem *group = outlineTree->topLevelItem(kind);
+    group->setIcon(0, group->isExpanded() ? expanded : collapsed);
+  }
+}
+
+void SDDSEditor::updateOutlineSummary() {
+  if (!outlinePanel)
+    return;
+  const QLocale locale;
+  const QString file = currentFilename.isEmpty() ? (datasetLoaded ? tr("Untitled") : tr("No file open"))
+                                                 : QFileInfo(currentFilename).fileName();
+  if (outlineFileName->text() != file) {
+    outlineFileName->setText(file);
+    outlineFileName->setToolTip(QDir::toNativeSeparators(currentFilename));
+  }
+  QString description;
+  if (datasetLoaded && dataset.layout.description && *dataset.layout.description)
+    description = QString::fromLocal8Bit(dataset.layout.description);
+  else if (datasetLoaded && dataset.layout.contents && *dataset.layout.contents)
+    description = QString::fromLocal8Bit(dataset.layout.contents);
+  outlineDescription->setText(description);
+  outlineDescription->setToolTip(datasetLoaded && dataset.layout.contents && *dataset.layout.contents
+                                     ? tr("Contents: %1").arg(QString::fromLocal8Bit(dataset.layout.contents))
+                                     : QString());
+  outlineDescription->setVisible(!description.isEmpty());
+  const bool loaded = datasetLoaded && !pages.isEmpty();
+  outlinePagesValue->setText(loaded ? locale.toString(pages.size()) : QStringLiteral("-"));
+  outlineRowsValue->setText(loaded && dataset.layout.n_columns > 0 ? locale.toString(columnModel->rowCount())
+                                                                   : QStringLiteral("-"));
+  outlineVersionValue->setText(datasetLoaded ? QString("SDDS%1").arg(dataset.layout.version) : QStringLiteral("-"));
+}
+
+void SDDSEditor::filterOutline(const QString &text) {
+  if (!outlineTree)
+    return;
+  for (int kind = 0; kind < outlineTree->topLevelItemCount(); ++kind) {
+    QTreeWidgetItem *group = outlineTree->topLevelItem(kind);
+    for (int i = 0; i < group->childCount(); ++i) {
+      QTreeWidgetItem *item = group->child(i);
+      item->setHidden(!text.isEmpty() && !item->text(0).contains(text, Qt::CaseInsensitive));
     }
   }
-  paramView->setColumnHidden(ParameterPageModel::UnitsColumn, !anyUnits);
-  paramView->setColumnHidden(ParameterPageModel::DescriptionColumn, !anyDescription);
+}
+
+/** Select the outline entry for the definition holding the current cell. */
+void SDDSEditor::syncOutlineSelection() {
+  if (!outlineTree || !lastCellView)
+    return;
+  int kind = -1;
+  int index = -1;
+  if (lastCellView == paramView) {
+    kind = 0;
+    index = paramGrid->parameterRow(paramView->currentIndex());
+  } else if (lastCellView == columnView) {
+    kind = 1;
+    index = columnView->currentIndex().column();
+  } else if (lastCellView == arrayView) {
+    kind = 2;
+    index = arrayView->currentIndex().column();
+  }
+  QTreeWidgetItem *group = kind >= 0 ? outlineTree->topLevelItem(kind) : nullptr;
+  QTreeWidgetItem *item = group && index >= 0 && index < group->childCount() ? group->child(index) : nullptr;
+  QSignalBlocker blocker(outlineTree);
+  if (!item) {
+    outlineTree->clearSelection();
+    return;
+  }
+  outlineTree->setCurrentItem(item);
+  outlineTree->scrollToItem(item);
+}
+
+/** Show the definition an outline entry names in its panel. */
+void SDDSEditor::navigateToOutlineItem(QTreeWidgetItem *item) {
+  const int kind = item->data(0, OutlineKindRole).toInt();
+  const int index = item->data(0, OutlineIndexRole).toInt();
+  DataPanel *panels[] = {paramBox, colBox, arrayBox};
+  if (kind < 0 || kind > 2)
+    return;
+  panels[kind]->setChecked(true);
+  QTableView *view = kind == 0 ? paramView : kind == 1 ? columnView : arrayView;
+  QModelIndex target;
+  if (kind == 0) {
+    target = parameterValueCell(index);
+  } else {
+    // Columns keep their first visible row; arrays start at the first element.
+    int row = view->currentIndex().isValid() && kind == 1 ? view->currentIndex().row() : 0;
+    while (kind == 1 && row < columnModel->rowCount() && columnView->isRowHidden(row))
+      ++row;
+    target = view->model()->index(row, index);
+  }
+  view->setFocus();
+  if (target.isValid()) {
+    view->selectionModel()->setCurrentIndex(target, QItemSelectionModel::ClearAndSelect);
+    view->scrollTo(target);
+  } else if (kind > 0 && index < view->model()->columnCount()) {
+    // Columns and arrays without rows have no cell to select; show the header.
+    view->horizontalScrollBar()->setValue(view->horizontalHeader()->sectionPosition(index));
+  }
+  lastCellView = view;
+  updateStatusBar();
 }
 
 /** Capture user-selected columns without letting a search result narrow the scope. */
@@ -5473,24 +6528,14 @@ QTableView *SDDSEditor::focusedTable() const {
 }
 
 bool SDDSEditor::eventFilter(QObject *watched, QEvent *event) {
+  // Reflow the parameter grid when the panel width changes.
+  if (event->type() == QEvent::Resize && paramView && watched == paramView->viewport() &&
+      paramView->viewport()->width() != lastParameterLayoutWidth && parameterLayoutTimer)
+    parameterLayoutTimer->start(0);
   if (event->type() == QEvent::MouseButtonPress) {
     QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
     if (mouse->button() == Qt::RightButton) {
-      if (watched == paramView->verticalHeader()) {
-        pendingParameterHeaderRows.clear();
-        int row = paramView->verticalHeader()->logicalIndexAt(mouse->pos());
-        QSet<int> selected;
-        collectSelectedRows(paramView, &selected);
-        QVector<int> rows = sortedValidIndexesDescending(
-            selected, dataset.layout.n_parameters);
-        if (row >= 0) {
-          if (!lastParameterSelectionRows.isEmpty() &&
-              lastParameterSelectionRows.contains(row))
-            rows = lastParameterSelectionRows;
-          if (rows.contains(row))
-            pendingParameterHeaderRows = rows;
-        }
-      } else if (watched == columnView->horizontalHeader()) {
+      if (watched == columnView->horizontalHeader()) {
         pendingColumnHeaderColumns.clear();
         int column = columnView->horizontalHeader()->logicalIndexAt(mouse->pos());
         QSet<int> selected;
@@ -5524,20 +6569,50 @@ bool SDDSEditor::eventFilter(QObject *watched, QEvent *event) {
   return QMainWindow::eventFilter(watched, event);
 }
 
-void SDDSEditor::parameterMoved(int, int, int) {
+/** Move the selected parameters (or @p row) up or down by one position. */
+void SDDSEditor::moveParameters(int row, int delta) {
+  if (!datasetLoaded || applyingStructuralUndo || delta == 0)
+    return;
+  const int count = dataset.layout.n_parameters;
+  QVector<int> rows = parameterRowsOrFallback(row);
+  std::sort(rows.begin(), rows.end());
+  if (rows.isEmpty() || (delta < 0 && rows.first() == 0) || (delta > 0 && rows.last() == count - 1))
+    return;
+  QVector<int> order(count);
+  for (int i = 0; i < count; ++i)
+    order[i] = i;
+  // Swap each moved parameter with its neighbor, starting nearest the destination.
+  if (delta < 0) {
+    for (int r : rows)
+      std::swap(order[r], order[r - 1]);
+  } else {
+    for (int i = rows.size() - 1; i >= 0; --i)
+      std::swap(order[rows[i]], order[rows[i] + 1]);
+  }
+  if (!reorderParameters(order))
+    return;
+  QItemSelection selection;
+  for (int r : rows) {
+    const QModelIndex cell = parameterValueCell(r + delta);
+    selection.select(cell, cell);
+  }
+  paramView->selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect);
+  paramView->selectionModel()->setCurrentIndex(parameterValueCell(row + delta), QItemSelectionModel::NoUpdate);
+}
+
+/** Reorder parameter definitions and values so that new position i holds old parameter order[i]. */
+bool SDDSEditor::reorderParameters(const QVector<int> &order) {
   if (!datasetLoaded)
-    return;
+    return false;
   if (applyingStructuralUndo)
-    return;
+    return false;
+  int count = dataset.layout.n_parameters;
+  if (order.size() != count)
+    return false;
   commitModels();
   StructuralSnapshot before;
   if (!captureStructuralSnapshot(this, &before))
-    return;
-  QHeaderView *vh = paramView->verticalHeader();
-  int count = dataset.layout.n_parameters;
-  QVector<int> order(count);
-  for (int i = 0; i < count; ++i)
-    order[i] = vh->logicalIndex(i);
+    return false;
   QVector<int> oldToNew(count);
   for (int i = 0; i < count; ++i)
     oldToNew[order[i]] = i;
@@ -5546,7 +6621,7 @@ void SDDSEditor::parameterMoved(int, int, int) {
       (PARAMETER_DEFINITION *)malloc(sizeof(PARAMETER_DEFINITION) * count);
   if (!newDefs) {
     QMessageBox::warning(this, tr("SDDS"), tr("Out of memory while reordering parameters"));
-    return;
+    return false;
   }
   for (int i = 0; i < count; ++i)
     newDefs[i] = oldDefs[order[i]];
@@ -5567,21 +6642,12 @@ void SDDSEditor::parameterMoved(int, int, int) {
                          tr("Failed to save reordered parameter layout"));
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     restoreStructuralSnapshot(this, before);
-    return;
+    return false;
   }
   populateModels();
-
-  // Keep the header visual order in sync with the reordered model.
-  vh->blockSignals(true);
-  for (int logical = 0; logical < count; ++logical) {
-    int visual = vh->visualIndex(logical);
-    if (visual != logical)
-      vh->moveSection(visual, logical);
-  }
-  vh->blockSignals(false);
-
   markDirty();
   pushStructuralUndoCommand(this, std::move(before), tr("Reorder Parameters"));
+  return true;
 }
 
 void SDDSEditor::columnMoved(int, int, int) {
@@ -5709,9 +6775,12 @@ void SDDSEditor::copy() {
   if (!view)
     return;
   flushPendingEdits();
-  QModelIndexList indexes = visibleSelectedIndexes(view);
+  // Parameter cells are copied in parameter order, one parameter per row.
+  QModelIndexList indexes = editIndexes(view, visibleSelectedIndexes(view));
   if (indexes.isEmpty())
     return;
+  QAbstractItemModel *model = editModel(view);
+  const bool filtered = view != paramView;
 
   int minRow = std::numeric_limits<int>::max();
   int maxRow = std::numeric_limits<int>::min();
@@ -5747,14 +6816,14 @@ void SDDSEditor::copy() {
   QStringList rowTexts;
   QJsonArray cellRows;
   for (int r = minRow; r <= maxRow; ++r) {
-    if (view->isRowHidden(r))
+    if (filtered && view->isRowHidden(r))
       continue;
     QStringList cols;
     QJsonArray rowCells;
     cols.reserve(maxCol - minCol + 1);
     for (int c = minCol; c <= maxCol; ++c) {
       if (selected.contains(keyFor(r, c))) {
-        QModelIndex idx = view->model()->index(r, c);
+        QModelIndex idx = model->index(r, c);
         const QString value = idx.isValid() ? idx.data().toString() : QString();
         cols << value;
         rowCells.append(value);
@@ -5777,9 +6846,12 @@ void SDDSEditor::paste() {
   if (!view)
     return;
   flushPendingEdits();
-  QModelIndex start = view->currentIndex();
+  // Pasted rows fill successive parameters, not successive grid rows.
+  const QModelIndexList startCell = editIndexes(view, {view->currentIndex()});
+  QModelIndex start = startCell.isEmpty() ? QModelIndex() : startCell.first();
   if (!start.isValid())
     return;
+  const bool filtered = view != paramView;
   QString text = QApplication::clipboard()->text();
   // Cells copied from a non-contiguous selection carry null gaps to skip.
   QVector<QStringList> rows;
@@ -5816,11 +6888,11 @@ void SDDSEditor::paste() {
   bool changed = false;
   bool warned = false;
   bool macroStarted = false;
-  QAbstractItemModel *model = view->model();
+  QAbstractItemModel *model = editModel(view);
   // Fill successive visible rows; rows hidden by the row filter are skipped.
   QVector<int> targetRows;
   for (int r = 0, row = start.row(); r < rows.size(); ++r, ++row) {
-    while (row < model->rowCount() && view->isRowHidden(row))
+    while (filtered && row < model->rowCount() && view->isRowHidden(row))
       ++row;
     targetRows << row;
   }
@@ -5836,7 +6908,7 @@ void SDDSEditor::paste() {
         continue;
       int type = SDDS_STRING;
       if (view == paramView)
-        type = dataset.layout.parameter_definition[idx.row()].type;
+        type = paramModel->typeAt(idx.row());
       else if (view == columnView)
         type = dataset.layout.column_definition[idx.column()].type;
       else if (view == arrayView)
@@ -7658,7 +8730,7 @@ void SDDSEditor::populateModels() {
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   }
   paramModel->refresh();
-  updateParameterColumns();
+  layoutParameterGrid();
   ++doneUnits;
   if (progress)
     updateProgress(false);
@@ -7814,6 +8886,9 @@ void SDDSEditor::updatePanelSizing(int32_t pcount, int32_t ccount, int32_t acoun
     sizes[columnData ? 1 : 2] = remaining;
   }
   dataSplitter->setSizes(sizes);
+  // layoutParameterGrid refits only a panel still at this automatic height.
+  parameterPanelFitted = fitParameters;
+  lastParameterFitHeight = dataSplitter->sizes().value(0);
 }
 
 /** Reapply panel sizing with final geometry for files loaded before show(). */
@@ -7978,10 +9053,9 @@ void SDDSEditor::editParameterAttributes() {
   if (!datasetLoaded)
     return;
   commitModels();
-  QModelIndex idx = paramView->currentIndex();
-  if (!idx.isValid())
+  const int row = paramGrid->parameterRow(paramView->currentIndex());
+  if (row < 0 || row >= dataset.layout.n_parameters)
     return;
-  int row = idx.row();
   PARAMETER_DEFINITION *def = &dataset.layout.parameter_definition[row];
   QDialog dlg(this);
   dlg.setWindowTitle(tr("Parameter Attributes"));
@@ -8122,7 +9196,7 @@ void SDDSEditor::editParameterAttributes() {
     }
   }
   paramModel->refresh();
-  updateParameterColumns();
+  layoutParameterGrid();
   markDirty();
   pushStructuralUndoCommand(this, std::move(before),
                             tr("Edit Parameter Attributes"));
@@ -8493,40 +9567,41 @@ void SDDSEditor::showParameterMenu(QTableView *view, int row,
                                    const QPoint &globalPos) {
   if (row < 0 || row >= dataset.layout.n_parameters)
     return;
-  QVector<int> rowsForDelete = selectedRowsOrFallback(
-      paramView, dataset.layout.n_parameters, row);
-  if (!pendingParameterHeaderRows.isEmpty() &&
-      pendingParameterHeaderRows.contains(row))
-    rowsForDelete = pendingParameterHeaderRows;
-  else if (!lastParameterSelectionRows.isEmpty() &&
-           lastParameterSelectionRows.contains(row))
+  QVector<int> rowsForDelete = parameterRowsOrFallback(row);
+  if (!lastParameterSelectionRows.isEmpty() &&
+      lastParameterSelectionRows.contains(row))
     rowsForDelete = lastParameterSelectionRows;
-  pendingParameterHeaderRows.clear();
 
   QMenu menu(view);
   QAction *attrAct = menu.addAction(tr("Attributes..."));
+  QAction *typeAct = menu.addAction(tr("Change Type..."));
+  menu.addSeparator();
+  // Moving replaces dragging row headers, which the wrapped grid does not have.
+  QVector<int> moving = rowsForDelete;
+  std::sort(moving.begin(), moving.end());
+  QAction *upAct = menu.addAction(tr("Move Up"));
+  QAction *downAct = menu.addAction(tr("Move Down"));
+  upAct->setEnabled(!moving.isEmpty() && moving.first() > 0);
+  downAct->setEnabled(!moving.isEmpty() && moving.last() < dataset.layout.n_parameters - 1);
   menu.addSeparator();
   QAction *delAct = menu.addAction(tr("Delete"));
   QAction *chosen = menu.exec(globalPos);
   if (chosen == attrAct) {
-    paramView->setCurrentIndex(paramModel->index(row, ParameterPageModel::ValueColumn));
+    paramView->setCurrentIndex(parameterValueCell(row));
     editParameterAttributes();
+  } else if (chosen == typeAct) {
+    changeParameterType(row);
+  } else if (chosen == upAct || chosen == downAct) {
+    moveParameters(row, chosen == upAct ? -1 : 1);
   } else if (chosen == delAct)
     deleteParameterRows(rowsForDelete);
 }
 
-void SDDSEditor::parameterHeaderMenuRequested(const QPoint &pos) {
-  int row = paramView->verticalHeader()->logicalIndexAt(pos);
-  showParameterMenu(paramView, row,
-                    paramView->verticalHeader()->mapToGlobal(pos));
-}
-
 void SDDSEditor::parameterCellMenuRequested(const QPoint &pos) {
-  QModelIndex idx = paramView->indexAt(pos);
-  if (!idx.isValid())
+  const int row = paramGrid->parameterRow(paramView->indexAt(pos));
+  if (row < 0)
     return;
-  pendingParameterHeaderRows.clear();
-  showParameterMenu(paramView, idx.row(), paramView->viewport()->mapToGlobal(pos));
+  showParameterMenu(paramView, row, paramView->viewport()->mapToGlobal(pos));
 }
 
 void SDDSEditor::changeColumnType(int column) {
@@ -10116,10 +11191,7 @@ void SDDSEditor::deleteParameterSelection(int fallbackRow) {
   if (!datasetLoaded)
     return;
   commitModels();
-  SDDS_LAYOUT *layout = &dataset.layout;
-  QVector<int> rows = selectedRowsOrFallback(paramView, layout->n_parameters,
-                                             fallbackRow);
-  deleteParameterRows(rows);
+  deleteParameterRows(parameterRowsOrFallback(fallbackRow));
 }
 
 void SDDSEditor::deleteParameterRows(const QVector<int> &selectedRows) {
@@ -10586,7 +11658,7 @@ void SDDSEditor::fillSeries(QTableView *view) {
   }
 
   flushPendingEdits();
-  QModelIndexList selection = editableSelectedIndexes(view, true);
+  QModelIndexList selection = editIndexes(view, editableSelectedIndexes(view, true));
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Fill Series"), tr("Select one or more cells first."));
     return;
@@ -10638,7 +11710,7 @@ void SDDSEditor::fillSeries(QTableView *view) {
 
     int type = SDDS_STRING;
     if (view == paramView)
-      type = dataset.layout.parameter_definition[idx.row()].type;
+      type = paramModel->typeAt(idx.row());
     else if (view == columnView)
       type = dataset.layout.column_definition[idx.column()].type;
     else if (view == arrayView)
@@ -10680,7 +11752,7 @@ void SDDSEditor::fillSeries(QTableView *view) {
     updates.append({idx, newText});
   }
 
-  if (applyCellEditsWithUndo(undoStack, view->model(), updates, tr("Fill Series")))
+  if (applyCellEditsWithUndo(undoStack, editModel(view), updates,tr("Fill Series")))
     markDirty();
 }
 
@@ -10695,7 +11767,7 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
   }
 
   flushPendingEdits();
-  QModelIndexList selection = editableSelectedIndexes(view, true);
+  QModelIndexList selection = editIndexes(view, editableSelectedIndexes(view, true));
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Apply Numerical Expression"), tr("Select one or more cells first."));
     return;
@@ -10768,7 +11840,7 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
 
     int type = SDDS_STRING;
     if (view == paramView)
-      type = dataset.layout.parameter_definition[idx.row()].type;
+      type = paramModel->typeAt(idx.row());
     else if (view == columnView)
       type = dataset.layout.column_definition[idx.column()].type;
     else if (view == arrayView)
@@ -10848,7 +11920,7 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
     updates.append({idx, newText});
   }
 
-  if (applyCellEditsWithUndo(undoStack, view->model(), updates, tr("Apply Numerical Expression")))
+  if (applyCellEditsWithUndo(undoStack, editModel(view), updates,tr("Apply Numerical Expression")))
     markDirty();
 }
 
@@ -10863,7 +11935,7 @@ void SDDSEditor::applyTextFormula(QTableView *view) {
   }
 
   flushPendingEdits();
-  QModelIndexList selection = editableSelectedIndexes(view, true);
+  QModelIndexList selection = editIndexes(view, editableSelectedIndexes(view, true));
   if (selection.isEmpty()) {
     QMessageBox::information(this, tr("Apply Text Formula"), tr("Select one or more cells first."));
     return;
@@ -10899,7 +11971,7 @@ void SDDSEditor::applyTextFormula(QTableView *view) {
 
     int type = SDDS_STRING;
     if (view == paramView)
-      type = dataset.layout.parameter_definition[idx.row()].type;
+      type = paramModel->typeAt(idx.row());
     else if (view == columnView)
       type = dataset.layout.column_definition[idx.column()].type;
     else if (view == arrayView)
@@ -10915,7 +11987,7 @@ void SDDSEditor::applyTextFormula(QTableView *view) {
     updates.append({idx, newText, type});
   }
 
-  if (applyCellEditsWithUndo(undoStack, view->model(), updates, tr("Apply Text Formula")))
+  if (applyCellEditsWithUndo(undoStack, editModel(view), updates,tr("Apply Text Formula")))
     markDirty();
 }
 
@@ -11037,10 +12109,14 @@ void SDDSEditor::applyTheme(bool dark) {
   for (int i = 0; i < dataSplitter->count(); ++i)
     if (QSplitterHandle *handle = dataSplitter->handle(i))
       handle->update();
-  columnHeader->setColors(t.text, t.muted, t.accentText);
-  arrayHeader->setColors(t.text, t.muted, t.accentText);
+  columnHeader->setTheme(t);
+  arrayHeader->setTheme(t);
   paramModel->setMutedColor(t.muted);
-  paramView->viewport()->update();
+  for (QTableView *view : {paramView, columnView, arrayView}) {
+    if (SDDSItemDelegate *delegate = dynamic_cast<SDDSItemDelegate *>(view->itemDelegate()))
+      delegate->setTheme(t);
+    view->viewport()->update();
+  }
 
   const QColor disabled = t.muted.lighter(dark ? 70 : 140);
   for (const IconBinding &binding : iconBindings) {
@@ -11059,10 +12135,11 @@ void SDDSEditor::applyTheme(bool dark) {
   const QIcon collapsed = makeEditorIcon(IconChevronRight, t.muted, disabled);
   for (DataPanel *panel : {paramBox, colBox, arrayBox})
     panel->setToggleIcons(expanded, collapsed);
-  if (modifiedLabel) {
-    modifiedLabel->style()->unpolish(modifiedLabel);
-    modifiedLabel->style()->polish(modifiedLabel);
-  }
+  if (outlineFileIcon)
+    outlineFileIcon->setPixmap(makeEditorIcon(IconFile, t.accentText, t.accentText).pixmap(QSize(18, 18)));
+  // Rebuilds the outline's type dots and the status bar's saved dot and badge.
+  rebuildOutline();
+  updateStatusBar();
   if (helpDialog)
     helpDialog->applyTheme(t);
   applyingTheme = false;

@@ -102,6 +102,14 @@ require exact ASCII and binary round trips in plain/gzip/xz files, using each
 platform's native long-double precision (the tests select the library's 64-bit
 long-double mode on MSVC and Apple Silicon).
 
+Parameter grid checks wrap twelve parameters into groups and verify the mapping
+between grid cells and parameters, read-only name cells, a compact panel that
+shows every grid row, copy and paste across the boundary between groups, Undo
+of grid edits and pastes after the grid reflows, selection kept through a
+reflow, Move Up/Down with Undo, and outline filtering and navigation. Interface
+checks also cover header type badges and array shape chips, the outline's
+column list and SDDS version, and the Messages badge count.
+
 Input failure checks repeatedly open truncated headers, invalid modes, conflicting
 byte-order declarations and broken includes in plain/gzip/xz files. They verify
 that streams are released and the current document is preserved. The xz checks
@@ -152,12 +160,29 @@ artifacts; the supplied file is never saved or modified.
 
 ## Interface
 
-The toolbar holds Open, Save, Undo/Redo, page navigation (previous/next arrows
-and a page list), Filter rows, Plot (current column), Array viewer, and the
-ASCII/Binary save format. Parameters, columns and arrays are shown in separate
-panels. Click a panel title to collapse or expand it, or use the **View** menu.
-Each panel header shows its count and common actions (Insert and Attributes;
-Attributes edits the definition of the current cell's parameter, column or array).
+The toolbar holds Open, Save, Undo/Redo, a page stepper (previous arrow, page
+list with the page count, next arrow), Filter rows, Plot (current column), Array
+viewer, and the ASCII/Binary save format. Parameters, columns and arrays are
+shown in separate panels. Click a panel title to collapse or expand it, or use
+the **View** menu. Each panel header shows its count and common actions (Insert
+and Attributes; Attributes edits the definition of the current cell's
+parameter, column or array).
+
+The outline sidebar on the left shows the file name, its description (or
+contents), the page, row and SDDS version counts, and every parameter, column
+and array with a colored type marker. Its filter box hides names that do not
+contain the typed text, and clicking an entry shows that definition in its
+panel. The entry for the current cell is highlighted. **View → Outline**
+(Ctrl+Shift+O) hides or shows the sidebar.
+
+Types appear as colored badges: blue for integer types, green for
+floating-point types and amber for string and character. Column and array
+headers show the name above the type badge, a shape chip for arrays (`4×2`)
+and the units. The header band spans the whole table, and the selected
+column's header is tinted with an accent underline. Tables draw light row
+rules and fainter column rules. In the Arrays panel, cells past the end of an
+array shorter than the longest one are hatched, so they cannot be confused with
+empty strings.
 
 Floating-point values are shown with the fewest digits that convert back to
 exactly the same number (0.1, not 0.10000000000000001). Rows hidden by the row
@@ -208,11 +233,19 @@ to distinguish integers from fractions. This keeps long64 and ulong64 values
 from silently rounding on MSVC and Apple Silicon. Expressions that produce NaN
 or infinity store `nan`, `inf` or `-inf` in floating-point cells.
 
-The parameter table lists Name, Type, Units, Value and Description. Only the
-value can be edited; double-click the type to change it, or units/description
-to open the attribute editor. Units and Description are hidden when no
-parameter defines them. Column and array headers show the name plus the type,
-array shape and units. Numeric data is right-aligned.
+The parameter panel lists Name, Type, Units, Value and Description for each
+parameter. When the panel is wide enough, parameters wrap into up to six groups
+side by side (at least three parameters per group), filling each group top to
+bottom before the next. The grid reflows when the panel width changes, keeping
+the selection; a panel at its automatic height refits to the new row count.
+Only the value can be edited; double-click the type to change it, or the name,
+units or description to open the attribute editor. Units and Description are
+hidden when no parameter defines them. Copy, paste, Delete, Fill Series and the
+formula tools treat parameters as one list in their file order, so a paste
+continues from the end of one group into the next. Undo targets the same
+parameter after a reflow. Right-click a parameter for Attributes, Change Type,
+Move Up, Move Down and Delete; Move Up/Down move every selected parameter and
+replace the former drag-to-reorder row headers. Numeric data is right-aligned.
 
 When a row filter is active, a chip next to the Columns title shows the
 expression and visible row count. Click it to edit the filter or × to clear
@@ -222,10 +255,11 @@ back to the beginning. Selecting a search result keeps the original search
 scope; selecting cells or columns yourself changes it. Searches ignore case
 and skip filtered rows.
 
-The status bar shows the save state, file, page, current cell, row counts and
-the last undoable action. Messages that used to appear in the top console are
-shown briefly in the status bar and kept in the message log. Open the log with
-**Messages** (Ctrl+Shift+L); unread messages are counted on the button.
+The status bar shows the save state (a green dot when saved), file, page,
+current cell with its type, row counts and the last undoable action. Messages
+that used to appear in the top console are shown briefly in the status bar and
+kept in the message log. Open the log with **Messages** (Ctrl+Shift+L); a badge
+on the button counts unread messages.
 
 **Info → Help** (F1) opens a nonmodal help window that can stay open beside the
 editor. A topic list on the left follows the text as it scrolls. The find bar
