@@ -123,6 +123,13 @@ $(OBJ_DIR)/sddseditor$(EXEEXT): $(sddseditor_OBJS) $(LIBRARY) $(PROD_DEPS)
 	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/$(@F).new && mv -f $(EPICS_BIN_DIR)/$(@F).new $(EPICS_BIN_DIR)/$(@F); fi
 
 # Checked-in regression programs; all executables and fixtures stay in OBJ_DIR.
+ifeq ($(OS), Windows)
+  $(OBJ_DIR)/sddseditor_tests$(EXEEXT): LDFLAGS += Qt$(QT_MAJOR)Test.lib
+else
+  $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT): CCFLAGS += $(shell $(PKG_CONFIG) --cflags Qt$(QT_MAJOR)Test)
+  $(OBJ_DIR)/sddseditor_tests$(EXEEXT): LDFLAGS += $(shell $(PKG_CONFIG) --libs Qt$(QT_MAJOR)Test)
+endif
+
 $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT): SDDSEditor.cc SDDSEditor.h ArrayViewer.h $(OBJ_DIR)/SDDSEditor_moc.h
 
 $(OBJ_DIR)/sddseditor_tests$(EXEEXT): $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT) $(OBJ_DIR)/ArrayViewer.$(OBJEXT) $(PROD_DEPS)

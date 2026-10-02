@@ -979,7 +979,8 @@ int32_t SDDS_WriteLayout(SDDS_DATASET *SDDS_dataset) {
       break;
     }
   }
-  if ((LDBL_DIG != 18) && (layout->version == 4)) {
+  /* ASCII long doubles are decimal text, independent of the native binary representation. */
+  if ((LDBL_DIG != 18) && (layout->version == 4) && (layout->data_mode.mode == SDDS_BINARY)) {
     if (getenv("SDDS_LONGDOUBLE_64BITS") == NULL) {
       SDDS_SetError("Error: Operating system does not support 80bit float variables used by SDDS_LONGDOUBLE (SDDS_WriteLayout)\nSet SDDS_LONGDOUBLE_64BITS environment variable to read old files that used 64bit float variables for SDDS_LONGDOUBLE");
       return 0;

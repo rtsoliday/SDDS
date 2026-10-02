@@ -19,6 +19,7 @@ extern "C" {
 #include <QElapsedTimer>
 #include <QBrush>
 #include <QCheckBox>
+#include <QtTest/QTest>
 #include <clocale>
 #ifndef _WIN32
 #include <cerrno>
@@ -96,6 +97,84 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** Exercise large definitions, long search text and exact filter boundaries. */
+  static void largeDocumentInteractions() {
+    int failures = 0;
+    auto check = [&](bool condition, const char *name) {
+      fprintf(stdout, "%s %s\n", condition ? "PASS" : "FAIL", name);
+      failures += !condition;
+    };
+    {
+      SDDSEditor editor;
+      setup(editor);
+      SDDS_DeferSavingLayout(&editor.dataset, 1);
+      for (int i = 0; i < 5001; ++i) {
+        const QByteArray name = QString("P%1").arg(i).toLatin1();
+        require(SDDS_DefineParameter(&editor.dataset, name.constData(), nullptr,
+                                    i == 5000 ? "m" : nullptr,
+                                    i == 5000 ? "last parameter description" : nullptr,
+                                    nullptr, SDDS_LONG, nullptr) >= 0, "define large parameter list");
+      }
+      SDDS_DeferSavingLayout(&editor.dataset, 0);
+      require(SDDS_SaveLayout(&editor.dataset), "save large parameter layout");
+      editor.pages[0].parameters.fill("1", 5001);
+      editor.populateModels();
+      const QModelIndex units = editor.paramGrid->cellFor(5000, ParameterGridModel::UnitsField);
+      const QModelIndex description = editor.paramGrid->cellFor(5000, ParameterGridModel::DescriptionField);
+      check(units.isValid() && units.data().toString() == "m" &&
+                description.isValid() && description.data().toString() == "last parameter description",
+            "metadata after the sizing scan remains visible in the parameter grid");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.column_definition[0].type = SDDS_STRING;
+      require(SDDS_SaveLayout(&editor.dataset), "save long search layout");
+      const QString prefix(33000, QLatin1Char('a'));
+      editor.pages[0].columns[0] = {prefix + "wrong", prefix + "target", "other"};
+      editor.populateModels();
+      editor.columnView->clearSelection();
+      editor.columnSearchEdit->setText(prefix + "target");
+      editor.findInColumnPanel();
+      check(editor.columnView->currentIndex().row() == 1 &&
+                editor.columnSearchEdit->text() == prefix + "target",
+            "panel search uses the complete long pattern instead of its truncated prefix");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.column_definition[0].type = SDDS_ULONG64;
+      require(SDDS_SaveLayout(&editor.dataset), "save exact filter layout");
+      editor.pages[0].columns[0] = {"18446744073709551615", "18446744073709551614", "0"};
+      editor.populateModels();
+      editor.rowFilterActive = true;
+      editor.rowFilterExpression = "X > 18446744073709551614.5";
+      editor.refreshColumnRowFilter(false);
+      check(!editor.columnView->isRowHidden(0) && editor.columnView->isRowHidden(1) &&
+                editor.columnView->isRowHidden(2),
+            "fractional filter boundaries do not round into a neighboring 64-bit integer");
+      editor.rowFilterExpression = "X == 1.8446744073709551615e19";
+      editor.refreshColumnRowFilter(false);
+      check(!editor.columnView->isRowHidden(0) && editor.columnView->isRowHidden(1),
+            "scientific filter literals distinguish adjacent unsigned 64-bit integers");
+    }
+    for (const auto &test : QVector<QPair<QString, bool>>{
+             {"-9223372036854775808 < -9223372036854775807.5", true},
+             {"9007199254740993 != 9.007199254740992e15", true},
+             {"1.20 == 12e-1", true}, {".001 <= 1e-3", true},
+             {"-0.000 == +0e30", true}, {"-2.5 > -2.05", false},
+             {"0 < .01", true}, {"-1e-30 < 0", true},
+             {"100.01 > 1e2", true}, {"0.1 == 0.10000000000000001", false},
+             {"\"nan\" == \"nan\"", false}, {"\"inf\" > 1e30", true}}) {
+      bool pass = false;
+      QString error;
+      RowFilterParser parser(test.first, [](const QString &, bool, QString *) { return false; });
+      require(parser.parse(&pass, &error) && pass == test.second,
+              "signed, fractional, exponent and nonfinite filter comparisons");
+    }
+    require(failures == 0, "large document interaction regressions");
+  }
+
   /** User-entered formulas must not exhaust the process stack. */
   static void expressionNesting() {
     const QString nested = QString(1000000, QLatin1Char('(')) + "1" +
@@ -2392,6 +2471,217 @@ public:
     fprintf(stdout, "PASS plotting unsaved snapshot and cleanup\n");
   }
 
+  /** Plot toolbar follows the active table; arrays retain their shapes and pending edits. */
+  static void plotArrays(const QString &root) {
+    const QByteArray oldPath = qgetenv("PATH");
+    qputenv("PATH", QFile::encodeName(QCoreApplication::applicationDirPath() + "/test-bin") +
+                       QDir::listSeparator().toLatin1() + oldPath);
+    for (const QVector<int> &shape : QVector<QVector<int>>{{4}, {2, 2}, {1, 2, 2}}) {
+      SDDSEditor editor;
+      setup(editor);
+      auto &definition = editor.dataset.layout.array_definition[0];
+      require(replaceSharedLayoutString(&definition.name, &editor.dataset.original_layout.array_definition[0].name,
+                                        "A[0]", false), "rename plotted array");
+      require(resyncSortedIndexName(editor.dataset.layout.array_index, 1, 0, definition.name), "update array name index");
+      definition.type = SDDS_LONGDOUBLE;
+      definition.dimensions = shape.size();
+      require(SDDS_DefineColumn(&editor.dataset, "Time", nullptr, nullptr, nullptr,
+                                nullptr, SDDS_DOUBLE, 0) >= 0, "define array plot time column");
+      require(SDDS_SaveLayout(&editor.dataset), "save array plot layout");
+      editor.pages[0].columns.append({"100", "200", "300"});
+      editor.pages[0].arrays[0].dims = shape;
+      editor.pages.append(editor.pages[0]);
+      editor.pages[1].arrays[0].values = {"50", "60", "70", "80"};
+      editor.populateModels();
+      editor.binaryBtn->setChecked(true);
+      editor.show();
+      editor.activateWindow();
+      QCoreApplication::processEvents();
+      clickCell(editor.columnView, editor.columnModel->index(0, 0));
+      clickCell(editor.arrayView, editor.arrayModel->index(0, 0));
+      QLineEdit *cell = editor.arrayView->viewport()->findChild<QLineEdit *>();
+      require(cell && !cell->isHidden(), "array plot has a pending cell edit");
+      cell->setText("123.5");
+      auto capturePlot = [&](const QString &route, const QByteArray &option, const std::function<void()> &launch) {
+        const QString capture = root + QString("/array-plot-%1-%2.sdds").arg(shape.size()).arg(route);
+        qputenv("SDDSEDITOR_PLOT_CAPTURE", QFile::encodeName(capture));
+        launch();
+        QElapsedTimer timer;
+        timer.start();
+        while (!editor.findChildren<QProcess *>().isEmpty() && timer.elapsed() < 10000) {
+          QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+          QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        }
+        require(QFileInfo::exists(capture), "array plotting launches the snapshot probe");
+        const auto arguments = readFile(capture + ".args").split('\n');
+        require(arguments.contains(option), "Plot targets the active array or column with its literal name");
+        if (option.startsWith("-arraynames="))
+          require(!arguments.contains("-tick=xtime"), "array Plot ignores an unrelated Time column");
+        SDDSEditor snapshot;
+        require(snapshot.loadFile(capture), "read array plot snapshot");
+        require(snapshot.pages.size() == 2 && snapshot.pages[0].arrays[0].dims == shape &&
+                    snapshot.pages[0].arrays[0].values[0] == "123.5" &&
+                    snapshot.pages[1].arrays[0].values == editor.pages[1].arrays[0].values,
+                "array Plot preserves multidimensional shapes, all pages and pending edits");
+        require(editor.dirty && editor.currentFilename.isEmpty() && editor.binaryBtn->isChecked(),
+                "array Plot preserves unsaved state and binary save choice");
+        for (const QByteArray &argument : arguments)
+          if (argument.endsWith("plot.sdds"))
+            require(!QFileInfo::exists(QString::fromUtf8(argument)), "array plot snapshot is cleaned after process exit");
+      };
+      QWidget *plotButton = editor.mainToolBar->widgetForAction(editor.plotAction);
+      require(plotButton, "Plot has a toolbar button");
+      capturePlot("toolbar", "-arraynames=A\\[0\\]", [&]() { QTest::mouseClick(plotButton, Qt::LeftButton); });
+      // Reading the captured file uses another editor; restore the source window
+      // before sending synthetic input, as a native click would activate it.
+      editor.activateWindow();
+      QCoreApplication::processEvents();
+      clickCell(editor.columnView, editor.columnModel->index(0, 0));
+      require(editor.lastCellView == editor.columnView, "column focus updates the plot target despite an unchanged cursor");
+      capturePlot("column", "-col=Time,X", [&]() { QTest::mouseClick(plotButton, Qt::LeftButton); });
+      // Both tables retain a current cell; changing focus must still change Plot's target.
+      editor.activateWindow();
+      QCoreApplication::processEvents();
+      clickCell(editor.arrayView, editor.arrayModel->index(0, 0));
+      capturePlot("return", "-arraynames=A\\[0\\]", [&]() { QTest::mouseClick(plotButton, Qt::LeftButton); });
+      capturePlot("menu", "-arraynames=A\\[0\\]", [&]() {
+        chooseMenuItem("Plot");
+        editor.showArrayMenu(editor.arrayView, 0, editor.arrayView->mapToGlobal(QPoint(5, 5)));
+      });
+      editor.dirty = false;
+    }
+    qputenv("PATH", oldPath);
+    qunsetenv("SDDSEDITOR_PLOT_CAPTURE");
+    fprintf(stdout, "PASS array Plot toolbar, context menu, shapes, pending edits and focus switching\n");
+  }
+
+  /** Clearing columns is visible, preserves data, and restores all-column search. */
+  static void clearColumnSelectionInteractions() {
+    SDDSEditor editor;
+    setup(editor);
+    require(SDDS_DefineColumn(&editor.dataset, "Y", nullptr, nullptr, nullptr,
+                              nullptr, SDDS_LONG64, 0) >= 0, "define deselection test column");
+    require(SDDS_SaveLayout(&editor.dataset), "save deselection test layout");
+    editor.pages[0].columns.append({"100", "200", "300"});
+    editor.populateModels();
+    editor.show();
+    editor.activateWindow();
+    QCoreApplication::processEvents();
+    QTableView *view = editor.columnView;
+    QToolButton *clear = editor.findChild<QToolButton *>("clearColumnSelection");
+    require(clear && clear->isVisible(), "Columns panel has a visible Clear selection button");
+    QHeaderView *header = view->horizontalHeader();
+    QTest::mouseClick(header->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      QPoint(header->sectionViewportPosition(0) + header->sectionSize(0) / 2, header->height() / 2));
+    require(view->selectionModel()->selectedIndexes().size() == 3, "header click selects a whole column");
+    QTest::mouseClick(clear, Qt::LeftButton);
+    require(!view->selectionModel()->hasSelection() && !view->currentIndex().isValid() &&
+                editor.columnSearchColumns.isEmpty() && editor.lastColumnSelectionColumns.isEmpty(),
+            "Clear selection removes column highlights, current cell and search scope");
+    require(!editor.dirty && !editor.undoStack->canUndo(), "clearing column selection leaves data and undo unchanged");
+    editor.columnSearchEdit->setText("200");
+    editor.findInColumnPanel();
+    require(view->currentIndex() == editor.columnModel->index(1, 1), "search after clearing reaches other columns");
+    clickCell(view, editor.columnModel->index(0, 0));
+    QLineEdit *cell = view->viewport()->findChild<QLineEdit *>();
+    require(cell && !cell->isHidden(), "deselection test opens a cell editor");
+    cell->setText("555");
+    QTest::mouseClick(clear, Qt::LeftButton);
+    require(editor.pages[0].columns[0][0] == "555" && !view->selectionModel()->hasSelection(),
+            "Clear selection commits pending cell edits");
+    require(editor.undoStack->count() == 1, "Clear selection adds only the pending edit to Undo");
+    editor.undoStack->undo();
+    clickCell(view, editor.columnModel->index(0, 0));
+    cell = nullptr;
+    for (QLineEdit *candidate : view->viewport()->findChildren<QLineEdit *>())
+      if (!candidate->isHidden())
+        cell = candidate;
+    require(cell && !cell->isHidden(), "Escape test opens a cell editor");
+    cell->setText("777");
+    QTest::keyClick(cell, Qt::Key_Escape);
+    QCoreApplication::processEvents();
+    require(editor.pages[0].columns[0][0] == "3" && view->selectionModel()->hasSelection(),
+            "first Escape cancels editing and keeps the cell selected");
+    QTest::keyClick(view, Qt::Key_Escape);
+    require(!view->selectionModel()->hasSelection() && !view->currentIndex().isValid() &&
+                editor.columnSearchColumns.isEmpty(), "Escape in the table clears column selection and search scope");
+    editor.dirty = false;
+    fprintf(stdout, "PASS column deselection button, Escape, pending edits and all-column search\n");
+  }
+
+  /** Plot and ASCII saves must work with longdouble fields without a binary-read override. */
+  static void plotLongDouble(const QString &root) {
+    const bool modeWasSet = qEnvironmentVariableIsSet("SDDS_LONGDOUBLE_64BITS");
+    const QByteArray originalMode = qgetenv("SDDS_LONGDOUBLE_64BITS");
+    qunsetenv("SDDS_LONGDOUBLE_64BITS");
+    const QByteArray oldPath = qgetenv("PATH");
+    qputenv("PATH", QFile::encodeName(QCoreApplication::applicationDirPath() + "/test-bin") +
+                       QDir::listSeparator().toLatin1() + oldPath);
+    int failures = 0;
+    auto check = [&](bool condition, const char *name) {
+      fprintf(stdout, "%s %s\n", condition ? "PASS" : "FAIL", name);
+      failures += !condition;
+    };
+    for (bool longDoubleColumn : {false, true}) {
+      for (bool binarySave : {false, true}) {
+        SDDSEditor editor;
+        setup(editor);
+        editor.dataset.layout.array_definition[0].type = SDDS_LONGDOUBLE;
+        if (longDoubleColumn)
+          editor.dataset.layout.column_definition[0].type = SDDS_LONGDOUBLE;
+        require(SDDS_DefineParameter(&editor.dataset, "P", nullptr, nullptr, nullptr,
+                                     nullptr, SDDS_LONGDOUBLE, nullptr) >= 0, "define longdouble plot parameter");
+        require(SDDS_SaveLayout(&editor.dataset), "save longdouble plot layout");
+        const QString precise = longDoubleToText(std::nextafter(1.0L, 2.0L));
+        editor.pages[0].parameters = {precise};
+        editor.pages[0].arrays[0].values = {precise, "20", "30", "40"};
+        if (longDoubleColumn)
+          editor.pages[0].columns[0][0] = precise;
+        editor.populateModels();
+        editor.asciiBtn->setChecked(!binarySave);
+        editor.binaryBtn->setChecked(binarySave);
+        editor.markDirty();
+        const QString capture = root + QString("/plot-longdouble-%1-%2.sdds").arg(longDoubleColumn).arg(binarySave);
+        qputenv("SDDSEDITOR_PLOT_CAPTURE", QFile::encodeName(capture));
+        editor.plotColumn(0);
+        QElapsedTimer timer;
+        timer.start();
+        while (!editor.findChildren<QProcess *>().isEmpty() && timer.elapsed() < 10000) {
+          QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+          QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        }
+        check(QFileInfo::exists(capture), "Plot writes a snapshot with longdouble parameters, arrays and columns");
+        check(!qEnvironmentVariableIsSet("SDDS_LONGDOUBLE_64BITS"), "Plot preserves the default 80-bit binary-read mode");
+        check(editor.dirty && editor.binaryBtn->isChecked() == binarySave,
+              "Plot preserves unsaved state and the document's selected save format");
+        if (QFileInfo::exists(capture)) {
+          SDDSEditor loaded;
+          require(loaded.loadFile(capture), "read longdouble plot snapshot without an environment override");
+          check(loaded.dataset.layout.data_mode.mode == SDDS_ASCII &&
+                    loaded.pages[0].parameters == editor.pages[0].parameters &&
+                    loaded.pages[0].columns == editor.pages[0].columns &&
+                    loaded.pages[0].arrays[0].values == editor.pages[0].arrays[0].values,
+                "ASCII plot snapshot preserves every longdouble value");
+          check(loaded.dataset.layout.parameter_definition[0].type == SDDS_LONGDOUBLE &&
+                    loaded.dataset.layout.array_definition[0].type == SDDS_LONGDOUBLE &&
+                    loaded.dataset.layout.column_definition[0].type == editor.dataset.layout.column_definition[0].type,
+                "Plot preserves longdouble definitions");
+        }
+        editor.asciiBtn->setChecked(true);
+        editor.binaryBtn->setChecked(false);
+        const QString save = root + QString("/save-longdouble-%1-%2.sdds").arg(longDoubleColumn).arg(binarySave);
+        check(editor.writeFile(save), "ASCII Save accepts native longdouble values without a binary-read override");
+        check(!qEnvironmentVariableIsSet("SDDS_LONGDOUBLE_64BITS"), "ASCII Save restores the default binary-read mode");
+        editor.dirty = false;
+      }
+    }
+    qputenv("PATH", oldPath);
+    qunsetenv("SDDSEDITOR_PLOT_CAPTURE");
+    if (modeWasSet)
+      qputenv("SDDS_LONGDOUBLE_64BITS", originalMode);
+    require(failures == 0, "longdouble Plot and ASCII Save regressions");
+  }
+
   /** Regressions found in the code review: parsing, undo, export, resize, sort, filters. */
   static void reviewFixes(const QString &root) {
     ExpressionContext ctx = {};
@@ -2564,6 +2854,267 @@ public:
     require(editor.pages[0].arrays[0].values == QVector<QString>({"10", "2", "3", "40"}),
             "array viewer sparse paste leaves unselected cells unchanged");
     fprintf(stdout, "PASS sparse copy and paste\n");
+  }
+
+  /** Send ordinary table mouse events, including the platform's additive-selection modifier. */
+  static void clickCell(QTableView *view, const QModelIndex &index,
+                        Qt::KeyboardModifiers modifiers = Qt::NoModifier,
+                        Qt::MouseButton button = Qt::LeftButton) {
+    view->setFocus();
+    view->scrollTo(index);
+    QCoreApplication::processEvents();
+    QWidget *viewport = view->viewport();
+    const QPoint pos = view->visualRect(index).center();
+    require(viewport->rect().contains(pos), "mouse test cell is visible");
+    // QTest updates Qt's global modifier state as native input does. Plain
+    // sendEvent misses that state when Qt 6 updates its range-selection anchor.
+    QTest::mouseClick(viewport, button, modifiers, pos);
+    QCoreApplication::processEvents();
+  }
+
+  /** Send the native Copy/Paste key sequence to the actual focused widget. */
+  static void clipboardShortcut(QKeySequence::StandardKey command) {
+    const QKeySequence sequence(command);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const int combined = sequence[0].toCombined();
+#else
+    const int combined = sequence[0];
+#endif
+    QWidget *target = QApplication::focusWidget();
+    require(target, "clipboard shortcut has a focused widget");
+    const int key = combined & ~int(Qt::KeyboardModifierMask);
+    QKeyEvent press(QEvent::KeyPress, key, Qt::KeyboardModifiers(combined & int(Qt::KeyboardModifierMask)));
+    QApplication::sendEvent(target, &press);
+    QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+    QApplication::sendEvent(QApplication::focusWidget(), &release);
+    QCoreApplication::processEvents();
+  }
+
+  /** Send the second press in a double-click to the table's actual field. */
+  static void doubleClickCell(QTableView *view, const QModelIndex &index) {
+    clickCell(view, index);
+    QWidget *viewport = view->viewport();
+    const QPoint pos = view->visualRect(index).center();
+    QMouseEvent doubleClick(QEvent::MouseButtonDblClick, QPointF(pos), QPointF(viewport->mapToGlobal(pos)),
+                            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(viewport, &doubleClick);
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(pos), QPointF(viewport->mapToGlobal(pos)),
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(viewport, &release);
+    QCoreApplication::processEvents();
+  }
+
+  /** Exercise sparse clipboard operations through mouse selection and keyboard shortcuts. */
+  static void everydayMouseInteractions() {
+    int failures = 0;
+    auto check = [&](bool condition, const char *name) {
+      fprintf(stdout, "%s %s\n", condition ? "PASS" : "FAIL", name);
+      failures += !condition;
+    };
+    {
+      SDDSEditor editor;
+      setup(editor);
+      require(SDDS_DefineColumn(&editor.dataset, "Y", nullptr, nullptr, nullptr,
+                                nullptr, SDDS_LONG64, 0) >= 0, "define mouse test column");
+      require(SDDS_SaveLayout(&editor.dataset), "save mouse test columns");
+      editor.pages[0].columns.append({"4", "5", "6"});
+      editor.populateModels();
+      editor.show();
+      editor.activateWindow();
+      QCoreApplication::processEvents();
+      QTableView *view = editor.columnView;
+      clickCell(view, editor.columnModel->index(0, 0));
+      check(view->viewport()->findChild<QLineEdit *>() != nullptr, "single click opens a column editor");
+      clickCell(view, editor.columnModel->index(2, 1), Qt::ControlModifier);
+      check(view->selectionModel()->selectedIndexes().size() == 2,
+            "additive mouse clicks select disconnected column cells");
+      clipboardShortcut(QKeySequence::Copy);
+      check(QApplication::clipboard()->text() == "3\t\n\t\n\t6",
+            "keyboard copy preserves disconnected column coordinates");
+      editor.pages[0].columns = {{"7", "8", "9"}, {"10", "11", "12"}};
+      clickCell(view, editor.columnModel->index(0, 0));
+      clipboardShortcut(QKeySequence::Paste);
+      check(editor.pages[0].columns == QVector<QVector<QString>>({{"3", "8", "9"}, {"10", "11", "6"}}),
+            "keyboard sparse paste from an active editor preserves column gaps");
+      editor.undoStack->undo();
+      check(editor.pages[0].columns == QVector<QVector<QString>>({{"7", "8", "9"}, {"10", "11", "12"}}),
+            "mouse-selected sparse paste is one undo step");
+      clickCell(view, editor.columnModel->index(0, 0));
+      clickCell(view, editor.columnModel->index(2, 1), Qt::ShiftModifier);
+      check(view->selectionModel()->selectedIndexes().size() == 6,
+            "shift click selects the column rectangle");
+      clickCell(view, editor.columnModel->index(0, 0), Qt::NoModifier, Qt::RightButton);
+      check(view->selectionModel()->selectedIndexes().size() == 6,
+            "right click on a selected column cell preserves selection");
+
+      // Drag without releasing on the first cell must select, rather than start editing.
+      static_cast<SingleClickEditTableView *>(view)->finishEditing();
+      QWidget *viewport = view->viewport();
+      const QPoint start = view->visualRect(editor.columnModel->index(0, 0)).center();
+      const QPoint end = view->visualRect(editor.columnModel->index(2, 1)).center();
+      QMouseEvent press(QEvent::MouseButtonPress, QPointF(start), QPointF(viewport->mapToGlobal(start)),
+                        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+      QApplication::sendEvent(viewport, &press);
+      QMouseEvent move(QEvent::MouseMove, QPointF(end), QPointF(viewport->mapToGlobal(end)),
+                       Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+      QApplication::sendEvent(viewport, &move);
+      QMouseEvent release(QEvent::MouseButtonRelease, QPointF(end), QPointF(viewport->mapToGlobal(end)),
+                          Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+      QApplication::sendEvent(viewport, &release);
+      QCoreApplication::processEvents();
+      check(view->selectionModel()->selectedIndexes().size() == 6,
+            "mouse drag selects a column rectangle");
+      bool editing = false;
+      for (QLineEdit *cell : viewport->findChildren<QLineEdit *>())
+        editing |= !cell->isHidden();
+      check(!editing, "drag selection does not open a cell editor");
+
+      view->setRowHidden(1, true);
+      clickCell(view, editor.columnModel->index(0, 0));
+      clickCell(view, editor.columnModel->index(2, 0), Qt::ControlModifier);
+      clipboardShortcut(QKeySequence::Copy);
+      check(QApplication::clipboard()->text() == "7\n9", "mouse copy skips filtered column rows");
+      editor.pages[0].columns[0] = {"40", "50", "60"};
+      clickCell(view, editor.columnModel->index(0, 0));
+      clipboardShortcut(QKeySequence::Paste);
+      check(editor.pages[0].columns[0] == QVector<QString>({"7", "50", "9"}),
+            "keyboard paste skips filtered column rows");
+      editor.undoStack->undo();
+      view->setRowHidden(1, false);
+
+      clickCell(editor.arrayView, editor.arrayModel->index(0, 0));
+      clickCell(editor.arrayView, editor.arrayModel->index(3, 0), Qt::ControlModifier);
+      clipboardShortcut(QKeySequence::Copy);
+      check(QApplication::clipboard()->text() == "10\n\n\n40", "main array panel copies disconnected cells");
+      editor.pages[0].arrays[0].values = {"1", "2", "3", "4"};
+      clickCell(editor.arrayView, editor.arrayModel->index(0, 0));
+      clipboardShortcut(QKeySequence::Paste);
+      check(editor.pages[0].arrays[0].values == QVector<QString>({"10", "2", "3", "40"}),
+            "main array panel sparse keyboard paste preserves gaps");
+      editor.undoStack->undo();
+      editor.pages[0].arrays[0].values = {"10", "20", "30", "40"};
+      editor.openArrayViewer(0);
+      auto *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      viewer->activateWindow();
+      QCoreApplication::processEvents();
+      clickCell(viewer->table(), viewer->sliceModel()->index(0, 0));
+      clickCell(viewer->table(), viewer->sliceModel()->index(1, 1), Qt::ControlModifier);
+      clipboardShortcut(QKeySequence::Copy);
+      check(QApplication::clipboard()->text() == "10\t\n\t40",
+            "mouse-selected array cells copy with gaps");
+      editor.pages[0].arrays[0].values = {"1", "2", "3", "4"};
+      clickCell(viewer->table(), viewer->sliceModel()->index(0, 0));
+      clipboardShortcut(QKeySequence::Paste);
+      check(editor.pages[0].arrays[0].values == QVector<QString>({"10", "2", "3", "40"}),
+            "keyboard paste of mouse-selected array cells preserves gaps");
+      editor.dirty = false;
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      for (int i = 0; i < 12; ++i)
+        require(SDDS_DefineParameter(&editor.dataset, qPrintable(QString("P%1").arg(i)), nullptr,
+                                     "m", "Description", nullptr, SDDS_LONG, nullptr) >= 0,
+                "define mouse test parameter");
+      require(SDDS_SaveLayout(&editor.dataset), "save mouse test parameters");
+      for (int i = 0; i < 12; ++i)
+        editor.pages[0].parameters.append(QString::number(i));
+      editor.populateModels();
+      editor.resize(1600, 900);
+      editor.show();
+      editor.activateWindow();
+      QCoreApplication::processEvents();
+      require(editor.paramGrid->groupCount() > 1, "mouse test parameters wrap into groups");
+      QTableView *view = editor.paramView;
+      auto sparseSelect = [&]() {
+        clickCell(view, editor.parameterValueCell(1));
+        clickCell(view, editor.parameterValueCell(10), Qt::ControlModifier);
+      };
+      sparseSelect();
+      check(editor.selectedParameterRows() == QSet<int>({1, 10}),
+            "additive mouse clicks select disconnected parameters across groups");
+      clipboardShortcut(QKeySequence::Copy);
+      check(QApplication::clipboard()->text() == "1\n\n\n\n\n\n\n\n\n10",
+            "sparse parameter copy follows file order across groups");
+      editor.pages[0].parameters.fill("100");
+      clickCell(view, editor.parameterValueCell(0));
+      clipboardShortcut(QKeySequence::Paste);
+      QVector<QString> expected(12, "100");
+      expected[0] = "1";
+      expected[9] = "10";
+      check(editor.pages[0].parameters == expected,
+            "keyboard sparse parameter paste preserves gaps across groups");
+      editor.undoStack->undo();
+      check(editor.pages[0].parameters == QVector<QString>(12, "100"),
+            "sparse parameter paste undoes as one step");
+      sparseSelect();
+      clickCell(view, editor.parameterValueCell(1), Qt::NoModifier, Qt::RightButton);
+      check(editor.selectedParameterRows() == QSet<int>({1, 10}),
+            "right click on a selected parameter value preserves selection");
+      clickCell(view, editor.paramGrid->cellFor(1, ParameterGridModel::NameField), Qt::NoModifier, Qt::RightButton);
+      check(editor.selectedParameterRows() == QSet<int>({1, 10}),
+            "right click on a selected parameter name preserves selection");
+      sparseSelect();
+      clickCell(view, editor.paramGrid->cellFor(4, ParameterGridModel::NameField), Qt::ControlModifier);
+      check(editor.selectedParameterRows() == QSet<int>({1, 4, 10}),
+            "additive click on a parameter name extends selection");
+      clickCell(view, editor.paramGrid->cellFor(4, ParameterGridModel::NameField));
+      check(editor.selectedParameterRows() == QSet<int>({4}),
+            "ordinary parameter name click selects its value");
+      clipboardShortcut(QKeySequence::Copy);
+      check(QApplication::clipboard()->text() == "100", "copy after a parameter name click copies its value");
+      for (int field : {ParameterGridModel::TypeField, ParameterGridModel::UnitsField,
+                        ParameterGridModel::DescriptionField}) {
+        sparseSelect();
+        clickCell(view, editor.paramGrid->cellFor(4, field), Qt::ControlModifier);
+        check(editor.selectedParameterRows() == QSet<int>({1, 4, 10}),
+              "additive metadata click extends the parameter value selection");
+      }
+      clickCell(view, editor.paramGrid->cellFor(0, ParameterGridModel::NameField));
+      clickCell(view, editor.paramGrid->cellFor(2, ParameterGridModel::NameField), Qt::ShiftModifier);
+      if (editor.selectedParameterRows() != QSet<int>({0, 1, 2})) {
+        QStringList selected;
+        for (int row : editor.selectedParameterRows())
+          selected << QString::number(row);
+        fprintf(stdout, "Shift-click parameter selection: %s\n", qPrintable(selected.join(",")));
+      }
+      check(editor.selectedParameterRows() == QSet<int>({0, 1, 2}),
+            "shift click on parameter names selects their values");
+      bool attributesOpened = false;
+      acceptDialogWhenShown("Parameter Attributes", [&](QDialog *dialog) {
+        attributesOpened = true;
+        require(dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly).first()->text() == "P4",
+                "double click opens the clicked parameter's attributes");
+      });
+      doubleClickCell(view, editor.paramGrid->cellFor(4, ParameterGridModel::NameField));
+      check(attributesOpened, "parameter name double click opens attributes");
+      bool typeOpened = false;
+      acceptDialogWhenShown("Parameter Type", [&](QDialog *) { typeOpened = true; });
+      doubleClickCell(view, editor.paramGrid->cellFor(4, ParameterGridModel::TypeField));
+      check(typeOpened, "parameter type double click opens the type dialog");
+      sparseSelect();
+      QModelIndex name = editor.paramGrid->cellFor(1, ParameterGridModel::NameField);
+      clickCell(view, name, Qt::NoModifier, Qt::RightButton);
+      chooseMenuItem("Move Up");
+      editor.parameterCellMenuRequested(view->visualRect(name).center());
+      check(QString(editor.dataset.layout.parameter_definition[0].name) == "P1" &&
+                QString(editor.dataset.layout.parameter_definition[9].name) == "P10",
+            "right click on a name moves both disconnected selected parameters");
+      editor.undoStack->undo();
+      sparseSelect();
+      name = editor.paramGrid->cellFor(1, ParameterGridModel::NameField);
+      clickCell(view, name, Qt::NoModifier, Qt::RightButton);
+      chooseMenuItem("Delete");
+      editor.parameterCellMenuRequested(view->visualRect(name).center());
+      check(editor.dataset.layout.n_parameters == 10 &&
+                SDDS_GetParameterIndex(&editor.dataset, const_cast<char *>("P1")) < 0 &&
+                SDDS_GetParameterIndex(&editor.dataset, const_cast<char *>("P10")) < 0,
+            "right click on a name deletes both disconnected selected parameters");
+      editor.undoStack->undo();
+      check(editor.dataset.layout.n_parameters == 12, "parameter context-menu delete is undoable");
+      editor.dirty = false;
+    }
+    require(failures == 0, "everyday mouse and clipboard regressions");
   }
 
   /** Parameters wrap into side-by-side groups while editing tools keep parameter order. */
@@ -3653,6 +4204,11 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::plotArrays(artifacts.path());
+  SDDSEditorTests::clearColumnSelectionInteractions();
+  SDDSEditorTests::plotLongDouble(artifacts.path());
+  SDDSEditorTests::everydayMouseInteractions();
+  SDDSEditorTests::largeDocumentInteractions();
   SDDSEditorTests::expressionNesting();
   SDDSEditorTests::integerSeriesPrecision();
   SDDSEditorTests::xzInputLines(artifacts.path());

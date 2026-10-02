@@ -10,6 +10,29 @@ REQUIRED_TOOLS = [SDDSMAKEDATASET, SDDS2PLAINDATA]
 
 @pytest.mark.skipif(not all(t.exists() for t in REQUIRED_TOOLS), reason="sdds tools not built")
 class TestSDDSMakeDataset:
+  def test_ascii_longdouble_without_binary_override(self, tmp_path, monkeypatch):
+    monkeypatch.delenv("SDDS_LONGDOUBLE_64BITS", raising=False)
+    out = tmp_path / "longdouble-ascii.sdds"
+    subprocess.run([
+      str(SDDSMAKEDATASET), str(out),
+      "-defaultType=longdouble",
+      "-parameter=P", "-data=2.5",
+      "-column=C", "-data=1.25,-3.5",
+      "-array=A", "-data=4.25,-5.5",
+      "-ascii",
+    ], check=True)
+    text = out.read_text()
+    header, data = text.split("&data", 1)
+    for definition in ("&parameter name=P", "&column name=C", "&array name=A"):
+      line = next(line for line in header.splitlines() if line.startswith(definition))
+      assert "type=longdouble" in line
+    assert "mode=ascii" in data
+    assert self.read_parameter(out, "P", tmp_path) == 2.5
+    assert self.read_column(out, "C", tmp_path) == [1.25, -3.5]
+    lines = text.splitlines()
+    array_line = next(i for i, line in enumerate(lines) if "array A:" in line)
+    assert [float(value) for value in lines[array_line + 1].split()] == [4.25, -5.5]
+
   def read_column(self, dataset, column, tmp_path):
     out = tmp_path / f"{column}.txt"
     subprocess.run([

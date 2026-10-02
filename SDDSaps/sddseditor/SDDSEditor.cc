@@ -295,6 +295,11 @@ class SingleClickEditTableView : public QTableView {
 public:
   explicit SingleClickEditTableView(QWidget *parent = nullptr) : QTableView(parent) {}
 
+  /** Treat clicks on read-only labels as selection of their associated value cell. */
+  void setSelectionIndexMapper(std::function<QModelIndex(const QModelIndex &)> mapper) {
+    selectionIndexMapper = std::move(mapper);
+  }
+
   /** Commit delegate editors even when another window owns keyboard focus. */
   void finishEditing() {
     const auto editors = viewport()->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
@@ -311,8 +316,23 @@ private:
   QPersistentModelIndex pressIndex;
   bool leftButtonDown{false};
   bool dragSelecting{false};
+  std::function<QModelIndex(const QModelIndex &)> selectionIndexMapper;
 
 private:
+  /** Keep Qt's native modifier and drag selection behavior when a label targets another cell. */
+  std::unique_ptr<QMouseEvent> mappedSelectionEvent(QMouseEvent *event) const {
+    if (!selectionIndexMapper)
+      return {};
+    const QModelIndex clicked = indexAt(event->pos());
+    const QModelIndex mapped = selectionIndexMapper(clicked);
+    if (!mapped.isValid() || mapped == clicked)
+      return {};
+    const QPoint position = visualRect(mapped).center();
+    return std::unique_ptr<QMouseEvent>(new QMouseEvent(
+        event->type(), QPointF(position), QPointF(viewport()->mapToGlobal(position)),
+        event->button(), event->buttons(), event->modifiers()));
+  }
+
   void forwardClickToEditorAt(const QPoint &viewPos, const QPoint &globalPos, int retries = 3) {
     QWidget *target = viewport()->childAt(viewPos);
     if (!target || target == viewport()) {
@@ -344,9 +364,21 @@ private:
   }
 
 protected:
+  /** Escape clears selection once the delegate has finished or canceled cell editing. */
+  void keyPressEvent(QKeyEvent *event) override {
+    if (event->key() == Qt::Key_Escape && state() != QAbstractItemView::EditingState) {
+      selectionModel()->clear();
+      event->accept();
+      return;
+    }
+    QTableView::keyPressEvent(event);
+  }
+
   void mousePressEvent(QMouseEvent *event) override {
+    const auto mapped = mappedSelectionEvent(event);
+    QMouseEvent *selectionEvent = mapped ? mapped.get() : event;
     if (event->button() == Qt::RightButton) {
-      const QModelIndex idx = indexAt(event->pos());
+      const QModelIndex idx = indexAt(selectionEvent->pos());
       QItemSelectionModel *selection = selectionModel();
       if (idx.isValid() && selection && selection->isSelected(idx)) {
         selection->setCurrentIndex(idx, QItemSelectionModel::NoUpdate);
@@ -361,7 +393,7 @@ protected:
       pressPos = event->pos();
       pressIndex = indexAt(event->pos());
     }
-    QTableView::mousePressEvent(event);
+    QTableView::mousePressEvent(selectionEvent);
   }
 
   void mouseMoveEvent(QMouseEvent *event) override {
@@ -370,11 +402,13 @@ protected:
       if (dist >= QApplication::startDragDistance())
         dragSelecting = true;
     }
-    QTableView::mouseMoveEvent(event);
+    const auto mapped = mappedSelectionEvent(event);
+    QTableView::mouseMoveEvent(mapped ? mapped.get() : event);
   }
 
   void mouseReleaseEvent(QMouseEvent *event) override {
-    QTableView::mouseReleaseEvent(event);
+    const auto mapped = mappedSelectionEvent(event);
+    QTableView::mouseReleaseEvent(mapped ? mapped.get() : event);
     if (event->button() != Qt::LeftButton)
       return;
     leftButtonDown = false;
@@ -394,6 +428,12 @@ protected:
     // we want the second click to land in the editor widget to place the caret.
     if (event->button() == Qt::LeftButton) {
       QModelIndex idx = indexAt(event->pos());
+      if (idx.isValid() && selectionIndexMapper && selectionIndexMapper(idx) != idx) {
+        // Selection uses the value cell, but definition dialogs use the clicked field.
+        emit doubleClicked(idx);
+        event->accept();
+        return;
+      }
       if (idx.isValid() && (model()->flags(idx) & Qt::ItemIsEditable)) {
         edit(idx);
         const QPoint viewPos = event->pos();
@@ -1734,6 +1774,72 @@ static bool compareIntegerText(const QString &left, const QString &right, int *r
   return true;
 }
 
+/** Compare decimal/scientific text without rounding 64-bit filter boundaries. */
+static bool compareDecimalText(const QString &left, const QString &right, int *result) {
+  struct Decimal {
+    bool negative;
+    QString digits;
+    qint64 order;
+  };
+  auto normalize = [](const QString &text, Decimal *value) {
+    static const QRegularExpression syntax(QStringLiteral(
+        "^([+-]?)([0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE]([+-]?[0-9]+))?$"));
+    const QRegularExpressionMatch match = syntax.match(text.trimmed());
+    if (!match.hasMatch())
+      return false;
+    QString digits = match.captured(2);
+    const int dot = digits.indexOf('.');
+    const int decimalPosition = dot < 0 ? static_cast<int>(digits.size()) : dot;
+    if (dot >= 0)
+      digits.remove(dot, 1);
+    int first = 0;
+    while (first < digits.size() && digits[first] == QLatin1Char('0'))
+      ++first;
+    if (first == digits.size()) {
+      *value = {false, QString(), 0};
+      return true;
+    }
+    bool ok = true;
+    const qint64 exponent = match.captured(3).isEmpty() ? 0 : match.captured(3).toLongLong(&ok);
+    const qint64 offset = static_cast<qint64>(decimalPosition) - first;
+    if (!ok || (offset > 0 && exponent > std::numeric_limits<qint64>::max() - offset) ||
+        (offset < 0 && exponent < std::numeric_limits<qint64>::min() - offset))
+      return false;
+    int last = static_cast<int>(digits.size());
+    while (last > first && digits[last - 1] == QLatin1Char('0'))
+      --last;
+    *value = {match.captured(1) == "-", digits.mid(first, last - first), exponent + offset};
+    return true;
+  };
+  Decimal a, b;
+  if (!normalize(left, &a) || !normalize(right, &b))
+    return false;
+  int comparison = 0;
+  if (a.negative != b.negative)
+    comparison = a.negative ? -1 : 1;
+  else {
+    if (a.digits.isEmpty() || b.digits.isEmpty())
+      comparison = a.digits.isEmpty() ? (b.digits.isEmpty() ? 0 : -1) : 1;
+    else if (a.order != b.order)
+      comparison = a.order < b.order ? -1 : 1;
+    else {
+      const int count = static_cast<int>(std::max(a.digits.size(), b.digits.size()));
+      for (int i = 0; i < count; ++i) {
+        const QChar ac = i < a.digits.size() ? a.digits.at(i) : QChar('0');
+        const QChar bc = i < b.digits.size() ? b.digits.at(i) : QChar('0');
+        if (ac != bc) {
+          comparison = ac < bc ? -1 : 1;
+          break;
+        }
+      }
+    }
+    if (a.negative)
+      comparison = -comparison;
+  }
+  *result = comparison;
+  return true;
+}
+
 enum class RowFilterTokenKind {
   Invalid,
   End,
@@ -1956,7 +2062,8 @@ private:
                             RowFilterTokenKind op,
                             const RowFilterValue &right) {
     int integerComparison;
-    if (compareIntegerText(left.text, right.text, &integerComparison)) {
+    if (compareIntegerText(left.text, right.text, &integerComparison) ||
+        (left.hasNumber && right.hasNumber && compareDecimalText(left.text, right.text, &integerComparison))) {
       switch (op) {
       case RowFilterTokenKind::Eq: return integerComparison == 0;
       case RowFilterTokenKind::Ne: return integerComparison != 0;
@@ -2710,8 +2817,8 @@ static QString editorStyleSheet(const EditorTheme &t) {
       "QFrame#panelRule { background: @border; border: none; }"
       "QToolButton#panelToggle { border: none; color: @text; padding: 2px 4px; background: transparent; }"
       "QLabel#countChip { background: @header; color: @muted; border-radius: 9px; padding: 1px 8px; }"
-      "QToolButton#panelAction { border: none; border-radius: 5px; padding: 3px 8px; color: @muted; background: transparent; }"
-      "QToolButton#panelAction:hover { background: @hover; color: @text; }"
+      "QToolButton#panelAction, QToolButton#clearColumnSelection { border: none; border-radius: 5px; padding: 3px 8px; color: @muted; background: transparent; }"
+      "QToolButton#panelAction:hover, QToolButton#clearColumnSelection:hover { background: @hover; color: @text; }"
       "QFrame#filterChip { background: @accentSoft; border-radius: 11px; }"
       "QFrame#filterChip QToolButton { border: none; background: transparent; color: @accentText; padding: 1px 4px; }"
       "QFrame#filterChip QToolButton:hover { color: @text; }"
@@ -2864,6 +2971,9 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "past the end of an array shorter than the longest one. "
       "Double-click a header to change the type, drag it to reorder, or right-click it for more "
       "actions (see <a href=\"#menus\">Right-click menus</a>).</p>"
+      "<p>Click <b>Clear selection</b> in the Columns panel to deselect its cells and search all "
+      "columns again. Press Esc in a table to clear its selection; if a cell is being edited, "
+      "the first Esc cancels the edit and a second Esc clears the selection.</p>"
       "<p class=\"note\">Floating-point values are shown with the fewest digits that reproduce "
       "the stored number exactly.</p>")
       .arg(helpKey(QKeySequence::Copy), helpKey(QKeySequence::Paste), del,
@@ -2892,7 +3002,7 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
           "Sort descending, Search/Replace, Filter/View, Clear Filter/View, formula tools, Delete</td></tr>"
           "<tr><td>Column row number</td><td>Insert, Delete, Filter/View, Clear Filter/View, "
           "formula tools</td></tr>"
-          "<tr><td>Array header or cell</td><td>Attributes, Open Array Viewer, Search, Resize, "
+          "<tr><td>Array header or cell</td><td>Attributes, Open Array Viewer, Plot, Search, Resize, "
           "formula tools, Delete</td></tr>")) +
       SDDSEditor::tr(
           "<p>Sorting reorders whole rows and keeps rows with equal values in their original order. "
@@ -3001,10 +3111,13 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
 
   topics.append({QStringLiteral("export"), SDDSEditor::tr("Plotting and export"), SDDSEditor::tr(
       "<h3>Plotting</h3>"
-      "<p>Select a cell in a column and click <b>Plot</b> on the toolbar, or right-click a column "
-      "and choose <b>Plot from file</b>. The column is plotted with <code>sddsplot</code>, which "
-      "must be on the PATH; a <code>Time</code> column, if present, is used for the horizontal "
-      "axis. Unsaved edits are included in the plot.</p>"
+      "<p>Select a cell in a column or numeric array and click <b>Plot</b> on the toolbar. "
+      "You can also right-click a column and choose <b>Plot from file</b>, or an array and "
+      "choose <b>Plot</b>. Plot uses the last active column or array table. "
+      "<code>sddsplot</code> must be on the PATH. For columns, a <code>Time</code> column, "
+      "if present, is used for the horizontal axis. Arrays are plotted against the zero-based "
+      "element index; multidimensional arrays use their stored order, with the last dimension "
+      "varying fastest. Each page is plotted separately. Unsaved edits are included.</p>"
       "<h3>Export</h3>"
       "<ul>"
       "<li><b>File &#8250; Export CSV</b> %1 writes the data as comma-separated values.</li>"
@@ -5126,6 +5239,10 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   paramGrid = new ParameterGridModel(paramModel, this);
   paramGrid->setNameFont(QApplication::font());
   paramView = new SingleClickEditTableView(paramBox);
+  static_cast<SingleClickEditTableView *>(paramView)->setSelectionIndexMapper(
+      [this](const QModelIndex &index) {
+        return parameterValueCell(paramGrid->parameterRow(index));
+      });
   paramView->setFont(tableFont);
   paramView->setModel(paramGrid);
   paramView->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -5240,7 +5357,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   connect(filterChipClear, &QToolButton::clicked, this, &SDDSEditor::clearColumnRowFilter);
   colBox->addHeaderWidget(filterChip);
   colBox->addHeaderStretch();
-  columnSearchEdit = new QLineEdit(colBox);
+  columnSearchEdit = new SDDSTextEdit(colBox);
   columnSearchEdit->setObjectName("panelSearch");
   columnSearchEdit->setClearButtonEnabled(true);
   columnSearchEdit->setFixedWidth(220);
@@ -5251,6 +5368,11 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   connect(columnSearchEdit, &QLineEdit::returnPressed, this, &SDDSEditor::findInColumnPanel);
   connect(columnSearchEdit, &QLineEdit::textChanged, this, [this]() { columnSearchMatch = QModelIndex(); });
   colBox->addHeaderWidget(columnSearchEdit);
+  QToolButton *clearSelectionBtn = makePanelAction(colBox, tr("Clear selection"), IconClose,
+                                                  tr("Clear selected column cells to search all columns (Esc in the table)"));
+  clearSelectionBtn->setObjectName("clearColumnSelection");
+  colBox->addHeaderWidget(clearSelectionBtn);
+  connect(clearSelectionBtn, &QToolButton::clicked, this, &SDDSEditor::clearColumnSelection);
   QToolButton *colInsertBtn = makePanelAction(colBox, tr("Insert"), IconPlus, tr("Insert a column"));
   colBox->addHeaderWidget(colInsertBtn);
   connect(colInsertBtn, &QToolButton::clicked, this, &SDDSEditor::insertColumn);
@@ -5431,6 +5553,17 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
               lastCellView = view;
               updateStatusBar();
             });
+  }
+  // A toolbar click takes focus. Remember the table used even when its cursor
+  // stayed on the same cell while the user switched between columns and arrays.
+  for (QTableView *view : {paramView, columnView, arrayView}) {
+    const QPointer<QTableView> table = view;
+    connect(qApp, &QApplication::focusChanged, this, [this, table](QWidget *, QWidget *now) {
+      if (table && now && (now == table || table->isAncestorOf(now))) {
+        lastCellView = table;
+        updateStatusBar();
+      }
+    });
   }
 
   // let columns and arrays consume additional space when resizing
@@ -5709,14 +5842,19 @@ void SDDSEditor::buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoA
   });
   mainToolBar->addAction(filterAction);
   plotAction = new QAction(tr("Plot"), this);
-  plotAction->setToolTip(tr("Plot the current column with sddsplot"));
+  plotAction->setToolTip(tr("Plot the current column or numeric array with sddsplot"));
   connect(plotAction, &QAction::triggered, this, [this]() {
-    const int column = columnView->currentIndex().column();
-    if (column < 0) {
-      message(tr("Select a cell in the column to plot"));
+    QTableView *view = focusedTable();
+    if (!view)
+      view = lastCellView;
+    if (!view || !view->currentIndex().isValid() || (view != columnView && view != arrayView)) {
+      message(tr("Select a cell in the column or array to plot"));
       return;
     }
-    plotColumn(column);
+    if (view == arrayView)
+      plotArray(view->currentIndex().column());
+    else
+      plotColumn(view->currentIndex().column());
   });
   mainToolBar->addAction(plotAction);
   arrayViewerAct->setToolTip(tr("Open the current array in the array viewer"));
@@ -6005,8 +6143,13 @@ void SDDSEditor::layoutParameterGrid() {
   int valueWidth = 0;
   int descriptionWidth = 0;
   const PageStore *page = currentPage >= 0 && currentPage < pages.size() ? &pages[currentPage] : nullptr;
-  for (int i = 0; i < scanned; ++i) {
+  for (int i = 0; i < count; ++i) {
     const PARAMETER_DEFINITION &def = dataset.layout.parameter_definition[i];
+    // Limit width measurements, but every definition determines field visibility.
+    anyUnits = anyUnits || (def.units && *def.units);
+    anyDescription = anyDescription || (def.description && *def.description);
+    if (i >= scanned)
+      continue;
     nameWidth = std::max(nameWidth, textAdvance(nameFm, QString::fromLocal8Bit(def.name ? def.name : "")));
     typeWidth = std::max(typeWidth, badgeSize(typeFont, QString::fromLocal8Bit(SDDS_GetTypeName(def.type))).width());
     if (def.units && *def.units) {
@@ -6402,6 +6545,14 @@ void SDDSEditor::navigateToOutlineItem(QTreeWidgetItem *item) {
   }
   lastCellView = view;
   updateStatusBar();
+}
+
+/** Commit pending edits and return column search to its all-column scope. */
+void SDDSEditor::clearColumnSelection() {
+  flushPendingEdits();
+  columnView->selectionModel()->clear();
+  pendingColumnHeaderColumns.clear();
+  updateColumnSearchScope();
 }
 
 /** Capture user-selected columns without letting a search result narrow the scope. */
@@ -7341,7 +7492,7 @@ bool SDDSEditor::writeFile(const QString &path) {
   return true;
 }
 
-bool SDDSEditor::writeDatasetFile(const QString &path) {
+bool SDDSEditor::writeDatasetFile(const QString &path, bool forceAscii) {
   if (!datasetLoaded)
     return false;
   commitModels();
@@ -7391,7 +7542,7 @@ bool SDDSEditor::writeDatasetFile(const QString &path) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return false;
   }
-  out.layout.data_mode.mode = asciiBtn->isChecked() ? SDDS_ASCII : SDDS_BINARY;
+  out.layout.data_mode.mode = forceAscii || asciiBtn->isChecked() ? SDDS_ASCII : SDDS_BINARY;
   // Editing columns invalidates the input's multiline row layout. Always emit
   // one complete ASCII row per line, including for compressed output.
   out.layout.data_mode.lines_per_row = 1;
@@ -9783,6 +9934,8 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
   QMenu menu(view);
   QAction *attrAct = menu.addAction(tr("Attributes..."));
   QAction *viewerAct = menu.addAction(tr("Open Array Viewer..."));
+  QAction *plotAct = menu.addAction(tr("Plot"));
+  plotAct->setEnabled(SDDS_NUMERIC_TYPE(dataset.layout.array_definition[column].type));
   QAction *searchAct = menu.addAction(tr("Search"));
   QAction *resizeAct = menu.addAction(tr("Resize"));
   menu.addSeparator();
@@ -9799,6 +9952,8 @@ void SDDSEditor::showArrayMenu(QTableView *view, int column,
     editArrayAttributesAt(column);
   else if (chosen == viewerAct)
     openArrayViewer(column);
+  else if (chosen == plotAct)
+    plotArray(column);
   else if (chosen == searchAct)
     searchArray(column);
   else if (chosen == resizeAct)
@@ -9880,15 +10035,32 @@ void SDDSEditor::arrayCellMenuRequested(const QPoint &pos) {
 }
 
 void SDDSEditor::plotColumn(int column) {
-  if (!datasetLoaded || column < 0 || column >= dataset.layout.n_columns)
+  plotData(column, false);
+}
+
+/** Plot array elements in their stored order against the zero-based element index. */
+void SDDSEditor::plotArray(int column) {
+  plotData(column, true);
+}
+
+/** Launch sddsplot with a portable snapshot of the current unsaved document. */
+void SDDSEditor::plotData(int index, bool array) {
+  if (!datasetLoaded || index < 0 || index >= (array ? dataset.layout.n_arrays : dataset.layout.n_columns))
     return;
+  if (array && !SDDS_NUMERIC_TYPE(dataset.layout.array_definition[index].type)) {
+    message(tr("Select a numeric array to plot"));
+    return;
+  }
   auto snapshot = std::make_shared<QTemporaryDir>();
-  if (!snapshot->isValid() || !writeDatasetFile(snapshot->filePath("plot.sdds")))
+  // Text snapshots can be read by sddsplot regardless of its native longdouble
+  // representation or the document's selected binary save format.
+  if (!snapshot->isValid() || !writeDatasetFile(snapshot->filePath("plot.sdds"), true))
     return;
 
-  QString colName = QString::fromLocal8Bit(dataset.layout.column_definition[column].name);
+  const QString name = QString::fromLocal8Bit(array ? dataset.layout.array_definition[index].name :
+                                                     dataset.layout.column_definition[index].name);
   bool hasTime = false;
-  for (int c = 0; c < dataset.layout.n_columns; ++c) {
+  for (int c = 0; !array && c < dataset.layout.n_columns; ++c) {
     if (QString::fromLocal8Bit(dataset.layout.column_definition[c].name) == QLatin1String("Time")) {
       hasTime = true;
       break;
@@ -9898,7 +10070,7 @@ void SDDSEditor::plotColumn(int column) {
   // sddsplot treats *, ? and [...] in names as wildcards, so "Q[0]" would
   // match "Q0" instead; escaped, the name matches only itself.
   QString literalName;
-  for (QChar ch : colName) {
+  for (QChar ch : name) {
     if (ch == '*' || ch == '?' || ch == '[' || ch == ']')
       literalName += '\\';
     literalName += ch;
@@ -9906,7 +10078,9 @@ void SDDSEditor::plotColumn(int column) {
 
   QStringList args;
   args << "-split=page" << "-sep=page" << snapshot->filePath("plot.sdds");
-  if (hasTime) {
+  if (array) {
+    args << QString("-arraynames=%1").arg(literalName);
+  } else if (hasTime) {
     args << QString("-col=Time,%1").arg(literalName) << "-tick=xtime";
   } else {
     args << QString("-col=%1").arg(literalName);

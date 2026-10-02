@@ -42,6 +42,9 @@ After building the repository, run:
 make -C SDDSaps/sddseditor tests
 ```
 
+The regression target also requires the matching Qt Test module (`Qt5Test` or
+`Qt6Test` in `pkg-config` on Linux/macOS, or the kit's Test library on Windows).
+
 The target builds `SDDSEditorTests.cc` and `PlotSnapshotProbe.cc` with the normal
 repository toolchain and runs Qt with `QT_QPA_PLATFORM=offscreen`. Tests exercise
 transactional saves (including gzip and xz), version collisions, fixed parameter
@@ -110,6 +113,14 @@ reflow, Move Up/Down with Undo, and outline filtering and navigation. Interface
 checks also cover header type badges and array shape chips, the outline's
 column list and SDDS version, and the Messages badge count.
 
+Mouse and keyboard checks select disconnected cells in columns, both array
+views, and wrapped parameter groups, then copy and paste with the platform's
+native shortcuts. They verify gap preservation, filtered-row handling, Undo,
+single-click editing, Shift-click and drag selection, and right-click selection
+preservation. Parameter names and metadata select their corresponding values;
+tests also exercise additive name/metadata clicks, double-click definition
+dialogs, and context-menu Move Up and Delete on disconnected parameters.
+
 Input failure checks repeatedly open truncated headers, invalid modes, conflicting
 byte-order declarations and broken includes in plain/gzip/xz files. They verify
 that streams are released and the current document is preserved. The xz checks
@@ -124,11 +135,25 @@ parentheses, unary operators or chained powers produce an error instead of
 exhausting the process stack. Regressions cover million-level nested input and
 ordinary expressions with functions and operator precedence.
 
+Large-document checks cover parameter metadata beyond the first 5,000 definitions
+and column-panel search patterns longer than 32,767 characters. Row-filter checks
+compare fractional and scientific decimal thresholds exactly against adjacent
+64-bit integers, including signed values, zero and nonfinite comparisons.
+
 Executables are built under the platform object directory (`O.Linux-x86_64` on
 Linux). The plotting probe is named `test-bin/sddsplot` there; only the test
 process prepends that directory to its PATH. It copies the plot input and records
 arguments, so the test verifies the real process launch without opening a plot
 window. It does not replace the installed `sddsplot`.
+
+Plot checks clear `SDDS_LONGDOUBLE_64BITS` and include longdouble parameters,
+arrays and columns with both ASCII and Binary selected for saving. They verify
+portable ASCII plot snapshots, exact values and definitions, the unchanged
+save-format choice and binary-read environment, and successful ASCII saves.
+Array Plot checks cover the toolbar and context menu, switching between tables
+that retain their current cells, pending edits, literal array names, multiple
+pages, and one-, two- and three-dimensional arrays. Deselection checks cover the
+Columns panel's Clear selection button, Escape, pending edits and search scope.
 
 The test prints each result and its fixture directory. Fixtures are retained in
 `O.*/test-artifacts-*` for inspection, and the normal `make clean` target removes
@@ -140,8 +165,16 @@ The editor stages SDDS saves, CSV exports and HDF exports beside the destination
 replacing it. Failed saves and exports preserve the existing file. Versioned
 symlink saves select an unused version
 and create it exclusively before replacing the link. On Windows the replacement
-is a native symbolic link (not a `.lnk` shortcut), which needs the same permission. Plot snapshots use a private
-temporary directory retained until the plotting process ends.
+is a native symbolic link (not a `.lnk` shortcut), which needs the same permission.
+Plot uses an ASCII snapshot of the current unsaved data, independently of the
+selected save format. This supports longdouble fields on platforms with 64-bit
+native long doubles. Snapshots use a private temporary directory retained until
+the plotting process ends.
+Select a cell in a column or numeric array and click **Plot**. The toolbar follows
+the last active table; arrays also have **Plot** in their right-click menu.
+Arrays plot values against the zero-based flat element index, with the last
+dimension varying fastest in multidimensional arrays. Each page is plotted
+separately; array plotting does not use an unrelated Time column.
 
 When column rows or array elements are present, the parameter panel initially
 fits the height of its rows and header. Extra vertical space goes to the populated
@@ -161,12 +194,17 @@ artifacts; the supplied file is never saved or modified.
 ## Interface
 
 The toolbar holds Open, Save, Undo/Redo, a page stepper (previous arrow, page
-list with the page count, next arrow), Filter rows, Plot (current column), Array
+list with the page count, next arrow), Filter rows, Plot (current column or numeric array), Array
 viewer, and the ASCII/Binary save format. Parameters, columns and arrays are
 shown in separate panels. Click a panel title to collapse or expand it, or use
 the **View** menu. Each panel header shows its count and common actions (Insert
 and Attributes; Attributes edits the definition of the current cell's
 parameter, column or array).
+
+The Columns panel also has **Clear selection**, which commits pending edits,
+removes the selection and returns the panel search to all columns. **Esc** clears
+selection in a table. While editing a cell, the first Esc cancels that edit;
+press Esc again to clear selection.
 
 The outline sidebar on the left shows the file name, its description (or
 contents), the page, row and SDDS version counts, and every parameter, column
@@ -222,6 +260,9 @@ refresh an active row filter; renaming a referenced column disables that filter
 and shows all rows.
 
 Row filters match column names case-sensitively first, then ignoring case.
+Decimal and scientific values are compared without rounding the threshold to
+the platform's floating-point precision, so filters distinguish adjacent 64-bit
+integers even when the threshold includes a decimal point or exponent.
 Write a name in brackets when it is not a plain identifier, including names
 that contain brackets (`[Q[0]] > 0`); a bracketed name always refers to a
 column, even one named `row`, `i`, `true` or `false`. Fill Series and numerical

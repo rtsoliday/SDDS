@@ -121,6 +121,7 @@ private slots:
   void arrayHeaderMenuRequested(const QPoint &pos);
   void arrayCellMenuRequested(const QPoint &pos);
   void plotColumn(int column);
+  void plotArray(int column);
   void restartApp();
   void showHelp();
   void columnMoved(int logical, int oldVisual, int newVisual);
@@ -184,7 +185,9 @@ private:
   bool ensureDataset();
   bool writeFile(const QString &path);
   /** Serialize current data without changing the document saved state. */
-  bool writeDatasetFile(const QString &path);
+  bool writeDatasetFile(const QString &path, bool forceAscii = false);
+  void plotData(int index, bool array);
+  void clearColumnSelection();
   bool writeHDF(const QString &path);
   bool writeCSV(const QString &path);
   void editColumnAttributesAt(int column);
