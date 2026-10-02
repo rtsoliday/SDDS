@@ -36,6 +36,7 @@ class QLineEdit;
 class QAction;
 class QFrame;
 class DataPanel;
+class EditorHelpDialog;
 class TwoLineHeaderView;
 class ParameterPageModel;
 class ColumnPageModel;
@@ -147,6 +148,7 @@ private:
   };
 
   void applyTheme(bool dark);
+  void showAbout();
   void buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoAct,
                     QAction *redoAct, QAction *filterAct, QAction *arrayViewerAct);
   void buildStatusBar();
@@ -271,6 +273,7 @@ private:
   bool applyingStructuralUndo;
   bool darkPalette;
   QPointer<QDialog> searchColumnDialog;
+  QPointer<EditorHelpDialog> helpDialog;
   QVector<QPointer<QDialog>> arrayViewers;
 
   /* Used only during initial load to provide progress through UI model building. */

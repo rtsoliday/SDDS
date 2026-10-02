@@ -2640,6 +2640,159 @@ public:
     fprintf(stdout, "PASS toolbar, panel headers, filter chip, status bar, and themes\n");
   }
 
+  /** Help opens one non-modal window whose topic list, find bar and theme follow the editor. */
+  static void helpWindow(const QString &root) {
+    SDDSEditor editor;
+    editor.show();
+    QCoreApplication::processEvents();
+    editor.showHelp();
+    QCoreApplication::processEvents();
+    EditorHelpDialog *help = editor.helpDialog;
+    require(help && help->isVisible() && help->windowModality() == Qt::NonModal,
+            "help opens as a non-modal window");
+    editor.showHelp();
+    require(editor.helpDialog == help, "a second Help request reuses the open window");
+
+    QListWidget *topics = help->findChild<QListWidget *>("helpTopics");
+    QTextBrowser *browser = help->findChild<QTextBrowser *>("helpBrowser");
+    QLineEdit *find = help->findChild<QLineEdit *>("helpFind");
+    QLabel *matches = help->findChild<QLabel *>("helpMatches");
+    require(topics && browser && find && matches, "help window has topics, text and a find bar");
+    require(topics->count() == editorHelpTopics().size() && topics->currentRow() == 0, "help lists every topic");
+
+    const QString text = browser->toPlainText();
+    require(text.contains("%2F and %25") && !text.contains("%1") && !text.contains("%3"),
+            "help text has its shortcuts substituted and literal percent signs intact");
+    require(text.contains(QKeySequence("Ctrl+Shift+E").toString(QKeySequence::NativeText)) &&
+                text.contains("Apply Numerical Expression"),
+            "help text shows the formula shortcuts");
+    const QString html = browser->toHtml();
+    for (const EditorHelpTopic &topic : editorHelpTopics())
+      require(html.contains(QString("name=\"%1\"").arg(topic.anchor)), "every help topic has an anchor");
+
+    // Choosing a topic scrolls to it; scrolling selects the topic being read.
+    QScrollBar *bar = browser->verticalScrollBar();
+    int findRow = -1, formulaRow = -1;
+    for (int row = 0; row < topics->count(); ++row) {
+      const QString anchor = topics->item(row)->data(Qt::UserRole).toString();
+      if (anchor == "find")
+        findRow = row;
+      else if (anchor == "formula")
+        formulaRow = row;
+    }
+    require(findRow > 0 && formulaRow > findRow, "help has search and formula topics");
+    topics->setCurrentRow(findRow);
+    const int findTop = bar->value();
+    require(findTop > 0 && findTop < bar->maximum(), "choosing a topic scrolls to it");
+    bar->setValue(0);
+    require(topics->currentRow() == 0, "scrolling to the top selects the first topic");
+    bar->setValue(findTop);
+    require(topics->currentRow() == findRow, "scrolling to a heading selects its topic");
+    browser->setSource(QUrl("#formula"));
+    QCoreApplication::processEvents();
+    require(browser->toPlainText() == text && topics->currentRow() == formulaRow,
+            "links between topics scroll within the help text");
+
+    find->setText("ANCHOR");
+    const int found = browser->extraSelections().size();
+    require(found > 1 && matches->text().endsWith(QString(" of %1").arg(found)),
+            "find highlights every match and counts them");
+    const QString before = matches->text();
+    QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QCoreApplication::sendEvent(find, &enter);
+    require(help->isVisible() && matches->text() != before,
+            "Enter in the find field moves to the next match without closing help");
+    for (const QTextEdit::ExtraSelection &selection : browser->extraSelections())
+      require(selection.cursor.selectedText().compare("anchor", Qt::CaseInsensitive) == 0,
+              "find highlights only matching text");
+    help->findNext(-1);
+    require(matches->text() == before, "find steps back to the previous match");
+    help->grab().save(root + "/help-light.png");
+
+    // A theme change restyles the open window and keeps the reading position and matches.
+    const int scroll = bar->value();
+    editor.applyTheme(true);
+    QCoreApplication::processEvents();
+    require(help->styleSheet().contains(editorTheme(true).win.name()) &&
+                browser->document()->defaultStyleSheet().contains(editorTheme(true).accentText.name()),
+            "help follows the dark theme");
+    require(bar->value() == scroll && browser->extraSelections().size() == found &&
+                matches->text() == before,
+            "theme change keeps the help position and matches");
+    help->grab().save(root + "/help-dark.png");
+    editor.applyTheme(false);
+
+    find->setText("no such help text");
+    require(browser->extraSelections().isEmpty() && matches->text() == "No matches",
+            "find reports text that is not in the help");
+
+    editor.close();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    require(!editor.helpDialog, "closing the editor closes its help window");
+    fprintf(stdout, "PASS help window topics, find, links and themes\n");
+  }
+
+  /** The About dialog keeps its message and runs an interactive animation only while shown. */
+  static void aboutDialog(const QString &root) {
+    SDDSEditor editor;
+    editor.show();
+    QCoreApplication::processEvents();
+    bool checked = false;
+    QPointer<QTimer> bannerTimer;
+    acceptDialog("About SDDS Editor", [&](QDialog *dialog) {
+      QLabel *message = dialog->findChild<QLabel *>("aboutMessage");
+      require(message && message->text().contains("Robert Soliday") && message->text().contains("caffeine") &&
+                  message->text().contains("infinite loop"),
+              "about dialog keeps the author message");
+      AboutBanner *banner = static_cast<AboutBanner *>(dialog->findChild<QWidget *>("aboutBanner"));
+      require(banner && banner->isAnimating(), "about animation runs while the dialog is shown");
+      bannerTimer = banner->findChild<QTimer *>();
+
+      const qreal full = banner->coffeeLevel();
+      const int fortune = banner->fortuneIndex();
+      banner->advance(5.0);
+      require(banner->coffeeLevel() < full, "the coffee drains over time");
+      require(banner->fortuneIndex() != fortune, "the one-liners rotate");
+
+      const qreal drained = banner->coffeeLevel();
+      const QPointF mug = banner->mugRect().center();
+      QMouseEvent click(QEvent::MouseButtonPress, mug, QPointF(banner->mapToGlobal(mug.toPoint())),
+                        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(banner, &click);
+      require(banner->particleCount() > 0, "clicking the mug sprays digits");
+      banner->advance(0.35);
+      require(banner->coffeeLevel() > drained, "clicking the mug refills it");
+      banner->grab().save(root + "/about-banner.png");
+      dialog->grab().save(root + "/about-light.png");
+      banner->advance(3.0);
+      require(banner->particleCount() == 0 && banner->coffeeLevel() > 0.95,
+              "digits fade away and the refilled mug is nearly full");
+
+      const QPointF corner(20, 20);
+      QMouseEvent toss(QEvent::MouseButtonPress, corner, QPointF(banner->mapToGlobal(corner.toPoint())),
+                       Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(banner, &toss);
+      require(banner->particleCount() > 0, "clicking elsewhere tosses digits");
+
+      banner->advance(100.0);
+      require(banner->coffeeLevel() < 0.12, "an untouched mug runs dry");
+      banner->grab().save(root + "/about-banner-empty.png");
+      checked = true;
+    });
+    editor.showAbout();
+    require(checked, "about dialog was shown");
+    require(!bannerTimer, "closing the about dialog stops and frees its animation");
+
+    editor.applyTheme(true);
+    acceptDialog("About SDDS Editor", [&](QDialog *dialog) {
+      static_cast<AboutBanner *>(dialog->findChild<QWidget *>("aboutBanner"))->advance(1.0);
+      dialog->grab().save(root + "/about-dark.png");
+    });
+    editor.showAbout();
+    editor.applyTheme(false);
+    fprintf(stdout, "PASS about dialog message, animation, refills and lifecycle\n");
+  }
+
   /** Accept a dialog once it is shown, including one opened after a context menu closes. */
   static void acceptDialogWhenShown(const QString &title, std::function<void(QDialog *)> configure) {
     QTimer *timer = new QTimer;
@@ -3402,6 +3555,8 @@ int main(int argc, char **argv) {
   SDDSEditorTests::reviewFixes(artifacts.path());
   SDDSEditorTests::sparseClipboard();
   SDDSEditorTests::interfaceChrome(artifacts.path());
+  SDDSEditorTests::helpWindow(artifacts.path());
+  SDDSEditorTests::aboutDialog(artifacts.path());
   SDDSEditorTests::menuAndTextFixes();
   SDDSEditorTests::displayAndRangeFixes();
   SDDSEditorTests::definitionAndPageFixes(artifacts.path());

@@ -94,6 +94,12 @@
 #include <QJsonDocument>
 #include <QJsonValue>
 #include <QScopedValueRollback>
+#include <QTextBrowser>
+#include <QTextBlock>
+#include <QTextDocument>
+#include <QAbstractTextDocumentLayout>
+#include <QListWidget>
+#include <QElapsedTimer>
 
 /*
  * On Windows, some headers define min/max as macros, which breaks code like
@@ -2618,6 +2624,8 @@ static QPalette editorPalette(const EditorTheme &t, QPalette pal) {
   return pal;
 }
 
+static QString themedStyleSheet(QString css, const EditorTheme &t);
+
 static QString editorStyleSheet(const EditorTheme &t) {
   QString css = QStringLiteral(
       "#centralArea { background: @win; }"
@@ -2666,6 +2674,11 @@ static QString editorStyleSheet(const EditorTheme &t) {
       "  color: @text; padding: 1px 8px; margin: 2px 4px; }"
       "QToolButton#messagesButton:checked { background: @accentSoft; color: @accentText; }"
       "QDockWidget#messagesDock QPlainTextEdit { background: @surface; color: @text; border: none; }");
+  return themedStyleSheet(css, t);
+}
+
+/** Replace @token color names in a style sheet with the theme's colors. */
+static QString themedStyleSheet(QString css, const EditorTheme &t) {
   const QList<QPair<QString, QColor>> tokens = {
       {"@win", t.win}, {"@chrome", t.chrome}, {"@surface", t.surface}, {"@header", t.header},
       {"@border", t.border}, {"@grid", t.grid}, {"@text", t.text}, {"@muted", t.muted},
@@ -2676,6 +2689,898 @@ static QString editorStyleSheet(const EditorTheme &t) {
     css.replace(token.first, token.second.name());
   return css;
 }
+
+/** One section of the help window, listed in its topic sidebar. */
+struct EditorHelpTopic {
+  QString anchor;
+  QString title;
+  QString body;
+};
+
+/** A shortcut as this platform displays it (Ctrl+Shift+F, or the symbols on macOS). */
+static QString helpKey(const QKeySequence &keys) {
+  const QString text = keys.toString(QKeySequence::NativeText);
+  if (text.isEmpty())
+    return QString();
+  return QStringLiteral("<span class=\"key\">&nbsp;%1&nbsp;</span>").arg(text.toHtmlEscaped());
+}
+
+static QString helpKey(QKeySequence::StandardKey key) {
+  return helpKey(QKeySequence(key));
+}
+
+static QString helpKey(const char *portableText) {
+  return helpKey(QKeySequence(QString::fromLatin1(portableText)));
+}
+
+static QString helpTable(const QString &header, const QString &rows) {
+  return QStringLiteral("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"5\"><tr>%1</tr>%2</table>")
+      .arg(header, rows);
+}
+
+/*
+ * Help text for the editor.  Body text is passed through QString::arg, so a
+ * literal percent sign is written as the entity &#37;.
+ */
+static QVector<EditorHelpTopic> editorHelpTopics() {
+  QString del = helpKey(QKeySequence::Delete);
+#if defined(Q_OS_MACOS)
+  del += QStringLiteral(" / ") + helpKey(QKeySequence(Qt::Key_Backspace));
+#endif
+  const QString filterKey = helpKey("Ctrl+Shift+R");
+  const QString fillKey = helpKey("Ctrl+Shift+F");
+  const QString exprKey = helpKey("Ctrl+Shift+E");
+  const QString textKey = helpKey("Ctrl+Shift+M");
+
+  QVector<EditorHelpTopic> topics;
+  topics.append({QStringLiteral("start"), SDDSEditor::tr("Getting started"), SDDSEditor::tr(
+      "<p>The SDDS Editor views and edits Self Describing Data Set files: the parameters, "
+      "column data and arrays on every page. A file named on the command line opens at startup.</p>"
+      "<ul>"
+      "<li><b>Open</b> a file with <b>File &#8250; Open</b> %1 or the <b>Open</b> toolbar button.</li>"
+      "<li>Data appears in three panels: <b>Parameters</b> (one value each per page), "
+      "<b>Columns</b> (rows of tabular data) and <b>Arrays</b> (multidimensional data). "
+      "Click a panel title, or use the <b>View</b> menu, to collapse or expand a panel. "
+      "Drag the gap between panels to resize them.</li>"
+      "<li>When a file has several pages, change pages with the toolbar arrows or the page list.</li>"
+      "<li>Click a cell and type to change a value.</li>"
+      "<li><b>Save</b> with <b>File &#8250; Save</b> %2 or <b>File &#8250; Save as...</b>. "
+      "The <b>ASCII</b> / <b>Binary</b> switch at the right end of the toolbar selects the format written.</li>"
+      "</ul>"
+      "<p>The status bar shows <b>&#9679; Modified</b> until changes are saved, and the editor asks "
+      "before discarding unsaved changes.</p>"
+      "<p class=\"note\">To create a new file, insert a parameter, column or array without opening "
+      "a file, then save it.</p>")
+      .arg(helpKey(QKeySequence::Open), helpKey(QKeySequence::Save))});
+
+  topics.append({QStringLiteral("edit"), SDDSEditor::tr("Editing data"), SDDSEditor::tr(
+      "<h3>Cells</h3>"
+      "<ul>"
+      "<li>Click a cell to edit it. Press Enter to keep the change or Esc to cancel it. "
+      "Values are checked against the SDDS type, and invalid values are rejected.</li>"
+      "<li><b>Copy</b> %1 and <b>Paste</b> %2 use tab-separated text, so data can move to and "
+      "from spreadsheets. A paste fills cells from the current cell onward.</li>"
+      "<li><b>Delete</b> %3 clears the selected cells.</li>"
+      "<li><b>Undo</b> %4 and <b>Redo</b> %5 cover cell edits and structural changes such as "
+      "inserts, deletions, sorts and type changes. The status bar shows the last undoable action. "
+      "Changing pages clears the Undo history.</li>"
+      "</ul>"
+      "<h3>Parameters</h3>"
+      "<p>The parameter table lists Name, Type, Units, Value and Description. Only the value is "
+      "edited in the table: double-click the type to change it, or the units or description to "
+      "open the parameter's attributes. Drag a row number to reorder parameters.</p>"
+      "<h3>Columns and arrays</h3>"
+      "<p>Each header shows the name with its type, units and, for arrays, the shape. "
+      "Double-click a header to change the type, drag it to reorder, or right-click it for more "
+      "actions (see <a href=\"#menus\">Right-click menus</a>).</p>"
+      "<p class=\"note\">Floating-point values are shown with the fewest digits that reproduce "
+      "the stored number exactly.</p>")
+      .arg(helpKey(QKeySequence::Copy), helpKey(QKeySequence::Paste), del,
+           helpKey(QKeySequence::Undo), helpKey(QKeySequence::Redo))});
+
+  topics.append({QStringLiteral("structure"), SDDSEditor::tr("Adding and removing"),
+      helpTable(SDDSEditor::tr("<th>To change</th><th>Use</th>"), SDDSEditor::tr(
+          "<tr><td>Parameters, columns and arrays</td><td><b>Edit &#8250; Parameter</b>, "
+          "<b>Column</b> or <b>Array</b>, then <b>Insert</b>, <b>Delete</b> or <b>Attributes</b>. "
+          "Each panel header also has <b>Insert</b> and <b>Attributes</b> buttons.</td></tr>"
+          "<tr><td>Column rows</td><td><b>Edit &#8250; Column Rows &#8250; Insert</b> or "
+          "<b>Delete</b>, or right-click a row number.</td></tr>"
+          "<tr><td>Pages</td><td><b>Edit &#8250; Page &#8250; Insert</b>, "
+          "<b>Insert and clone current page</b> or <b>Delete</b>.</td></tr>"
+          "<tr><td>Array shape</td><td>Right-click an array and choose <b>Resize</b>, or change the "
+          "number of dimensions in its <b>Attributes</b>. Elements keep their indices.</td></tr>")) +
+      SDDSEditor::tr(
+          "<p><b>Attributes</b> edits the definition of the item under the current cell, such as its "
+          "name, units, description and type. <b>Delete</b> removes every selected parameter, "
+          "column or array.</p>")});
+
+  topics.append({QStringLiteral("menus"), SDDSEditor::tr("Right-click menus"),
+      helpTable(SDDSEditor::tr("<th>Right-click</th><th>Actions</th>"), SDDSEditor::tr(
+          "<tr><td>Parameter row or value</td><td>Attributes, Delete</td></tr>"
+          "<tr><td>Column header or cell</td><td>Attributes, Plot from file, Sort ascending, "
+          "Sort descending, Search/Replace, Filter/View, Clear Filter/View, formula tools, Delete</td></tr>"
+          "<tr><td>Column row number</td><td>Insert, Delete, Filter/View, Clear Filter/View, "
+          "formula tools</td></tr>"
+          "<tr><td>Array header or cell</td><td>Attributes, Open Array Viewer, Search, Resize, "
+          "formula tools, Delete</td></tr>")) +
+      SDDSEditor::tr(
+          "<p>Sorting reorders whole rows and keeps rows with equal values in their original order. "
+          "The formula tools are Fill Series, Apply Numerical Expression and Apply Text Formula "
+          "(see <a href=\"#formula\">Formulas and fill</a>).</p>")});
+
+  topics.append({QStringLiteral("find"), SDDSEditor::tr("Search and filter"), SDDSEditor::tr(
+      "<h3>Column search box</h3>"
+      "<p>Type in the search box in the Columns panel header and press Enter to select the next "
+      "match; press Enter again to continue. The search covers the selected columns, or all "
+      "columns when none are selected. It ignores case, skips filtered rows and wraps to the "
+      "beginning.</p>"
+      "<h3>Search and replace</h3>"
+      "<p>Right-click a column and choose <b>Search/Replace</b>, or an array and choose "
+      "<b>Search</b>. <b>Next</b> and <b>Previous</b> step through the matches; <b>Replace</b> "
+      "and <b>Replace All</b> change them.</p>"
+      "<h3>Row filter</h3>"
+      "<p><b>Filter/View...</b> %1 shows only the column rows that match an expression; no data is "
+      "deleted. Open it from <b>Edit &#8250; Column Rows</b>, the <b>Filter rows</b> toolbar "
+      "button or a right-click menu. A chip beside the Columns title shows the filter and the "
+      "number of visible rows: click it to edit the filter, or &#215; to clear it. Copy, paste, "
+      "delete, search/replace and the formula tools change only visible rows.</p>")
+      .arg(filterKey) +
+      helpTable(SDDSEditor::tr("<th>Element</th><th>Syntax</th>"), SDDSEditor::tr(
+          "<tr><td>Column value</td><td><code>X</code>, or <code>[Beam Current]</code> for a name "
+          "that is not a plain identifier. A bracketed name is always a column, even "
+          "<code>[row]</code>.</td></tr>"
+          "<tr><td>Row index</td><td><code>row</code> or <code>i</code>, starting at 0</td></tr>"
+          "<tr><td>Literals</td><td>numbers, <code>\"text\"</code> or <code>'text'</code>, "
+          "<code>true</code>, <code>false</code></td></tr>"
+          "<tr><td>Comparison</td><td><code>==</code> <code>!=</code> <code>&lt;</code> "
+          "<code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code></td></tr>"
+          "<tr><td>Logic</td><td><code>&amp;&amp;</code> <code>||</code> <code>!</code> "
+          "and parentheses</td></tr>")) +
+      SDDSEditor::tr(
+          "<p>Numbers compare numerically and other values as case-sensitive text. A value on its "
+          "own is true unless it is zero, empty, <code>false</code>, <code>no</code> or "
+          "<code>off</code>. Column names match case-sensitively first, then ignoring case.</p>"
+          "<p>Examples: <code>X &gt; 0 &amp;&amp; Status == \"OK\"</code>, "
+          "<code>[Beam Current] &gt;= 100</code>, <code>row &lt; 10 || !Flag</code></p>")});
+
+  topics.append({QStringLiteral("formula"), SDDSEditor::tr("Formulas and fill"),
+      SDDSEditor::tr(
+          "<p>Select the cells to change in any table, then choose a tool from "
+          "<b>Edit &#8250; Formula / Fill</b> or a right-click menu.</p>") +
+      helpTable(SDDSEditor::tr("<th>Tool</th><th>Each selected cell becomes</th>"), SDDSEditor::tr(
+          "<tr><td><b>Fill Series...</b> %1</td><td><i>start</i> + <i>step</i> &#215; "
+          "<code>i</code></td></tr>"
+          "<tr><td><b>Apply Numerical Expression...</b> %2</td><td>the value of an expression, "
+          "such as <code>x * 2</code></td></tr>"
+          "<tr><td><b>Apply Text Formula...</b> %3</td><td>a text template with its tokens "
+          "replaced, such as <code>run_${i}</code></td></tr>")
+          .arg(fillKey, exprKey, textKey)) +
+      SDDSEditor::tr("<h3>Variables</h3>") +
+      helpTable(SDDSEditor::tr("<th>Expression</th><th>Template</th><th>Meaning</th>"), SDDSEditor::tr(
+          "<tr><td><code>x</code></td><td><code>${x}</code></td><td>current cell value</td></tr>"
+          "<tr><td><code>a</code></td><td><code>${a}</code></td><td>anchor value (first selected cell)</td></tr>"
+          "<tr><td><code>i</code></td><td><code>${i}</code></td><td>position in the selection, from 0</td></tr>"
+          "<tr><td><code>row</code></td><td><code>${row}</code></td><td>row index, from 0</td></tr>"
+          "<tr><td><code>col</code></td><td><code>${col}</code></td><td>column index, from 0</td></tr>"
+          "<tr><td><code>dr</code></td><td><code>${dr}</code></td><td>rows below the anchor</td></tr>"
+          "<tr><td><code>dc</code></td><td><code>${dc}</code></td><td>columns right of the anchor</td></tr>")) +
+      SDDSEditor::tr(
+          "<p>Cells are processed top to bottom, then left to right; the first cell in that order "
+          "is the anchor.</p>"
+          "<h3>Expressions</h3>"
+          "<ul>"
+          "<li>Operators <code>+</code> <code>-</code> <code>*</code> <code>/</code> and "
+          "<code>^</code> (power; <code>-2^2</code> is -4), with parentheses.</li>"
+          "<li>Functions <code>abs</code> <code>sqrt</code> <code>sin</code> <code>cos</code> "
+          "<code>tan</code> <code>log</code> <code>exp</code> <code>floor</code> <code>ceil</code>. "
+          "<code>log</code> is the natural logarithm, and angles are in radians.</li>"
+          "<li>Constants <code>pi</code> and <code>e</code>.</li>"
+          "</ul>"
+          "<h3>Examples</h3>") +
+      helpTable(SDDSEditor::tr("<th>Formula</th><th>Effect</th>"), SDDSEditor::tr(
+          "<tr><td><code>x + 10</code></td><td>add 10 to each value</td></tr>"
+          "<tr><td><code>a + i*0.5</code></td><td>series from the anchor value in steps of 0.5</td></tr>"
+          "<tr><td><code>x * (1 + dr*0.01)</code></td><td>scale by 1&#37; more on each row below the anchor</td></tr>"
+          "<tr><td><code>sin(x) * exp(-i/10)</code></td><td>damped sine of each value</td></tr>"
+          "<tr><td><code>${x} mm</code></td><td>text formula: append \" mm\"</td></tr>"
+          "<tr><td><code>S${row}</code></td><td>text formula: S0, S1, S2, ...</td></tr>")) +
+      SDDSEditor::tr(
+          "<p class=\"note\">Integer columns are computed exactly with 64-bit arithmetic when an "
+          "expression uses only integers, + - * exact division, abs, floor and ceil. A result that "
+          "would be rounded or does not fit the type is rejected.</p>")});
+
+  topics.append({QStringLiteral("arrays"), SDDSEditor::tr("Array viewer"), SDDSEditor::tr(
+      "<p>Open a viewer for the current array with the <b>Array viewer</b> toolbar button, "
+      "<b>Edit &#8250; Array &#8250; Open Array Viewer...</b>, or by right-clicking an array. "
+      "Each viewer is a separate window showing that array on the current page.</p>"
+      "<ul>"
+      "<li>Choose the dimensions that form the rows and columns of the grid; choosing an axis "
+      "already in use swaps the two. Spin boxes and sliders select the slice of the other "
+      "dimensions. All indices start at 0.</li>"
+      "<li>Edits appear in the main table at once and share its Undo/Redo history. "
+      "%1 saves the document.</li>"
+      "<li>Copy and paste work on rectangular selections; <b>Copy slice</b> copies the displayed "
+      "plane. A paste must fit inside the plane.</li>"
+      "<li>The viewer follows page changes, and slice indices adjust when the array shape changes.</li>"
+      "<li><b>Heatmap</b> colors numeric cells, scaled to the <b>Current slice</b> or to a "
+      "<b>Fixed range</b> (enter Min and Max, then Apply). Gray marks missing, NaN and infinite "
+      "values. The heatmap changes only the display.</li>"
+      "</ul>")
+      .arg(helpKey(QKeySequence::Save))});
+
+  topics.append({QStringLiteral("export"), SDDSEditor::tr("Plotting and export"), SDDSEditor::tr(
+      "<h3>Plotting</h3>"
+      "<p>Select a cell in a column and click <b>Plot</b> on the toolbar, or right-click a column "
+      "and choose <b>Plot from file</b>. The column is plotted with <code>sddsplot</code>, which "
+      "must be on the PATH; a <code>Time</code> column, if present, is used for the horizontal "
+      "axis. Unsaved edits are included in the plot.</p>"
+      "<h3>Export</h3>"
+      "<ul>"
+      "<li><b>File &#8250; Export CSV</b> %1 writes the data as comma-separated values.</li>"
+      "<li><b>File &#8250; Export HDF</b> %2 writes an HDF5 file. Because HDF5 separates paths "
+      "with /, the characters / and &#37; in names are written as &#37;2F and &#37;25.</li>"
+      "</ul>"
+      "<p class=\"note\">Saves and exports are written to a temporary file first, so a failure "
+      "leaves the existing file unchanged. Exporting does not mark the document as saved.</p>")
+      .arg(helpKey("Ctrl+Shift+C"), helpKey("Ctrl+Shift+H"))});
+
+  topics.append({QStringLiteral("status"), SDDSEditor::tr("Status bar and messages"), SDDSEditor::tr(
+      "<ul>"
+      "<li>The status bar shows whether the document is saved, the file (hover for the full "
+      "path), the page, the current cell, the row count (visible rows while a filter is active) "
+      "and the last undoable action.</li>"
+      "<li>Messages appear briefly in the status bar and are kept in the message log. Open the "
+      "log with the <b>Messages</b> button or <b>View &#8250; Messages</b> %1; the button counts "
+      "unread messages.</li>"
+      "<li>The <b>View</b> menu also shows or hides the toolbar, the status bar and each panel.</li>"
+      "<li>The editor uses a light or dark appearance to match the desktop.</li>"
+      "<li><b>File &#8250; Restart</b> %2 restarts the editor after offering to save changes.</li>"
+      "</ul>")
+      .arg(helpKey("Ctrl+Shift+L"), helpKey("Ctrl+R"))});
+
+  struct Shortcut {
+    QString action;
+    QString keys;
+  };
+  const QVector<Shortcut> shortcuts = {
+      {SDDSEditor::tr("Open"), helpKey(QKeySequence::Open)},
+      {SDDSEditor::tr("Save"), helpKey(QKeySequence::Save)},
+      {SDDSEditor::tr("Save as"), helpKey(QKeySequence::SaveAs)},
+      {SDDSEditor::tr("Export CSV"), helpKey("Ctrl+Shift+C")},
+      {SDDSEditor::tr("Export HDF"), helpKey("Ctrl+Shift+H")},
+      {SDDSEditor::tr("Restart"), helpKey("Ctrl+R")},
+      {SDDSEditor::tr("Quit"), helpKey(QKeySequence::Quit)},
+      {SDDSEditor::tr("Undo"), helpKey(QKeySequence::Undo)},
+      {SDDSEditor::tr("Redo"), helpKey(QKeySequence::Redo)},
+      {SDDSEditor::tr("Copy"), helpKey(QKeySequence::Copy)},
+      {SDDSEditor::tr("Paste"), helpKey(QKeySequence::Paste)},
+      {SDDSEditor::tr("Clear selected cells"), del},
+      {SDDSEditor::tr("Filter/View rows"), filterKey},
+      {SDDSEditor::tr("Fill Series"), fillKey},
+      {SDDSEditor::tr("Apply Numerical Expression"), exprKey},
+      {SDDSEditor::tr("Apply Text Formula"), textKey},
+      {SDDSEditor::tr("Show or hide messages"), helpKey("Ctrl+Shift+L")},
+      {SDDSEditor::tr("Help"), helpKey(QKeySequence::HelpContents)},
+      {SDDSEditor::tr("Find in this help"), helpKey(QKeySequence::Find)},
+      {SDDSEditor::tr("Next / previous match in this help"),
+       helpKey(QKeySequence::FindNext) + QStringLiteral(" / ") + helpKey(QKeySequence::FindPrevious)}};
+  QString rows;
+  for (const Shortcut &shortcut : shortcuts) {
+    // Some standard keys, such as Save as on Windows, have no binding.
+    if (!shortcut.keys.isEmpty())
+      rows += QStringLiteral("<tr><td>%1</td><td>%2</td></tr>").arg(shortcut.action.toHtmlEscaped(), shortcut.keys);
+  }
+  topics.append({QStringLiteral("keys"), SDDSEditor::tr("Keyboard shortcuts"),
+      helpTable(SDDSEditor::tr("<th>Action</th><th>Shortcut</th>"), rows)});
+  return topics;
+}
+
+/** Colors and fonts for the help text, which Qt applies when the HTML is set. */
+static QString helpDocumentStyleSheet(const EditorTheme &t) {
+  return themedStyleSheet(QStringLiteral(
+      "body { color: @text; }"
+      "h2 { color: @accentText; font-size: large; margin-top: 20px; margin-bottom: 6px; }"
+      "h3 { color: @text; margin-top: 14px; margin-bottom: 4px; }"
+      "p, li { margin-top: 3px; margin-bottom: 3px; }"
+      "code { font-family: '@mono'; color: @accentText; }"
+      ".key { font-family: '@mono'; background-color: @header; color: @text; }"
+      ".note { color: @muted; }"
+      "table { border-collapse: collapse; margin-top: 4px; margin-bottom: 8px; }"
+      "th { background-color: @header; color: @text; text-align: left; font-weight: bold; }"
+      "td, th { border-bottom: 1px solid @border; }"), t)
+      .replace(QStringLiteral("@mono"), preferredTableFont().family());
+}
+
+/*
+ * Non-modal help window: a topic list, the help text, and a find bar that
+ * highlights every match.  The topic list follows the text as it scrolls.
+ */
+class EditorHelpDialog : public QDialog {
+public:
+  EditorHelpDialog() : QDialog(nullptr) {
+    setObjectName(QStringLiteral("helpDialog"));
+    setWindowTitle(SDDSEditor::tr("SDDS Editor Help"));
+    setAttribute(Qt::WA_DeleteOnClose);
+
+    findEdit = new QLineEdit(this);
+    findEdit->setObjectName(QStringLiteral("helpFind"));
+    findEdit->setPlaceholderText(SDDSEditor::tr("Find in help"));
+    findEdit->setClearButtonEnabled(true);
+    QToolButton *prevBtn = new QToolButton(this);
+    prevBtn->setArrowType(Qt::UpArrow);
+    prevBtn->setAutoRaise(true);
+    prevBtn->setToolTip(SDDSEditor::tr("Previous match (%1)")
+                            .arg(QKeySequence(QKeySequence::FindPrevious).toString(QKeySequence::NativeText)));
+    QToolButton *nextBtn = new QToolButton(this);
+    nextBtn->setArrowType(Qt::DownArrow);
+    nextBtn->setAutoRaise(true);
+    nextBtn->setToolTip(SDDSEditor::tr("Next match (%1)")
+                            .arg(QKeySequence(QKeySequence::FindNext).toString(QKeySequence::NativeText)));
+    matchLabel = new QLabel(this);
+    matchLabel->setObjectName(QStringLiteral("helpMatches"));
+    matchLabel->setMinimumWidth(textAdvance(matchLabel->fontMetrics(), SDDSEditor::tr("No matches")) + 8);
+    QHBoxLayout *findLayout = new QHBoxLayout();
+    findLayout->addWidget(findEdit, 1);
+    findLayout->addWidget(prevBtn);
+    findLayout->addWidget(nextBtn);
+    findLayout->addWidget(matchLabel);
+
+    topicList = new QListWidget(this);
+    topicList->setObjectName(QStringLiteral("helpTopics"));
+    browser = new QTextBrowser(this);
+    browser->setObjectName(QStringLiteral("helpBrowser"));
+    browser->document()->setDocumentMargin(14);
+    QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->addWidget(topicList);
+    splitter->addWidget(browser);
+    splitter->setChildrenCollapsible(false);
+    splitter->setStretchFactor(1, 1);
+
+    const QVector<EditorHelpTopic> topics = editorHelpTopics();
+    for (const EditorHelpTopic &topic : topics) {
+      QListWidgetItem *item = new QListWidgetItem(topic.title, topicList);
+      item->setData(Qt::UserRole, topic.anchor);
+      html += QStringLiteral("<h2><a name=\"%1\">%2</a></h2>%3").arg(topic.anchor, topic.title, topic.body);
+    }
+    int listWidth = 0;
+    for (const EditorHelpTopic &topic : topics)
+      listWidth = std::max(listWidth, textAdvance(topicList->fontMetrics(), topic.title));
+    splitter->setSizes({listWidth + 48, 680});
+    {
+      QSignalBlocker blocker(topicList);
+      topicList->setCurrentRow(0);
+    }
+
+    // A plain button: Enter in the find field must step through matches, not close the window.
+    QPushButton *closeBtn = new QPushButton(SDDSEditor::tr("Close"), this);
+    closeBtn->setAutoDefault(false);
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    buttonLayout->addStretch(1);
+    buttonLayout->addWidget(closeBtn);
+
+    QVBoxLayout *layout = new QVBoxLayout(this);
+    layout->addLayout(findLayout);
+    layout->addWidget(splitter, 1);
+    layout->addLayout(buttonLayout);
+
+    connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
+    connect(topicList, &QListWidget::currentRowChanged, this, [this](int row) { showTopic(row); });
+    connect(browser->verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() { followScroll(); });
+    connect(findEdit, &QLineEdit::textChanged, this, [this]() { updateMatches(true); });
+    connect(findEdit, &QLineEdit::returnPressed, this, [this]() {
+      findNext(QApplication::keyboardModifiers().testFlag(Qt::ShiftModifier) ? -1 : 1);
+    });
+    connect(prevBtn, &QToolButton::clicked, this, [this]() { findNext(-1); });
+    connect(nextBtn, &QToolButton::clicked, this, [this]() { findNext(1); });
+    QShortcut *findSc = new QShortcut(QKeySequence::Find, this);
+    connect(findSc, &QShortcut::activated, this, [this]() {
+      findEdit->setFocus();
+      findEdit->selectAll();
+    });
+    QShortcut *nextSc = new QShortcut(QKeySequence::FindNext, this);
+    connect(nextSc, &QShortcut::activated, this, [this]() { findNext(1); });
+    QShortcut *prevSc = new QShortcut(QKeySequence::FindPrevious, this);
+    connect(prevSc, &QShortcut::activated, this, [this]() { findNext(-1); });
+  }
+
+  /** Restyle the window and its text, keeping the reading position and matches. */
+  void applyTheme(const EditorTheme &t) {
+    matchColor = t.accentSoft;
+    currentMatchColor = t.accent;
+    currentMatchText = t.onAccent;
+    setStyleSheet(themedStyleSheet(QStringLiteral(
+        "QDialog#helpDialog { background: @win; }"
+        "QListWidget#helpTopics { background: @chrome; border: 1px solid @border; border-radius: 8px;"
+        "  padding: 4px; color: @text; outline: 0; }"
+        "QListWidget#helpTopics::item { padding: 6px 10px; border-radius: 5px; }"
+        "QListWidget#helpTopics::item:hover { background: @hover; }"
+        "QListWidget#helpTopics::item:selected { background: @accentSoft; color: @accentText; }"
+        "QTextBrowser#helpBrowser { background: @surface; border: 1px solid @border; border-radius: 8px; }"
+        "QLineEdit#helpFind { background: @surface; border: 1px solid @border; border-radius: 6px;"
+        "  padding: 4px 6px; color: @text; }"
+        "QLineEdit#helpFind:focus { border-color: @accent; }"
+        "QLabel#helpMatches { color: @muted; padding-left: 4px; }"
+        "QLabel#helpMatches[missing=\"true\"] { color: @warn; }"), t));
+
+    const int scroll = browser->verticalScrollBar()->value();
+    {
+      // Replacing the text resets the scroll position; keep the topic list where it is.
+      QScopedValueRollback<bool> guard(navigating, true);
+      browser->document()->setDefaultStyleSheet(helpDocumentStyleSheet(t));
+      browser->setHtml(html);
+    }
+    topicPositions.clear();
+    for (int row = 0; row < topicList->count(); ++row)
+      topicPositions.append(anchorPosition(topicList->item(row)->data(Qt::UserRole).toString()));
+    updateMatches(false);
+    browser->verticalScrollBar()->setValue(scroll);
+    QPointer<QScrollBar> bar(browser->verticalScrollBar());
+    // Layout can finish after this call, so restore the position once more.
+    QTimer::singleShot(0, this, [bar, scroll]() {
+      if (bar)
+        bar->setValue(scroll);
+    });
+  }
+
+  /** Scroll to a topic, by its row in the topic list. */
+  void showTopic(int row) {
+    if (row < 0 || row >= topicList->count())
+      return;
+    QScopedValueRollback<bool> guard(navigating, true);
+    if (topicList->currentRow() != row) {
+      QSignalBlocker blocker(topicList);
+      topicList->setCurrentRow(row);
+    }
+    browser->scrollToAnchor(topicList->item(row)->data(Qt::UserRole).toString());
+  }
+
+  /** Move to the next (1) or previous (-1) match, wrapping around. */
+  void findNext(int direction) {
+    if (matches.isEmpty())
+      return;
+    currentMatch = (currentMatch + direction + matches.size()) % matches.size();
+    showMatches(true);
+  }
+
+private:
+  int anchorPosition(const QString &name) const {
+    const QTextDocument *doc = browser->document();
+    for (QTextBlock block = doc->begin(); block.isValid(); block = block.next())
+      for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it)
+        if (it.fragment().charFormat().anchorNames().contains(name))
+          return block.position();
+    return -1;
+  }
+
+  /** Select the topic whose heading is at or above the top of the view. */
+  void followScroll() {
+    if (navigating)
+      return;
+    QTextDocument *doc = browser->document();
+    const int top = browser->verticalScrollBar()->value();
+    int row = 0;
+    for (int i = 0; i < topicPositions.size(); ++i) {
+      const QTextBlock block = doc->findBlock(topicPositions[i]);
+      if (topicPositions[i] >= 0 && block.isValid() &&
+          doc->documentLayout()->blockBoundingRect(block).top() <= top + 24)
+        row = i;
+    }
+    if (topicList->currentRow() != row) {
+      QSignalBlocker blocker(topicList);
+      topicList->setCurrentRow(row);
+    }
+  }
+
+  /** Find every match, keeping the current one or starting from the visible text. */
+  void updateMatches(bool moveToMatch) {
+    const QString needle = findEdit->text();
+    const int from = currentMatchStart >= 0 ? currentMatchStart
+                                            : browser->cursorForPosition(QPoint(0, 0)).position();
+    matches.clear();
+    currentMatch = -1;
+    if (!needle.isEmpty()) {
+      QTextCursor cursor(browser->document());
+      for (;;) {
+        cursor = browser->document()->find(needle, cursor);
+        if (cursor.isNull())
+          break;
+        if (currentMatch < 0 && cursor.selectionStart() >= from)
+          currentMatch = matches.size();
+        matches.append(cursor);
+      }
+      if (currentMatch < 0 && !matches.isEmpty())
+        currentMatch = 0;
+    }
+    showMatches(moveToMatch);
+  }
+
+  void showMatches(bool moveToMatch) {
+    QList<QTextEdit::ExtraSelection> selections;
+    for (int i = 0; i < matches.size(); ++i) {
+      QTextEdit::ExtraSelection selection;
+      selection.cursor = matches[i];
+      selection.format.setBackground(i == currentMatch ? currentMatchColor : matchColor);
+      if (i == currentMatch)
+        selection.format.setForeground(currentMatchText);
+      selections.append(selection);
+    }
+    browser->setExtraSelections(selections);
+
+    const bool missing = !findEdit->text().isEmpty() && matches.isEmpty();
+    if (findEdit->text().isEmpty())
+      matchLabel->clear();
+    else if (missing)
+      matchLabel->setText(SDDSEditor::tr("No matches"));
+    else
+      matchLabel->setText(SDDSEditor::tr("%1 of %2").arg(currentMatch + 1).arg(matches.size()));
+    if (matchLabel->property("missing").toBool() != missing) {
+      matchLabel->setProperty("missing", missing);
+      matchLabel->style()->unpolish(matchLabel);
+      matchLabel->style()->polish(matchLabel);
+    }
+
+    currentMatchStart = currentMatch >= 0 ? matches[currentMatch].selectionStart() : -1;
+    if (!moveToMatch || currentMatch < 0)
+      return;
+    // Bring a hidden match to a third of the way down, where it is easy to read in context.
+    const QRect rect = browser->cursorRect(matches[currentMatch]);
+    const int height = browser->viewport()->height();
+    if (rect.top() < 0 || rect.bottom() > height)
+      browser->verticalScrollBar()->setValue(browser->verticalScrollBar()->value() + rect.top() - height / 3);
+  }
+
+  QListWidget *topicList;
+  QTextBrowser *browser;
+  QLineEdit *findEdit;
+  QLabel *matchLabel;
+  QString html;
+  QVector<int> topicPositions;
+  QVector<QTextCursor> matches;
+  int currentMatch{-1};
+  int currentMatchStart{-1};
+  bool navigating{false};
+  QColor matchColor;
+  QColor currentMatchColor;
+  QColor currentMatchText;
+};
+
+/*
+ * Animated banner for the About dialog: a live plot of data points streams
+ * past a glass mug of coffee that slowly drains.  Clicking the mug refills it
+ * and gives the plot a caffeine rush; clicking elsewhere tosses up some digits.
+ * Time advances only through advance(), so the scene can be stepped in tests.
+ */
+class AboutBanner : public QWidget {
+public:
+  AboutBanner(const EditorTheme &theme, QWidget *parent) : QWidget(parent), t(theme) {
+    setObjectName(QStringLiteral("aboutBanner"));
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setMouseTracking(true);
+    fortunes << SDDSEditor::tr("Now with 100% more self-description.")
+             << SDDSEditor::tr("No columns were harmed in the making of this editor.")
+             << SDDSEditor::tr("Arrays may be larger than they appear.")
+             << SDDSEditor::tr("Undo is always there for you.")
+             << SDDSEditor::tr("Every page tells a story.")
+             << SDDSEditor::tr("Tested on real data. Mostly.");
+    timer = new QTimer(this);
+    timer->setInterval(16);
+    connect(timer, &QTimer::timeout, this, [this]() {
+      // Clamp the step so a stalled event loop does not make the scene jump.
+      advance(std::min<qreal>(clock.restart() / 1000.0, 0.1));
+    });
+  }
+
+  QSize sizeHint() const override { return QSize(500, 190); }
+  QSize minimumSizeHint() const override { return sizeHint(); }
+
+  bool isAnimating() const { return timer->isActive(); }
+  qreal coffeeLevel() const { return level; }
+  int particleCount() const { return particles.size(); }
+  int fortuneIndex() const { return fortune; }
+
+  /** The mug's resting position; it bobs and jiggles around this when drawn. */
+  QRectF mugRect() const {
+    const qreal w = 58, h = 56;
+    return QRectF(width() - 40 - 18 - w, height() * 0.33, w, h);
+  }
+
+  /** Move the scene forward by @p dt seconds. */
+  void advance(qreal dt) {
+    const qreal rush = 1.0 + 2.0 * burst / burstLength;
+    time += dt;
+    stream += dt * 42.0 * rush;
+    burst = std::max<qreal>(0.0, burst - dt);
+    if (refilling) {
+      level = std::min<qreal>(1.0, level + dt * 1.25);
+      refilling = level < 1.0;
+    } else {
+      level = std::max<qreal>(0.0, level - dt * 0.012);
+    }
+    fortuneTime += dt;
+    while (fortuneTime >= fortuneSeconds) {
+      fortuneTime -= fortuneSeconds;
+      fortune = (fortune + 1) % fortunes.size();
+    }
+    for (Particle &particle : particles) {
+      particle.age += dt;
+      particle.velocity.ry() += 70.0 * dt;
+      particle.position += particle.velocity * dt;
+    }
+    particles.erase(std::remove_if(particles.begin(), particles.end(),
+                                   [](const Particle &particle) { return particle.age >= particle.life; }),
+                    particles.end());
+    update();
+  }
+
+  /** Top up the mug, with a caffeine rush and a spray of digits. */
+  void refill() {
+    refilling = true;
+    burst = burstLength;
+    const QRectF mug = mugRect();
+    for (int i = 0; i < 10; ++i)
+      spawn(QPointF(mug.center().x(), mug.top()));
+  }
+
+  void toss(const QPointF &at) {
+    for (int i = 0; i < 6; ++i)
+      spawn(at);
+  }
+
+protected:
+  void showEvent(QShowEvent *event) override {
+    QWidget::showEvent(event);
+    clock.start();
+    timer->start();
+  }
+
+  void hideEvent(QHideEvent *event) override {
+    timer->stop();
+    QWidget::hideEvent(event);
+  }
+
+  void mousePressEvent(QMouseEvent *event) override {
+    if (event->button() != Qt::LeftButton) {
+      QWidget::mousePressEvent(event);
+      return;
+    }
+    if (mugHitRect().contains(event->pos()))
+      refill();
+    else
+      toss(event->pos());
+  }
+
+  void mouseMoveEvent(QMouseEvent *event) override {
+    setCursor(mugHitRect().contains(event->pos()) ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    QWidget::mouseMoveEvent(event);
+  }
+
+  void paintEvent(QPaintEvent *) override {
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    const QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    QPainterPath frame;
+    frame.addRoundedRect(r, 12, 12);
+    QLinearGradient background(r.topLeft(), r.bottomRight());
+    background.setColorAt(0, t.accentSoft);
+    background.setColorAt(1, t.header);
+    p.fillPath(frame, background);
+    p.save();
+    p.setClipPath(frame);
+    drawGrid(p, r);
+    drawStream(p, r);
+    drawMug(p);
+    drawParticles(p);
+    drawFortune(p, r);
+    p.restore();
+    p.setPen(QPen(t.border, 1));
+    p.setBrush(Qt::NoBrush);
+    p.drawPath(frame);
+  }
+
+private:
+  struct Particle {
+    QPointF position;
+    QPointF velocity;
+    qreal age;
+    qreal life;
+    QString glyph;
+    QColor color;
+  };
+
+  QRectF mugHitRect() const { return mugRect().adjusted(-12, -12, 22, 10); }
+
+  /** Deterministic pseudo-random numbers in [0, 1). */
+  qreal random() {
+    seed = seed * 1664525u + 1013904223u;
+    return (seed >> 8) / 16777216.0;
+  }
+
+  void spawn(const QPointF &at) {
+    static const QString glyphs[] = {QStringLiteral("0"), QStringLiteral("1"), QStringLiteral("x"),
+                                     QStringLiteral("y"), QStringLiteral("+"), QString(QChar(0x03C0))};
+    const QColor colors[] = {t.accent, t.accentText, t.warn};
+    Particle particle;
+    particle.position = at;
+    particle.velocity = QPointF(-45.0 + 90.0 * random(), -70.0 - 60.0 * random());
+    particle.age = 0;
+    particle.life = 1.1 + 0.7 * random();
+    particle.glyph = glyphs[int(random() * 6) % 6];
+    particle.color = colors[int(random() * 3) % 3];
+    particles.append(particle);
+  }
+
+  /** A faint table grid that scrolls with the data. */
+  void drawGrid(QPainter &p, const QRectF &r) {
+    QColor line = t.border;
+    line.setAlpha(110);
+    p.setPen(QPen(line, 1));
+    const qreal cellWidth = 32, cellHeight = 20;
+    for (qreal x = r.left() - std::fmod(stream * 0.35, cellWidth); x < r.right(); x += cellWidth)
+      p.drawLine(QPointF(x, r.top()), QPointF(x, r.bottom()));
+    for (qreal y = r.top() + cellHeight; y < r.bottom(); y += cellHeight)
+      p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y));
+  }
+
+  /** Data points flowing right to left, fading in and out at the edges. */
+  void drawStream(QPainter &p, const QRectF &r) {
+    const qreal left = r.left() + 16, right = mugRect().left() - 40;
+    const qreal mid = r.top() + r.height() * 0.42, amplitude = r.height() * 0.2;
+    const qreal spacing = 14;
+    const qreal shift = std::fmod(stream, spacing);
+    const qint64 first = qint64(std::floor(stream / spacing));
+    QPolygonF curve;
+    QVector<qreal> fades;
+    for (int i = 0; left + i * spacing - shift <= right + spacing; ++i) {
+      const qreal x = left + i * spacing - shift;
+      const qreal k = qreal(first + i);
+      const qreal value = 0.75 * std::sin(k * 0.32) + 0.25 * std::sin(k * 0.9 + 1.3);
+      curve << QPointF(x, mid - value * amplitude);
+      fades << std::max<qreal>(0.0, std::min<qreal>({1.0, (x - left) / 40.0, (right - x) / 40.0}));
+    }
+    QColor lineColor = t.accent;
+    lineColor.setAlpha(70);
+    p.setPen(QPen(lineColor, 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.setBrush(Qt::NoBrush);
+    p.drawPolyline(curve);
+    p.setPen(Qt::NoPen);
+    for (int i = 0; i < curve.size(); ++i) {
+      if (fades[i] <= 0)
+        continue;
+      QColor dot = t.accent;
+      dot.setAlphaF(fades[i]);
+      p.setBrush(dot);
+      p.drawEllipse(curve[i], 3.2, 3.2);
+    }
+  }
+
+  void drawMug(QPainter &p) {
+    QRectF mug = mugRect();
+    const qreal jiggle = burst > 0 ? std::sin(time * 40.0) * 1.8 * burst / burstLength : 0.0;
+    mug.translate(jiggle, std::sin(time * 1.6) * 1.2);
+
+    QColor saucer = t.border;
+    p.setPen(Qt::NoPen);
+    p.setBrush(saucer);
+    p.drawEllipse(QRectF(mug.left() - 14, mug.bottom() - 5, mug.width() + 46, 12));
+
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(t.text, 5, Qt::SolidLine, Qt::RoundCap));
+    p.drawArc(QRectF(mug.right() - 10, mug.top() + 12, 24, 26), -90 * 16, 180 * 16);
+
+    QPainterPath body;
+    body.addRoundedRect(mug, 10, 10);
+    QColor glass = t.surface;
+    glass.setAlpha(230);
+    p.setPen(QPen(t.text, 2.2));
+    p.setBrush(glass);
+    p.drawPath(body);
+
+    // Coffee, with a gentle wave on top that sloshes harder during a rush.
+    const QRectF inner = mug.adjusted(4, 6, -4, -4);
+    if (level > 0.0) {
+      const qreal top = inner.bottom() - level * inner.height();
+      const qreal slosh = 1.3 * (1.0 + 2.0 * burst / burstLength);
+      QPainterPath coffee;
+      coffee.moveTo(inner.left(), top);
+      for (qreal x = inner.left(); x <= inner.right(); x += 2)
+        coffee.lineTo(x, top + std::sin(x * 0.25 + time * 4.0) * slosh);
+      coffee.lineTo(inner.right(), inner.bottom());
+      coffee.lineTo(inner.left(), inner.bottom());
+      coffee.closeSubpath();
+      QPainterPath innerShape;
+      innerShape.addRoundedRect(inner, 7, 7);
+      p.save();
+      p.setClipPath(innerShape, Qt::IntersectClip);
+      p.setPen(QPen(QColor("#C8A27A"), 2));
+      p.setBrush(QColor("#6F4E37"));
+      p.drawPath(coffee);
+      p.restore();
+    }
+
+    if (level > 0.12) {
+      // Steam: each wisp is drawn in short segments that fade as they rise.
+      const qreal strength = std::min<qreal>(1.0, (level - 0.12) * 3.0) * (burst > 0 ? 1.0 : 0.75);
+      for (int wisp = 0; wisp < 3; ++wisp) {
+        const qreal x0 = mug.left() + mug.width() * (0.3 + 0.2 * wisp);
+        const qreal y0 = mug.top() - 6;
+        QPointF previous(x0, y0);
+        for (int s = 1; s <= 12; ++s) {
+          const qreal f = s / 12.0;
+          const QPointF point(x0 + std::sin(time * 2.6 + f * 5.0 + wisp * 2.1) * 6.0 * f, y0 - f * 42.0);
+          QColor steam = t.muted;
+          steam.setAlphaF(std::max<qreal>(0.0, strength * (1.0 - f) * 0.8));
+          p.setPen(QPen(steam, 2.4, Qt::SolidLine, Qt::RoundCap));
+          p.drawLine(previous, point);
+          previous = point;
+        }
+      }
+    } else {
+      // An empty mug dozes off.
+      QFont font = this->font();
+      font.setBold(true);
+      for (int i = 0; i < 3; ++i) {
+        const qreal f = std::fmod(time * 0.5 + i / 3.0, 1.0);
+        font.setPointSizeF(7.0 + 5.0 * f);
+        p.setFont(font);
+        QColor z = t.muted;
+        z.setAlphaF(1.0 - f);
+        p.setPen(z);
+        p.drawText(QPointF(mug.center().x() + 4 + f * 18, mug.top() - 4 - f * 38), QStringLiteral("z"));
+      }
+    }
+
+    QFont caption = font();
+    caption.setPointSizeF(caption.pointSizeF() * 0.85);
+    p.setFont(caption);
+    p.setPen(t.muted);
+    const QString text = level > 0.12 ? SDDSEditor::tr("caffeine %1%").arg(qRound(level * 100))
+                                      : SDDSEditor::tr("refill?");
+    p.drawText(QRectF(mug.left() - 30, mug.bottom() + 9, mug.width() + 78, 18), Qt::AlignCenter, text);
+  }
+
+  void drawParticles(QPainter &p) {
+    QFont font = this->font();
+    font.setBold(true);
+    font.setPointSizeF(font.pointSizeF() * 1.15);
+    p.setFont(font);
+    for (const Particle &particle : particles) {
+      QColor color = particle.color;
+      color.setAlphaF(std::max<qreal>(0.0, 1.0 - particle.age / particle.life));
+      p.setPen(color);
+      p.drawText(particle.position, particle.glyph);
+    }
+  }
+
+  /** One-liners that fade in and out along the bottom edge. */
+  void drawFortune(QPainter &p, const QRectF &r) {
+    const qreal fade = 0.45;
+    const qreal alpha = std::max<qreal>(0.0, std::min<qreal>({1.0, fortuneTime / fade, (fortuneSeconds - fortuneTime) / fade}));
+    QFont font = this->font();
+    font.setItalic(true);
+    p.setFont(font);
+    QColor color = t.text;
+    color.setAlphaF(alpha * 0.85);
+    p.setPen(color);
+    p.drawText(QRectF(r.left() + 16, r.bottom() - 30, mugRect().left() - 40, 22),
+               Qt::AlignLeft | Qt::AlignVCenter, fortunes.value(fortune));
+  }
+
+  EditorTheme t;
+  QTimer *timer;
+  QElapsedTimer clock;
+  QStringList fortunes;
+  QVector<Particle> particles;
+  quint32 seed{20260929u};
+  qreal time{0};
+  qreal stream{0};
+  qreal level{0.86};
+  qreal burst{0};
+  qreal fortuneTime{0};
+  int fortune{0};
+  bool refilling{false};
+  const qreal burstLength{2.0};
+  const qreal fortuneSeconds{4.5};
+};
 
 enum EditorIcon {
   IconOpen, IconSave, IconUndo, IconRedo, IconPrev, IconNext, IconFilter, IconPlot,
@@ -4138,14 +5043,8 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   QMenu *infoMenu = menuBar()->addMenu(tr("Info"));
   QAction *aboutAct = infoMenu->addAction(tr("About"));
   QAction *helpAct = infoMenu->addAction(tr("Help"));
-  connect(aboutAct, &QAction::triggered, []() {
-    QString text =
-        QObject::tr("Programmed by Robert Soliday <soliday@anl.gov>\n"
-                    "Powered (mostly) by caffeine, stubbornness… and OpenAI Codex.\n\n"
-                    "Fun fact: 90% of this code was written by OpenAI Codex, the other 10% was me forcing a square peg into a round hole.\n"
-                    "Proceed with caution: may contain puns, dad jokes, and the occasional infinite loop.");
-    QMessageBox::about(nullptr, QObject::tr("About"), text);
-  });
+  helpAct->setShortcut(QKeySequence::HelpContents);
+  connect(aboutAct, &QAction::triggered, this, [this]() { showAbout(); });
   connect(helpAct, &QAction::triggered, this, &SDDSEditor::showHelp);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
   // Follow the desktop's light/dark setting while the editor is running.
@@ -4553,6 +5452,8 @@ void SDDSEditor::closeEvent(QCloseEvent *event) {
   // and keep the application running, after the editor window closes.
   if (searchColumnDialog)
     searchColumnDialog->close();
+  if (helpDialog)
+    helpDialog->close();
   const QVector<QPointer<QDialog>> viewers = arrayViewers;
   for (const QPointer<QDialog> &viewer : viewers)
     if (viewer)
@@ -10162,6 +11063,8 @@ void SDDSEditor::applyTheme(bool dark) {
     modifiedLabel->style()->unpolish(modifiedLabel);
     modifiedLabel->style()->polish(modifiedLabel);
   }
+  if (helpDialog)
+    helpDialog->applyTheme(t);
   applyingTheme = false;
 }
 
@@ -10189,62 +11092,73 @@ void SDDSEditor::restartApp() {
   QCoreApplication::quit();
 }
 
+/** Show the help window, reusing it if it is already open so it can stay beside the editor. */
 void SDDSEditor::showHelp() {
+  if (helpDialog) {
+    helpDialog->showNormal();
+    helpDialog->raise();
+    helpDialog->activateWindow();
+    return;
+  }
+  EditorHelpDialog *dlg = new EditorHelpDialog();
+  helpDialog = dlg;
+  configureEditorPopupDialog(dlg, this, Qt::NonModal);
+  connect(this, &QObject::destroyed, dlg, &QObject::deleteLater);
+  dlg->applyTheme(editorTheme(darkPalette));
+  dlg->resize(900, 640);
+  dlg->show();
+}
+
+void SDDSEditor::showAbout() {
+  const EditorTheme t = editorTheme(darkPalette);
   QDialog dlg(this);
-  dlg.setWindowTitle(tr("Help"));
+  dlg.setObjectName(QStringLiteral("aboutDialog"));
+  dlg.setWindowTitle(tr("About SDDS Editor"));
+  dlg.setStyleSheet(themedStyleSheet(QStringLiteral(
+      "QDialog#aboutDialog { background: @win; }"
+      "QLabel#aboutTitle, QLabel#aboutMessage { color: @text; }"
+      "QLabel#aboutSubtitle, QLabel#aboutFooter { color: @muted; }"), t));
+
+  AboutBanner *banner = new AboutBanner(t, &dlg);
+  QLabel *title = new QLabel(tr("SDDS Editor"), &dlg);
+  title->setObjectName(QStringLiteral("aboutTitle"));
+  QFont titleFont = title->font();
+  titleFont.setPointSizeF(titleFont.pointSizeF() * 1.7);
+  titleFont.setBold(true);
+  title->setFont(titleFont);
+  QLabel *subtitle = new QLabel(tr("Self Describing Data Sets, lovingly edited"), &dlg);
+  subtitle->setObjectName(QStringLiteral("aboutSubtitle"));
+
+  QLabel *message = new QLabel(tr(
+      "<p>Programmed by Robert Soliday &lt;<a href=\"mailto:soliday@anl.gov\">soliday@anl.gov</a>&gt;<br>"
+      "Powered (mostly) by caffeine, stubbornness&#8230; and OpenAI Codex.</p>"
+      "<p>Fun fact: 90% of this code was written by OpenAI Codex, the other 10% was me forcing "
+      "a square peg into a round hole.</p>"
+      "<p>Proceed with caution: may contain puns, dad jokes, and the occasional infinite loop.</p>"), &dlg);
+  message->setObjectName(QStringLiteral("aboutMessage"));
+  message->setTextFormat(Qt::RichText);
+  message->setWordWrap(true);
+  message->setOpenExternalLinks(true);
+  QLabel *footer = new QLabel(tr("Built with Qt %1. Psst: click the mug.").arg(QString::fromLatin1(qVersion())), &dlg);
+  footer->setObjectName(QStringLiteral("aboutFooter"));
+
+  QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok, Qt::Horizontal, &dlg);
+  connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+
+  QVBoxLayout *layout = new QVBoxLayout(&dlg);
+  layout->setContentsMargins(18, 18, 18, 14);
+  layout->setSpacing(6);
+  layout->setSizeConstraint(QLayout::SetFixedSize);
+  layout->addWidget(banner);
+  layout->addSpacing(8);
+  layout->addWidget(title);
+  layout->addWidget(subtitle);
+  layout->addSpacing(4);
+  layout->addWidget(message);
+  layout->addWidget(footer);
+  layout->addWidget(buttons);
+
   configureEditorPopupDialog(&dlg, this);
-  QVBoxLayout layout(&dlg);
-  QPlainTextEdit text(&dlg);
-  text.setReadOnly(true);
-  text.setPlainText(tr("Open a file using File->Open or the toolbar.\n"
-                       "Select a page with the toolbar arrows or list, and edit parameters, columns or arrays in the tables.\n"
-                       "Click a panel title to collapse or expand it. Double-click a parameter's Type to change it.\n"
-                       "The status bar shows the save state, file, page, current cell and visible rows;\n"
-                       "its Messages button (Ctrl+Shift+L) opens the message log.\n"
-                       "Type in the Columns search box and press Enter to find the next match in selected columns, or all columns if none are selected.\n"
-                       "Right click headers for more actions such as:\n"
-                       " - Plotting a column\n"
-                       " - Sorting column or array data\n"
-                       " - Searching or replacing values in columns or arrays\n"
-                       " - Resizing arrays\n"
-                       " - Open Array Viewer: edit a 2D slice, choose axes, and navigate remaining dimensions\n"
-                       "   Array Viewer uses zero-based indices and shares edits and Undo/Redo with this editor.\n"
-                       "   Copy/Paste works on rectangular selections; Copy slice copies the displayed plane.\n"
-                       "   The viewer follows page changes; slice indices adjust when the shape changes.\n"
-                       "   Heatmap colors numeric values using Current slice or a Fixed range; gray marks nonfinite/missing values.\n"
-                       "Use the Edit menu to insert or delete items, and File->Save to commit changes.\n\n"
-                       "Formula / Fill tools (Edit->Formula / Fill):\n"
-                       " - Fill Series... (Ctrl+Shift+F): fill selected cells with start + step*i\n"
-                       " - Apply Numerical Expression... (Ctrl+Shift+E): evaluate expression per selected cell\n"
-                       " - Apply Text Formula... (Ctrl+Shift+M): apply text template to selection\n"
-                       "   Tokens: ${x}, ${a}, ${i}, ${row}, ${col}, ${dr}, ${dc}\n\n"
-                       "Column row view filter (Edit->Column Rows):\n"
-                       " - Filter/View... (Ctrl+Shift+R): show rows matching expression without deleting data\n"
-                       " - Clear Filter/View: return to full row view\n"
-                       " - Expression operators: &&, ||, !, ==, !=, <, <=, >, >=\n"
-                       " - Use [Column Name] for names containing spaces or punctuation, such as [Q[0]];\n"
-                       "   a bracketed name is always a column, even if it is row, i, true or false\n\n"
-                       "Variables reference\n"
-                       " - x / ${x}: current cell value\n"
-                       " - a / ${a}: anchor value (first selected cell)\n"
-                       " - i / ${i}: index in selected cells (0-based)\n"
-                       " - row / ${row}: absolute row index (0-based)\n"
-                       " - col / ${col}: absolute column index (0-based)\n"
-                       " - dr / ${dr}: row offset from anchor\n"
-                       " - dc / ${dc}: column offset from anchor\n\n"
-                       "Selection ordering\n"
-                       " - Cells are processed top-to-bottom, then left-to-right\n"
-                       " - The first selected cell in that order is the anchor\n\n"
-                       "Apply Numerical Expression examples\n"
-                       " - x + 10\n"
-                       " - a + i*0.5\n"
-                       " - x * (1 + dr*0.01)\n"
-                       " - sin(x) * exp(-i/10)"));
-  text.setMinimumSize(400, 300);
-  layout.addWidget(&text);
-  QDialogButtonBox box(QDialogButtonBox::Ok, Qt::Horizontal, &dlg);
-  connect(&box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  layout.addWidget(&box);
   dlg.exec();
 }
 

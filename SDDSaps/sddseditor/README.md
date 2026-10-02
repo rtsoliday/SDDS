@@ -227,6 +227,14 @@ the last undoable action. Messages that used to appear in the top console are
 shown briefly in the status bar and kept in the message log. Open the log with
 **Messages** (Ctrl+Shift+L); unread messages are counted on the button.
 
+**Info → Help** (F1) opens a nonmodal help window that can stay open beside the
+editor. A topic list on the left follows the text as it scrolls. The find bar
+(Ctrl+F) highlights every match. Press Enter or the platform's Find Next key
+(F3, or Cmd+G on macOS) for the next match, and Shift with either key for the
+previous one. Shortcuts in the help text are shown as the current platform
+displays them. **Info → About** shows a small animation that runs only while the
+dialog is open; click the coffee mug to refill it.
+
 The editor uses its own light or dark palette, chosen from the desktop palette
 at startup (Qt 6.5+ also follows later desktop changes). Icons are drawn in
 code, so the editor needs only the Qt Widgets module. The table font is the
