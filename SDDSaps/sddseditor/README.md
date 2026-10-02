@@ -78,7 +78,9 @@ rejected without changing data; representable subnormal values remain valid.
 Checks also cover unchanged sorts and array resizes preserving Redo and the
 saved state, pending viewer edits on Escape/reject, and subnormal heatmap bounds.
 Long-string checks open and commit values beyond 32,767 characters in each table
-and the array viewer, then save and reload them. Array action checks cover formula
+and the array viewer, then save and reload them. Rendering checks verify that
+open cell editors cover the original text in all tables and the array viewer,
+in both light and dark themes. Array action checks cover formula
 sequence numbers across unequal array lengths, rectangular keyboard paste from
 an active cell editor, and viewer Undo/Redo with pending edits in the main window.
 Fixed-parameter checks cover literal backslashes, quotes, whitespace and all 256

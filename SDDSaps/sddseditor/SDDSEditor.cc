@@ -4918,6 +4918,13 @@ public:
     option->text = canonicalizeForDisplay(option->text, typeFunc(index));
   }
 
+  /** Cover the full cell rather than the style's inset text rectangle. */
+  void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option,
+                            const QModelIndex &index) const override {
+    Q_UNUSED(index);
+    editor->setGeometry(option.rect);
+  }
+
   /*
    * Optional decorations: padding cells drawn as hatching, cells drawn as a
    * type badge (badgeType returns the SDDS type, or 0 for ordinary text),

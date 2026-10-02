@@ -97,6 +97,77 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** An open editor must completely hide the cell's old display text. */
+  static void cellEditorPainting(const QString &root) {
+    const int flashTime = QApplication::cursorFlashTime();
+    QApplication::setCursorFlashTime(0);
+    int failures = 0;
+    for (bool dark : {false, true}) {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.column_definition[0].type = SDDS_STRING;
+      editor.dataset.layout.array_definition[0].type = SDDS_STRING;
+      require(SDDS_DefineParameter(&editor.dataset, "P", nullptr, nullptr, nullptr,
+                                   nullptr, SDDS_STRING, nullptr) >= 0, "define string painting parameter");
+      require(SDDS_SaveLayout(&editor.dataset), "save string painting layout");
+      const QString text = "MMMMMMMMMMMMMMMMMMMM";
+      editor.pages[0].parameters = {text};
+      editor.pages[0].columns[0][0] = text;
+      editor.pages[0].arrays[0].values[0] = text;
+      editor.populateModels();
+      editor.show();
+      editor.activateWindow();
+      editor.applyTheme(dark);
+      QCoreApplication::processEvents();
+      auto check = [&](const QString &panel, QTableView *view, const QModelIndex &index, QString &stored) {
+        clickCell(view, index);
+        QLineEdit *line = nullptr;
+        for (QLineEdit *candidate : view->viewport()->findChildren<QLineEdit *>())
+          if (!candidate->isHidden())
+            line = candidate;
+        if (!line) {
+          view->edit(index); // Slice viewers use the native double-click editing policy.
+          QCoreApplication::processEvents();
+          for (QLineEdit *candidate : view->viewport()->findChildren<QLineEdit *>())
+            if (!candidate->isHidden())
+              line = candidate;
+        }
+        require(line, "painting regression opens a cell editor");
+        line->setText("X");
+        line->deselect();
+        const QRect rect = view->visualRect(index);
+        const QImage withText = view->viewport()->grab(rect).toImage();
+        const QString original = stored;
+        // Change only the display backing value; the editor must remain open
+        // with the same text, focus, geometry and selection for both renders.
+        stored.clear();
+        const QImage withoutText = view->viewport()->grab(rect).toImage();
+        stored = original;
+        const bool same = withText == withoutText;
+        const QString name = QString("cell-editor-%1-%2").arg(panel, dark ? "dark" : "light");
+        withText.save(root + "/" + name + ".png");
+        if (!same)
+          withoutText.save(root + "/" + name + "-blank-model.png");
+        fprintf(stdout, "%s %s hides old cell text while editing\n", same ? "PASS" : "FAIL", qPrintable(name));
+        failures += !same;
+        QTest::keyClick(line, Qt::Key_Escape);
+        QCoreApplication::processEvents();
+        require(stored == original, "painting regression cancels the pending edit");
+      };
+      check("columns", editor.columnView, editor.columnModel->index(0, 0), editor.pages[0].columns[0][0]);
+      check("parameters", editor.paramView, editor.parameterValueCell(0), editor.pages[0].parameters[0]);
+      check("arrays", editor.arrayView, editor.arrayModel->index(0, 0), editor.pages[0].arrays[0].values[0]);
+      editor.openArrayViewer(0);
+      auto *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      viewer->activateWindow();
+      QCoreApplication::processEvents();
+      check("array-viewer", viewer->table(), viewer->sliceModel()->index(0, 0), editor.pages[0].arrays[0].values[0]);
+      require(!editor.dirty && !editor.undoStack->canUndo(), "rendering and canceling leave the data unchanged");
+    }
+    QApplication::setCursorFlashTime(flashTime);
+    require(failures == 0, "cell editor painting regressions");
+  }
+
   /** Exercise large definitions, long search text and exact filter boundaries. */
   static void largeDocumentInteractions() {
     int failures = 0;
@@ -4204,6 +4275,7 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::cellEditorPainting(artifacts.path());
   SDDSEditorTests::plotArrays(artifacts.path());
   SDDSEditorTests::clearColumnSelectionInteractions();
   SDDSEditorTests::plotLongDouble(artifacts.path());
