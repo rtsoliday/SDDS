@@ -131,6 +131,39 @@ def test_sddsplot_png_basic(tmp_path):
   run_png_sddsplot(tmp_path, "basic")
 
 
+@pytest.mark.skipif(not all(tool.exists() for tool in (SDDSPLOT, SDDSMAKEDATASET)), reason="sddsplot tools not built")
+@pytest.mark.parametrize("time_end", [1788282000, 1790874000, 4080322800])
+@pytest.mark.parametrize("plane", ["x", "y"])
+def test_sddsplot_time_ticks_multi_decade_range(tmp_path, time_end, plane):
+  # The first two endpoints straddle 30 years after automatic plot margins.
+  # Previously the longer range selected millisecond ticks and did not finish.
+  data = tmp_path / "time_range.sdds"
+  subprocess.run(
+    [
+      str(SDDSMAKEDATASET), str(data), "-ascii",
+      "-column=Time,type=double", f"-data=928256400,{time_end}",
+      "-column=value,type=double", "-data=1,2",
+    ],
+    check=True,
+    timeout=10,
+  )
+  columns = "Time,value" if plane == "x" else "value,Time"
+  subprocess.run(
+    [
+      str(SDDSPLOT), str(data), f"-column={columns}",
+      "-legend", "-graph=line,vary", f"-tick={plane}time",
+      "-device=png,rootname=time_range",
+    ],
+    cwd=tmp_path,
+    check=True,
+    timeout=10,
+  )
+  assert any(
+    path.is_file() and path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    for path in tmp_path.glob("time_range*")
+  )
+
+
 @pytest.mark.skipif(not SDDSPLOT.exists(), reason="sddsplot not built")
 def test_sddsplot_png_common_options(tmp_path):
   run_png_sddsplot(

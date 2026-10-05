@@ -846,7 +846,7 @@ void makeTimeScales(
   double timeStart, timeRange, timeEnd, subtickPosition, tickStart;
   long i, iUse, doTicks, first, firstSubticks;
   char label[256];
-  double hsave, vsave, spacing, subspacing;
+  double hsave, vsave, spacing, subspacing, tickEstimate;
   double hsize, vsize;
   double qmin, qmax, pmin, pmax;
   double wqmin, wqmax, wpmin, wpmax;
@@ -984,12 +984,16 @@ void makeTimeScales(
    
   i = iUse = 0;
   while (i<36) {
-    ticks = (long)(timeRange/timeSpacing[i].spacing);
-    if (ticks>3 && ticks<6) {
+    /* Keep the estimate floating point: fine spacings on a multi-year axis
+     * can exceed the range of long on platforms with 32-bit longs. */
+    tickEstimate = floor(timeRange/timeSpacing[i].spacing);
+    if (tickEstimate>3 && tickEstimate<6) {
       iUse = i;
       break;
     }
-    if (ticks>=3 && ticks<30)
+    /* Fall back to the coarsest available spacing for long time ranges.
+     * Rejecting all spacings with 30 or more ticks left iUse at 0 (1 ms). */
+    if (tickEstimate>=3)
       iUse = i;
     i++;
   }
