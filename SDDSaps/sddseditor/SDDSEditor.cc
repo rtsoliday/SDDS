@@ -102,6 +102,11 @@
 #include <QTextDocument>
 #include <QAbstractTextDocumentLayout>
 #include <QListWidget>
+#include <QGridLayout>
+#include <QScrollArea>
+#include <QWheelEvent>
+#include <QWindow>
+#include <QScreen>
 #include <QElapsedTimer>
 
 /*
@@ -2927,6 +2932,11 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "<p>The SDDS Editor views and edits Self Describing Data Set files: the parameters, "
       "column data and arrays on every page. A file named on the command line opens at startup.</p>"
       "<ul>"
+      "<li><b>New</b> with <b>File &#8250; New...</b> %4 or the <b>New</b> toolbar button. "
+      "Add parameters, columns and arrays and choose their names, types and units. Give parameters "
+      "an initial value, columns a row count and arrays a shape such as 5 or 3x4, then click "
+      "<b>Create</b>. Problems such as duplicate names appear beside the buttons as you type. "
+      "Remove every definition to create an empty file and insert definitions later.</li>"
       "<li><b>Open</b> a file with <b>File &#8250; Open</b> %1 or the <b>Open</b> toolbar button.</li>"
       "<li>Data appears in three panels: <b>Parameters</b> (one value each per page), "
       "<b>Columns</b> (rows of tabular data) and <b>Arrays</b> (multidimensional data). "
@@ -2942,9 +2952,10 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "</ul>"
       "<p>The status bar shows <b>&#9679; Modified</b> until changes are saved, and the editor asks "
       "before discarding unsaved changes.</p>"
-      "<p class=\"note\">To create a new file, insert a parameter, column or array without opening "
-      "a file, then save it.</p>")
-      .arg(helpKey(QKeySequence::Open), helpKey(QKeySequence::Save), helpKey("Ctrl+Shift+O"))});
+      "<p class=\"note\">New files start with one page. Save asks for a filename; "
+      "the previously open file is kept until you confirm any unsaved changes.</p>")
+      .arg(helpKey(QKeySequence::Open), helpKey(QKeySequence::Save), helpKey("Ctrl+Shift+O"),
+           helpKey(QKeySequence::New))});
 
   topics.append({QStringLiteral("edit"), SDDSEditor::tr("Editing data"), SDDSEditor::tr(
       "<h3>Cells</h3>"
@@ -3148,6 +3159,7 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
     QString keys;
   };
   const QVector<Shortcut> shortcuts = {
+      {SDDSEditor::tr("New"), helpKey(QKeySequence::New)},
       {SDDSEditor::tr("Open"), helpKey(QKeySequence::Open)},
       {SDDSEditor::tr("Save"), helpKey(QKeySequence::Save)},
       {SDDSEditor::tr("Save as"), helpKey(QKeySequence::SaveAs)},
@@ -5598,6 +5610,9 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
 
   // menu bar
   QMenu *fileMenu = menuBar()->addMenu(tr("File"));
+  QAction *newAct = fileMenu->addAction(tr("New..."));
+  newAct->setObjectName("newFileAction");
+  newAct->setShortcut(QKeySequence::New);
   QAction *openAct = fileMenu->addAction(tr("Open"));
   openAct->setShortcut(QKeySequence::Open);
   fileMenu->addSeparator();
@@ -5614,6 +5629,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   restartAct->setShortcut(QKeySequence(tr("Ctrl+R")));
   QAction *quitAct = fileMenu->addAction(tr("Quit"));
   quitAct->setShortcut(QKeySequence::Quit);
+  connect(newAct, &QAction::triggered, this, &SDDSEditor::newFile);
   connect(openAct, &QAction::triggered, this, &SDDSEditor::openFile);
   connect(saveAct, &QAction::triggered, this, &SDDSEditor::saveFile);
   connect(saveAsAct, &QAction::triggered, this, &SDDSEditor::saveFileAs);
@@ -5699,7 +5715,7 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
   connect(pageIns, &QAction::triggered, this, &SDDSEditor::insertPage);
   connect(pageDel, &QAction::triggered, this, &SDDSEditor::deletePage);
 
-  buildToolBar(openAct, saveAct, undoAct, redoAct, colRowFilter, arrayGrid);
+  buildToolBar(newAct, openAct, saveAct, undoAct, redoAct, colRowFilter, arrayGrid);
   buildStatusBar();
 
   QMenu *viewMenu = menuBar()->addMenu(tr("View"));
@@ -5761,7 +5777,7 @@ void SDDSEditor::bindIcon(QObject *target, int kind, int tone) {
   iconBindings.append(binding);
 }
 
-void SDDSEditor::buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoAct,
+void SDDSEditor::buildToolBar(QAction *newAct, QAction *openAct, QAction *saveAct, QAction *undoAct,
                               QAction *redoAct, QAction *filterAct, QAction *arrayViewerAct) {
   mainToolBar = new QToolBar(tr("Main Toolbar"), this);
   mainToolBar->setObjectName("mainToolBar");
@@ -5778,10 +5794,12 @@ void SDDSEditor::buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoA
     return label;
   };
 
+  newAct->setToolTip(tr("Create a new SDDS file (%1)").arg(newAct->shortcut().toString(QKeySequence::NativeText)));
   openAct->setToolTip(tr("Open an SDDS file (%1)").arg(openAct->shortcut().toString(QKeySequence::NativeText)));
   saveAct->setToolTip(tr("Save (%1)").arg(saveAct->shortcut().toString(QKeySequence::NativeText)));
   undoAct->setToolTip(tr("Undo (%1)").arg(undoAct->shortcut().toString(QKeySequence::NativeText)));
   redoAct->setToolTip(tr("Redo (%1)").arg(redoAct->shortcut().toString(QKeySequence::NativeText)));
+  mainToolBar->addAction(newAct);
   mainToolBar->addAction(openAct);
   mainToolBar->addAction(saveAct);
   mainToolBar->addSeparator();
@@ -5883,6 +5901,7 @@ void SDDSEditor::buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoA
   formatLayout->addWidget(binaryBtn);
   mainToolBar->addWidget(formatSwitch);
 
+  bindIcon(newAct, IconFile);
   bindIcon(openAct, IconOpen);
   bindIcon(saveAct, IconSave);
   bindIcon(undoAct, IconUndo);
@@ -5891,7 +5910,7 @@ void SDDSEditor::buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoA
   bindIcon(plotAction, IconPlot);
   bindIcon(viewerToolAct, IconGrid);
   // Keep menus text-only; the toolbar carries the icons.
-  for (QAction *action : {openAct, saveAct, undoAct, redoAct})
+  for (QAction *action : {newAct, openAct, saveAct, undoAct, redoAct})
     action->setIconVisibleInMenu(false);
 }
 
@@ -7137,6 +7156,662 @@ static bool terminateIncompleteDataset(SDDS_DATASET *partial) {
   if (!SDDS_SaveLayout(partial))
     return false;
   return SDDS_Terminate(partial);
+}
+
+/** Type menu that leaves wheel scrolling to the dialog unless the menu has focus. */
+class NewFileTypeBox : public QComboBox {
+public:
+  explicit NewFileTypeBox(QWidget *parent = nullptr) : QComboBox(parent) {
+    setFocusPolicy(Qt::StrongFocus);
+  }
+
+protected:
+  void wheelEvent(QWheelEvent *event) override {
+    if (hasFocus())
+      QComboBox::wheelEvent(event);
+    else
+      event->ignore();
+  }
+};
+
+/** A parameter, column or array chosen for a new file. */
+struct NewFileDefinition {
+  int kind;
+  QString name;
+  int32_t type;
+  QString units;
+  QString value;     // Initial value of every element.
+  QVector<int> dims; // Arrays only.
+};
+
+/*
+ * Setup for File > New.  Parameters, columns and arrays each get a card like
+ * the main window's panels, with one row of fields per definition.  Problems
+ * are reported beside the buttons while typing, and Create stays disabled
+ * until every definition can be written.
+ */
+class NewFileDialog : public QDialog {
+public:
+  enum Kind { ParameterKind, ColumnKind, ArrayKind, KindCount };
+  enum {
+    /** Largest column row count or array element count offered for a new file. */
+    MaxElements = 1000000,
+    /** SDDS_IsValidName formats an invalid name into a 1024-byte message. */
+    MaxNameBytes = 512
+  };
+
+  explicit NewFileDialog(const EditorTheme &theme, QWidget *parent = nullptr) : QDialog(parent) {
+    setObjectName("newFileDialog");
+    setWindowTitle(SDDSEditor::tr("New SDDS File"));
+    const QColor disabled = theme.muted.lighter(theme.win.lightness() < 128 ? 70 : 140);
+    addIcon = makeEditorIcon(IconPlus, theme.muted, disabled);
+    removeIcon = makeEditorIcon(IconClose, theme.muted, disabled);
+    setStyleSheet(themedStyleSheet(QStringLiteral(
+        "QDialog#newFileDialog { background: @win; }"
+        "QLabel#newFileHeading, QLabel#newFileHint, QLabel#newFileStatus { color: @muted; }"
+        "QLabel#newFileStatus[problem=\"true\"] { color: @warn; }"
+        "QScrollArea#newFileScroll, QWidget#newFileCards { background: transparent; }"
+        "QFrame#newFileCard { background: @surface; border: 1px solid @border; border-radius: 8px; }"
+        "QFrame#newFileCardHeader, QWidget#newFileCardBody { background: transparent; border: none; }"
+        "QFrame#newFileRule { background: @border; border: none; }"
+        "QLabel#countChip { background: @header; color: @muted; border-radius: 9px; padding: 1px 8px; }"
+        "QToolButton[panelAction=\"true\"] { border: none; border-radius: 5px; padding: 3px 8px;"
+        "  color: @muted; background: transparent; }"
+        "QToolButton[panelAction=\"true\"]:hover { background: @hover; color: @text; }"
+        "QToolButton#newFileRemove { border: none; border-radius: 5px; padding: 3px; background: transparent; }"
+        "QToolButton#newFileRemove:hover { background: @hover; }"
+        "QLineEdit[field=\"true\"] { background: @surface; border: 1px solid @border; border-radius: 5px;"
+        "  padding: 3px 6px; color: @text; }"
+        "QLineEdit[field=\"true\"]:focus { border-color: @accent; }"
+        "QLineEdit[field=\"true\"][invalid=\"true\"] { border-color: @warn; }"), theme));
+
+    QVBoxLayout *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(16, 14, 16, 12);
+    layout->setSpacing(10);
+
+    QHBoxLayout *descriptionRow = new QHBoxLayout();
+    descriptionRow->setSpacing(8);
+    QLabel *descriptionLabel = new QLabel(SDDSEditor::tr("Description"), this);
+    descriptionEdit = makeField(this, "newFileDescription");
+    descriptionEdit->setPlaceholderText(SDDSEditor::tr("Optional; saved in the file header"));
+    descriptionLabel->setBuddy(descriptionEdit);
+    descriptionRow->addWidget(descriptionLabel);
+    descriptionRow->addWidget(descriptionEdit, 1);
+    layout->addLayout(descriptionRow);
+
+    QWidget *cards = new QWidget();
+    cards->setObjectName("newFileCards");
+    QVBoxLayout *cardLayout = new QVBoxLayout(cards);
+    cardLayout->setContentsMargins(0, 0, 0, 0);
+    cardLayout->setSpacing(10);
+    for (int kind = 0; kind < KindCount; ++kind)
+      buildSection(kind, cardLayout);
+    cardLayout->addStretch(1);
+    scroll = new QScrollArea(this);
+    scroll->setObjectName("newFileScroll");
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setFocusPolicy(Qt::NoFocus);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setWidget(cards);
+    scroll->viewport()->setAutoFillBackground(false);
+    layout->addWidget(scroll, 1);
+
+    QHBoxLayout *footer = new QHBoxLayout();
+    footer->setSpacing(12);
+    status = new QLabel(this);
+    status->setObjectName("newFileStatus");
+    status->setWordWrap(true);
+    footer->addWidget(status, 1);
+    QDialogButtonBox *buttons =
+        new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, this);
+    createButton = buttons->button(QDialogButtonBox::Ok);
+    createButton->setText(SDDSEditor::tr("Create"));
+    footer->addWidget(buttons, 0, Qt::AlignBottom);
+    layout->addLayout(footer);
+    connect(buttons, &QDialogButtonBox::accepted, this, [this]() {
+      if (validate())
+        accept();
+    });
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(descriptionEdit, &QLineEdit::textChanged, this, [this]() { validate(); });
+
+    for (int kind = 0; kind < KindCount; ++kind)
+      relayout(kind);
+    addDefinition(ColumnKind);
+    // The cards never scroll sideways, so the window must keep their headers whole.
+    scroll->setMinimumWidth(cards->minimumSizeHint().width() + scroll->verticalScrollBar()->sizeHint().width());
+  }
+
+  /** Wide enough for comfortable names and units, and tall enough for the starting definitions. */
+  QSize sizeHint() const override {
+    const QSize hint = QDialog::sizeHint();
+    const int width = std::max(hint.width(), 44 * fontMetrics().height());
+    return QSize(width, layout()->hasHeightForWidth() ? layout()->totalHeightForWidth(width) : hint.height());
+  }
+
+  QString description() const { return descriptionEdit->text(); }
+  int columnRows() const { return rowsBox->value(); }
+
+  /** The chosen definitions, parameters first, with their initial values. */
+  QVector<NewFileDefinition> definitions() const {
+    QVector<NewFileDefinition> result;
+    for (int kind = 0; kind < KindCount; ++kind) {
+      for (const Row &row : sections[kind].rows) {
+        NewFileDefinition def;
+        def.kind = kind;
+        def.name = row.name->text();
+        def.type = row.type->currentData().toInt();
+        def.units = row.units->text();
+        def.value = defaultValue(def.type);
+        if (kind == ParameterKind && !row.detail->text().isEmpty())
+          def.value = SDDS_NUMERIC_TYPE(def.type) ? row.detail->text().trimmed() : row.detail->text();
+        if (kind == ArrayKind)
+          parseShape(row.detail->text(), &def.dims);
+        result.append(def);
+      }
+    }
+    return result;
+  }
+
+protected:
+  /** Opening in a window of its own clears focus, so put the cursor back in the newest name. */
+  void showEvent(QShowEvent *event) override {
+    QDialog::showEvent(event);
+    if (pendingFocus) {
+      pendingFocus->setFocus();
+      pendingFocus->selectAll();
+      pendingFocus = nullptr;
+    }
+  }
+
+private:
+  friend class SDDSEditorTests;
+  enum Field { NameField, TypeField, UnitsField, DetailField, RemoveField };
+
+  struct Row {
+    QLineEdit *name;
+    NewFileTypeBox *type;
+    QLineEdit *units;
+    QLineEdit *detail; // Parameter value or array shape; null for columns.
+    QToolButton *remove;
+
+    QVector<QWidget *> widgets() const {
+      QVector<QWidget *> list = {name, type, units};
+      if (detail)
+        list.append(detail);
+      list.append(remove);
+      return list;
+    }
+  };
+
+  struct Section {
+    QToolButton *add{nullptr};
+    QLabel *count{nullptr};
+    QFrame *rule{nullptr};
+    QWidget *body{nullptr};
+    QGridLayout *grid{nullptr};
+    QVector<Row> rows;
+  };
+
+  static QString kindName(int kind) {
+    return kind == ParameterKind ? SDDSEditor::tr("parameter")
+           : kind == ColumnKind  ? SDDSEditor::tr("column")
+                                 : SDDSEditor::tr("array");
+  }
+
+  /** Value given to new elements when no value is entered. */
+  static QString defaultValue(int32_t type) {
+    return type == SDDS_STRING ? QString() : type == SDDS_CHARACTER ? QStringLiteral(" ") : QStringLiteral("0");
+  }
+
+  /** Read sizes such as "5", "3x4" or "2, 3, 4". */
+  static bool parseShape(const QString &text, QVector<int> *dims) {
+    dims->clear();
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty())
+      return false;
+    static const QRegularExpression separator(QStringLiteral("\\s*[xX*,\\x{00D7}]\\s*|\\s+"));
+    for (const QString &part : trimmed.split(separator)) {
+      bool ok = false;
+      const int size = part.toInt(&ok);
+      if (!ok || size < 0)
+        return false;
+      dims->append(size);
+    }
+    return true;
+  }
+
+  static QLineEdit *makeField(QWidget *parent, const char *objectName) {
+    QLineEdit *field = new SDDSTextEdit(parent);
+    field->setObjectName(objectName);
+    field->setProperty("field", true);
+    return field;
+  }
+
+  void buildSection(int kind, QVBoxLayout *parentLayout) {
+    Section &section = sections[kind];
+    QFrame *card = new QFrame();
+    card->setObjectName("newFileCard");
+    QVBoxLayout *cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(0, 0, 0, 0);
+    cardLayout->setSpacing(0);
+
+    QFrame *header = new QFrame(card);
+    header->setObjectName("newFileCardHeader");
+    header->setFixedHeight(DataPanel::HeaderHeight);
+    QHBoxLayout *headerRow = new QHBoxLayout(header);
+    headerRow->setContentsMargins(12, 0, 8, 0);
+    headerRow->setSpacing(8);
+    const QString titles[] = {SDDSEditor::tr("Parameters"), SDDSEditor::tr("Columns"), SDDSEditor::tr("Arrays")};
+    const QString hints[] = {SDDSEditor::tr("One value per page"), SDDSEditor::tr("Rows of tabular data"),
+                             SDDSEditor::tr("Multidimensional data")};
+    const QString addTips[] = {SDDSEditor::tr("Add a parameter"), SDDSEditor::tr("Add a column"),
+                               SDDSEditor::tr("Add an array")};
+    QLabel *title = new QLabel(titles[kind], header);
+    QFont titleFont = title->font();
+    titleFont.setBold(true);
+    title->setFont(titleFont);
+    headerRow->addWidget(title);
+    section.count = new QLabel(header);
+    section.count->setObjectName("countChip");
+    QFont chipFont = section.count->font();
+    chipFont.setPointSizeF(std::max<qreal>(7.0, chipFont.pointSizeF() - 1));
+    section.count->setFont(chipFont);
+    section.count->setAlignment(Qt::AlignCenter);
+    section.count->setFixedHeight(QFontMetrics(chipFont).height() + 4);
+    headerRow->addWidget(section.count, 0, Qt::AlignVCenter);
+    QLabel *hint = new QLabel(hints[kind], header);
+    hint->setObjectName("newFileHint");
+    hint->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); // The first thing to give way.
+    headerRow->addWidget(hint, 1);
+    if (kind == ColumnKind) {
+      QLabel *rowsLabel = new QLabel(SDDSEditor::tr("Rows"), header);
+      rowsBox = new QSpinBox(header);
+      rowsBox->setObjectName("newFileRows");
+      rowsBox->setRange(0, int(MaxElements));
+      rowsBox->setValue(1);
+      rowsBox->setToolTip(SDDSEditor::tr("Number of rows in every column"));
+      rowsLabel->setBuddy(rowsBox);
+      headerRow->addWidget(rowsLabel);
+      headerRow->addWidget(rowsBox);
+      headerRow->addSpacing(4);
+      connect(rowsBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { validate(); });
+    }
+    section.add = new QToolButton(header);
+    section.add->setObjectName(QStringLiteral("newFileAdd%1").arg(kind));
+    section.add->setProperty("panelAction", true);
+    section.add->setText(SDDSEditor::tr("Add %1").arg(kindName(kind)));
+    section.add->setToolTip(addTips[kind]);
+    section.add->setIcon(addIcon);
+    section.add->setIconSize(QSize(14, 14));
+    section.add->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    section.add->setAutoRaise(true);
+    headerRow->addWidget(section.add);
+    connect(section.add, &QToolButton::clicked, this, [this, kind]() { addDefinition(kind); });
+    cardLayout->addWidget(header);
+
+    section.rule = new QFrame(card);
+    section.rule->setObjectName("newFileRule");
+    section.rule->setFixedHeight(1);
+    cardLayout->addWidget(section.rule);
+
+    section.body = new QWidget(card);
+    section.body->setObjectName("newFileCardBody");
+    section.grid = new QGridLayout(section.body);
+    section.grid->setContentsMargins(12, 8, 8, 10);
+    section.grid->setHorizontalSpacing(8);
+    section.grid->setVerticalSpacing(6);
+    // Equal stretches in every card keep the fields aligned from card to card.
+    section.grid->setColumnStretch(NameField, 3);
+    section.grid->setColumnStretch(UnitsField, 2);
+    section.grid->setColumnStretch(DetailField, 2);
+    const QString detail = kind == ParameterKind ? SDDSEditor::tr("Initial value")
+                           : kind == ArrayKind   ? SDDSEditor::tr("Shape")
+                                                 : QString();
+    const QStringList headings = {SDDSEditor::tr("Name"), SDDSEditor::tr("Type"), SDDSEditor::tr("Units"), detail};
+    for (int field = NameField; field <= DetailField; ++field) {
+      if (headings[field].isEmpty())
+        continue;
+      QLabel *heading = new QLabel(headings[field], section.body);
+      heading->setObjectName("newFileHeading");
+      section.grid->addWidget(heading, 0, field, 1, field == UnitsField && kind == ColumnKind ? 2 : 1);
+    }
+    if (kind == ColumnKind) {
+      // Units span the value column here; a column covered only by spans loses its spacing.
+      QWidget *placeholder = new QWidget(section.body);
+      QSizePolicy policy = placeholder->sizePolicy();
+      policy.setRetainSizeWhenHidden(true);
+      placeholder->setSizePolicy(policy);
+      placeholder->hide();
+      section.grid->addWidget(placeholder, 0, DetailField);
+    }
+    cardLayout->addWidget(section.body);
+    parentLayout->addWidget(card);
+  }
+
+  /** Append a definition with an unused name and put the cursor in its name. */
+  void addDefinition(int kind) {
+    Section &section = sections[kind];
+    static const char *const prefixes[] = {"Parameter", "Column", "Array"};
+    QString name;
+    for (int suffix = 1; name.isEmpty(); ++suffix) {
+      name = QStringLiteral("%1%2").arg(QLatin1String(prefixes[kind])).arg(suffix);
+      for (const Row &row : section.rows)
+        if (row.name->text() == name)
+          name.clear();
+    }
+
+    Row row;
+    row.name = makeField(section.body, "newFileName");
+    row.name->setText(name);
+    row.type = new NewFileTypeBox(section.body);
+    row.type->setObjectName("newFileType");
+    for (int id : {SDDS_SHORT, SDDS_USHORT, SDDS_LONG, SDDS_ULONG, SDDS_LONG64, SDDS_ULONG64,
+                   SDDS_FLOAT, SDDS_DOUBLE, SDDS_LONGDOUBLE, SDDS_STRING, SDDS_CHARACTER})
+      row.type->addItem(QString::fromLocal8Bit(SDDS_GetTypeName(id)), id);
+    row.type->setCurrentIndex(row.type->findData(kind == ParameterKind ? SDDS_STRING : SDDS_DOUBLE));
+    row.units = makeField(section.body, "newFileUnits");
+    row.detail = nullptr;
+    if (kind == ParameterKind) {
+      row.detail = makeField(section.body, "newFileValue");
+    } else if (kind == ArrayKind) {
+      row.detail = makeField(section.body, "newFileShape");
+      row.detail->setText(QStringLiteral("5"));
+      row.detail->setPlaceholderText(SDDSEditor::tr("5 or 3x4"));
+    }
+    row.remove = new QToolButton(section.body);
+    row.remove->setObjectName("newFileRemove");
+    row.remove->setIcon(removeIcon);
+    row.remove->setIconSize(QSize(14, 14));
+    row.remove->setAutoRaise(true);
+    row.remove->setToolTip(SDDSEditor::tr("Remove this %1").arg(kindName(kind)));
+
+    QLineEdit *nameEdit = row.name;
+    QLineEdit *detail = row.detail;
+    NewFileTypeBox *type = row.type;
+    auto refresh = [this]() { validate(); };
+    connect(row.name, &QLineEdit::textChanged, this, refresh);
+    connect(row.units, &QLineEdit::textChanged, this, refresh);
+    if (row.detail)
+      connect(row.detail, &QLineEdit::textChanged, this, refresh);
+    connect(row.type, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, kind, type, detail]() {
+      if (kind == ParameterKind)
+        detail->setPlaceholderText(placeholderForType(type->currentData().toInt()));
+      validate();
+    });
+    connect(row.remove, &QToolButton::clicked, this, [this, kind, nameEdit]() { removeDefinition(kind, nameEdit); });
+    if (kind == ParameterKind)
+      detail->setPlaceholderText(placeholderForType(type->currentData().toInt()));
+
+    section.rows.append(row);
+    relayout(kind);
+    nameEdit->setFocus();
+    nameEdit->selectAll();
+    if (!isVisible())
+      pendingFocus = nameEdit;
+    QPointer<QLineEdit> guard(nameEdit);
+    QTimer::singleShot(0, this, [this, guard]() {
+      if (!guard)
+        return;
+      growToFit();
+      scroll->ensureWidgetVisible(guard);
+    });
+  }
+
+  void removeDefinition(int kind, QLineEdit *name) {
+    Section &section = sections[kind];
+    int index = 0;
+    while (index < section.rows.size() && section.rows[index].name != name)
+      ++index;
+    if (index == section.rows.size())
+      return;
+    // The clicked remove button is among these widgets, so delete them once its signal returns.
+    for (QWidget *widget : section.rows.takeAt(index).widgets()) {
+      section.grid->removeWidget(widget);
+      widget->hide();
+      widget->deleteLater();
+    }
+    relayout(kind);
+    if (!section.rows.isEmpty())
+      section.rows[std::min(index, static_cast<int>(section.rows.size()) - 1)].name->setFocus();
+    else
+      section.add->setFocus();
+  }
+
+  /** Place the rows in order below the headings, and show the card body only when it has rows. */
+  void relayout(int kind) {
+    Section &section = sections[kind];
+    for (const Row &row : section.rows)
+      for (QWidget *widget : row.widgets())
+        section.grid->removeWidget(widget);
+    for (int i = 0; i < section.rows.size(); ++i) {
+      const Row &row = section.rows[i];
+      const int line = i + 1;
+      section.grid->addWidget(row.name, line, NameField);
+      section.grid->addWidget(row.type, line, TypeField);
+      section.grid->addWidget(row.units, line, UnitsField, 1, row.detail ? 1 : 2);
+      if (row.detail)
+        section.grid->addWidget(row.detail, line, DetailField);
+      section.grid->addWidget(row.remove, line, RemoveField);
+    }
+    const bool any = !section.rows.isEmpty();
+    section.rule->setVisible(any);
+    section.body->setVisible(any);
+    section.count->setText(QString::number(section.rows.size()));
+    if (kind == ColumnKind)
+      rowsBox->setEnabled(any);
+    updateTabOrder();
+    validate();
+  }
+
+  /** Tab through the cards from top to bottom, then to the buttons. */
+  void updateTabOrder() {
+    QVector<QWidget *> chain = {descriptionEdit};
+    for (int kind = 0; kind < KindCount; ++kind) {
+      if (kind == ColumnKind)
+        chain.append(rowsBox);
+      chain.append(sections[kind].add);
+      for (const Row &row : sections[kind].rows)
+        chain += row.widgets();
+    }
+    for (int i = 1; i < chain.size(); ++i)
+      setTabOrder(chain[i - 1], chain[i]);
+  }
+
+  /** Grow the window with its contents, up to a comfortable height, before it scrolls. */
+  void growToFit() {
+    const int needed = scroll->widget()->sizeHint().height() - scroll->viewport()->height();
+    int limit = 44 * fontMetrics().height();
+    if (QWindow *window = windowHandle())
+      if (QScreen *screen = window->screen())
+        limit = std::min(limit, screen->availableGeometry().height() * 9 / 10);
+    limit = std::max(limit, height());
+    if (needed > 0 && height() < limit)
+      resize(width(), std::min(height() + needed, limit));
+  }
+
+  static QString placeholderForType(int32_t type) {
+    return type == SDDS_STRING      ? SDDSEditor::tr("empty")
+           : type == SDDS_CHARACTER ? SDDSEditor::tr("space")
+                                    : QStringLiteral("0");
+  }
+
+  QString summary() const {
+    auto count = [](int n, const QString &one, const QString &many) {
+      return n == 1 ? one : many.arg(n);
+    };
+    QStringList parts;
+    const int parameters = sections[ParameterKind].rows.size();
+    const int columns = sections[ColumnKind].rows.size();
+    const int arrays = sections[ArrayKind].rows.size();
+    if (parameters)
+      parts << count(parameters, SDDSEditor::tr("1 parameter"), SDDSEditor::tr("%1 parameters"));
+    if (columns)
+      parts << SDDSEditor::tr("%1 × %2")
+                   .arg(count(columns, SDDSEditor::tr("1 column"), SDDSEditor::tr("%1 columns")),
+                        count(rowsBox->value(), SDDSEditor::tr("1 row"), SDDSEditor::tr("%1 rows")));
+    if (arrays)
+      parts << count(arrays, SDDSEditor::tr("1 array"), SDDSEditor::tr("%1 arrays"));
+    if (parts.isEmpty())
+      return SDDSEditor::tr("Creates an empty file with one page.");
+    return SDDSEditor::tr("Creates one page with %1.").arg(parts.join(QStringLiteral(", ")));
+  }
+
+  /** Mark fields that cannot be saved and report the first problem; true when Create may proceed. */
+  bool validate() {
+    QString problem;
+    auto mark = [&problem](QWidget *field, const QString &message) {
+      const bool invalid = !message.isEmpty();
+      if (field->property("invalid").toBool() != invalid) {
+        field->setProperty("invalid", invalid);
+        field->style()->unpolish(field);
+        field->style()->polish(field);
+      }
+      field->setToolTip(message);
+      if (invalid && problem.isEmpty())
+        problem = message;
+    };
+    const QString cannotSave = SDDSEditor::tr("contains characters that cannot be saved in this system's encoding");
+    mark(descriptionEdit, localEncodingPreserves(descriptionEdit->text())
+                              ? QString()
+                              : SDDSEditor::tr("The description %1").arg(cannotSave));
+    static const char *const classes[] = {"parameter", "column", "array"};
+    for (int kind = 0; kind < KindCount; ++kind) {
+      QSet<QString> names;
+      const QVector<Row> &rows = sections[kind].rows;
+      for (int i = 0; i < rows.size(); ++i) {
+        const Row &row = rows[i];
+        const QString name = row.name->text();
+        QString nameProblem;
+        if (name.isEmpty()) {
+          nameProblem = SDDSEditor::tr("Enter a name for %1 %2").arg(kindName(kind)).arg(i + 1);
+        } else if (name.toLocal8Bit().size() > MaxNameBytes) {
+          nameProblem = SDDSEditor::tr("The name of %1 %2 is longer than %3 bytes")
+                            .arg(kindName(kind)).arg(i + 1).arg(int(MaxNameBytes));
+        } else if (!localEncodingPreserves(name) ||
+                   !SDDS_IsValidName(name.toLocal8Bit().constData(), classes[kind])) {
+          // The library records why; this dialog explains in its own words.
+          SDDS_ClearErrors();
+          nameProblem = SDDSEditor::tr("“%1” is not a valid %2 name").arg(name, kindName(kind));
+        } else if (names.contains(name)) {
+          nameProblem = SDDSEditor::tr("More than one %1 is named “%2”").arg(kindName(kind), name);
+        }
+        names.insert(name);
+        mark(row.name, nameProblem);
+        mark(row.units, localEncodingPreserves(row.units->text())
+                            ? QString()
+                            : SDDSEditor::tr("The units of “%1” %2").arg(name, cannotSave));
+        if (kind == ParameterKind) {
+          const int32_t type = row.type->currentData().toInt();
+          mark(row.detail, validateTextForType(row.detail->text(), type, false)
+                               ? QString()
+                               : SDDSEditor::tr("“%1” is not a valid %2 value for “%3”")
+                                     .arg(row.detail->text(), QString::fromLocal8Bit(SDDS_GetTypeName(type)), name));
+        } else if (kind == ArrayKind) {
+          QVector<int> dims;
+          QString shapeProblem;
+          if (!parseShape(row.detail->text(), &dims))
+            shapeProblem = SDDSEditor::tr("Enter the shape of “%1” as sizes such as 5 or 3x4").arg(name);
+          else if (dimProduct(dims) < 0 || dimProduct(dims) > int(MaxElements))
+            shapeProblem = SDDSEditor::tr("“%1” can have at most %2 elements").arg(name).arg(int(MaxElements));
+          mark(row.detail, shapeProblem);
+        }
+      }
+    }
+    status->setText(problem.isEmpty() ? summary() : problem);
+    if (status->property("problem").toBool() != !problem.isEmpty()) {
+      status->setProperty("problem", !problem.isEmpty());
+      status->style()->unpolish(status);
+      status->style()->polish(status);
+    }
+    createButton->setEnabled(problem.isEmpty());
+    return problem.isEmpty();
+  }
+
+  Section sections[KindCount];
+  QLineEdit *descriptionEdit{nullptr};
+  QSpinBox *rowsBox{nullptr};
+  QScrollArea *scroll{nullptr};
+  QLabel *status{nullptr};
+  QPushButton *createButton{nullptr};
+  QPointer<QLineEdit> pendingFocus;
+  QIcon addIcon;
+  QIcon removeIcon;
+};
+
+/** Configure and stage a new document before replacing the current one. */
+void SDDSEditor::newFile() {
+  commitModels();
+  NewFileDialog dlg(editorTheme(darkPalette), this);
+  configureEditorPopupDialog(&dlg, this);
+  dlg.resize(dlg.sizeHint()); // Not limited to part of the screen as adjustSize() is.
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+  const QVector<NewFileDefinition> definitions = dlg.definitions();
+  const QByteArray description = dlg.description().toLocal8Bit();
+
+  SDDS_DATASET newDataset = {};
+  auto failed = [&]() {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    terminateIncompleteDataset(&newDataset);
+    QMessageBox::warning(this, tr("SDDS"), tr("Failed to create the new document"));
+  };
+  if (!SDDS_InitializeOutput(&newDataset, asciiSave ? SDDS_ASCII : SDDS_BINARY, 1,
+                             description.isEmpty() ? nullptr : description.constData(), nullptr, nullptr)) {
+    failed();
+    return;
+  }
+  SDDS_DeferSavingLayout(&newDataset, 1);
+  PageStore page;
+  for (const NewFileDefinition &def : definitions) {
+    const QByteArray name = def.name.toLocal8Bit();
+    const QByteArray units = def.units.toLocal8Bit();
+    const char *unitText = def.units.isEmpty() ? nullptr : units.constData();
+    int32_t index;
+    if (def.kind == NewFileDialog::ParameterKind) {
+      index = SDDS_DefineParameter(&newDataset, name.constData(), nullptr, unitText, nullptr,
+                                   nullptr, def.type, nullptr);
+      page.parameters.append(def.value);
+    } else if (def.kind == NewFileDialog::ColumnKind) {
+      index = SDDS_DefineColumn(&newDataset, name.constData(), nullptr, unitText, nullptr,
+                                nullptr, def.type, 0);
+      page.columns.append(QVector<QString>(dlg.columnRows(), def.value));
+    } else {
+      index = SDDS_DefineArray(&newDataset, name.constData(), nullptr, unitText, nullptr,
+                               nullptr, def.type, 0, def.dims.size(), nullptr);
+      page.arrays.append({QVector<QString>(dimProduct(def.dims), def.value), def.dims});
+    }
+    if (index < 0) {
+      failed();
+      return;
+    }
+  }
+  SDDS_DeferSavingLayout(&newDataset, 0);
+  if (!SDDS_SaveLayout(&newDataset)) {
+    failed();
+    return;
+  }
+  if (!maybeSave()) {
+    SDDS_Terminate(&newDataset);
+    return;
+  }
+
+  clearDataset();
+  dataset = newDataset;
+  datasetLoaded = true;
+  pages.append(std::move(page));
+  currentPage = 0;
+  currentFilename.clear();
+  pageCombo->blockSignals(true);
+  pageCombo->addItem(tr("Page %1").arg(1));
+  pageCombo->setCurrentIndex(0);
+  pageCombo->blockSignals(false);
+  outlineFilter->clear();
+  columnSearchEdit->clear();
+  populateModels();
+  markDirty();
+  message(tr("Created a new document. Save to choose its filename."));
 }
 
 bool SDDSEditor::loadFile(const QString &path) {

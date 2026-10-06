@@ -97,6 +97,266 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** Drive New through its real buttons, including validation and save prompts. */
+  static void newFiles(const QString &root) {
+    auto configure = [](std::function<void(NewFileDialog *)> action) {
+      QTimer::singleShot(0, [action]() {
+        for (QWidget *widget : QApplication::topLevelWidgets())
+          if (NewFileDialog *dialog = dynamic_cast<NewFileDialog *>(widget))
+            if (dialog->isVisible()) {
+              action(dialog);
+              return;
+            }
+        require(false, "New opens its setup dialog");
+      });
+    };
+    auto create = [](NewFileDialog *dialog) { dialog->createButton->click(); };
+    // Rows hold widget pointers; copies stay valid as later rows are added.
+    auto add = [](NewFileDialog *dialog, int kind) {
+      dialog->findChild<QToolButton *>(QString("newFileAdd%1").arg(kind))->click();
+      return dialog->sections[kind].rows.last();
+    };
+    auto setType = [](const NewFileDialog::Row &row, int type) {
+      row.type->setCurrentIndex(row.type->findData(type));
+    };
+    auto invalid = [](QWidget *field) { return field->property("invalid").toBool(); };
+    /* Create stays disabled and the footer names the problem, without a message box. */
+    auto blocked = [](NewFileDialog *dialog, const QString &problem) {
+      dialog->createButton->click();
+      return dialog->isVisible() && !dialog->createButton->isEnabled() &&
+             dialog->status->property("problem").toBool() && dialog->status->text().contains(problem);
+    };
+    {
+      SDDSEditor editor;
+      editor.show();
+      QAction *action = editor.findChild<QAction *>("newFileAction");
+      require(action && action->shortcut() == QKeySequence(QKeySequence::New) &&
+                  editor.mainToolBar->actions().contains(action), "New has a menu, toolbar and native shortcut");
+      configure([&](NewFileDialog *dialog) {
+        const auto &columns = dialog->sections[NewFileDialog::ColumnKind].rows;
+        require(columns.size() == 1 && columns[0].name->text() == "Column1" &&
+                    dialog->focusWidget() == columns[0].name && columns[0].name->selectedText() == "Column1",
+                "New starts with one column whose name is selected for typing");
+        require(dialog->sections[NewFileDialog::ParameterKind].body->isHidden() &&
+                    dialog->sections[NewFileDialog::ArrayKind].body->isHidden() &&
+                    dialog->createButton->isEnabled() &&
+                    dialog->status->text() == "Creates one page with 1 column × 1 row.",
+                "empty sections collapse to their headers and the footer summarizes the file");
+        columns[0].name->setText("Position");
+        columns[0].units->setText("m");
+        dialog->descriptionEdit->setText("Test file");
+
+        NewFileDialog::Row title = add(dialog, NewFileDialog::ParameterKind);
+        require(dialog->focusWidget() == title.name && !dialog->sections[0].body->isHidden() &&
+                    title.type->currentData().toInt() == SDDS_STRING,
+                "adding a parameter shows its section and focuses a string parameter's name");
+        title.name->setText("Title");
+        title.detail->setText("Run 7");
+        NewFileDialog::Row count = add(dialog, NewFileDialog::ParameterKind);
+        require(count.name->text() == "Parameter1", "new names are unique within their kind");
+        count.name->setText("Count");
+        setType(count, SDDS_LONG64);
+        require(count.detail->placeholderText() == "0", "the value placeholder shows the type's default");
+        count.detail->setText("abc");
+        require(invalid(count.detail) && blocked(dialog, "not a valid long64 value"),
+                "an invalid parameter value blocks Create");
+        count.detail->setText(" 42 ");
+        require(!invalid(count.detail) && dialog->createButton->isEnabled(), "a valid value enables Create");
+
+        NewFileDialog::Row flag = add(dialog, NewFileDialog::ColumnKind);
+        setType(flag, SDDS_CHARACTER);
+        flag.name->setText("Position");
+        require(invalid(flag.name) && blocked(dialog, "More than one column is named"),
+                "duplicate names in one kind block Create");
+        flag.name->setText("invalid name");
+        require(blocked(dialog, "not a valid column name"), "invalid names block Create");
+        flag.name->setText(QString("bad%1name").arg(QChar(0)));
+        require(blocked(dialog, "not a valid column name"), "NUL names block Create");
+        flag.name->setText(QString(600, QChar('a')));
+        require(blocked(dialog, "longer than"), "very long names block Create");
+        flag.name->clear();
+        require(blocked(dialog, "Enter a name for column 2"), "empty names block Create");
+        flag.name->setText("Flag");
+        require(!invalid(flag.name) && dialog->createButton->isEnabled(), "fixing the name enables Create");
+
+        NewFileDialog::Row samples = add(dialog, NewFileDialog::ArrayKind);
+        samples.name->setText("Samples");
+        samples.detail->setText("3x");
+        require(invalid(samples.detail) && blocked(dialog, "Enter the shape"), "malformed shapes block Create");
+        samples.detail->setText("2000 x 2000");
+        require(blocked(dialog, "at most"), "oversized arrays block Create");
+        samples.detail->setText("2 × 3");
+        NewFileDialog::Row spare = add(dialog, NewFileDialog::ArrayKind);
+        spare.name->setText("Spare");
+        spare.remove->click();
+        require(dialog->sections[NewFileDialog::ArrayKind].rows.size() == 1 &&
+                    dialog->focusWidget() == samples.name,
+                "removing a definition moves the cursor to its neighbor");
+        dialog->rowsBox->setValue(2);
+        require(dialog->status->text() ==
+                    "Creates one page with 2 parameters, 2 columns × 2 rows, 1 array.",
+                "the footer summarizes every kind");
+        QCoreApplication::processEvents();
+        dialog->grab().save(root + "/new-file-dialog.png");
+
+        // Start small; growth stops at most of the screen, and the offscreen screen is small.
+        dialog->resize(dialog->width(), 300);
+        QCoreApplication::processEvents();
+        const int before = dialog->height();
+        for (int i = 0; i < 12; ++i)
+          add(dialog, NewFileDialog::ColumnKind);
+        QCoreApplication::processEvents();
+        require(dialog->height() > before, "the dialog grows as definitions are added");
+        while (dialog->sections[NewFileDialog::ColumnKind].rows.size() > 2) {
+          dialog->sections[NewFileDialog::ColumnKind].rows.last().remove->click();
+          QCoreApplication::processEvents();
+        }
+        create(dialog);
+      });
+      action->trigger();
+      require(editor.datasetLoaded && editor.dirty && editor.currentFilename.isEmpty() &&
+                  editor.pages.size() == 1 && editor.currentPage == 0 && !editor.undoStack->canUndo(),
+              "New starts one unsaved, unnamed page without old undo history");
+      const SDDS_LAYOUT &layout = editor.dataset.layout;
+      require(layout.n_parameters == 2 && layout.n_columns == 2 && layout.n_arrays == 1 &&
+                  QByteArray(layout.parameter_definition[1].name) == "Count" &&
+                  layout.parameter_definition[1].type == SDDS_LONG64 &&
+                  QByteArray(layout.column_definition[0].units) == "m" &&
+                  layout.column_definition[1].type == SDDS_CHARACTER &&
+                  layout.array_definition[0].dimensions == 2 &&
+                  QByteArray(layout.description) == "Test file",
+              "New preserves the description and the chosen kinds, names, types, units and shapes");
+      require(editor.pages[0].parameters == QVector<QString>({"Run 7", "42"}) &&
+                  editor.pages[0].columns == QVector<QVector<QString>>({{"0", "0"}, {" ", " "}}) &&
+                  editor.pages[0].arrays[0].dims == QVector<int>({2, 3}) &&
+                  editor.pages[0].arrays[0].values == QVector<QString>(6, "0"),
+              "New initializes values, rows and array shapes");
+      for (bool ascii : {true, false}) {
+        (ascii ? editor.asciiBtn : editor.binaryBtn)->click();
+        const QString path = root + (ascii ? "/new-ascii.sdds" : "/new-binary.sdds");
+        require(editor.writeFile(path), "save a new mixed document");
+        SDDSEditor loaded;
+        require(loaded.loadFile(path) && loaded.asciiSave == ascii &&
+                    loaded.pages[0].parameters == editor.pages[0].parameters &&
+                    loaded.pages[0].columns == editor.pages[0].columns &&
+                    loaded.pages[0].arrays[0].dims == editor.pages[0].arrays[0].dims &&
+                    loaded.pages[0].arrays[0].values == editor.pages[0].arrays[0].values &&
+                    QByteArray(loaded.dataset.layout.description) == "Test file",
+                "new document round trips through ASCII and binary");
+      }
+    }
+    {
+      SDDSEditor editor(true);
+      configure([&](NewFileDialog *dialog) {
+        add(dialog, NewFileDialog::ParameterKind).detail->setText("x");
+        add(dialog, NewFileDialog::ArrayKind);
+        QCoreApplication::processEvents();
+        dialog->grab().save(root + "/new-file-dialog-dark.png");
+        dialog->reject();
+      });
+      editor.newFile();
+      require(!editor.datasetLoaded && !editor.dirty, "canceling New with no document leaves the editor empty");
+    }
+    {
+      SDDSEditor editor;
+      setup(editor);
+      const QString original = root + "/before-new.sdds";
+      require(editor.writeFile(original), "save original document for New checks");
+      editor.currentFilename = original;
+      const QByteArray saved = readFile(original);
+      configure([](NewFileDialog *dialog) { dialog->reject(); });
+      editor.newFile();
+      require(!editor.dirty && editor.currentFilename == original && editor.pages[0].columns[0][0] == "3",
+              "canceling setup preserves a loaded document and saved state");
+      configure([&](NewFileDialog *dialog) {
+        add(dialog, NewFileDialog::ColumnKind).name->setText("Column1");
+        require(blocked(dialog, "More than one column"), "invalid setup cannot be created");
+        QCoreApplication::processEvents();
+        dialog->grab().save(root + "/new-file-dialog-problem.png");
+        dialog->reject();
+      });
+      editor.newFile();
+      require(editor.currentFilename == original && !editor.dirty && readFile(original) == saved,
+              "invalid setup leaves the current document and file intact");
+
+      editor.show();
+      editor.columnView->edit(editor.columnModel->index(0, 0));
+      QCoreApplication::processEvents();
+      auto *cell = editor.columnView->viewport()->findChild<QLineEdit *>();
+      require(cell && cell->isVisible(), "open a pending cell before New");
+      cell->setText("77");
+      editor.openArrayViewer(0);
+      QPointer<QDialog> viewer = editor.arrayViewers.last();
+      editor.rowFilterExpression = "X>1";
+      editor.rowFilterActive = true;
+      editor.refreshColumnRowFilter(false);
+      editor.outlineFilter->setText("X");
+      editor.columnSearchEdit->setText("77");
+      auto replace = [&](QMessageBox::StandardButton answer, bool expectReplacement) {
+        bool prompted = false;
+        QTimer responder;
+        QObject::connect(&responder, &QTimer::timeout, [&]() {
+          for (QWidget *widget : QApplication::topLevelWidgets())
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(widget))
+              if (box->isVisible()) {
+                if (box->standardButtons() & QMessageBox::Save) {
+                  prompted = true;
+                  box->done(answer);
+                } else {
+                  box->accept();
+                }
+              }
+        });
+        configure(create);
+        messageBoxAccepter->stop();
+        responder.start(10);
+        editor.newFile();
+        responder.stop();
+        messageBoxAccepter->start();
+        require(prompted && editor.currentFilename.isEmpty() == expectReplacement,
+                "New honors the unsaved-change answer and save result");
+      };
+      replace(QMessageBox::Cancel, false);
+      require(editor.dirty && editor.pages[0].columns[0][0] == "77" && viewer &&
+                  readFile(original) == saved, "Cancel preserves pending edits, viewers and the old file");
+      editor.currentFilename = root + "/missing-directory/failed.sdds";
+      replace(QMessageBox::Save, false);
+      require(editor.dirty && editor.pages[0].columns[0][0] == "77" && viewer,
+              "failed Save preserves the current document");
+      editor.currentFilename = original;
+      replace(QMessageBox::Save, true);
+      SDDSEditor loaded;
+      require(loaded.loadFile(original) && loaded.pages[0].columns[0][0] == "77",
+              "Save persists pending changes before New replaces the document");
+      require(!viewer && editor.arrayViewers.isEmpty() && !editor.undoStack->canUndo() &&
+                  !editor.rowFilterActive && !editor.filterAction->isChecked() &&
+                  editor.outlineFilter->text().isEmpty() && editor.columnSearchEdit->text().isEmpty(),
+              "New closes old viewers and resets undo, row filters and searches");
+      const QByteArray afterSave = readFile(original);
+      replace(QMessageBox::Discard, true);
+      require(readFile(original) == afterSave, "Discard creates a new document without writing the old file");
+    }
+    {
+      SDDSEditor editor;
+      configure([&](NewFileDialog *dialog) {
+        dialog->sections[NewFileDialog::ColumnKind].rows[0].remove->click();
+        require(dialog->sections[NewFileDialog::ColumnKind].body->isHidden() && !dialog->rowsBox->isEnabled() &&
+                    dialog->status->text() == "Creates an empty file with one page.",
+                "removing every definition offers an empty file");
+        create(dialog);
+      });
+      editor.newFile();
+      require(editor.datasetLoaded && editor.dirty && editor.pages.size() == 1 &&
+                  editor.dataset.layout.n_parameters == 0 && editor.dataset.layout.n_columns == 0 &&
+                  editor.dataset.layout.n_arrays == 0, "New can create an empty file");
+      require(editor.writeFile(root + "/new-empty.sdds"), "save empty new document");
+      SDDSEditor loaded;
+      require(loaded.loadFile(root + "/new-empty.sdds") && loaded.pages.size() == 1,
+              "empty new document round trips");
+    }
+    fprintf(stdout, "PASS New setup, validation, defaults, cancellation, save prompts and round trips\n");
+  }
+
   /** An open editor must completely hide the cell's old display text. */
   static void cellEditorPainting(const QString &root) {
     const int flashTime = QApplication::cursorFlashTime();
@@ -4275,6 +4535,7 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::newFiles(artifacts.path());
   SDDSEditorTests::cellEditorPainting(artifacts.path());
   SDDSEditorTests::plotArrays(artifacts.path());
   SDDSEditorTests::clearColumnSelectionInteractions();

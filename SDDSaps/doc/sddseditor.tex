@@ -2,12 +2,24 @@
   \item \textbf{description:} \verb|sddseditor| is a Qt graphical application for viewing
   and modifying SDDS files. Multiple pages of parameters, columns and arrays can be
   edited using familiar table widgets. Standard shortcuts such as
-  \verb|Ctrl+O| for opening files, \verb|Ctrl+S| for saving, \verb|Ctrl+C| and
+  \verb|Ctrl+N| for creating files, \verb|Ctrl+O| for opening files,
+  \verb|Ctrl+S| for saving, \verb|Ctrl+C| and
   \verb|Ctrl+V| for copy and paste, and \verb|Ctrl+Z|/\verb|Ctrl+Shift+Z| for
   undo and redo are provided. Additional actions are available from context menus
   on the column and array headers including plotting and sorting columns with
   \progref{sddsplot}, plus searching and resizing arrays. Files may also be
   exported to HDF format using \verb|Ctrl+Shift+H|.
+
+  Choose \verb|File > New...| or the \verb|New| toolbar button to create a file,
+  even while another file is open. The setup dialog lists parameters, columns
+  and arrays in separate cards, each with names, types and units. Parameters
+  take an initial value, columns share a row count, and arrays take a shape such
+  as \verb|5| or \verb|3x4|. An optional description is stored in the file
+  header. Problems such as duplicate names are reported as you type, and
+  \verb|Create| is enabled once every definition is valid. New files start with
+  one page. Removing all definitions creates an empty file. Unsaved changes in
+  the current document are protected by a Save/Discard/Cancel prompt, and saving
+  the new file asks for a filename.
 
   \item \textbf{examples:}
     \begin{verbatim}

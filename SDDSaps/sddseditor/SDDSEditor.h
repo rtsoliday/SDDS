@@ -86,6 +86,7 @@ signals:
   void columnRowVisibilityChanged();
 
 private slots:
+  void newFile();
   void openFile();
   void saveFile();
   void saveFileAs();
@@ -152,7 +153,7 @@ private:
 
   void applyTheme(bool dark);
   void showAbout();
-  void buildToolBar(QAction *openAct, QAction *saveAct, QAction *undoAct,
+  void buildToolBar(QAction *newAct, QAction *openAct, QAction *saveAct, QAction *undoAct,
                     QAction *redoAct, QAction *filterAct, QAction *arrayViewerAct);
   void buildStatusBar();
   void bindIcon(QObject *target, int kind, int tone = 0);

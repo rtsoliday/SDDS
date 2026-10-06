@@ -47,7 +47,9 @@ The regression target also requires the matching Qt Test module (`Qt5Test` or
 
 The target builds `SDDSEditorTests.cc` and `PlotSnapshotProbe.cc` with the normal
 repository toolchain and runs Qt with `QT_QPA_PLATFORM=offscreen`. Tests exercise
-transactional saves (including gzip and xz), version collisions, fixed parameter
+creating files with File → New (inline validation, initial values, array
+shapes, unsaved-change prompts and ASCII/binary round trips), transactional
+saves (including gzip and xz), version collisions, fixed parameter
 insertion, cell and structural undo/redo, sorting, resizing, empty arrays in SDDS
 and HDF, numeric row filters, search invalidation, plotting unsaved edits, and
 parameter panel sizing when opening files, resizing the window, and manually
@@ -195,13 +197,29 @@ artifacts; the supplied file is never saved or modified.
 
 ## Interface
 
-The toolbar holds Open, Save, Undo/Redo, a page stepper (previous arrow, page
+The toolbar holds New, Open, Save, Undo/Redo, a page stepper (previous arrow, page
 list with the page count, next arrow), Filter rows, Plot (current column or numeric array), Array
 viewer, and the ASCII/Binary save format. Parameters, columns and arrays are
 shown in separate panels. Click a panel title to collapse or expand it, or use
 the **View** menu. Each panel header shows its count and common actions (Insert
 and Attributes; Attributes edits the definition of the current cell's
 parameter, column or array).
+
+Choose **File → New...**, the **New** toolbar button, or **Ctrl+N** (**Cmd+N** on
+macOS) to create a file, including while another file is open. The setup dialog
+has a card each for parameters, columns and arrays, laid out like the main
+window's panels. Add or remove definitions and set their names, SDDS types and
+units. Parameters take an initial value, the Columns card sets the row count,
+and arrays take a shape such as `5`, `3x4` or `2, 3, 4`. An optional description
+is stored in the file header. Invalid or duplicate names, values that do not fit
+their type, and malformed shapes are outlined as you type, the first problem is
+described beside the buttons, and **Create** is enabled once everything can be
+saved. New files have one page. Blank values start at zero for numbers, empty
+for strings and a space for characters. Remove every definition to start with an
+empty file. Symbols, descriptions, formats and other attributes can be edited
+afterward with the Attributes actions. Cancel keeps the current document. Before
+replacing a modified document, the editor offers Save, Discard and Cancel. The
+new document has no filename and Save asks for a destination.
 
 The Columns panel also has **Clear selection**, which commits pending edits,
 removes the selection and returns the panel search to all columns. **Esc** clears
