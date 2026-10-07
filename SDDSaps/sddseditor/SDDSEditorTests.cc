@@ -97,6 +97,160 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** Exercise Time-only menus, rendered dates and lossless numeric persistence. */
+  static void timeDisplay(const QString &root) {
+    fprintf(stdout, "sddseditor_tests: column time display\n");
+    const TimeDisplayMode utc = TimeDisplayMode::UTC;
+    require(epochTimeText("0", utc) == "1970-01-01 00:00:00.000 UTC", "epoch zero displays in UTC");
+    require(epochTimeText("-0.001", utc) == "1969-12-31 23:59:59.999 UTC", "negative fractional epoch");
+    require(epochTimeText("1700000000.1234567", utc) == "2023-11-14 22:13:20.123 UTC",
+            "fractional seconds round only for display");
+    require(epochTimeText("0.9999", utc) == "1970-01-01 00:00:01.000 UTC", "millisecond rounding carries seconds");
+    for (const QString &value : {QString(), QString("bad"), QString("nan"), QString("inf"),
+                                 QString("1e300"), QString("-1e300"), QString("253402300800")})
+      require(epochTimeText(value, utc) == value, "unsupported timestamps retain their raw text");
+
+    SDDSEditor editor;
+    setup(editor);
+    require(SDDS_DefineColumn(&editor.dataset, "Time", nullptr, "s", nullptr, nullptr, SDDS_DOUBLE, 0) >= 0,
+            "define epoch Time column");
+    require(SDDS_DefineColumn(&editor.dataset, "Starttime", nullptr, nullptr, nullptr, nullptr, SDDS_LONG64, 0) >= 0,
+            "define lowercase time suffix");
+    require(SDDS_DefineColumn(&editor.dataset, "TimeText", nullptr, nullptr, nullptr, nullptr, SDDS_STRING, 0) >= 0,
+            "define nonnumeric Time column");
+    require(SDDS_DefineParameter(&editor.dataset, "TimeParameter", nullptr, nullptr, nullptr, nullptr,
+                                 SDDS_DOUBLE, nullptr) >= 0, "define Time parameter");
+    require(SDDS_SaveLayout(&editor.dataset), "save Time fixture layout");
+    editor.pages[0].columns = {{"3", "1", "2"}, {"1700000000.1234567", "0", "-0.001"},
+                               {"0", "1", "2"}, {"0", "1", "2"}};
+    editor.pages[0].parameters = {"1700000000.1234567"};
+    editor.populateModels();
+    editor.dirty = false;
+    editor.undoStack->clear();
+    editor.show();
+    QCoreApplication::processEvents();
+    require(!editor.columnModel->canDisplayTime(0) && editor.columnModel->canDisplayTime(1) &&
+                editor.columnModel->canDisplayTime(2) && !editor.columnModel->canDisplayTime(3),
+            "only numeric columns containing Time are eligible, case-insensitively");
+
+    auto menuMode = [&](int column, const QString &label) {
+      QTimer::singleShot(0, [&, column, label]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        require(menu, "column context menu is open");
+        QMenu *timeMenu = nullptr;
+        for (QAction *action : menu->actions())
+          if (action->text() == "Time display")
+            timeMenu = action->menu();
+        require(bool(timeMenu) == editor.columnModel->canDisplayTime(column), "Time submenu eligibility");
+        if (timeMenu) {
+          require(timeMenu->actions().size() == 3, "Time menu offers raw, local and UTC");
+          int checked = 0;
+          QAction *chosen = nullptr;
+          for (QAction *action : timeMenu->actions()) {
+            checked += action->isChecked();
+            if (action->text() == label)
+              chosen = action;
+          }
+          require(checked == 1 && chosen, "Time menu has one checked option and the requested action");
+          chosen->trigger();
+          require(chosen->isChecked(), "triggered Time action becomes checked");
+        }
+        menu->close();
+      });
+      editor.showColumnMenu(editor.columnView, column, editor.columnView->mapToGlobal(QPoint(5, 5)));
+    };
+    menuMode(0, QString());
+    menuMode(3, QString());
+    menuMode(1, "Date/time — UTC");
+    const QModelIndex cell = editor.columnModel->index(0, 1);
+    auto *delegate = dynamic_cast<SDDSItemDelegate *>(editor.columnView->itemDelegate());
+    require(delegate, "column uses the SDDS delegate");
+    auto rendered = [&](const QModelIndex &index) {
+      QStyleOptionViewItem option;
+      delegate->initStyleOption(&option, index);
+      return option.text;
+    };
+    const QString raw = "1700000000.1234567";
+    require(rendered(cell) == "2023-11-14 22:13:20.123 UTC", "delegate paints the UTC date");
+    require(cell.data().toString() == raw && cell.data(Qt::EditRole).toString() == raw,
+            "both model roles retain the precise epoch value");
+    require(cell.data(Qt::ToolTipRole).toString().contains(raw) &&
+                editor.columnModel->headerData(1, Qt::Horizontal, HeaderUnitsRole).toString().contains("UTC"),
+            "cell tooltip exposes raw epoch and header identifies UTC display");
+    require(QString::fromLocal8Bit(editor.dataset.layout.column_definition[1].units) == "s",
+            "display label never changes saved units");
+    editor.columnView->setCurrentIndex(cell);
+    editor.columnView->selectionModel()->select(cell, QItemSelectionModel::ClearAndSelect);
+    editor.activateWindow();
+    QCoreApplication::processEvents();
+    editor.columnView->setFocus();
+    QCoreApplication::processEvents();
+    require(editor.focusedTable() == editor.columnView, "Time column has focus for copying");
+    editor.copy();
+    require(QApplication::clipboard()->text() == raw, "copy uses exact epoch value while dates are displayed");
+    editor.columnView->edit(cell);
+    QCoreApplication::processEvents();
+    QLineEdit *line = qobject_cast<QLineEdit *>(editor.columnView->indexWidget(cell));
+    require(line && line->text() == raw, "active cell editor shows the exact raw epoch");
+    editor.flushPendingEdits();
+
+    menuMode(1, "Date/time — Local");
+    const QDateTime local = QDateTime::fromMSecsSinceEpoch(1700000000123LL).toLocalTime();
+    require(rendered(cell) == local.toString("yyyy-MM-dd HH:mm:ss.zzz t"), "local display uses the system time zone");
+    menuMode(1, "Epoch (raw)");
+    require(rendered(cell) == raw, "raw display restores the original numeric rendering");
+    menuMode(1, "Date/time — UTC");
+    menuMode(2, "Date/time — Local");
+    require(editor.columnModel->timeDisplayMode(1) == utc &&
+                editor.columnModel->timeDisplayMode(2) == TimeDisplayMode::Local,
+            "Time columns have independent settings");
+    editor.rowFilterExpression = "Time>=0";
+    editor.rowFilterActive = true;
+    editor.refreshColumnRowFilter(false);
+    require(editor.visibleColumnRows == 2 && editor.columnView->isRowHidden(2),
+            "row filters compare numeric epoch values with dates displayed");
+    menuMode(1, "Epoch (raw)");
+    menuMode(1, "Date/time — UTC");
+    require(editor.visibleColumnRows == 2 && editor.columnView->isRowHidden(2),
+            "time display toggles preserve the active numeric filter");
+    editor.clearColumnRowFilter();
+    require(!editor.dirty && editor.undoStack->count() == 0, "display toggles preserve saved state and undo history");
+    require(editor.paramModel->index(0, 0).data(Qt::EditRole).toString() == raw &&
+                editor.pages[0].arrays[0].values[0] == "10", "parameters and arrays remain unchanged");
+    editor.grab().save(root + "/time-display.png");
+
+    editor.sortColumn(1, Qt::AscendingOrder);
+    require(editor.pages[0].columns[1] == QVector<QString>({"-0.001", "0", raw}),
+            "sorting uses numeric epochs while dates are displayed");
+    editor.undoStack->undo();
+    require(editor.pages[0].columns[1] == QVector<QString>({raw, "0", "-0.001"}), "time sort undoes normally");
+
+    editor.pages.append(editor.pages[0]);
+    editor.pageChanged(1);
+    require(editor.columnModel->timeDisplayMode(1) == utc, "time settings survive page switches");
+    editor.columnView->horizontalHeader()->moveSection(1, 0);
+    require(QString::fromLocal8Bit(editor.dataset.layout.column_definition[0].name) == "Time" &&
+                editor.columnModel->timeDisplayMode(0) == utc, "time settings follow reordered column names");
+    editor.undoStack->undo();
+    require(editor.columnModel->timeDisplayMode(1) == utc, "structural undo preserves time settings");
+    for (bool ascii : {false, true}) {
+      editor.asciiSave = ascii;
+      const QString path = root + (ascii ? "/time-display-ascii.sdds" : "/time-display-binary.sdds");
+      require(editor.writeFile(path), "save Time fixture with dates displayed");
+      SDDSEditor loaded;
+      require(loaded.loadFile(path) && loaded.pages.size() == 2 &&
+                  loaded.pages[0].columns == editor.pages[0].columns &&
+                  loaded.pages[1].columns == editor.pages[1].columns &&
+                  loaded.pages[0].parameters == editor.pages[0].parameters,
+              "ASCII and binary saves preserve epoch values and full fractional precision");
+      require(loaded.columnModel->timeDisplayMode(1) == TimeDisplayMode::Raw,
+              "time display preferences are never saved in SDDS data");
+      require(editor.loadFile(path) && editor.columnModel->timeDisplayMode(1) == TimeDisplayMode::Raw,
+              "loading another document resets view-only time preferences");
+      menuMode(1, "Date/time — UTC");
+    }
+  }
+
   /** Drive New through its real buttons, including validation and save prompts. */
   static void newFiles(const QString &root) {
     auto configure = [](std::function<void(NewFileDialog *)> action) {
@@ -4535,6 +4689,7 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::timeDisplay(artifacts.path());
   SDDSEditorTests::newFiles(artifacts.path());
   SDDSEditorTests::cellEditorPainting(artifacts.path());
   SDDSEditorTests::plotArrays(artifacts.path());

@@ -337,6 +337,31 @@ first installed of Source Code Pro, JetBrains Mono, Cascadia Mono, Consolas,
 Menlo, DejaVu Sans Mono or Liberation Mono, falling back to the system
 fixed-width font.
 
+## Column time display
+
+Right-click the header or a cell of a numeric column whose name contains
+`Time` (case-insensitive) and choose **Time display**. **Epoch (raw)** is the
+default; **Date/time — Local** and **Date/time — UTC** interpret the stored
+number as Unix epoch seconds since January 1, 1970 UTC. Dates use
+`yyyy-MM-dd HH:mm:ss.zzz`, rounded to milliseconds, with the time zone shown
+beside the date. Local time follows the computer's time zone and daylight-saving
+rules. The column header identifies the active date display, and cell tooltips
+show the exact epoch value. Empty, invalid, nonfinite and out-of-range values
+remain raw; supported displayed years are 0001 through 9999.
+
+This is a display setting for each column name, retained across pages and column
+reordering until a different document is opened or created. Renaming a column
+selects the setting for its new name. Parameters, arrays and nonnumeric columns
+keep their usual display. Cell editing, Copy, sorting, filtering, formulas and
+all file output continue using the original numeric values and precision.
+Switching time display does not mark the document modified or add an Undo step,
+and the setting is never written into the SDDS file.
+
+The editor regression target covers time-menu eligibility, UTC/local rendering,
+fractional and negative epochs, raw fallback, copying/editing, independent
+columns, pages/reordering/undo, and ASCII/binary round trips. The date display
+screenshot is retained in the test artifact directory.
+
 ## Multidimensional array viewer
 
 Right-click an array header or cell and choose **Open Array Viewer...**, or use

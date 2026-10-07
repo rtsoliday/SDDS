@@ -108,6 +108,9 @@
 #include <QWindow>
 #include <QScreen>
 #include <QElapsedTimer>
+#include <QDateTime>
+#include <QTimeZone>
+#include <QActionGroup>
 
 /*
  * On Windows, some headers define min/max as macros, which breaks code like
@@ -3009,7 +3012,7 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
   topics.append({QStringLiteral("menus"), SDDSEditor::tr("Right-click menus"),
       helpTable(SDDSEditor::tr("<th>Right-click</th><th>Actions</th>"), SDDSEditor::tr(
           "<tr><td>Parameter</td><td>Attributes, Change Type, Move Up, Move Down, Delete</td></tr>"
-          "<tr><td>Column header or cell</td><td>Attributes, Plot from file, Sort ascending, "
+          "<tr><td>Column header or cell</td><td>Attributes, Time display (numeric Time columns), Plot from file, Sort ascending, "
           "Sort descending, Search/Replace, Filter/View, Clear Filter/View, formula tools, Delete</td></tr>"
           "<tr><td>Column row number</td><td>Insert, Delete, Filter/View, Clear Filter/View, "
           "formula tools</td></tr>"
@@ -3018,7 +3021,14 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       SDDSEditor::tr(
           "<p>Sorting reorders whole rows and keeps rows with equal values in their original order. "
           "The formula tools are Fill Series, Apply Numerical Expression and Apply Text Formula "
-          "(see <a href=\"#formula\">Formulas and fill</a>).</p>")});
+          "(see <a href=\"#formula\">Formulas and fill</a>).</p>"
+          "<p><b>Time display</b> is available for numeric columns whose names contain Time "
+          "(ignoring case). Choose <b>Epoch (raw)</b>, <b>Date/time — Local</b> or <b>Date/time — UTC</b>. "
+          "Dates interpret values as Unix epoch seconds and show milliseconds and the time zone. "
+          "Unsupported values remain raw. Editing, copying, searching, sorting, filtering and saving "
+          "continue using the original numeric values. Each column name keeps its display setting "
+          "across pages and reordering until another document is opened or created; changing the "
+          "display does not mark the file modified.</p>")});
 
   topics.append({QStringLiteral("find"), SDDSEditor::tr("Search and filter"), SDDSEditor::tr(
       "<h3>Column search box</h3>"
@@ -4603,6 +4613,33 @@ static QString definitionToolTip(const char *name, int32_t type, const char *uni
   return lines.join('\n');
 }
 
+/** View-only interpretation of a numeric Time column as Unix epoch seconds. */
+enum class TimeDisplayMode { Raw, Local, UTC };
+
+/** Format finite epoch seconds to milliseconds, leaving unsupported values raw. */
+static QString epochTimeText(const QString &text, TimeDisplayMode mode) {
+  long double seconds;
+  if (mode == TimeDisplayMode::Raw || text.trimmed().isEmpty() ||
+      !parseLongDoubleStrict(text, &seconds) || !std::isfinite(seconds))
+    return text;
+  const long double milliseconds = std::round(seconds * 1000.0L);
+  // Keep the displayed year within 0001..9999 and avoid integer overflow.
+  if (!std::isfinite(milliseconds) || milliseconds < -62135596800000.0L ||
+      milliseconds > 253402300799999.0L)
+    return text;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+  QDateTime date = QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(milliseconds), QTimeZone::UTC);
+#else
+  QDateTime date = QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(milliseconds), Qt::UTC);
+#endif
+  if (mode == TimeDisplayMode::Local)
+    date = date.toLocalTime();
+  if (!date.isValid() || date.date().year() < 1 || date.date().year() > 9999)
+    return text;
+  return date.toString("yyyy-MM-dd HH:mm:ss.zzz") +
+         (mode == TimeDisplayMode::UTC ? QStringLiteral(" UTC") : date.toString(" t"));
+}
+
 class ColumnPageModel : public QAbstractTableModel {
 public:
   ColumnPageModel(SDDS_DATASET *dataset, QVector<PageStore> *pages, int *currentPage,
@@ -4636,7 +4673,7 @@ public:
         return QVariant();
       return numericAlignment(dataset->layout.column_definition[index.column()].type);
     }
-    if (role != Qt::DisplayRole && role != Qt::EditRole)
+    if (role != Qt::DisplayRole && role != Qt::EditRole && role != Qt::ToolTipRole)
       return QVariant();
     if (*currentPage < 0 || *currentPage >= pages->size())
       return QVariant();
@@ -4648,6 +4685,12 @@ public:
     const QVector<QString> &col = pd.columns[c];
     if (r < 0 || r >= col.size())
       return QVariant();
+    if (role == Qt::ToolTipRole) {
+      if (timeDisplayMode(c) == TimeDisplayMode::Raw)
+        return QVariant();
+      return tr("Epoch seconds: %1\nDisplayed: %2\nEditing and copying use the epoch value.")
+          .arg(col[r], displayText(index));
+    }
     return col[r];
   }
 
@@ -4693,15 +4736,18 @@ public:
         return QString::fromLocal8Bit(def.name);
       case HeaderSubtitleRole:
         return joinSubtitle({QString::fromLocal8Bit(SDDS_GetTypeName(def.type)),
-                             def.units ? QString::fromLocal8Bit(def.units) : QString()});
+                             displayUnits(section)});
       case HeaderTypeRole:
         return def.type;
       case HeaderUnitsRole:
-        return def.units ? QString::fromLocal8Bit(def.units) : QString();
+        return displayUnits(section);
       case Qt::TextAlignmentRole:
         return numericAlignment(def.type);
       case Qt::ToolTipRole:
-        return definitionToolTip(def.name, def.type, def.units, def.description);
+        return definitionToolTip(def.name, def.type, def.units, def.description) +
+               (timeDisplayMode(section) == TimeDisplayMode::Raw ? QString() :
+                tr("\nTime display: %1 (Unix epoch seconds; display only)")
+                    .arg(timeDisplayMode(section) == TimeDisplayMode::UTC ? tr("UTC") : tr("Local")));
       default:
         return QVariant();
       }
@@ -4720,10 +4766,62 @@ public:
     emit headerDataChanged(Qt::Horizontal, first, last);
   }
 
+  /** Only numeric columns containing Time, case-insensitively, offer this view. */
+  bool canDisplayTime(int column) const {
+    if (!dataset || column < 0 || column >= dataset->layout.n_columns)
+      return false;
+    const COLUMN_DEFINITION &def = dataset->layout.column_definition[column];
+    return SDDS_NUMERIC_TYPE(def.type) &&
+           QString::fromLocal8Bit(def.name).contains("Time", Qt::CaseInsensitive);
+  }
+
+  /** Settings follow column names across page switches and column reordering. */
+  TimeDisplayMode timeDisplayMode(int column) const {
+    if (!canDisplayTime(column))
+      return TimeDisplayMode::Raw;
+    return timeDisplayModes.value(QString::fromLocal8Bit(dataset->layout.column_definition[column].name),
+                                  TimeDisplayMode::Raw);
+  }
+
+  /** Change presentation without emitting dataChanged or modifying cell data. */
+  void setTimeDisplayMode(int column, TimeDisplayMode mode) {
+    if (!canDisplayTime(column) || timeDisplayMode(column) == mode)
+      return;
+    const QString name = QString::fromLocal8Bit(dataset->layout.column_definition[column].name);
+    if (mode == TimeDisplayMode::Raw)
+      timeDisplayModes.remove(name);
+    else
+      timeDisplayModes.insert(name, mode);
+    refreshHeaders(column, column);
+  }
+
+  /** The delegate alone uses formatted dates; all model values remain raw. */
+  QString displayText(const QModelIndex &index) const {
+    if (!index.isValid() || !dataset || index.column() < 0 || index.column() >= dataset->layout.n_columns)
+      return QString();
+    const QString text = data(index, Qt::EditRole).toString();
+    const TimeDisplayMode mode = timeDisplayMode(index.column());
+    return mode == TimeDisplayMode::Raw ?
+        canonicalizeForDisplay(text, dataset->layout.column_definition[index.column()].type) :
+        epochTimeText(text, mode);
+  }
+
+  void clearTimeDisplayModes() { timeDisplayModes.clear(); }
+
 private:
+  /** Append a view label to the units without changing the SDDS definition. */
+  QString displayUnits(int column) const {
+    const char *units = dataset->layout.column_definition[column].units;
+    const QString text = units ? QString::fromLocal8Bit(units) : QString();
+    const TimeDisplayMode mode = timeDisplayMode(column);
+    return mode == TimeDisplayMode::Raw ? text :
+        joinSubtitle({text, mode == TimeDisplayMode::UTC ? tr("Date/time UTC") : tr("Date/time Local")});
+  }
+
   SDDS_DATASET *dataset;
   QVector<PageStore> *pages;
   int *currentPage;
+  QHash<QString, TimeDisplayMode> timeDisplayModes;
 };
 
 class ArrayPageModel : public QAbstractTableModel {
@@ -4927,7 +5025,8 @@ public:
   void initStyleOption(QStyleOptionViewItem *option,
                        const QModelIndex &index) const override {
     QStyledItemDelegate::initStyleOption(option, index);
-    option->text = canonicalizeForDisplay(option->text, typeFunc(index));
+    option->text = displayTextFunc ? displayTextFunc(index) :
+        canonicalizeForDisplay(option->text, typeFunc(index));
   }
 
   /** Cover the full cell rather than the style's inset text rectangle. */
@@ -4944,6 +5043,7 @@ public:
    * true.  Without them the delegate paints like QStyledItemDelegate.
    */
   void setTheme(const EditorTheme &t) { theme = t; hasTheme = true; }
+  void setDisplayTextFunc(std::function<QString(const QModelIndex &)> f) { displayTextFunc = std::move(f); }
   void setGridLines(bool on) { gridLines = on; }
   void setPaddingFunc(std::function<bool(const QModelIndex &)> f) { isPadding = std::move(f); }
   void setBadgeFunc(std::function<int(const QModelIndex &)> f) { badgeType = std::move(f); }
@@ -5021,6 +5121,7 @@ public:
 
 private:
   TypeFunc typeFunc;
+  std::function<QString(const QModelIndex &)> displayTextFunc;
   QUndoStack *undoStack;
   std::function<void()> multiCellPasteHandler;
   EditorTheme theme;
@@ -5449,6 +5550,9 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
       },
       undoStack, columnView);
   columnDelegate->setGridLines(true);
+  columnDelegate->setDisplayTextFunc([this](const QModelIndex &index) {
+    return columnModel->displayText(index);
+  });
   columnView->setItemDelegate(columnDelegate);
   columnView->setShowGrid(false);
   /*
@@ -9776,6 +9880,7 @@ void SDDSEditor::resizeEvent(QResizeEvent *event) {
 }
 
 void SDDSEditor::clearDataset() {
+  columnModel->clearTimeDisplayModes();
   // Viewer callbacks refer to this dataset; close them before replacing it.
   for (const QPointer<QDialog> &viewer : arrayViewers)
     delete viewer.data();
@@ -10496,6 +10601,25 @@ void SDDSEditor::showColumnMenu(QTableView *view, int column,
 
   QMenu menu(view);
   QAction *attrAct = menu.addAction(tr("Attributes..."));
+  if (columnModel->canDisplayTime(column)) {
+    QMenu *timeMenu = menu.addMenu(tr("Time display"));
+    timeMenu->setToolTip(tr("Interpret this column as Unix epoch seconds (display only)."));
+    QActionGroup *group = new QActionGroup(timeMenu);
+    for (TimeDisplayMode mode : {TimeDisplayMode::Raw, TimeDisplayMode::Local, TimeDisplayMode::UTC}) {
+      const QString label = mode == TimeDisplayMode::Raw ? tr("Epoch (raw)") :
+                            mode == TimeDisplayMode::Local ? tr("Date/time — Local") : tr("Date/time — UTC");
+      QAction *action = timeMenu->addAction(label);
+      action->setCheckable(true);
+      action->setChecked(columnModel->timeDisplayMode(column) == mode);
+      group->addAction(action);
+      connect(action, &QAction::triggered, this, [this, column, mode]() {
+        columnModel->setTimeDisplayMode(column, mode);
+        columnView->viewport()->update();
+        // Sizing scans at most the header's configured 200 rows.
+        columnView->resizeColumnToContents(column);
+      });
+    }
+  }
   menu.addSeparator();
   QAction *plotAct = menu.addAction(tr("Plot from file"));
   QAction *ascAct = menu.addAction(tr("Sort ascending"));
