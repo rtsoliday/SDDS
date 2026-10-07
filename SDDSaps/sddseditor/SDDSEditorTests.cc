@@ -251,6 +251,109 @@ public:
     }
   }
 
+  /** Time display needs epoch-second units, explains raw cells, and lives as long as its column. */
+  static void timeDisplayLifetime() {
+    fprintf(stdout, "sddseditor_tests: column time display units, tooltips and lifetime\n");
+    require(epochSecondsUnits(nullptr) && epochSecondsUnits("") && epochSecondsUnits(" s ") &&
+                epochSecondsUnits("Seconds") && !epochSecondsUnits("h") && !epochSecondsUnits("ms"),
+            "only blank or second units are epoch seconds");
+#ifndef _WIN32
+    // US Central time repeats 01:30 when clocks fall back on 2023-11-05.
+    const bool hadTz = qEnvironmentVariableIsSet("TZ");
+    const QByteArray oldTz = qgetenv("TZ");
+    qputenv("TZ", "CST6CDT,M3.2.0,M11.1.0");
+    tzset();
+    const QString daylight = epochTimeText("1699165800", TimeDisplayMode::Local);
+    const QString standard = epochTimeText("1699169400", TimeDisplayMode::Local);
+    if (hadTz)
+      qputenv("TZ", oldTz);
+    else
+      qunsetenv("TZ");
+    tzset();
+    require(daylight == "2023-11-05 01:30:00.000 CDT" && standard == "2023-11-05 01:30:00.000 CST",
+            "local display tells apart the repeated fall-back hour");
+#endif
+
+    SDDSEditor editor;
+    setup(editor);
+    require(SDDS_DefineColumn(&editor.dataset, "Time", nullptr, "s", nullptr, nullptr, SDDS_DOUBLE, 0) >= 0,
+            "define epoch Time column");
+    require(SDDS_DefineColumn(&editor.dataset, "TimeOfDay", nullptr, "h", nullptr, nullptr, SDDS_FLOAT, 0) >= 0,
+            "define TimeOfDay in hours");
+    require(SDDS_SaveLayout(&editor.dataset), "save time lifetime layout");
+    editor.pages[0].columns = {{"3", "1", "2"}, {"", "1e300", "0"}, {"1.5", "2", "3"}};
+    editor.populateModels();
+    editor.dirty = false;
+    editor.undoStack->clear();
+    ColumnPageModel *model = editor.columnModel;
+    const TimeDisplayMode utc = TimeDisplayMode::UTC;
+    auto name = [&](int column) { return QString::fromLocal8Bit(editor.dataset.layout.column_definition[column].name); };
+    require(model->canDisplayTime(1) && !model->canDisplayTime(2), "TimeOfDay in hours does not offer dates");
+
+    model->setTimeDisplayMode(1, utc);
+    require(!model->index(0, 1).data(Qt::ToolTipRole).isValid(), "empty time cells have no tooltip");
+    const QString rawTip = model->index(1, 1).data(Qt::ToolTipRole).toString();
+    require(rawTip.contains("1e300") && rawTip.contains("Shown raw") && !rawTip.contains("Displayed"),
+            "unconvertible time cells explain the raw display");
+    require(model->index(2, 1).data(Qt::ToolTipRole).toString().contains("1970-01-01 00:00:00.000 UTC"),
+            "converted time cells show the date in the tooltip");
+
+    auto editAttributes = [&](int column, std::function<void(QDialog *)> configure) {
+      acceptDialog("Column Attributes", configure);
+      editor.editColumnAttributesAt(column);
+    };
+    editAttributes(1, [](QDialog *dialog) {
+      dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[0]->setText("StartTime");
+    });
+    require(name(1) == "StartTime" && model->timeDisplayMode(1) == utc &&
+                !model->allTimeDisplayModes().contains("Time"),
+            "renaming keeps the column's date display under its new name");
+    editor.undoStack->undo();
+    require(name(1) == "Time" && model->timeDisplayMode(1) == utc, "undoing a rename keeps the date display");
+    editor.undoStack->redo();
+    require(name(1) == "StartTime" && model->timeDisplayMode(1) == utc, "redoing a rename keeps the date display");
+
+    editAttributes(1, [](QDialog *dialog) {
+      dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly)[2]->setText("ms");
+    });
+    require(!model->canDisplayTime(1) && model->allTimeDisplayModes().isEmpty(),
+            "changing to non-second units forgets the date display");
+    editor.undoStack->undo();
+    require(model->timeDisplayMode(1) == utc, "undoing the units change restores the date display");
+
+    editAttributes(1, [](QDialog *dialog) {
+      for (QRadioButton *button : dialog->findChildren<QRadioButton *>())
+        if (button->text() == "string")
+          button->setChecked(true);
+    });
+    require(editor.dataset.layout.column_definition[1].type == SDDS_STRING && model->allTimeDisplayModes().isEmpty(),
+            "changing to a string type forgets the date display");
+    editor.undoStack->undo();
+    require(model->timeDisplayMode(1) == utc, "undoing the type change restores the date display");
+
+    // Display choices are not undo steps, so one made after a structural edit survives its undo.
+    editor.deleteColumnIndexes({0});
+    require(name(0) == "StartTime" && model->timeDisplayMode(0) == utc, "deleting another column keeps settings");
+    model->setTimeDisplayMode(0, TimeDisplayMode::Raw);
+    editor.undoStack->undo();
+    require(name(1) == "StartTime" && model->timeDisplayMode(1) == TimeDisplayMode::Raw,
+            "undo does not bring back an older date choice");
+    model->setTimeDisplayMode(1, utc);
+
+    editor.deleteColumnIndexes({1});
+    require(model->allTimeDisplayModes().isEmpty(), "deleting a Time column forgets its date display");
+    editor.undoStack->undo();
+    require(name(1) == "StartTime" && model->timeDisplayMode(1) == utc, "undoing the delete restores the date display");
+    editor.undoStack->redo();
+    require(model->allTimeDisplayModes().isEmpty(), "redoing the delete forgets the date display again");
+    require(SDDS_DefineColumn(&editor.dataset, "StartTime", nullptr, "s", nullptr, nullptr, SDDS_DOUBLE, 0) >= 0 &&
+                SDDS_SaveLayout(&editor.dataset), "define a new column with the deleted name");
+    editor.pages[0].columns.append({"0", "1", "2"});
+    editor.populateModels();
+    require(name(2) == "StartTime" && model->canDisplayTime(2) && model->timeDisplayMode(2) == TimeDisplayMode::Raw,
+            "a new column with a deleted column's name starts raw");
+  }
+
   /** Drive New through its real buttons, including validation and save prompts. */
   static void newFiles(const QString &root) {
     auto configure = [](std::function<void(NewFileDialog *)> action) {
@@ -2587,6 +2690,61 @@ public:
     fprintf(stdout, "PASS array heatmap scaling, colors, edits, precision, pages, and numeric type gating\n");
   }
 
+  /** Heatmap limits use the cells' text for the array type, without long double digit noise. */
+  static void arrayHeatmapRangeText() {
+    struct Case {
+      int32_t type;
+      QVector<QString> values;
+      QString minimum, maximum;
+    };
+    QVector<Case> cases = {
+        {SDDS_DOUBLE, {"-6.9999", "0.5", "7.0394", "1.25"}, "-6.9999", "7.0394"},
+        {SDDS_FLOAT, {"-2.5", "0.1", "3.3", "1"}, "-2.5", "3.3"}};
+    // Long double cells keep every digit; where it is no wider than double, it formats as double.
+    if (std::numeric_limits<long double>::digits > std::numeric_limits<double>::digits) {
+      const QString low = longDoubleToText(strtold("-6.9999", nullptr));
+      const QString high = longDoubleToText(strtold("7.0394", nullptr));
+      cases.append({SDDS_LONGDOUBLE, {low, "0.5", high, "1.25"}, low, high});
+    }
+    for (const Case &test : cases) {
+      SDDSEditor editor;
+      setup(editor);
+      editor.dataset.layout.array_definition[0].type = test.type;
+      require(SDDS_SaveLayout(&editor.dataset), "save heatmap range text layout");
+      editor.pages[0].arrays[0].values = test.values;
+      editor.populateModels();
+      editor.openArrayViewer(0);
+      ArrayViewer *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      ArraySliceModel *grid = viewer->sliceModel();
+      QLineEdit *minimum = viewer->findChild<QLineEdit *>("arrayHeatmapMinimum");
+      QLineEdit *maximum = viewer->findChild<QLineEdit *>("arrayHeatmapMaximum");
+      QLabel *legendMinimum = viewer->findChild<QLabel *>("arrayHeatmapLegendMinimum");
+      QLabel *legendMaximum = viewer->findChild<QLabel *>("arrayHeatmapLegendMaximum");
+      QLabel *status = viewer->findChild<QLabel *>("arrayHeatmapStatus");
+      require(minimum && maximum && legendMinimum && legendMaximum && status, "heatmap range text controls");
+      auto color = [grid](int r, int c) { return qvariant_cast<QBrush>(grid->index(r, c).data(Qt::BackgroundRole)).color(); };
+      viewer->findChild<QCheckBox *>("arrayHeatmap")->setChecked(true);
+      require(minimum->text() == test.minimum && maximum->text() == test.maximum,
+              "automatic heatmap range shows the cells' shortest exact text");
+      require(legendMinimum->toolTip() == test.minimum && legendMaximum->toolTip() == test.maximum,
+              "heatmap legend tooltips show the cells' shortest exact text");
+      long double lowest = 0, highest = 0, parsedMinimum = 0, parsedMaximum = 0;
+      require(grid->finiteRange(&lowest, &highest) && parseLongDoubleStrict(minimum->text(), &parsedMinimum) &&
+                  parseLongDoubleStrict(maximum->text(), &parsedMaximum) &&
+                  parsedMinimum == lowest && parsedMaximum == highest,
+              "heatmap range text parses back to the exact automatic limits");
+      const QColor low = color(0, 0), high = color(1, 0);
+      viewer->findChild<QComboBox *>("arrayHeatmapScale")->setCurrentIndex(1);
+      require(minimum->text() == test.minimum && maximum->text() == test.maximum,
+              "fixed range starts with the cells' shortest exact text");
+      viewer->findChild<QPushButton *>("arrayHeatmapApply")->click();
+      require(!status->text().contains("previous range") && color(0, 0) == low && color(1, 0) == high &&
+                  legendMinimum->toolTip() == test.minimum && legendMaximum->toolTip() == test.maximum,
+              "unchanged heatmap range text applies as the same fixed limits");
+    }
+    fprintf(stdout, "PASS array heatmap range text matches double, float, and long double cells\n");
+  }
+
   /** A format-copy failure must leave the destination intact. */
   static void safeSave(const QString &root) {
     SDDSEditor editor;
@@ -4690,6 +4848,7 @@ int main(int argc, char **argv) {
   warnings.start(10);
   messageBoxAccepter = &warnings;
   SDDSEditorTests::timeDisplay(artifacts.path());
+  SDDSEditorTests::timeDisplayLifetime();
   SDDSEditorTests::newFiles(artifacts.path());
   SDDSEditorTests::cellEditorPainting(artifacts.path());
   SDDSEditorTests::plotArrays(artifacts.path());
@@ -4719,6 +4878,7 @@ int main(int argc, char **argv) {
     SDDSEditorTests::filePanelSizing(layoutInput, artifacts.path());
   SDDSEditorTests::arrayViewer(artifacts.path());
   SDDSEditorTests::arrayHeatmap(artifacts.path());
+  SDDSEditorTests::arrayHeatmapRangeText();
   SDDSEditorTests::safeSave(artifacts.path());
   SDDSEditorTests::fixedParameter(artifacts.path());
   SDDSEditorTests::undo();

@@ -73,9 +73,11 @@ private:
 class ArrayViewer : public QDialog {
 public:
   using State = std::function<ArrayViewerState()>;
+  /** Text a cell of the array's type would show for a value. */
+  using Format = std::function<QString(long double)>;
   ArrayViewer(QAbstractItemModel *source, QUndoStack *undo, State state,
               ArraySliceModel::Edit edit, ArraySliceModel::Validate validate,
-              std::function<void()> commitEdits, QWidget *parent);
+              Format format, std::function<void()> commitEdits, QWidget *parent);
   void refresh();
   void copySelection(bool wholeSlice = false);
   bool pasteText(const QString &text);
@@ -91,7 +93,9 @@ private:
   void changeAxis(bool rows, int axis);
   void updateHeatmap();
   void applyHeatmapRange();
+  QString rangeText(long double value) const;
   State getState;
+  Format format;
   ArrayViewerState state;
   ArraySliceModel *model;
   QUndoStack *undo;

@@ -340,26 +340,35 @@ fixed-width font.
 ## Column time display
 
 Right-click the header or a cell of a numeric column whose name contains
-`Time` (case-insensitive) and choose **Time display**. **Epoch (raw)** is the
+`Time` (case-insensitive) and whose units are blank or seconds (`s`, `sec`,
+`secs`, `second`, `seconds`), and choose **Time display**. Columns in other
+units, such as `TimeOfDay` in hours, do not offer it. **Epoch (raw)** is the
 default; **Date/time — Local** and **Date/time — UTC** interpret the stored
-number as Unix epoch seconds since January 1, 1970 UTC. Dates use
+number as Unix epoch seconds since January 1, 1970 UTC. A duration in seconds,
+such as an elapsed time, would display as a date near 1970. Dates use
 `yyyy-MM-dd HH:mm:ss.zzz`, rounded to milliseconds, with the time zone shown
 beside the date. Local time follows the computer's time zone and daylight-saving
-rules. The column header identifies the active date display, and cell tooltips
-show the exact epoch value. Empty, invalid, nonfinite and out-of-range values
-remain raw; supported displayed years are 0001 through 9999.
+rules; the zone abbreviation tells apart the repeated hour when clocks fall back.
+The column header identifies the active date display, and cell tooltips show the
+exact epoch value, or why a value is shown raw; empty cells have no tooltip.
+Empty, invalid, nonfinite and out-of-range values remain raw; supported
+displayed years are 0001 through 9999.
 
-This is a display setting for each column name, retained across pages and column
-reordering until a different document is opened or created. Renaming a column
-selects the setting for its new name. Parameters, arrays and nonnumeric columns
+This is a display setting for each column, retained across pages, column
+reordering and renaming until a different document is opened or created.
+Deleting a column, or changing its type or units so it no longer qualifies,
+forgets the setting, so a later column with the same name starts raw; Undo
+restores the setting along with the column. Parameters, arrays and nonnumeric columns
 keep their usual display. Cell editing, Copy, sorting, filtering, formulas and
 all file output continue using the original numeric values and precision.
 Switching time display does not mark the document modified or add an Undo step,
 and the setting is never written into the SDDS file.
 
-The editor regression target covers time-menu eligibility, UTC/local rendering,
-fractional and negative epochs, raw fallback, copying/editing, independent
-columns, pages/reordering/undo, and ASCII/binary round trips. The date display
+The editor regression target covers time-menu eligibility by name, type and
+units, UTC/local rendering, the daylight-saving fall-back hour, fractional and
+negative epochs, raw fallback and its tooltips, copying/editing, independent
+columns, pages/reordering/undo, renaming, deleting and retyping, and ASCII/binary
+round trips. The date display
 screenshot is retained in the test artifact directory.
 
 ## Multidimensional array viewer
@@ -394,6 +403,9 @@ and page changes. **Fixed range** starts with the current slice's limits; edit
 **Min** and **Max** and press **Apply** (or Enter) to set bounds that remain fixed
 across slices and pages. Values outside those bounds use the end colors. Limits
 accept scientific notation and must be finite, with Min no greater than Max.
+Min, Max and the legend tooltips show limits the way the array's cells show
+values (-6.9999 in a double array), using more digits only when that text would
+not convert back to exactly the same limit.
 
 The purple-to-yellow legend shows the active bounds. Missing, invalid, NaN and
 infinite values appear gray and are excluded from automatic bounds. A constant
@@ -405,6 +417,7 @@ values, or undo history. Batch edits share one deferred automatic range scan.
 The regular `tests` target covers 1D through 4D arrays, axis changes, empty slices,
 clipboard handling, shared and structural undo, page changes, file round trips,
 and closing/replacing viewer documents. Heatmap tests cover automatic and fixed
-scales, exact cell text, edits/undo, empty and nonfinite data, extreme numbers,
-page changes, and numeric type gating. Viewer and heatmap screenshots are retained
+scales, exact cell text, Min/Max text matching double, float and long double
+cells, edits/undo, empty and nonfinite data, extreme numbers, page changes, and
+numeric type gating. Viewer and heatmap screenshots are retained
 in the test artifact directory.

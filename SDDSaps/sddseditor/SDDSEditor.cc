@@ -2389,9 +2389,20 @@ static QString applyTemplateVariables(const QString &templ,
   return out;
 }
 
+/** View-only interpretation of a numeric Time column as Unix epoch seconds. */
+enum class TimeDisplayMode { Raw, Local, UTC };
+/** Time display choices keyed by column name. */
+using TimeDisplayModes = QHash<QString, TimeDisplayMode>;
+
+// Defined after ColumnPageModel; structural undo carries the view-only choices.
+static TimeDisplayModes columnTimeDisplayModes(const ColumnPageModel *model);
+static void restoreColumnTimeDisplayModes(ColumnPageModel *model, const TimeDisplayModes &modes);
+static void pruneColumnTimeDisplayModes(ColumnPageModel *model);
+
 struct StructuralSnapshot {
   SDDS_DATASET dataset;
   QVector<PageStore> pages;
+  TimeDisplayModes timeDisplayModes;
   int currentPage;
   bool hasDataset;
 
@@ -2406,6 +2417,7 @@ struct StructuralSnapshot {
 
   StructuralSnapshot(StructuralSnapshot &&other) noexcept
       : dataset(other.dataset), pages(std::move(other.pages)),
+        timeDisplayModes(std::move(other.timeDisplayModes)),
         currentPage(other.currentPage), hasDataset(other.hasDataset) {
     memset(&other.dataset, 0, sizeof(other.dataset));
     other.currentPage = 0;
@@ -2418,6 +2430,7 @@ struct StructuralSnapshot {
     clear();
     dataset = other.dataset;
     pages = std::move(other.pages);
+    timeDisplayModes = std::move(other.timeDisplayModes);
     currentPage = other.currentPage;
     hasDataset = other.hasDataset;
     memset(&other.dataset, 0, sizeof(other.dataset));
@@ -2431,6 +2444,7 @@ struct StructuralSnapshot {
       SDDS_Terminate(&dataset);
     memset(&dataset, 0, sizeof(dataset));
     pages.clear();
+    timeDisplayModes.clear();
     currentPage = 0;
     hasDataset = false;
   }
@@ -2441,6 +2455,7 @@ bool captureStructuralSnapshot(SDDSEditor *editor, StructuralSnapshot *snapshot)
     return false;
   snapshot->clear();
   snapshot->pages = editor->pages;
+  snapshot->timeDisplayModes = columnTimeDisplayModes(editor->columnModel);
   snapshot->currentPage = editor->currentPage;
   snapshot->hasDataset = editor->datasetLoaded;
   if (!snapshot->hasDataset)
@@ -2497,6 +2512,7 @@ bool restoreStructuralSnapshot(SDDSEditor *editor, const StructuralSnapshot &sna
     editor->pageCombo->setCurrentIndex(editor->currentPage);
   editor->pageCombo->blockSignals(false);
 
+  restoreColumnTimeDisplayModes(editor->columnModel, snapshot.timeDisplayModes);
   editor->populateModels();
   if (editor->datasetLoaded && !editor->pages.isEmpty())
     editor->loadPage(editor->currentPage + 1);
@@ -2549,6 +2565,8 @@ void pushStructuralUndoCommand(SDDSEditor *editor,
                                const QString &label) {
   if (!editor || !editor->undoStack)
     return;
+  // Deleted, retyped or renamed columns must not leave settings for a later column of that name.
+  pruneColumnTimeDisplayModes(editor->columnModel);
   StructuralSnapshot after;
   if (!captureStructuralSnapshot(editor, &after))
     return;
@@ -3023,12 +3041,15 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
           "The formula tools are Fill Series, Apply Numerical Expression and Apply Text Formula "
           "(see <a href=\"#formula\">Formulas and fill</a>).</p>"
           "<p><b>Time display</b> is available for numeric columns whose names contain Time "
-          "(ignoring case). Choose <b>Epoch (raw)</b>, <b>Date/time — Local</b> or <b>Date/time — UTC</b>. "
-          "Dates interpret values as Unix epoch seconds and show milliseconds and the time zone. "
+          "(ignoring case) and whose units are blank or seconds, so TimeOfDay in hours is excluded. "
+          "Choose <b>Epoch (raw)</b>, <b>Date/time — Local</b> or <b>Date/time — UTC</b>. "
+          "Dates interpret values as Unix epoch seconds and show milliseconds and the time zone; "
+          "durations such as elapsed seconds would display as dates near 1970. "
           "Unsupported values remain raw. Editing, copying, searching, sorting, filtering and saving "
-          "continue using the original numeric values. Each column name keeps its display setting "
-          "across pages and reordering until another document is opened or created; changing the "
-          "display does not mark the file modified.</p>")});
+          "continue using the original numeric values. Each column keeps its display setting "
+          "across pages, reordering and renaming until another document is opened or created; "
+          "deleting the column or changing it to another type or unit forgets the setting, and "
+          "Undo restores it. Changing the display does not mark the file modified.</p>")});
 
   topics.append({QStringLiteral("find"), SDDSEditor::tr("Search and filter"), SDDSEditor::tr(
       "<h3>Column search box</h3>"
@@ -4613,8 +4634,12 @@ static QString definitionToolTip(const char *name, int32_t type, const char *uni
   return lines.join('\n');
 }
 
-/** View-only interpretation of a numeric Time column as Unix epoch seconds. */
-enum class TimeDisplayMode { Raw, Local, UTC };
+/** Blank units or seconds; any other units mean the values are not epoch seconds. */
+static bool epochSecondsUnits(const char *units) {
+  const QString text = QString::fromLocal8Bit(units ? units : "").trimmed();
+  return text.isEmpty() || text == QLatin1String("s") ||
+         QStringList({"sec", "secs", "second", "seconds"}).contains(text, Qt::CaseInsensitive);
+}
 
 /** Format finite epoch seconds to milliseconds, leaving unsupported values raw. */
 static QString epochTimeText(const QString &text, TimeDisplayMode mode) {
@@ -4686,10 +4711,13 @@ public:
     if (r < 0 || r >= col.size())
       return QVariant();
     if (role == Qt::ToolTipRole) {
-      if (timeDisplayMode(c) == TimeDisplayMode::Raw)
+      if (timeDisplayMode(c) == TimeDisplayMode::Raw || col[r].trimmed().isEmpty())
         return QVariant();
+      const QString shown = displayText(index);
+      if (shown == col[r])
+        return tr("Epoch seconds: %1\nShown raw: not a finite epoch within years 0001 to 9999.").arg(col[r]);
       return tr("Epoch seconds: %1\nDisplayed: %2\nEditing and copying use the epoch value.")
-          .arg(col[r], displayText(index));
+          .arg(col[r], shown);
     }
     return col[r];
   }
@@ -4766,13 +4794,18 @@ public:
     emit headerDataChanged(Qt::Horizontal, first, last);
   }
 
-  /** Only numeric columns containing Time, case-insensitively, offer this view. */
+  /*
+   * Only numeric columns containing Time, case-insensitively, offer this view,
+   * and only when their units are blank or seconds: TimeOfDay in hours, or
+   * times in ms, are not epoch seconds.
+   */
   bool canDisplayTime(int column) const {
     if (!dataset || column < 0 || column >= dataset->layout.n_columns)
       return false;
     const COLUMN_DEFINITION &def = dataset->layout.column_definition[column];
     return SDDS_NUMERIC_TYPE(def.type) &&
-           QString::fromLocal8Bit(def.name).contains("Time", Qt::CaseInsensitive);
+           QString::fromLocal8Bit(def.name).contains("Time", Qt::CaseInsensitive) &&
+           epochSecondsUnits(def.units);
   }
 
   /** Settings follow column names across page switches and column reordering. */
@@ -4787,11 +4820,8 @@ public:
   void setTimeDisplayMode(int column, TimeDisplayMode mode) {
     if (!canDisplayTime(column) || timeDisplayMode(column) == mode)
       return;
-    const QString name = QString::fromLocal8Bit(dataset->layout.column_definition[column].name);
-    if (mode == TimeDisplayMode::Raw)
-      timeDisplayModes.remove(name);
-    else
-      timeDisplayModes.insert(name, mode);
+    // Raw is kept explicitly so an undo cannot bring back an older date choice.
+    timeDisplayModes.insert(QString::fromLocal8Bit(dataset->layout.column_definition[column].name), mode);
     refreshHeaders(column, column);
   }
 
@@ -4807,6 +4837,33 @@ public:
   }
 
   void clearTimeDisplayModes() { timeDisplayModes.clear(); }
+  const TimeDisplayModes &allTimeDisplayModes() const { return timeDisplayModes; }
+
+  /** A renamed column keeps its choice under the new name. */
+  void renameTimeDisplayMode(const QString &oldName, const QString &newName) {
+    if (oldName == newName || !timeDisplayModes.contains(oldName))
+      return;
+    timeDisplayModes.insert(newName, timeDisplayModes.take(oldName));
+    pruneTimeDisplayModes();
+  }
+
+  /** Restore choices for columns an undo brings back; choices made since then win. */
+  void mergeTimeDisplayModes(const TimeDisplayModes &modes) {
+    for (auto it = modes.constBegin(); it != modes.constEnd(); ++it)
+      if (!timeDisplayModes.contains(it.key()))
+        timeDisplayModes.insert(it.key(), it.value());
+    pruneTimeDisplayModes();
+  }
+
+  /** Forget choices for names that are no longer eligible Time columns. */
+  void pruneTimeDisplayModes() {
+    QSet<QString> eligible;
+    for (int c = 0; dataset && c < dataset->layout.n_columns; ++c)
+      if (canDisplayTime(c))
+        eligible.insert(QString::fromLocal8Bit(dataset->layout.column_definition[c].name));
+    for (auto it = timeDisplayModes.begin(); it != timeDisplayModes.end();)
+      it = eligible.contains(it.key()) ? std::next(it) : timeDisplayModes.erase(it);
+  }
 
 private:
   /** Append a view label to the units without changing the SDDS definition. */
@@ -4821,8 +4878,22 @@ private:
   SDDS_DATASET *dataset;
   QVector<PageStore> *pages;
   int *currentPage;
-  QHash<QString, TimeDisplayMode> timeDisplayModes;
+  TimeDisplayModes timeDisplayModes;
 };
+
+static TimeDisplayModes columnTimeDisplayModes(const ColumnPageModel *model) {
+  return model ? model->allTimeDisplayModes() : TimeDisplayModes();
+}
+
+static void restoreColumnTimeDisplayModes(ColumnPageModel *model, const TimeDisplayModes &modes) {
+  if (model)
+    model->mergeTimeDisplayModes(modes);
+}
+
+static void pruneColumnTimeDisplayModes(ColumnPageModel *model) {
+  if (model)
+    model->pruneTimeDisplayModes();
+}
 
 class ArrayPageModel : public QAbstractTableModel {
 public:
@@ -10248,8 +10319,10 @@ void SDDSEditor::editColumnAttributesAt(int col) {
   };
 
   if (!definitionTextMatches(def->name, name.text())) {
+    const QString oldName = QString::fromLocal8Bit(def->name ? def->name : "");
     if (!replaceField(&def->name, &savedDef->name, name.text(), false))
       return;
+    columnModel->renameTimeDisplayMode(oldName, name.text());
     if (!resyncSortedIndexName(dataset.layout.column_index,
                                dataset.layout.n_columns, col,
                                def->name) ||
@@ -10812,6 +10885,7 @@ void SDDSEditor::openArrayViewer(int column) {
         return applyCellEditWithUndo(undoStack, arrayModel, index, text);
       },
       [type](const QString &text) { return validateTextForType(text, type(), false); },
+      [type](long double value) { return numericResultText(value, type()); },
       [this]() { flushPendingEdits(); }, this);
   // The slice model creates undo commands against flat source coordinates.
   viewer->table()->setItemDelegate(new SDDSItemDelegate(

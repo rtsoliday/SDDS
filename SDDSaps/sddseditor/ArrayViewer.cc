@@ -262,8 +262,9 @@ void ArraySliceModel::setHeatmap(bool enabled, bool validRange, long double mini
 /** Build the slice controls and connect updates to the shared source model. */
 ArrayViewer::ArrayViewer(QAbstractItemModel *source, QUndoStack *undo, State state,
                          ArraySliceModel::Edit edit, ArraySliceModel::Validate validate,
-                         std::function<void()> commitEdits, QWidget *parent)
-    : QDialog(parent, Qt::Window), getState(std::move(state)), undo(undo), commitEdits(std::move(commitEdits)) {
+                         Format format, std::function<void()> commitEdits, QWidget *parent)
+    : QDialog(parent, Qt::Window), getState(std::move(state)), format(std::move(format)), undo(undo),
+      commitEdits(std::move(commitEdits)) {
   setAttribute(Qt::WA_DeleteOnClose);
   setWindowModality(Qt::NonModal);
   resize(900, 620);
@@ -338,7 +339,9 @@ ArrayViewer::ArrayViewer(QAbstractItemModel *source, QUndoStack *undo, State sta
   QHBoxLayout *legend = new QHBoxLayout(heatmapLegend);
   legend->setContentsMargins(0, 0, 0, 0);
   legendMinimum = new QLabel(heatmapLegend);
+  legendMinimum->setObjectName("arrayHeatmapLegendMinimum");
   legendMaximum = new QLabel(heatmapLegend);
+  legendMaximum->setObjectName("arrayHeatmapLegendMaximum");
   legend->addWidget(legendMinimum);
   legend->addWidget(new HeatmapColorBar(heatmapLegend), 1);
   legend->addWidget(legendMaximum);
@@ -408,8 +411,8 @@ ArrayViewer::ArrayViewer(QAbstractItemModel *source, QUndoStack *undo, State sta
           fixedRangeValid = true;
         }
       }
-      rangeMinimum->setText(heatmapText(fixedMinimum));
-      rangeMaximum->setText(heatmapText(fixedMaximum));
+      rangeMinimum->setText(rangeText(fixedMinimum));
+      rangeMaximum->setText(rangeText(fixedMaximum));
     }
     updateHeatmap();
   });
@@ -561,13 +564,13 @@ void ArrayViewer::updateHeatmap() {
   if (enabled) {
     valid = fixedScale ? fixedRangeValid : model->finiteRange(&minimum, &maximum);
     if (!fixedScale) {
-      rangeMinimum->setText(valid ? heatmapText(minimum) : QString());
-      rangeMaximum->setText(valid ? heatmapText(maximum) : QString());
+      rangeMinimum->setText(valid ? rangeText(minimum) : QString());
+      rangeMaximum->setText(valid ? rangeText(maximum) : QString());
     }
     legendMinimum->setText(valid ? heatmapText(minimum, 8) : tr("No range"));
     legendMaximum->setText(valid ? heatmapText(maximum, 8) : QString());
-    legendMinimum->setToolTip(valid ? heatmapText(minimum) : QString());
-    legendMaximum->setToolTip(valid ? heatmapText(maximum) : QString());
+    legendMinimum->setToolTip(valid ? rangeText(minimum) : QString());
+    legendMaximum->setToolTip(valid ? rangeText(maximum) : QString());
     if (!valid)
       heatmapStatus->setText(tr("This slice has no finite numeric values to scale."));
     else if (fixedScale)
@@ -576,6 +579,22 @@ void ArrayViewer::updateHeatmap() {
       heatmapStatus->setText(tr("All finite values are equal; the middle color is used."));
   }
   model->setHeatmap(enabled, valid, minimum, maximum);
+}
+
+/*
+ * Show a limit as the array's cells show values (-6.9999 for a double, not the
+ * long double digits of its parsed text).  Fall back to full long double
+ * precision when that text would not parse back to exactly this limit, so
+ * applying unchanged Min/Max text never moves the range.
+ */
+QString ArrayViewer::rangeText(long double value) const {
+  if (format) {
+    const QString text = format(value);
+    long double parsed;
+    if (heatmapNumber(text, &parsed) && parsed == value)
+      return text;
+  }
+  return heatmapText(value);
 }
 
 /** Reject invalid limits without changing the active color range or document. */
