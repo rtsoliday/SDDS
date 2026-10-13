@@ -2857,15 +2857,6 @@ void sddscontour_main(char *input_line)
       process_data(&data_value, &nx, &ny, &xmin, &xmax, &ymin, &ymax, &dx, &dy,
                    orig_limit, logscale, logfloor, nx_interp, ny_interp, x_lowpass,
                    y_lowpass, interp_flags, xyzArray, xyzColumn, verbosity, xlog, &nx_offset, swap_xy);
-      if (orig_limit[0] != orig_limit[1] || orig_limit[2] != orig_limit[3]) {
-        // This may cause problems in the future.
-        // Check example from doolings email 5/21/2019 to ensure any changes here don't mess up that example.
-        // Also check Dooing email from 8/17/2020
-        // Also check Emery email from 12/10/2020
-        if (quantity)
-          nx_offset = 0;
-      }
-
       if (yaxisScaleProvided) {
         ymin = (ymin - yaxisOffset) * yaxisScale;
         ymax = (ymax - yaxisOffset) * yaxisScale;
@@ -3008,6 +2999,9 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
   }
 #endif
   if (!xintervals) {
+    /* These coordinates describe the cropped grid. Only interval arrays from
+       the original grid need the horizontal offset from window_2d_array. */
+    nx_offset = 0;
     xintervals = malloc(sizeof(double) * nx);
     for (i = 0; i < nx; i++) {
       xintervals[i] = xmin + dx * i;
