@@ -20,6 +20,10 @@ sequences reminiscent of emacs.\n\
                   <n>d   delete <n> characters\n\
                   <n>f   forward <n> characters\n\
                   <n>b   backward <n> characters\n\
+                  <n>u   upper-case <n> characters and advance\n\
+                  <n>l   lower-case <n> characters and advance\n\
+                  <n>U   upper-case <n> words and advance past word end\n\
+                  <n>L   lower-case <n> words and advance past word end\n\
                   <n>D   delete <n> words\n\
                   <n>F   forward <n> words\n\
                   <n>B   backward <n> words\n\
