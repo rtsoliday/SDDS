@@ -146,6 +146,14 @@ is no longer necessary to enter a configured Cygwin terminal.
    make -j
    ```
 
+On Linux, the build prefers `/usr/bin/pkg-config` so an active Conda
+environment does not select Conda's Qt through its `pkg-config` wrapper.
+This also applies inside `rhel8-shell`, where `/usr` refers to the container.
+To select another installation, set `PKG_CONFIG` and, if needed,
+`PKG_CONFIG_PATH` explicitly, for example `make -j4 PKG_CONFIG=/path/to/pkg-config`.
+Run `make clean` before switching between host and container builds or Qt
+installations, then rebuild in the selected shell.
+
 ## Usage
 
 ### Writing an SDDS File

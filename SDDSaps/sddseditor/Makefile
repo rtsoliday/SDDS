@@ -13,7 +13,6 @@ ifeq ($(USE_H5_16_API),1)
 endif
 
 ifneq ($(filter Linux Darwin,$(OS)),)
-  PKG_CONFIG ?= pkg-config
   # Retain the macOS Qt 5 default when both versions are installed.
   QT_PREFERENCE = 6 5
   ifeq ($(OS), Darwin)

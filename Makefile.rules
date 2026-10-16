@@ -5,6 +5,15 @@ ifeq ($(findstring CYGWIN, $(OS)),CYGWIN)
     OS := Windows
 endif
 
+# Conda's pkg-config wrapper searches its own Qt installation first. Prefer
+# the distribution tool on Linux, including inside the RHEL 8 build shell.
+# Set PKG_CONFIG explicitly to select another installation.
+ifeq ($(OS),Linux)
+PKG_CONFIG ?= $(firstword $(wildcard /usr/bin/pkg-config) pkg-config)
+else
+PKG_CONFIG ?= pkg-config
+endif
+
 # Apple Clang does not ship an OpenMP runtime.  Enable OpenMP on macOS when
 # a MacPorts or Homebrew libomp installation is available, and otherwise
 # leave the existing serial fallback in place.
