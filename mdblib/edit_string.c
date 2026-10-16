@@ -29,8 +29,12 @@ long edit_string(char *text, char *edit);
 /* edit commands:
  *      <n>(<seq>)   perform command sequence <seq>, <n> times
  *      <n>d   delete <n> characters
- *      <n>f   forward <n> characters 
+ *      <n>f   forward <n> characters
  *      <n>b   backward <n> characters
+ *      <n>u   convert <n> characters to upper case and advance
+ *      <n>l   convert <n> characters to lower case and advance
+ *      <n>U   convert <n> words to upper case and advance past word end
+ *      <n>L   convert <n> words to lower case and advance past word end
  *      <n>D   delete <n> words
  *      <n>F   forward <n> words
  *      <n>B   backward <n> words
@@ -187,6 +191,50 @@ long edit_string(char *text, char *edit0) {
           /* move backward N chars */
           if ((text -= count) < text_start)
             text = text_start;
+          new_kill = 1;
+          break;
+        case 'u':
+          /* convert N chars to upper case and advance */
+          if (count > (long)strlen(text))
+            count = strlen(text);
+          for (i = 0; i < count; i++) {
+            *text = toupper((unsigned char)*text);
+            text++;
+          }
+          new_kill = 1;
+          break;
+        case 'l':
+          /* convert N chars to lower case and advance */
+          if (count > (long)strlen(text))
+            count = strlen(text);
+          for (i = 0; i < count; i++) {
+            *text = tolower((unsigned char)*text);
+            text++;
+          }
+          new_kill = 1;
+          break;
+        case 'U':
+          /* convert N words to upper case and advance past word end */
+          while (count-- && *text) {
+            while (*text && !IS_WORD_END(*text)) {
+              *text = toupper((unsigned char)*text);
+              text++;
+            }
+            while (*text && IS_WORD_END(*text))
+              text++;
+          }
+          new_kill = 1;
+          break;
+        case 'L':
+          /* convert N words to lower case and advance past word end */
+          while (count-- && *text) {
+            while (*text && !IS_WORD_END(*text)) {
+              *text = tolower((unsigned char)*text);
+              text++;
+            }
+            while (*text && IS_WORD_END(*text))
+              text++;
+          }
           new_kill = 1;
           break;
         case 'D':
