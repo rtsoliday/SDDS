@@ -151,8 +151,15 @@ static inline struct SDDS_ENUM_DEFINITION *sddsEnumParse(const char *text, size_
   out = d->text;
   for (i = 0; i < d->count; i++) {
     const unsigned char *s = (const unsigned char *)d->entries[i].label;
+    size_t available;
+    int written;
     if (i) *out++ = ',';
-    out += sprintf(out, "%" PRId32 ":", d->entries[i].code);
+    available = total - (size_t)(out - d->text);
+    written = snprintf(out, available, "%" PRId32 ":", d->entries[i].code);
+    if (written < 0 || (size_t)written >= available) {
+      *error = "Unable to serialize enum code"; goto invalid;
+    }
+    out += written;
     while (*s) {
       unsigned char c = *s++;
       switch (c) {

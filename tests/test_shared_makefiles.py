@@ -5,7 +5,9 @@ No compiler wrappers or runtime injection are used.
 """
 
 from pathlib import Path
+import os
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -53,14 +55,19 @@ def build_tree():
 
 
 def run_make(tree, *arguments, expect_success=True, use_output_defaults=False):
-    command = ["make", "-j4"]
+    # macOS ships Make 3.81; these checks use newer GNU Make features.
+    command = [*shlex.split(os.environ.get("MAKE", shutil.which("gmake") or "make")), "-j4"]
     if not use_output_defaults:
         command += [
             f"BIN_DIR={tree}/bin", f"LIB_DIR={tree}/lib",
             "LIB_LINK_DIRS=-L" + str(tree / "lib"),
         ]
     command += ["OBJ_DIR=O.test", "VALUE=42", *arguments]
-    result = subprocess.run(command, cwd=tree, text=True, capture_output=True)
+    # Each fixture owns its parallel build; do not inherit a parent's jobserver.
+    environment = os.environ.copy()
+    for name in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL"):
+        environment.pop(name, None)
+    result = subprocess.run(command, cwd=tree, text=True, capture_output=True, env=environment)
     with (tree / "build.log").open("a") as log:
         log.write("$ " + " ".join(command) + "\n" + result.stdout + result.stderr)
     if expect_success:

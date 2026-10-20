@@ -31,6 +31,10 @@ else
 PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
 PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LINK_LIBS) $(Z_LIB) $(GD_LIB) $(PNG_LIB) $(DARWIN_OPENMP_LDFLAGS) -lm
 endif
+ifeq ($(OS),Darwin)
+# Native foreground activation uses ApplicationServices and the Objective-C runtime.
+mpl_qt_LIBS = $(PROD_LIBS) $(PROD_SYS_LIBS) -framework ApplicationServices -lobjc
+endif
 endif
 BUILD_GENERATED += $(OBJ_DIR)/mpl_qt_moc.h
 include ../../../Makefile.build
