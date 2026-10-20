@@ -45,6 +45,7 @@ extern int32_t SDDS_UpdateNonNativeBinaryPage(SDDS_DATASET *dataset, uint32_t mo
 
 #define THREADS 8
 #define ITERATIONS 500
+#define ENUM_DICTIONARIES 4
 #define INITIAL_ROW_LIMIT 424242
 #define INITIAL_IO_BUFFER 16384
 #define INITIAL_NAME_FLAGS SDDS_ALLOW_ANY_NAME
@@ -62,6 +63,7 @@ static pthread_cond_t initial_global_cond = PTHREAD_COND_INITIALIZER;
 static int initial_global_checks_complete = 0;
 static int initial_global_check_failed = 0;
 static pthread_mutex_t process_global_settings_mutex = PTHREAD_MUTEX_INITIALIZER;
+static SDDS_ENUM_DEFINITION *shared_enum_dictionaries[ENUM_DICTIONARIES];
 
 static void set_error(Worker *worker, const char *message)
 {
@@ -301,6 +303,28 @@ static int check_pointer_array(Worker *worker, long iteration)
     return 1;
   }
   SDDS_FreePointerArray((void **)pointer, 2, dimensions);
+  return 0;
+}
+
+/** @brief Stress shared dictionary caches while other threads replace comparison partners. */
+static int check_enum_comparisons(Worker *worker, long iteration)
+{
+  long comparison;
+
+  for (comparison = 0; comparison < 16; comparison++) {
+    int partner = 1 + (int)((worker->id + iteration + comparison) % (ENUM_DICTIONARIES - 1));
+    int expected = partner == 1;
+
+    if (SDDS_EnumDefinitionsEqual(shared_enum_dictionaries[0], shared_enum_dictionaries[partner]) != expected) {
+      set_error(worker, "shared enum dictionary comparison changed");
+      return 1;
+    }
+    sched_yield();
+    if (SDDS_EnumDefinitionsEqual(shared_enum_dictionaries[partner], shared_enum_dictionaries[0]) != expected) {
+      set_error(worker, "reversed shared enum dictionary comparison changed");
+      return 1;
+    }
+  }
   return 0;
 }
 
@@ -620,7 +644,8 @@ static void *thread_worker(void *arg)
         check_name_validity_flags(worker, i) ||
         check_lzma_compression_level(worker, i) ||
         check_auto_check_mode(worker, i) ||
-        check_pointer_array(worker, i))
+        check_pointer_array(worker, i) ||
+        check_enum_comparisons(worker, i))
       return worker;
   }
   return NULL;
@@ -630,6 +655,13 @@ static int run_thread_test(void)
 {
   pthread_t threads[THREADS];
   Worker workers[THREADS];
+  const char *enum_mappings[ENUM_DICTIONARIES] = {
+    "0:OFF,10:ON,-1:FAULT",
+    "-1:FAULT,0:OFF,10:ON",
+    "0:OFF,10:BUSY,-1:FAULT",
+    "0:OFF,11:ON,-1:FAULT"
+  };
+  int failed = 0;
   long i;
 
   SDDS_RegisterProgramName(INITIAL_PROGRAM_NAME);
@@ -638,6 +670,16 @@ static int run_thread_test(void)
   SDDS_SetNameValidityFlags(INITIAL_NAME_FLAGS);
   SDDS_SetLZMACompressionLevel(INITIAL_LZMA_LEVEL);
   SDDS_SetAutoCheckMode(INITIAL_AUTO_CHECK);
+
+  for (i = 0; i < ENUM_DICTIONARIES; i++) {
+    shared_enum_dictionaries[i] = SDDS_CreateEnumDefinition(enum_mappings[i]);
+    if (!shared_enum_dictionaries[i]) {
+      fprintf(stderr, "shared enum dictionary creation failed\n");
+      while (i > 0)
+        SDDS_FreeEnumDefinition(shared_enum_dictionaries[--i]);
+      return 1;
+    }
+  }
 
   for (i = 0; i < THREADS; i++) {
     workers[i].id = i + 1;
@@ -656,9 +698,13 @@ static int run_thread_test(void)
     }
     if (status) {
       fprintf(stderr, "thread %ld failed: %s\n", i + 1, ((Worker *)status)->error);
-      return 1;
+      failed = 1;
     }
   }
+  for (i = 0; i < ENUM_DICTIONARIES; i++)
+    SDDS_FreeEnumDefinition(shared_enum_dictionaries[i]);
+  if (failed)
+    return 1;
 
   puts("thread-safe");
   return 0;

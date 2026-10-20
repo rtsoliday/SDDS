@@ -48,7 +48,7 @@ long perform_sddsplot_filtering(SDDS_TABLE *table, FILTER_DEFINITION **filter, l
       filter_term = filter_ptr->filter_term;
       for (j=0; j<filter_ptr->filter_terms; j++) {
         if (!(pardefptr=SDDS_GetParameterDefinition(table, filter_term[j].name)) ||
-            (pardefptr->type==SDDS_STRING || pardefptr->type==SDDS_CHARACTER)) {
+            !SDDS_NUMERIC_TYPE(pardefptr->type)) {
           fprintf(stderr, "error: unknown or non-numeric parameter %s given for filter\n",
                   filter_term[j].name);
           exit(1);
@@ -150,7 +150,7 @@ skip_table = 0;
     time_filter_ptr=time_filter[i];
     if (time_filter_ptr->is_parameter) {
       if (!(pardefptr=SDDS_GetParameterDefinition(table, time_filter_ptr->name)) ||
-          (pardefptr->type==SDDS_STRING || pardefptr->type==SDDS_CHARACTER)) {
+          !SDDS_NUMERIC_TYPE(pardefptr->type)) {
         fprintf(stderr, "error: unknown or non-numeric parameter %s given for time filter\n",
                 time_filter_ptr->name);
         exit(1);

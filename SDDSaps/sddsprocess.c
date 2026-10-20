@@ -1510,7 +1510,7 @@ int main(int argc, char **argv) {
         time_filter_ptr = (TIME_FILTER_DEFINITION *)definition[i].structure;
         if (time_filter_ptr->is_parameter) {
           if (!(pardefptr = SDDS_GetParameterDefinition(&SDDS_output, time_filter_ptr->name)) ||
-              (pardefptr->type == SDDS_STRING || pardefptr->type == SDDS_CHARACTER)) {
+              !SDDS_NUMERIC_TYPE(pardefptr->type)) {
             fprintf(stderr, "error: unknown or non-numeric parameter %s given for time filter\n", time_filter_ptr->name);
             exit(EXIT_FAILURE);
           }
@@ -1566,7 +1566,7 @@ int main(int argc, char **argv) {
           filter_term = filter_ptr->filter_term;
           for (j = 0; j < filter_ptr->filter_terms; j++) {
             if (!(pardefptr = SDDS_GetParameterDefinition(&SDDS_output, filter_term[j].name)) ||
-                (pardefptr->type == SDDS_STRING || pardefptr->type == SDDS_CHARACTER)) {
+                !SDDS_NUMERIC_TYPE(pardefptr->type)) {
               fprintf(stderr, "error: unknown or non-numeric parameter %s given for filter\n", filter_term[j].name);
               exit(EXIT_FAILURE);
             }
@@ -1606,21 +1606,17 @@ int main(int argc, char **argv) {
           accept = 1;
           match_term = match_ptr->match_term;
           for (j = 0; j < match_ptr->match_terms; j++) {
+            char *label;
             if (!(pardefptr = SDDS_GetParameterDefinition(&SDDS_output, match_term[j].name)) ||
-                !(pardefptr->type == SDDS_STRING || pardefptr->type == SDDS_CHARACTER)) {
+                !(pardefptr->type == SDDS_STRING || pardefptr->type == SDDS_CHARACTER || pardefptr->type == SDDS_ENUM)) {
               fprintf(stderr, "error: unknown or numeric parameter %s given for match\n", match_term[j].name);
               exit(EXIT_FAILURE);
             }
-            if (pardefptr->type == SDDS_STRING) {
-              char **ppc;
-              ppc = SDDS_GetParameter(&SDDS_output, match_term[j].name, NULL);
-              strcpy(s, *ppc);
-            } else {
-              char *pc;
-              pc = SDDS_GetParameter(&SDDS_output, match_term[j].name, NULL);
-              sprintf(s, "%c", *pc);
-            }
-            accept = SDDS_Logic(accept, (match_term[j].logic & SDDS_NOCASE_COMPARE ? wild_match_ci(s, match_term[j].string) : wild_match(s, match_term[j].string)), match_term[j].logic);
+            if (!(label = SDDS_GetParameterAsString(&SDDS_output, match_term[j].name, NULL)))
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+            accept = SDDS_Logic(accept, (match_term[j].logic & SDDS_NOCASE_COMPARE ? wild_match_ci(label, match_term[j].string) : wild_match(label, match_term[j].string)), match_term[j].logic);
+            free(label);
+            SDDS_FreeParameterDefinition(pardefptr);
           }
           if (!accept) {
             if (verbose)

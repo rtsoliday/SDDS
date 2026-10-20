@@ -558,6 +558,11 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
   FILE *fp1;
   int32_t retval, bigEndianMachine;
   uint32_t commentFlags;
+  if (!SDDS_dataset->layout.s) {
+    SDDS_dataset->layout.s_capacity = SDDS_MAXLINE;
+    if (!(SDDS_dataset->layout.s = malloc(SDDS_MAXLINE))) return 0;
+  }
+
 
   if (!fp) {
     SDDS_SetError("Unable to read layout--NULL file pointer (SDDS_ReadLayout)");
@@ -591,9 +596,12 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
     SDDS_ResetSpecialCommentsModes(SDDS_dataset);
     SDDS_dataset->layout.data_command_seen = 0;
   }
-  while (SDDS_GetNamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, fp)) {
+  if (SDDS_dataset->layout.version < 1 || SDDS_dataset->layout.version > SDDS_VERSION) {
+    SDDS_SetError("Unsupported SDDS protocol version"); return 0;
+  }
+  while (SDDS_dataset->layout.version == 6 ? SDDS6_GetNamelist(SDDS_dataset, fp, 0) : SDDS_GetNamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, fp)) {
 #if DEBUG
-    strcpy(buffer, SDDS_dataset->layout.s);
+    snprintf(buffer, sizeof(buffer), "%.*s", (int)sizeof(buffer) - 1, SDDS_dataset->layout.s);
 #endif
     groupName = SDDS_dataset->layout.s + 1;
     if (!(ptr = strpbrk(SDDS_dataset->layout.s, " \t"))) {
@@ -697,7 +705,7 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
       break;
     default:
       closeLayoutFile(SDDS_dataset, fp);
-      sprintf(buffer, "Unknown layout entry %s given (SDDS_ReadLayout)", groupName);
+      snprintf(buffer, sizeof(buffer), "Unknown layout entry %.800s given (SDDS_ReadLayout)", groupName);
       SDDS_SetError(buffer);
       return (0);
     }
@@ -721,6 +729,11 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
   FILE *fp1;
   int32_t retval, bigEndianMachine;
   uint32_t commentFlags;
+  if (!SDDS_dataset->layout.s) {
+    SDDS_dataset->layout.s_capacity = SDDS_MAXLINE;
+    if (!(SDDS_dataset->layout.s = malloc(SDDS_MAXLINE))) return 0;
+  }
+
 
   if (!lzmafp) {
     SDDS_SetError("Unable to read layout--NULL file pointer (SDDS_LZMAReadLayout)");
@@ -754,9 +767,12 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
     SDDS_ResetSpecialCommentsModes(SDDS_dataset);
     SDDS_dataset->layout.data_command_seen = 0;
   }
-  while (SDDS_GetLZMANamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, lzmafp)) {
+  if (SDDS_dataset->layout.version < 1 || SDDS_dataset->layout.version > SDDS_VERSION) {
+    SDDS_SetError("Unsupported SDDS protocol version"); return 0;
+  }
+  while (SDDS_dataset->layout.version == 6 ? SDDS6_GetNamelist(SDDS_dataset, lzmafp, 2) : SDDS_GetLZMANamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, lzmafp)) {
 #if DEBUG
-    strcpy(buffer, SDDS_dataset->layout.s);
+    snprintf(buffer, sizeof(buffer), "%.*s", (int)sizeof(buffer) - 1, SDDS_dataset->layout.s);
 #endif
     groupName = SDDS_dataset->layout.s + 1;
     if (!(ptr = strpbrk(SDDS_dataset->layout.s, " \t"))) {
@@ -860,7 +876,7 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
       break;
     default:
       closeLzmaLayoutFile(SDDS_dataset, lzmafp);
-      sprintf(buffer, "Unknown layout entry %s given (SDDS_LZMAReadLayout)", groupName);
+      snprintf(buffer, sizeof(buffer), "Unknown layout entry %.800s given (SDDS_LZMAReadLayout)", groupName);
       SDDS_SetError(buffer);
       return (0);
     }
@@ -885,6 +901,11 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
   FILE *fp1;
   int32_t retval, bigEndianMachine;
   uint32_t commentFlags;
+  if (!SDDS_dataset->layout.s) {
+    SDDS_dataset->layout.s_capacity = SDDS_MAXLINE;
+    if (!(SDDS_dataset->layout.s = malloc(SDDS_MAXLINE))) return 0;
+  }
+
 
   if (!gzfp) {
     SDDS_SetError("Unable to read layout--NULL file pointer (SDDS_GZipReadLayout)");
@@ -917,9 +938,12 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
   SDDS_ResetSpecialCommentsModes(SDDS_dataset);
   if (SDDS_dataset->layout.depth == 0)
     SDDS_dataset->layout.data_command_seen = 0;
-  while (SDDS_GetGZipNamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, gzfp)) {
+  if (SDDS_dataset->layout.version < 1 || SDDS_dataset->layout.version > SDDS_VERSION) {
+    SDDS_SetError("Unsupported SDDS protocol version"); return 0;
+  }
+  while (SDDS_dataset->layout.version == 6 ? SDDS6_GetNamelist(SDDS_dataset, gzfp, 1) : SDDS_GetGZipNamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, gzfp)) {
 #  if DEBUG
-    strcpy(buffer, SDDS_dataset->layout.s);
+    snprintf(buffer, sizeof(buffer), "%.*s", (int)sizeof(buffer) - 1, SDDS_dataset->layout.s);
 #  endif
     groupName = SDDS_dataset->layout.s + 1;
     if (!(ptr = strpbrk(SDDS_dataset->layout.s, " \t"))) {
@@ -1023,7 +1047,7 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
       break;
     default:
       closeGzipLayoutFile(SDDS_dataset, gzfp);
-      sprintf(buffer, "Unknown layout entry %s given (SDDS_GZipReadLayout)", groupName);
+      snprintf(buffer, sizeof(buffer), "Unknown layout entry %.800s given (SDDS_GZipReadLayout)", groupName);
       SDDS_SetError(buffer);
       return (0);
     }
@@ -1163,6 +1187,7 @@ int32_t SDDS_ReadPageSparse(SDDS_DATASET *SDDS_dataset, uint32_t mode, int64_t s
     SDDS_SetError("Unable to read page--unrecognized data mode (SDDS_ReadPageSparse)");
     return (0);
   }
+  if (!SDDS_ValidateEnumReadPage(SDDS_dataset)) return 0;
   if (!SDDS_dataset->layout.gzipFile && !SDDS_dataset->layout.lzmaFile && !SDDS_dataset->layout.popenUsed && SDDS_dataset->layout.filename && SDDS_dataset->pagecount_offset) {
     /* Data is not:
          1. from a gzip file
@@ -1234,6 +1259,7 @@ int32_t SDDS_ReadPageLastRows(SDDS_DATASET *SDDS_dataset, int64_t last_rows) {
     SDDS_SetError("Unable to read page--unrecognized data mode (SDDS_ReadPageLastRows)");
     return (0);
   }
+  if (!SDDS_ValidateEnumReadPage(SDDS_dataset)) return 0;
   if (!SDDS_dataset->layout.gzipFile && !SDDS_dataset->layout.lzmaFile && !SDDS_dataset->layout.popenUsed && SDDS_dataset->layout.filename && SDDS_dataset->pagecount_offset) {
     /* Data is not:
          1. from a gzip file
@@ -1506,6 +1532,7 @@ void SDDS_FreeTableStrings(SDDS_DATASET *SDDS_dataset) {
  * @return 1 on success, 0 on error.
  */
 int32_t SDDS_Terminate(SDDS_DATASET *SDDS_dataset) {
+  SDDS_FreeUnownedEnums(SDDS_dataset);
   SDDS_LAYOUT *layout;
   char **ptr;
   int64_t i, j;
@@ -1660,6 +1687,7 @@ int32_t SDDS_Terminate(SDDS_DATASET *SDDS_dataset) {
     for (i = 0; i < layout->n_columns; i++) {
       if (layout->column_index[i])
         free(layout->column_index[i]);
+      SDDS_FreeEnumDefinition(layout->column_definition[i].enum_definition);
       if (layout->column_definition[i].name)
         free(layout->column_definition[i].name);
       if (layout->column_definition[i].symbol)
@@ -1678,6 +1706,7 @@ int32_t SDDS_Terminate(SDDS_DATASET *SDDS_dataset) {
     for (i = 0; i < layout->n_parameters; i++) {
       if (layout->parameter_index[i])
         free(layout->parameter_index[i]);
+      SDDS_FreeEnumDefinition(layout->parameter_definition[i].enum_definition);
       if (layout->parameter_definition[i].name)
         free(layout->parameter_definition[i].name);
       if (layout->parameter_definition[i].symbol)
@@ -1698,6 +1727,7 @@ int32_t SDDS_Terminate(SDDS_DATASET *SDDS_dataset) {
     for (i = 0; i < layout->n_arrays; i++) {
       if (layout->array_index[i])
         free(layout->array_index[i]);
+      SDDS_FreeEnumDefinition(layout->array_definition[i].enum_definition);
       if (layout->array_definition[i].name)
         free(layout->array_definition[i].name);
       if (layout->array_definition[i].symbol)
@@ -1747,6 +1777,7 @@ int32_t SDDS_Terminate(SDDS_DATASET *SDDS_dataset) {
     free(layout->parameter_index);
   if (layout->array_index)
     free(layout->array_index);
+  free(SDDS_dataset->layout.s);
   SDDS_ZeroMemory(&SDDS_dataset->layout, sizeof(SDDS_LAYOUT));
   SDDS_ZeroMemory(SDDS_dataset, sizeof(SDDS_DATASET));
 #if DEBUG
@@ -1798,7 +1829,11 @@ int32_t SDDS_UpdateRowCount(SDDS_DATASET *SDDS_dataset) {
       return (0);
     }
     rows32 = (int32_t)rows;
-    if ((outputEndianess = getenv("SDDS_OUTPUT_ENDIANESS"))) {
+    if (SDDS_dataset->layout.version == 6) {
+      if (SDDS_dataset->layout.byteOrderDeclared &&
+          ((SDDS_dataset->layout.byteOrderDeclared == SDDS_BIGENDIAN) != SDDS_IsBigEndianMachine()))
+        SDDS_SwapLong(&rows32);
+    } else if ((outputEndianess = getenv("SDDS_OUTPUT_ENDIANESS"))) {
       if (((strncmp(outputEndianess, "big", 3) == 0) && (SDDS_IsBigEndianMachine() == 0)) || ((strncmp(outputEndianess, "little", 6) == 0) && (SDDS_IsBigEndianMachine() == 1)))
         SDDS_SwapLong(&rows32);
     }

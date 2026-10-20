@@ -64,6 +64,7 @@
 #include "mdb.h"
 #include "SDDS.h"
 #include "scan.h"
+#include <errno.h>
 
 /* Enumeration for option types */
 enum option_type {
@@ -114,6 +115,8 @@ char *USAGE =
   "                [-append[=merge]]\n"
   "                [-majorOrder=row|column]\n"
   "Options:\n"
+  "    -enumValues=<column|parameter|array>,<name>,<code:label,...>\n"
+  "        Define an enum mapping; provide -data as integer codes and use type=enum.\n"
   "    -defaultType=<type>\n"
   "        Specify the default data type for parameters and columns if not specified.\n"
   "        Available types: double, float, long64, ulong64, long, ulong, short, ushort, string, character.\n\n"
@@ -152,7 +155,7 @@ typedef struct
 {
   char *name, *dataString;
   void *data;
-  char *description, *symbol, *unit, *typename;
+  char *description, *symbol, *unit, *typename, *enum_values;
   long type;
 } PARAMETER_INFO;
 
@@ -160,9 +163,24 @@ typedef struct
 {
   char *name, **dataList;
   void *data;
-  char *description, *symbol, *unit, *typename;
+  char *description, *symbol, *unit, *typename, *enum_values;
   long type, rows;
 } COLUMN_INFO;
+
+typedef struct {
+  char *kind, *name, *mapping, *storage;
+} ENUM_INPUT;
+
+/** @brief Parse a decimal enum code without narrowing or overflow. */
+static int32_t checkedEnumCode(const char *text) {
+  char *end;
+  intmax_t value;
+  errno = 0;
+  value = strtoimax(text, &end, 10);
+  if (errno || end == text || *end || value < INT32_MIN || value > INT32_MAX)
+    SDDS_Bomb("invalid signed 32-bit enum code");
+  return (int32_t)value;
+}
 
 /* Function prototypes */
 COLUMN_INFO *InitializeColumnInfo();
@@ -188,6 +206,8 @@ int main(int argc, char **argv) {
   int64_t rowsPresent;
   int32_t colIndex, arrayIndex, dsize, startIndex;
   SDDS_ARRAY *sdds_array = NULL;
+  ENUM_INPUT *enumInputs = NULL;
+  long enumInputCount = 0, writeArg = 1;
 
   description = contents = NULL;
   parameter = NULL;
@@ -202,6 +222,19 @@ int main(int argc, char **argv) {
   SDDS_RegisterProgramName(argv[0]);
   SDDS_CheckDatasetStructureSize(sizeof(SDDS_DATASET));
 
+  for (i = 1; i < argc; i++) {
+    if (!strncmp(argv[i], "-enumValues=", 12)) {
+      char *text = NULL, *first, *second;
+      SDDS_CopyString(&text, argv[i] + 12);
+      first = text ? strchr(text, ',') : NULL;
+      second = first ? strchr(first + 1, ',') : NULL;
+      if (!first || !second || !second[1]) SDDS_Bomb("invalid -enumValues syntax");
+      *first++ = 0; *second++ = 0;
+      enumInputs = SDDS_Realloc(enumInputs, sizeof(*enumInputs) * (enumInputCount + 1));
+      enumInputs[enumInputCount++] = (ENUM_INPUT){text, first, second, text};
+    } else argv[writeArg++] = argv[i];
+  }
+  argc = writeArg;
   argc = scanargs(&s_arg, argc, argv);
   if (argc < 3) {
     fprintf(stderr, "Error: Insufficient arguments provided.\n\n%s", USAGE);
@@ -246,6 +279,7 @@ int main(int argc, char **argv) {
         if (s_arg[i_arg].n_items > 0 &&
             !scanItemList(&dummyFlags, s_arg[i_arg].list, &s_arg[i_arg].n_items, 0,
                           "type", SDDS_STRING, &(parameter[parameters]->typename), 1, 0,
+                          "enum_values", SDDS_STRING, &(parameter[parameters]->enum_values), 1, 0,
                           "units", SDDS_STRING, &(parameter[parameters]->unit), 1, 0,
                           "symbol", SDDS_STRING, &(parameter[parameters]->symbol), 1, 0,
                           "description", SDDS_STRING, &(parameter[parameters]->description), 1, 0, NULL))
@@ -267,6 +301,7 @@ int main(int argc, char **argv) {
         if (s_arg[i_arg].n_items > 0 &&
             (!scanItemList(&dummyFlags, s_arg[i_arg].list, &s_arg[i_arg].n_items, 0,
                            "type", SDDS_STRING, &(column[columns]->typename), 1, 0,
+                          "enum_values", SDDS_STRING, &(column[columns]->enum_values), 1, 0,
                            "unit", SDDS_STRING, &(column[columns]->unit), 1, 0,
                            "symbol", SDDS_STRING, &(column[columns]->symbol), 1, 0,
                            "description", SDDS_STRING, &(column[columns]->description), 1, 0, NULL)))
@@ -288,6 +323,7 @@ int main(int argc, char **argv) {
         if (s_arg[i_arg].n_items > 0 &&
             (!scanItemList(&dummyFlags, s_arg[i_arg].list, &s_arg[i_arg].n_items, 0,
                            "type", SDDS_STRING, &(array[arrays]->typename), 1, 0,
+                          "enum_values", SDDS_STRING, &(array[arrays]->enum_values), 1, 0,
                            "unit", SDDS_STRING, &(array[arrays]->unit), 1, 0,
                            "symbol", SDDS_STRING, &(array[arrays]->symbol), 1, 0,
                            "description", SDDS_STRING, &(array[arrays]->description), 1, 0, NULL)))
@@ -411,6 +447,21 @@ int main(int argc, char **argv) {
   for (i = 0; i < columns; i++)
     if (maxrows < column[i]->rows)
       maxrows = column[i]->rows;
+  for (i = 0; i < enumInputCount; i++) {
+    ENUM_INPUT *entry = enumInputs + i;
+    char **slot = NULL;
+    if (!strcmp(entry->kind, "parameter")) {
+      for (j = 0; j < parameters; j++) if (!strcmp(parameter[j]->name, entry->name)) slot = &parameter[j]->enum_values;
+    } else if (!strcmp(entry->kind, "column")) {
+      for (j = 0; j < columns; j++) if (!strcmp(column[j]->name, entry->name)) slot = &column[j]->enum_values;
+    } else if (!strcmp(entry->kind, "array")) {
+      for (j = 0; j < arrays; j++) if (!strcmp(array[j]->name, entry->name)) slot = &array[j]->enum_values;
+    }
+    if (!slot || *slot) SDDS_Bomb("unknown or duplicate -enumValues target");
+    SDDS_CopyString(slot, entry->mapping);
+    free(entry->storage);
+  }
+  free(enumInputs);
   SetInfoData(parameter, parameters, column, columns, array, arrays, defaultType, noWarnings, maxrows);
 
   if (append == 0) {
@@ -420,20 +471,20 @@ int main(int argc, char **argv) {
     outTable.layout.data_mode.column_major = columnMajorOrder;
     for (i = 0; i < parameters; i++) {
       if (parameter[i]->dataString) {
-        if (SDDS_DefineParameter(&outTable, parameter[i]->name, parameter[i]->symbol, parameter[i]->unit, parameter[i]->description, NULL, parameter[i]->type, NULL) < 0)
+        if ((parameter[i]->type == SDDS_ENUM ? SDDS_DefineEnumParameter(&outTable, parameter[i]->name, parameter[i]->symbol, parameter[i]->unit, parameter[i]->description, NULL, parameter[i]->enum_values, NULL) : SDDS_DefineParameter(&outTable, parameter[i]->name, parameter[i]->symbol, parameter[i]->unit, parameter[i]->description, NULL, parameter[i]->type, NULL)) < 0)
           SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       }
     }
 
     for (i = 0; i < columns; i++) {
       if (column[i]->dataList) {
-        if (SDDS_DefineColumn(&outTable, column[i]->name, column[i]->symbol, column[i]->unit, column[i]->description, NULL, column[i]->type, 0) < 0)
+        if ((column[i]->type == SDDS_ENUM ? SDDS_DefineEnumColumn(&outTable, column[i]->name, column[i]->symbol, column[i]->unit, column[i]->description, NULL, column[i]->enum_values, 0) : SDDS_DefineColumn(&outTable, column[i]->name, column[i]->symbol, column[i]->unit, column[i]->description, NULL, column[i]->type, 0)) < 0)
           SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       }
     }
     for (i = 0; i < arrays; i++) {
       if (array[i]->dataList) {
-        if (SDDS_DefineArray(&outTable, array[i]->name, array[i]->symbol, array[i]->unit, array[i]->description, NULL, array[i]->type, 0, 1, NULL) < 0)
+        if ((array[i]->type == SDDS_ENUM ? SDDS_DefineEnumArray(&outTable, array[i]->name, array[i]->symbol, array[i]->unit, array[i]->description, NULL, array[i]->enum_values, 0, 1, NULL) : SDDS_DefineArray(&outTable, array[i]->name, array[i]->symbol, array[i]->unit, array[i]->description, NULL, array[i]->type, 0, 1, NULL)) < 0)
           SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       }
     }
@@ -451,6 +502,36 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
   if (append) {
+    for (i = 0; i < parameters; i++) {
+      int32_t index = SDDS_GetParameterIndex(&outTable, parameter[i]->name);
+      if (index >= 0 && (outTable.layout.parameter_definition[index].type == SDDS_ENUM || parameter[i]->type == SDDS_ENUM)) {
+        SDDS_ENUM_DEFINITION *mapping = SDDS_CreateEnumDefinition(parameter[i]->enum_values);
+        int compatible = outTable.layout.parameter_definition[index].type == parameter[i]->type &&
+            SDDS_EnumDefinitionsEqual(mapping, outTable.layout.parameter_definition[index].enum_definition);
+        SDDS_FreeEnumDefinition(mapping);
+        if (!compatible) SDDS_Bomb("Append requires identical enum mappings; use explicit remapping first");
+      }
+    }
+    for (i = 0; i < columns; i++) {
+      int32_t index = SDDS_GetColumnIndex(&outTable, column[i]->name);
+      if (index >= 0 && (outTable.layout.column_definition[index].type == SDDS_ENUM || column[i]->type == SDDS_ENUM)) {
+        SDDS_ENUM_DEFINITION *mapping = SDDS_CreateEnumDefinition(column[i]->enum_values);
+        int compatible = outTable.layout.column_definition[index].type == column[i]->type &&
+            SDDS_EnumDefinitionsEqual(mapping, outTable.layout.column_definition[index].enum_definition);
+        SDDS_FreeEnumDefinition(mapping);
+        if (!compatible) SDDS_Bomb("Append requires identical enum mappings; use explicit remapping first");
+      }
+    }
+    for (i = 0; i < arrays; i++) {
+      int32_t index = SDDS_GetArrayIndex(&outTable, array[i]->name);
+      if (index >= 0 && (outTable.layout.array_definition[index].type == SDDS_ENUM || array[i]->type == SDDS_ENUM)) {
+        SDDS_ENUM_DEFINITION *mapping = SDDS_CreateEnumDefinition(array[i]->enum_values);
+        int compatible = outTable.layout.array_definition[index].type == array[i]->type &&
+            SDDS_EnumDefinitionsEqual(mapping, outTable.layout.array_definition[index].enum_definition);
+        SDDS_FreeEnumDefinition(mapping);
+        if (!compatible) SDDS_Bomb("Append requires identical enum mappings; use explicit remapping first");
+      }
+    }
     /* Check the parameters, columns, and arrays */
     for (i = 0; i < parameters; i++) {
       if (parameter[i]->dataString) {
@@ -543,6 +624,7 @@ int main(int argc, char **argv) {
                                   colIndex, ((uint64_t *)(column[i]->data))[j], -1) == 0)
               SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
             break;
+          case SDDS_ENUM:
           case SDDS_LONG:
             if (SDDS_SetRowValues(&outTable, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE, rowsPresent + j,
                                   colIndex, ((int32_t *)(column[i]->data))[j], -1) == 0)
@@ -631,6 +713,7 @@ COLUMN_INFO *InitializeColumnInfo() {
   column->name = column->unit = column->description = column->symbol = NULL;
   column->data = NULL;
   column->typename = NULL;
+  column->enum_values = NULL;
   column->rows = 0;
   column->type = -1;
   column->dataList = NULL;
@@ -645,6 +728,7 @@ PARAMETER_INFO *InitializeParameteterInfo() {
   }
   parameter->name = parameter->unit = parameter->description = parameter->symbol = NULL;
   parameter->typename = NULL;
+  parameter->enum_values = NULL;
   parameter->data = NULL;
   parameter->type = -1;
   parameter->dataString = NULL;
@@ -697,6 +781,9 @@ void SetInfoData(PARAMETER_INFO **parameter, long parameters, COLUMN_INFO **colu
       break;
     case SDDS_ULONG64:
       *((uint64_t *)par->data) = strtoull(par->dataString, NULL, 10);
+      break;
+    case SDDS_ENUM:
+      *((int32_t *)par->data) = checkedEnumCode(par->dataString);
       break;
     case SDDS_LONG:
       *((int32_t *)par->data) = atol(par->dataString);
@@ -799,6 +886,11 @@ void SetInfoData(PARAMETER_INFO **parameter, long parameters, COLUMN_INFO **colu
         ((uint64_t *)col->data)[j] = strtoull(col->dataList[j], NULL, 10);
       for (j = col->rows; j < maxrows; j++)
         ((uint64_t *)col->data)[j] = 0;
+      break;
+    case SDDS_ENUM:
+      col->data = calloc(maxrows ? (size_t)maxrows : 1, sizeof(int32_t));
+      if (!col->data) SDDS_Bomb("enum data allocation failed");
+      for (j = 0; j < col->rows; j++) ((int32_t *)col->data)[j] = checkedEnumCode(col->dataList[j]);
       break;
     case SDDS_LONG:
       col->data = malloc(sizeof(int32_t) * maxrows);
@@ -938,6 +1030,11 @@ void SetInfoData(PARAMETER_INFO **parameter, long parameters, COLUMN_INFO **colu
       for (j = 0; j < col->rows; j++)
         ((uint64_t *)col->data)[j] = strtoull(col->dataList[j], NULL, 10);
       break;
+    case SDDS_ENUM:
+      col->data = calloc(col->rows ? (size_t)col->rows : 1, sizeof(int32_t));
+      if (!col->data) SDDS_Bomb("enum data allocation failed");
+      for (j = 0; j < col->rows; j++) ((int32_t *)col->data)[j] = checkedEnumCode(col->dataList[j]);
+      break;
     case SDDS_LONG:
       col->data = malloc(sizeof(int32_t) * col->rows);
       if (!col->data) {
@@ -1017,6 +1114,7 @@ void FreeMemory(PARAMETER_INFO **parameter, long parameters, COLUMN_INFO **colum
       free(parameter[i]->symbol);
     if (parameter[i]->typename)
       free(parameter[i]->typename);
+    free(parameter[i]->enum_values);
     free(parameter[i]);
   }
   if (parameters)
@@ -1047,6 +1145,7 @@ void FreeMemory(PARAMETER_INFO **parameter, long parameters, COLUMN_INFO **colum
       free(column[i]->symbol);
     if (column[i]->description)
       free(column[i]->description);
+    free(column[i]->enum_values);
     free(column[i]);
   }
   if (columns)
@@ -1077,6 +1176,7 @@ void FreeMemory(PARAMETER_INFO **parameter, long parameters, COLUMN_INFO **colum
       free(array[i]->symbol);
     if (array[i]->description)
       free(array[i]->description);
+    free(array[i]->enum_values);
     free(array[i]);
   }
   if (arrays)

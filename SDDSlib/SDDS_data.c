@@ -51,7 +51,8 @@ char *SDDS_type_name[SDDS_NUM_TYPES] = {
     "short",
     "ushort",
     "string",
-    "character"
+    "character",
+    "enum"
 };
 
 /**
@@ -70,7 +71,8 @@ int32_t SDDS_type_size[SDDS_NUM_TYPES] = {
     sizeof(short),
     sizeof(unsigned short),
     sizeof(char *),
-    sizeof(char)
+    sizeof(char),
+    sizeof(int32_t)
 };
 
 /**
@@ -148,6 +150,7 @@ SDDS_ENUM_PAIR typeEnumPair[SDDS_NUM_TYPES + 1] = {
   {"ushort", SDDS_USHORT},
   {"string", SDDS_STRING},
   {"character", SDDS_CHARACTER},
+  {"enum", SDDS_ENUM},
   {NULL, 0}};
 
 /**
@@ -182,6 +185,7 @@ SDDS_FIELD_INFORMATION SDDS_ArrayFieldInformation[SDDS_ARRAY_FIELDS] = {
   {"type", offsetof(ARRAY_DEFINITION, type), SDDS_LONG, typeEnumPair},
   {"field_length", offsetof(ARRAY_DEFINITION, field_length), SDDS_LONG, NULL},
   {"dimensions", offsetof(ARRAY_DEFINITION, dimensions), SDDS_LONG, NULL},
+  {"enum_values", offsetof(ARRAY_DEFINITION, enum_values), SDDS_STRING, NULL},
 };
 
 /**
@@ -198,6 +202,7 @@ SDDS_FIELD_INFORMATION SDDS_ColumnFieldInformation[SDDS_COLUMN_FIELDS] = {
   {"format_string", offsetof(COLUMN_DEFINITION, format_string), SDDS_STRING},
   {"type", offsetof(COLUMN_DEFINITION, type), SDDS_LONG, typeEnumPair},
   {"field_length", offsetof(COLUMN_DEFINITION, field_length), SDDS_LONG},
+  {"enum_values", offsetof(COLUMN_DEFINITION, enum_values), SDDS_STRING, NULL},
 };
 
 /**
@@ -214,6 +219,7 @@ SDDS_FIELD_INFORMATION SDDS_ParameterFieldInformation[SDDS_PARAMETER_FIELDS] = {
   {"format_string", offsetof(PARAMETER_DEFINITION, format_string), SDDS_STRING},
   {"type", offsetof(PARAMETER_DEFINITION, type), SDDS_LONG, typeEnumPair},
   {"fixed_value", offsetof(PARAMETER_DEFINITION, fixed_value), SDDS_STRING},
+  {"enum_values", offsetof(PARAMETER_DEFINITION, enum_values), SDDS_STRING, NULL},
 };
 
 /**

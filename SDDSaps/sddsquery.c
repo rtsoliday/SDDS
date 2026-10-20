@@ -389,6 +389,7 @@ int main(int argc, char **argv) {
                 coldef->format_string ? coldef->format_string : "NULL",
                 SDDS_type_name[coldef->type - 1] ? SDDS_type_name[coldef->type - 1] : "NULL",
                 coldef->field_length, coldef->description ? coldef->description : "NULL");
+        if (coldef->type == SDDS_ENUM) fprintf(stdout, "  enum_values=\"%s\"\n", coldef->enum_values);
       }
     }
 
@@ -403,6 +404,7 @@ int main(int argc, char **argv) {
                 pardef->symbol ? pardef->symbol : "NULL",
                 SDDS_type_name[pardef->type - 1] ? SDDS_type_name[pardef->type - 1] : "NULL",
                 pardef->description ? pardef->description : "NULL");
+        if (pardef->type == SDDS_ENUM) fprintf(stdout, "  enum_values=\"%s\"\n", pardef->enum_values);
       }
     }
 
@@ -422,6 +424,7 @@ int main(int argc, char **argv) {
                 arraydef->field_length,
                 arraydef->group_name ? arraydef->group_name : "NULL",
                 arraydef->description ? arraydef->description : "NULL");
+        if (arraydef->type == SDDS_ENUM) fprintf(stdout, "  enum_values=\"%s\"\n", arraydef->enum_values);
       }
     }
 
@@ -453,7 +456,7 @@ int main(int argc, char **argv) {
   return EXIT_SUCCESS;
 }
 
-static long indexName, indexUnits, indexSymbol, indexFormat, indexType, indexDescription, indexGroup;
+static long indexName, indexUnits, indexSymbol, indexFormat, indexType, indexDescription, indexGroup, indexEnum;
 
 long InitializeSDDSHeaderOutput(SDDS_DATASET *outSet, char *filename) {
   if (!SDDS_InitializeOutput(outSet, SDDS_BINARY, 0, NULL, NULL, filename))
@@ -466,6 +469,7 @@ long InitializeSDDSHeaderOutput(SDDS_DATASET *outSet, char *filename) {
       0 > (indexDescription = SDDS_DefineColumn(outSet, "Description", NULL, NULL, NULL, NULL, SDDS_STRING, 0)) ||
       0 > (indexGroup = SDDS_DefineColumn(outSet, "Group", NULL, NULL, NULL, NULL, SDDS_STRING, 0)))
     return 0;
+  if ((indexEnum = SDDS_DefineColumn(outSet, "EnumValues", NULL, NULL, NULL, NULL, SDDS_STRING, 0)) < 0) return 0;
   if (0 > SDDS_DefineParameter(outSet, "Class", NULL, NULL, NULL, NULL, SDDS_STRING, 0) ||
       0 > SDDS_DefineParameter(outSet, "Filename", NULL, NULL, NULL, NULL, SDDS_STRING, 0))
     return 0;
@@ -516,6 +520,7 @@ long MakeColumnHeaderSummary(SDDS_DATASET *outSet, SDDS_DATASET *inSet, char *in
                            indexSymbol, coldef->symbol,
                            indexFormat, coldef->format_string,
                            indexType, SDDS_type_name[coldef->type - 1],
+                           indexEnum, coldef->enum_values,
                            indexDescription, coldef->description,
                            indexGroup, NULL, -1))
       return 0;
@@ -548,6 +553,7 @@ long MakeParameterHeaderSummary(SDDS_DATASET *outSet, SDDS_DATASET *inSet, char 
                            indexSymbol, pardef->symbol,
                            indexFormat, pardef->format_string,
                            indexType, SDDS_type_name[pardef->type - 1],
+                           indexEnum, pardef->enum_values,
                            indexDescription, pardef->description,
                            indexGroup, NULL, -1))
       return 0;
@@ -580,6 +586,7 @@ long MakeArrayHeaderSummary(SDDS_DATASET *outSet, SDDS_DATASET *inSet, char *inp
                            indexSymbol, arrdef->symbol,
                            indexFormat, arrdef->format_string,
                            indexType, SDDS_type_name[arrdef->type - 1],
+                           indexEnum, arrdef->enum_values,
                            indexDescription, arrdef->description,
                            indexGroup, arrdef->group_name,
                            -1))

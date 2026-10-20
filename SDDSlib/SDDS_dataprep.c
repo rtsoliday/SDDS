@@ -408,7 +408,7 @@ int32_t SDDS_SetParameters(SDDS_DATASET *SDDS_dataset, int32_t mode, ...) {
         break;
       }
       if ((index = SDDS_GetParameterIndex(SDDS_dataset, name)) < 0) {
-        sprintf(s, "Unable to set parameter values--name %s not recognized (SDDS_SetParameters)", name);
+        snprintf(s, sizeof(s), "Unable to set parameter values--name %s not recognized (SDDS_SetParameters)", name);
         SDDS_SetError(s);
         retval = 0;
         break;
@@ -427,6 +427,14 @@ int32_t SDDS_SetParameters(SDDS_DATASET *SDDS_dataset, int32_t mode, ...) {
       else
         *((unsigned short *)SDDS_dataset->parameter[index]) = *(va_arg(argptr, unsigned short *));
       break;
+    case SDDS_ENUM: {
+      int32_t code = mode & SDDS_PASS_BY_VALUE ? va_arg(argptr, int32_t) : *va_arg(argptr, int32_t *);
+      if (!SDDS_EnumCodeToLabel(layout->parameter_definition[index].enum_definition, code)) {
+        SDDS_SetError("Unmapped enum assignment");
+        retval = 0;
+      } else ((int32_t *)SDDS_dataset->parameter[index])[0] = code;
+      break;
+    }
     case SDDS_LONG:
       if (mode & SDDS_PASS_BY_VALUE)
         *((int32_t *)SDDS_dataset->parameter[index]) = (int32_t)va_arg(argptr, int32_t);
@@ -572,7 +580,7 @@ int32_t SDDS_SetParameter(SDDS_DATASET *SDDS_dataset, int32_t mode, ...) {
       return (0);
     }
     if ((index = SDDS_GetParameterIndex(SDDS_dataset, name)) < 0) {
-      sprintf(s, "Unable to set parameter values--name %s not recognized (SDDS_SetParameter)", name);
+      snprintf(s, sizeof(s), "Unable to set parameter values--name %s not recognized (SDDS_SetParameter)", name);
       SDDS_SetError(s);
       va_end(argptr);
       return (0);
@@ -591,7 +599,15 @@ int32_t SDDS_SetParameter(SDDS_DATASET *SDDS_dataset, int32_t mode, ...) {
     else
       *((unsigned short *)SDDS_dataset->parameter[index]) = *(va_arg(argptr, unsigned short *));
     break;
-  case SDDS_LONG:
+  case SDDS_ENUM: {
+      int32_t code = mode & SDDS_PASS_BY_VALUE ? va_arg(argptr, int32_t) : *va_arg(argptr, int32_t *);
+      if (!SDDS_EnumCodeToLabel(layout->parameter_definition[index].enum_definition, code)) {
+        SDDS_SetError("Unmapped enum assignment");
+        va_end(argptr); return 0;
+      } else ((int32_t *)SDDS_dataset->parameter[index])[0] = code;
+      break;
+    }
+    case SDDS_LONG:
     if (mode & SDDS_PASS_BY_VALUE)
       *((int32_t *)SDDS_dataset->parameter[index]) = (int32_t)va_arg(argptr, int32_t);
     else
@@ -737,7 +753,7 @@ int32_t SDDS_SetParametersFromDoubles(SDDS_DATASET *SDDS_dataset, int32_t mode, 
         break;
       }
       if ((index = SDDS_GetParameterIndex(SDDS_dataset, name)) < 0) {
-        sprintf(s, "Unable to set parameter values--name %s not recognized (SDDS_SetParametersFromDoubles)", name);
+        snprintf(s, sizeof(s), "Unable to set parameter values--name %s not recognized (SDDS_SetParametersFromDoubles)", name);
         SDDS_SetError(s);
         retval = 0;
         break;
@@ -878,7 +894,7 @@ int32_t SDDS_SetParametersFromLongDoubles(SDDS_DATASET *SDDS_dataset, int32_t mo
         break;
       }
       if ((index = SDDS_GetParameterIndex(SDDS_dataset, name)) < 0) {
-        sprintf(s, "Unable to set parameter values--name %s not recognized (SDDS_SetParametersFromLongDoubles)", name);
+        snprintf(s, sizeof(s), "Unable to set parameter values--name %s not recognized (SDDS_SetParametersFromLongDoubles)", name);
         SDDS_SetError(s);
         retval = 0;
         break;
@@ -1065,6 +1081,14 @@ int32_t SDDS_SetRowValues(SDDS_DATASET *SDDS_dataset, int32_t mode, int64_t row,
       else
         *(((unsigned short *)SDDS_dataset->data[index]) + row) = *(va_arg(argptr, unsigned short *));
       break;
+    case SDDS_ENUM: {
+      int32_t code = mode & SDDS_PASS_BY_VALUE ? va_arg(argptr, int32_t) : *va_arg(argptr, int32_t *);
+      if (!SDDS_EnumCodeToLabel(layout->column_definition[index].enum_definition, code)) {
+        SDDS_SetError("Unmapped enum assignment");
+        retval = 0;
+      } else ((int32_t *)SDDS_dataset->data[index])[row] = code;
+      break;
+    }
     case SDDS_LONG:
       if (mode & SDDS_PASS_BY_VALUE)
         *(((int32_t *)SDDS_dataset->data[index]) + row) = va_arg(argptr, int32_t);
@@ -1234,6 +1258,7 @@ int32_t SDDS_SetArrayVararg(SDDS_DATASET *SDDS_dataset, char *array_name, int32_
       SDDS_SetError("Unable to set array--string copy failure (SDDS_SetArrayVararg");
       return (0);
     }
+    if (array->definition->type == SDDS_ENUM && !SDDS_ValidateEnumData(array->definition->enum_definition, array->data, array->elements)) return 0;
     return (1);
   }
 
@@ -1257,6 +1282,7 @@ int32_t SDDS_SetArrayVararg(SDDS_DATASET *SDDS_dataset, char *array_name, int32_
   } while (SDDS_AdvanceCounter(counter, array->dimension, array->definition->dimensions - 1) != -1);
   if (counter)
     free(counter);
+  if (array->definition->type == SDDS_ENUM && !SDDS_ValidateEnumData(array->definition->enum_definition, array->data, array->elements)) return 0;
   return (1);
 }
 
@@ -1348,6 +1374,7 @@ int32_t SDDS_SetArray(SDDS_DATASET *SDDS_dataset, char *array_name, int32_t mode
       SDDS_SetError("Unable to set array--string copy failure (SDDS_SetArrayVararg");
       return (0);
     }
+    if (array->definition->type == SDDS_ENUM && !SDDS_ValidateEnumData(array->definition->enum_definition, array->data, array->elements)) return 0;
     return (1);
   }
 
@@ -1371,6 +1398,7 @@ int32_t SDDS_SetArray(SDDS_DATASET *SDDS_dataset, char *array_name, int32_t mode
   } while (SDDS_AdvanceCounter(counter, array->dimension, array->definition->dimensions - 1) != -1);
   if (counter)
     free(counter);
+  if (array->definition->type == SDDS_ENUM && !SDDS_ValidateEnumData(array->definition->enum_definition, array->data, array->elements)) return 0;
   return (1);
 }
 
@@ -1426,6 +1454,9 @@ int32_t SDDS_AppendToArrayVararg(SDDS_DATASET *SDDS_dataset, char *array_name, i
     SDDS_SetError("Unable to set array--internal array definition pointer is NULL (SDDS_AppendToArrayVararg)");
     return (0);
   }
+  if (layout->array_definition[index].type == SDDS_ENUM &&
+      !SDDS_ValidateEnumData(layout->array_definition[index].enum_definition, data_pointer, elements))
+    return (0);
   array->definition = layout->array_definition + index;
   if (!array->dimension && !(array->dimension = (int32_t *)SDDS_Malloc(sizeof(*array->dimension) * array->definition->dimensions))) {
     SDDS_SetError("Unable to set array--allocation failure (SDDS_SetArrayVararg)");
@@ -1586,6 +1617,8 @@ int32_t SDDS_SetColumn(SDDS_DATASET *SDDS_dataset, int32_t mode, void *data, int
   if (!retval)
     return 0;
 
+  if (layout->column_definition[index].type == SDDS_ENUM &&
+      !SDDS_ValidateEnumData(layout->column_definition[index].enum_definition, data, rows)) return 0;
   if (layout->column_definition[index].type == SDDS_STRING) {
     if (SDDS_dataset->data[index]) {
       char *ptr;

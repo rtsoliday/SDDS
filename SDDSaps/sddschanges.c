@@ -112,7 +112,7 @@ typedef struct
 long addChangeRequests(CHANGE_REQUEST **request, long requests, char **item, long items, long code, char *excludeName, char *newType);
 CHANGE_DEFINITION *compileChangeDefinitions(SDDS_DATASET *inSet, long *changes, CHANGE_REQUEST *request, long requests);
 long setupOutputFile(SDDS_DATASET *outSet, char *output, SDDS_DATASET *inSet, CHANGE_DEFINITION *change, long changes, short columnMajorOrder);
-int64_t addBaselineData(CHANGE_DEFINITION *change, long changes, char *baseline, long page, int64_t lastRows);
+int64_t addBaselineData(CHANGE_DEFINITION *change, long changes, char *baseline, long page, int64_t lastRows, SDDS_DATASET *outSet);
 int64_t copyBaselineData(CHANGE_DEFINITION *change, long changes, SDDS_DATASET *dataset);
 void computeChanges(CHANGE_DEFINITION *change, long changes, SDDS_DATASET *inSet, int64_t rows);
 void outputChanges(CHANGE_DEFINITION *change, long changes, SDDS_DATASET *outSet, int64_t rows, SDDS_DATASET *inSet);
@@ -288,13 +288,13 @@ int main(int argc, char **argv) {
   }
 
   if (baseline && !parallelPages)
-    baselineRows = addBaselineData(change, changes, baseline, 0, 0);
+    baselineRows = addBaselineData(change, changes, baseline, 0, 0, &outSet);
 
   lastRows = 0;
   while ((code = SDDS_ReadPage(&inSet)) > 0) {
     rows = SDDS_CountRowsOfInterest(&inSet);
     if (baseline && parallelPages)
-      baselineRows = addBaselineData(change, changes, baseline, code, lastRows);
+      baselineRows = addBaselineData(change, changes, baseline, code, lastRows, &outSet);
     if (!baseline && code == 1) {
       baselineRows = copyBaselineData(change, changes, &inSet);
       continue;
@@ -332,7 +332,7 @@ int main(int argc, char **argv) {
   return EXIT_SUCCESS;
 }
 
-int64_t addBaselineData(CHANGE_DEFINITION *change, long changes, char *baseline, long page, int64_t lastRows) {
+int64_t addBaselineData(CHANGE_DEFINITION *change, long changes, char *baseline, long page, int64_t lastRows, SDDS_DATASET *outSet) {
   static SDDS_DATASET dataset;
   long i, code;
   int64_t rows;
@@ -360,6 +360,12 @@ int64_t addBaselineData(CHANGE_DEFINITION *change, long changes, char *baseline,
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       }
     } else if (change[i].optionCode == SET_COPY) {
+      if (!SDDS_CheckEnumFieldCompatibility(outSet, &dataset, 0,
+                                           SDDS_GetColumnIndex(outSet, change[i].resultColumn),
+                                           SDDS_GetColumnIndex(&dataset, change[i].sourceColumn))) {
+        SDDS_SetError("Incompatible baseline copy column definition (sddschanges)");
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      }
       if (change[i].copy) {
         if (page > 1) {
           if (change[i].type == SDDS_STRING && lastRows)

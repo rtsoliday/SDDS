@@ -25,11 +25,13 @@ public namespace remains `sdds`, and the preferred header remains `SDDS.hpp`.
 
 The modern type IDs match current SDDS: `longdouble`, `double`, `float`,
 `long64`, `ulong64`, `long`, `ulong`, `short`, `ushort`, `string`, and
-`character` (IDs 1 through 11).
+`character` (IDs 1 through 11), plus categorical `enum` (ID 12). API generation 3
+adds a distinct `EnumValue` scalar/vector alternative and immutable dictionaries.
+See [the enum API and migration contract](../SDDSlib/doc/enums.md).
 
 ## Supported format behavior
 
-- SDDS protocol versions 1 through 5, with the minimum output version selected
+- SDDS protocol versions 1 through 6, with the minimum output version selected
   from the layout features
 - ASCII and binary data
 - row-major and column-major binary pages
@@ -124,7 +126,9 @@ sets the C library's `SDDS_LONGDOUBLE_64BITS` option inside the test process.
 Other platforms use `Extended80`. No environment setup is needed to run the
 test. Test linking uses the dependency paths detected by `Makefile.rules`.
 
-The sanitizer target uses Clang AddressSanitizer and UndefinedBehaviorSanitizer.
+The sanitizer target uses AddressSanitizer and UndefinedBehaviorSanitizer with
+the normal compiler (override `SANITIZER_CXX` when needed). Linux GCC builds
+link sanitizer runtimes statically.
 Leak detection is disabled because monitored build hosts may run under process
 inspection that is incompatible with LeakSanitizer. `make fuzz` builds the
 opt-in libFuzzer harness. The benchmark gate takes five alternating C and C++
@@ -133,6 +137,7 @@ memory for representative uncompressed numeric reads and writes. String-heavy,
 array, compression, projection, sparse, seek, append, and update results are
 reported but are not hard gates.
 
-See [MIGRATION.md](MIGRATION.md) for the API-generation-2 source migration.
+See [native enums](../SDDSlib/doc/enums.md) for the API-generation-3 migration,
+including the maintained adapter and the unsupported archived implementation.
 See [BENCHMARKS.md](BENCHMARKS.md) for workload definitions, release thresholds,
 and the rationale for non-gated string, array, and compressed results.

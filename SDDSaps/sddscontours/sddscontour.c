@@ -2293,12 +2293,20 @@ void sddscontour_main(char *input_line)
           return 1;
       } else if (xyzArray[0]) {
         char *columnunits;
-        long ix, iy, type[3];
+        long ix, iy;
+        int32_t type[3];
         SDDS_ARRAY *xyzData[3];
         for (i = 0; i < 3; i++) {
           if (xyzArray[i]) {
-            SDDS_GetArrayInformation(&SDDS_table, "type", &type[i], SDDS_GET_BY_NAME,
-                                     xyzArray[i]);
+            if (SDDS_GetArrayInformation(&SDDS_table, "type", &type[i], SDDS_GET_BY_NAME,
+                                         xyzArray[i]) != SDDS_LONG) {
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+              return (1);
+            }
+            if (!SDDS_NUMERIC_TYPE(type[i])) {
+              fprintf(stderr, "array %s must have numeric type; convert categorical values explicitly with sddscast first\n", xyzArray[i]);
+              return (1);
+            }
             if (!(xyzData[i] = SDDS_GetArray(&SDDS_table, xyzArray[i], NULL))) {
               fprintf(stderr, "unable to read %s array\n", xyzArray[i]);
               return (1);

@@ -1797,6 +1797,7 @@ long CopyRowToNewColumn(SDDS_DATASET *target, int64_t target_row, SDDS_DATASET *
       continue;
     }
 
+    if (!SDDS_CheckEnumFieldCompatibility(target, source, 0, k, j)) return 0;
     if ((type = SDDS_GetColumnType(target, k)) == SDDS_STRING) {
       if (!SDDS_CopyString(((char ***)target->data)[k] + target_row, ((char ***)source->data)[j][source_row])) {
         SDDS_SetError("Unable to copy row--string copy failed (SDDS_CopyRow)");
@@ -1826,6 +1827,7 @@ long CopyParametersFromSecondInput(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS
         fprintf(stderr, "Warning, parameter %s not defined in output.\n", new_data.new_parameter[i]);
         continue;
       }
+      if (!SDDS_CheckEnumFieldCompatibility(SDDS_target, SDDS_source, 1, k, j)) return 0;
       if (!SDDS_SetParameters(SDDS_target, SDDS_SET_BY_INDEX | SDDS_PASS_BY_REFERENCE, k, SDDS_source->parameter[j], -1)) {
         sprintf(s, "Unable to copy parameters for parameter %s", new_data.new_parameter[i]);
         SDDS_SetError(s);
@@ -1854,6 +1856,7 @@ long CopyArraysFromSecondInput(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_sou
       SDDS_SetError("Can't copy arrays between different types (SDDS_CopyArrays)");
       return 0;
     }
+    if (!SDDS_CheckEnumFieldCompatibility(SDDS_target, SDDS_source, 2, k, j)) return 0;
     SDDS_target->array[k].definition = SDDS_target->layout.array_definition + k;
     SDDS_target->array[k].elements = SDDS_source->array[j].elements;
     if (!(SDDS_target->array[k].dimension = (int32_t *)SDDS_Malloc(sizeof(*SDDS_target->array[k].dimension) * SDDS_target->array[k].definition->dimensions)) ||

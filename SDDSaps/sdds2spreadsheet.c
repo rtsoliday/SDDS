@@ -233,6 +233,14 @@ int main(int argc, char **argv) {
 
   processFilenames("sdds2spreadsheet", &input, &output, pipeFlags, 0, NULL);
 
+  /* Validate the input before opening or replacing the destination. */
+  if (!SDDS_InitializeInput(&SDDS_table, input)) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    exit(EXIT_FAILURE);
+  }
+  if (!SDDS_CheckEnumExport(&SDDS_table))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
   if (output) {
     if (!excel) {
       outfile = fopen(output, "w");
@@ -250,11 +258,6 @@ int main(int argc, char **argv) {
 
   if (input && !excel)
     fprintf(outfile, "Created from SDDS file: %s\n", input);
-
-  if (!SDDS_InitializeInput(&SDDS_table, input)) {
-    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-    exit(EXIT_FAILURE);
-  }
 
   layout = &SDDS_table.layout;
 

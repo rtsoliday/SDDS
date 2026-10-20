@@ -526,7 +526,7 @@ int32_t SDDS_SetColumnsOfInterest(SDDS_DATASET *SDDS_dataset, int32_t mode, ...)
   if (mode != SDDS_MATCH_STRING) {
     for (i = 0; i < n_names; i++) {
       if ((index = SDDS_GetColumnIndex(SDDS_dataset, name[i])) < 0) {
-        sprintf(buffer, "Unable to process column selection--unrecognized column name %s seen (SDDS_SetColumnsOfInterest)", name[i]);
+        snprintf(buffer, sizeof(buffer), "Unable to process column selection--unrecognized column name %s seen (SDDS_SetColumnsOfInterest)", name[i]);
         SDDS_SetError(buffer);
         return (0);
       }
@@ -1456,7 +1456,7 @@ char **SDDS_GetColumnInString(SDDS_DATASET *SDDS_dataset, char *column_name) {
   }
 
   if ((type = SDDS_GetColumnType(SDDS_dataset, index)) <= 0 || (size = SDDS_GetTypeSize(type)) <= 0 ||
-      (!SDDS_NUMERIC_TYPE(type) && type != SDDS_CHARACTER && type != SDDS_STRING)) {
+      (!SDDS_NUMERIC_TYPE(type) && type != SDDS_CHARACTER && type != SDDS_STRING && type != SDDS_ENUM)) {
     SDDS_SetError("Unable to get column--data size or type undefined or non-numeric (SDDS_GetColumnInString)");
     return (NULL);
   }
@@ -1466,6 +1466,14 @@ char **SDDS_GetColumnInString(SDDS_DATASET *SDDS_dataset, char *column_name) {
   }
   rawData = SDDS_dataset->data[index];
   switch (type) {
+  case SDDS_ENUM:
+    for (i = j = 0; i < SDDS_dataset->n_rows; i++)
+      if (SDDS_dataset->row_flag[i]) {
+        const char *label = SDDS_EnumCodeToLabel(SDDS_dataset->layout.column_definition[index].enum_definition, ((int32_t *)rawData)[i]);
+        if (!label || !SDDS_CopyString(&data[j++], label)) { SDDS_SetError("Invalid enum label extraction"); return NULL; }
+      }
+    break;
+
   case SDDS_LONGDOUBLE:
     for (i = j = 0; i < SDDS_dataset->n_rows; i++) {
       if (SDDS_dataset->row_flag[i]) {
@@ -1809,7 +1817,7 @@ void *SDDS_GetValue(SDDS_DATASET *SDDS_dataset, char *column_name, int64_t srow_
  *   - **0** if an error occurs (e.g., invalid dataset, unrecognized column name, undefined data type, invalid row index, non-numeric column type). In this case, an error message is recorded internally.
  *
  * @warning 
- *   - This function only supports numerical data types. Attempting to retrieve and cast data from non-numeric columns (excluding `SDDS_CHARACTER`) will result in an error.
+ *   - This function only supports numerical data types. Character, string and enum columns are rejected.
  *
  * @note 
  *   - The function internally allocates temporary memory to store the value before casting. This memory is freed before the function returns.
@@ -1839,7 +1847,7 @@ double SDDS_GetValueAsDouble(SDDS_DATASET *SDDS_dataset, char *column_name, int6
     SDDS_SetError("Unable to get value--row index out of range (SDDS_GetValueAsDouble)");
     return (0);
   }
-  if ((type != SDDS_STRING) && (type != SDDS_CHARACTER)) {
+  if (SDDS_NUMERIC_TYPE(type)) {
     memory = SDDS_Malloc(size);
     memcpy(memory, (char *)SDDS_dataset->data[column_index] + row_index * size, size);
     switch (type) {
@@ -1898,8 +1906,7 @@ double SDDS_GetValueAsDouble(SDDS_DATASET *SDDS_dataset, char *column_name, int6
  *     non-numeric column type). In this case, an error message is recorded internally.
  *
  * @warning 
- *   - This function only supports numerical data types. Attempting to retrieve and cast data from non-numeric columns (excluding `SDDS_CHARACTER`)
- *     will result in an error.
+ *   - This function only supports numerical data types. Character, string and enum columns are rejected.
  *   - The returned value `0.0` may be ambiguous if it is a valid data value. Always check for errors using `SDDS_CheckError` or similar mechanisms.
  *
  * @note 
@@ -1932,7 +1939,7 @@ double SDDS_GetValueByIndexAsDouble(SDDS_DATASET *SDDS_dataset, int32_t column_i
     SDDS_SetError("Unable to get value--row index out of range (SDDS_GetValueByIndexAsDouble)");
     return (0);
   }
-  if ((type != SDDS_STRING) && (type != SDDS_CHARACTER)) {
+  if (SDDS_NUMERIC_TYPE(type)) {
     memory = SDDS_Malloc(size);
     memcpy(memory, (char *)SDDS_dataset->data[column_index] + row_index * size, size);
     switch (type) {
@@ -2435,7 +2442,7 @@ int32_t SDDS_GetParameters(SDDS_DATASET *SDDS_dataset, ...) {
     if (!(data = va_arg(argptr, void *)))
       retval = 0;
     if (!SDDS_GetParameter(SDDS_dataset, name, data)) {
-      sprintf(s, "Unable to get value of parameter %s (SDDS_GetParameters)", name);
+      snprintf(s, sizeof(s), "Unable to get value of parameter %s (SDDS_GetParameters)", name);
       SDDS_SetError(s);
     }
   } while (retval);
@@ -2490,7 +2497,7 @@ void *SDDS_GetParameter(SDDS_DATASET *SDDS_dataset, char *parameter_name, void *
     return (NULL);
   }
   if ((index = SDDS_GetParameterIndex(SDDS_dataset, parameter_name)) < 0) {
-    sprintf(s, "Unable to get parameter value--parameter name %s is unrecognized (SDDS_GetParameter)", parameter_name);
+    snprintf(s, sizeof(s), "Unable to get parameter value--parameter name %s is unrecognized (SDDS_GetParameter)", parameter_name);
     SDDS_SetError(s);
     return (NULL);
   }
@@ -2597,11 +2604,11 @@ void *SDDS_GetParameterByIndex(SDDS_DATASET *SDDS_dataset, int32_t index, void *
  *
  * @return 
  *   - **Pointer to the `int32_t` value** stored in `memory` (if provided) or to newly allocated memory containing the converted value.
- *   - **NULL** if an error occurs (e.g., invalid dataset, unrecognized parameter name, undefined data type, memory allocation failure, parameter type is `SDDS_STRING`). In this case, an error message is recorded internally.
+ *   - **NULL** if an error occurs (e.g., invalid dataset, unrecognized parameter name, undefined data type, memory allocation failure, parameter type is nonnumeric). In this case, an error message is recorded internally.
  *
  * @warning 
  *   - If `memory` is `NULL`, the function allocates memory that the caller must free to prevent memory leaks.
- *   - This function does not support parameters of type `SDDS_STRING`. Attempting to retrieve string parameters as long integers will result in an error.
+ *   - This function supports numeric and character parameters. Categorical enums require explicit conversion.
  *
  * @note 
  *   - The conversion is performed using `SDDS_ConvertToLong`, which handles casting from various numerical types to `int32_t`.
@@ -2629,8 +2636,8 @@ int32_t *SDDS_GetParameterAsLong(SDDS_DATASET *SDDS_dataset, char *parameter_nam
     SDDS_SetError("Unable to get parameter value--parameter data type is invalid (SDDS_GetParameterAsLong)");
     return (NULL);
   }
-  if (type == SDDS_STRING) {
-    SDDS_SetError("Unable to get parameter value--parameter data type is SDDS_STRING (SDDS_GetParameterAsLong)");
+  if (!SDDS_NUMERIC_TYPE(type) && type != SDDS_CHARACTER) {
+    SDDS_SetError("Unable to get parameter value--parameter data type is nonnumeric (SDDS_GetParameterAsLong)");
     return (NULL);
   }
   if (!SDDS_dataset->parameter || !SDDS_dataset->parameter[index]) {
@@ -2685,8 +2692,8 @@ int64_t *SDDS_GetParameterAsLong64(SDDS_DATASET *SDDS_dataset, char *parameter_n
     SDDS_SetError("Unable to get parameter value--parameter data type is invalid (SDDS_GetParameterAsLong64)");
     return (NULL);
   }
-  if (type == SDDS_STRING) {
-    SDDS_SetError("Unable to get parameter value--parameter data type is SDDS_STRING (SDDS_GetParameterAsLong64)");
+  if (!SDDS_NUMERIC_TYPE(type) && type != SDDS_CHARACTER) {
+    SDDS_SetError("Unable to get parameter value--parameter data type is nonnumeric (SDDS_GetParameterAsLong64)");
     return (NULL);
   }
   if (!SDDS_dataset->parameter || !SDDS_dataset->parameter[index]) {
@@ -2741,8 +2748,8 @@ long double *SDDS_GetParameterAsLongDouble(SDDS_DATASET *SDDS_dataset, char *par
     SDDS_SetError("Unable to get parameter value--parameter data type is invalid (SDDS_GetParameterAsLongDouble)");
     return (NULL);
   }
-  if (type == SDDS_STRING) {
-    SDDS_SetError("Unable to get parameter value--parameter data type is SDDS_STRING (SDDS_GetParameterAsLongDouble)");
+  if (!SDDS_NUMERIC_TYPE(type) && type != SDDS_CHARACTER) {
+    SDDS_SetError("Unable to get parameter value--parameter data type is nonnumeric (SDDS_GetParameterAsLongDouble)");
     return (NULL);
   }
   if (!SDDS_dataset->parameter || !SDDS_dataset->parameter[index]) {
@@ -2796,8 +2803,8 @@ double *SDDS_GetParameterAsDouble(SDDS_DATASET *SDDS_dataset, char *parameter_na
     SDDS_SetError("Unable to get parameter value--parameter data type is invalid (SDDS_GetParameterAsDouble)");
     return (NULL);
   }
-  if (type == SDDS_STRING) {
-    SDDS_SetError("Unable to get parameter value--parameter data type is SDDS_STRING (SDDS_GetParameterAsDouble)");
+  if (!SDDS_NUMERIC_TYPE(type) && type != SDDS_CHARACTER) {
+    SDDS_SetError("Unable to get parameter value--parameter data type is nonnumeric (SDDS_GetParameterAsDouble)");
     return (NULL);
   }
   if (!SDDS_dataset->parameter || !SDDS_dataset->parameter[index]) {
@@ -2856,6 +2863,12 @@ char *SDDS_GetParameterAsString(SDDS_DATASET *SDDS_dataset, char *parameter_name
     return (NULL);
   }
   value = SDDS_dataset->parameter[index];
+  if (type == SDDS_ENUM) {
+    const char *label = SDDS_EnumCodeToLabel(SDDS_dataset->layout.parameter_definition[index].enum_definition, *(int32_t *)value);
+    if (!label || !SDDS_CopyString(&parValue, label)) return NULL;
+    if (memory) *memory = parValue;
+    return parValue;
+  }
   switch (type) {
   case SDDS_LONGDOUBLE:
     if (LDBL_DIG == 18) {
@@ -2915,6 +2928,7 @@ char *SDDS_GetParameterAsString(SDDS_DATASET *SDDS_dataset, char *parameter_name
  * and returns it as a null-terminated string. If `suppliedformat` is `NULL`, the function uses the format string defined in the parameter's
  * definition. If the `memory` pointer is provided, the formatted string is stored at the specified memory location. Otherwise, memory is
  * allocated internally to hold the string, which must be freed by the caller.
+ * Enum parameters return their dictionary labels and accept string formats, with dynamically sized storage for the formatted label.
  *
  * @param SDDS_dataset Pointer to the `SDDS_DATASET` structure representing the dataset.
  * @param parameter_name A null-terminated string specifying the name of the parameter to retrieve.
@@ -2952,6 +2966,34 @@ char *SDDS_GetParameterAsFormattedString(SDDS_DATASET *SDDS_dataset, char *param
   if (!(type = SDDS_GetParameterType(SDDS_dataset, index))) {
     SDDS_SetError("Unable to get parameter value--parameter data type is invalid (SDDS_GetParameterAsFormattedString)");
     return (NULL);
+  }
+  if (type == SDDS_ENUM) {
+    const SDDS_ENUM_DEFINITION *definition = SDDS_dataset->layout.parameter_definition[index].enum_definition;
+    const int32_t *code = SDDS_dataset->parameter ? SDDS_dataset->parameter[index] : NULL;
+    const char *label;
+    int length;
+    if (!SDDS_ValidateEnumData(definition, code, 1))
+      return NULL;
+    label = SDDS_EnumCodeToLabel(definition, *code);
+    format = suppliedformat ? suppliedformat : "%s";
+    if (!SDDS_VerifyPrintfFormat(format, SDDS_STRING)) {
+      SDDS_SetError("Enum display format must be a string format (SDDS_GetParameterAsFormattedString)");
+      return NULL;
+    }
+    length = snprintf(NULL, 0, format, label);
+    if (length < 0) {
+      SDDS_SetError("Unable to format enum parameter label (SDDS_GetParameterAsFormattedString)");
+      return NULL;
+    }
+    if (!(parValue = SDDS_Malloc((size_t)length + 1)))
+      return NULL;
+    if (!SDDS_SprintEnumValue(definition, code, 0, format, parValue, (size_t)length + 1, SDDS_PRINT_NOQUOTES, 1, 0)) {
+      free(parValue);
+      return NULL;
+    }
+    if (memory)
+      *memory = parValue;
+    return parValue;
   }
   if (suppliedformat != NULL) {
     format = suppliedformat;
@@ -3317,11 +3359,25 @@ void *SDDS_GetDoubleMatrixFromColumn(SDDS_DATASET *SDDS_dataset, char *column_na
  * @retval Non-negative Integer representing the count of rows marked as "of interest".
  *
  * @note
- * - The caller must ensure that the `selection_column` exists and is of string type in the dataset.
+ * - The selection column must exist and be of string or enum type. Enum codes must be mapped.
  * - For modes that allocate memory internally (e.g., `SDDS_NAMES_STRING`), the function handles memory management internally.
  *
  * @sa SDDS_MatchRowsOfInterest, SDDS_FilterRowsOfInterest, SDDS_DeleteUnsetRows
  */
+/** @brief Resolve string or categorical row labels without modifying stored data. */
+static char *selectionLabel(SDDS_DATASET *dataset, int32_t index, int64_t row) {
+  if (dataset->layout.column_definition[index].type == SDDS_ENUM)
+    return (char *)SDDS_EnumCodeToLabel(dataset->layout.column_definition[index].enum_definition, ((int32_t *)dataset->data[index])[row]);
+  return ((char **)dataset->data[index])[row];
+}
+
+/** @brief Check categorical labels before comparisons can change row flags. */
+static int32_t validateSelectionEnumColumn(SDDS_DATASET *dataset, int32_t index) {
+  COLUMN_DEFINITION *definition = dataset->layout.column_definition + index;
+  return definition->type != SDDS_ENUM ||
+    SDDS_ValidateEnumData(definition->enum_definition, dataset->data ? dataset->data[index] : NULL, dataset->n_rows);
+}
+
 int64_t SDDS_SetRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *selection_column, int32_t mode, ...)
 /* This routine has 4 calling modes:
  * SDDS_SetRowsOfInterest(&SDDS_dataset, selection_column, SDDS_NAME_ARRAY, int32_t n_entries, char **name)
@@ -3420,7 +3476,7 @@ int64_t SDDS_SetRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *selection_colum
       SDDS_SetError("Unable to process row selection--unrecognized selection column name (SDDS_SetRowsOfInterest)");
       return (-1);
     }
-    if ((type = SDDS_GetColumnType(SDDS_dataset, index)) != SDDS_STRING) {
+    if ((type = SDDS_GetColumnType(SDDS_dataset, index)) != SDDS_STRING && type != SDDS_ENUM) {
       SDDS_SetError("Unable to select rows--selection column is not string type (SDDS_SetRowsOfInterest)");
       return (-1);
     }
@@ -3428,9 +3484,13 @@ int64_t SDDS_SetRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *selection_colum
       SDDS_SetError("Unable to process row selection--no names in call (SDDS_SetRowsOfInterest)");
       return (-1);
     }
+    if (!validateSelectionEnumColumn(SDDS_dataset, index)) {
+      retval = -1;
+      goto cleanup;
+    }
     for (j = 0; j < n_names; j++) {
       for (i = 0; i < SDDS_dataset->n_rows; i++) {
-        if ((*stringCompare)(*((char **)SDDS_dataset->data[index] + i), name[j]) == 0)
+        if ((*stringCompare)(selectionLabel(SDDS_dataset, index, i), name[j]) == 0)
           SDDS_dataset->row_flag[i] = 1;
       }
     }
@@ -3450,19 +3510,24 @@ int64_t SDDS_SetRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *selection_colum
         SDDS_SetError("Unable to process row selection--unrecognized selection column name (SDDS_SetRowsOfInterest)");
         return (-1);
       }
-      if ((type = SDDS_GetColumnType(SDDS_dataset, index)) != SDDS_STRING) {
+      if ((type = SDDS_GetColumnType(SDDS_dataset, index)) != SDDS_STRING && type != SDDS_ENUM) {
         free(match_string);
         SDDS_SetError("Unable to select rows--selection column is not string type (SDDS_SetRowsOfInterest)");
         return (-1);
       }
+      if (!validateSelectionEnumColumn(SDDS_dataset, index)) {
+        retval = -1;
+        goto cleanup;
+      }
       for (i = 0; i < SDDS_dataset->n_rows; i++)
-        SDDS_dataset->row_flag[i] = SDDS_Logic(SDDS_dataset->row_flag[i], (*wildMatch)(*((char **)SDDS_dataset->data[index] + i), match_string), logic);
+        SDDS_dataset->row_flag[i] = SDDS_Logic(SDDS_dataset->row_flag[i], (*wildMatch)(selectionLabel(SDDS_dataset, index, i), match_string), logic);
     } else {
       for (i = 0; i < SDDS_dataset->n_rows; i++)
         SDDS_dataset->row_flag[i] = SDDS_Logic(SDDS_dataset->row_flag[i], 0, logic & ~(SDDS_AND | SDDS_OR));
     }
   }
 
+cleanup:
   if (local_memory == 2) {
     for (i = 0; i < n_names; i++)
       free(name[i]);
@@ -3471,6 +3536,8 @@ int64_t SDDS_SetRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *selection_colum
     free(match_string);
   if (local_memory >= 1)
     free(name);
+  if (retval != 1)
+    return (-1);
 
   for (i = count = 0; i < SDDS_dataset->n_rows; i++)
     if (SDDS_dataset->row_flag[i])
@@ -3486,7 +3553,7 @@ int64_t SDDS_SetRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *selection_colum
  *
  * @param SDDS_dataset Pointer to the `SDDS_DATASET` structure representing the dataset.
  * @param selection_column A null-terminated string specifying the name of the column used for label matching.
- *                         This column must be of string or character type.
+ *                         This column must be of string, character or enum type.
  * @param label_to_match A null-terminated string specifying the label to match against the entries in the selection column.
  *                       If `logic` includes `SDDS_INDIRECT_MATCH`, this parameter is treated as the name of another column used for indirect matching.
  * @param logic An integer representing logical operation flags. Supported flags include:
@@ -3499,8 +3566,9 @@ int64_t SDDS_SetRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *selection_colum
  * @retval Non-negative Integer representing the count of rows marked as "of interest".
  *
  * @note
- * - The selection column must exist and be of string or character type.
+ * - The selection column must exist and be of string, character or enum type. Enum codes must be mapped.
  * - If using indirect matching (`SDDS_INDIRECT_MATCH`), the indirect column must exist and be of the same type as the selection column.
+ *   Enum columns must also have equal dictionaries.
  *
  * @sa SDDS_SetRowsOfInterest, SDDS_FilterRowsOfInterest, SDDS_DeleteUnsetRows
  */
@@ -3524,7 +3592,7 @@ int64_t SDDS_MatchRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *selection_col
       SDDS_SetError("Unable to select rows--column name is unrecognized (SDDS_MatchRowsOfInterest)");
       return (-1);
     }
-    if ((type = SDDS_GetColumnType(SDDS_dataset, index)) != SDDS_STRING && type != SDDS_CHARACTER) {
+    if ((type = SDDS_GetColumnType(SDDS_dataset, index)) != SDDS_STRING && type != SDDS_CHARACTER && type != SDDS_ENUM) {
       SDDS_SetError("Unable to select rows--selection column is not a string (SDDS_MatchRowsOfInterest)");
       return (-1);
     }
@@ -3545,7 +3613,18 @@ int64_t SDDS_MatchRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *selection_col
       }
     }
   }
-  if (type == SDDS_STRING) {
+  if (type == SDDS_ENUM && (logic & SDDS_INDIRECT_MATCH) &&
+      !SDDS_EnumDefinitionsEqual(SDDS_dataset->layout.column_definition[index].enum_definition,
+                                SDDS_dataset->layout.column_definition[indirect_index].enum_definition)) {
+    SDDS_SetError("Indirect enum matching requires equal mappings"); return -1;
+  }
+  if (type == SDDS_ENUM &&
+      (!validateSelectionEnumColumn(SDDS_dataset, index) ||
+       ((logic & SDDS_INDIRECT_MATCH) && !validateSelectionEnumColumn(SDDS_dataset, indirect_index)))) {
+    free(match_string);
+    return (-1);
+  }
+  if (type == SDDS_STRING || type == SDDS_ENUM) {
     int (*stringCompare)(const char *s, const char *t);
     int (*wildMatch)(char *s, char *t);
     if (logic & SDDS_NOCASE_COMPARE) {
@@ -3557,7 +3636,7 @@ int64_t SDDS_MatchRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *selection_col
     }
     for (i = count = 0; i < SDDS_dataset->n_rows; i++) {
       if (selection_column)
-        match = SDDS_Logic(SDDS_dataset->row_flag[i], (logic & SDDS_INDIRECT_MATCH ? (*stringCompare)(*((char **)SDDS_dataset->data[index] + i), *((char **)SDDS_dataset->data[indirect_index] + i)) == 0 : (*wildMatch)(*((char **)SDDS_dataset->data[index] + i), match_string)), logic);
+        match = SDDS_Logic(SDDS_dataset->row_flag[i], (logic & SDDS_INDIRECT_MATCH ? (*stringCompare)(selectionLabel(SDDS_dataset, index, i), selectionLabel(SDDS_dataset, indirect_index, i)) == 0 : (*wildMatch)(selectionLabel(SDDS_dataset, index, i), match_string)), logic);
       else
         match = SDDS_Logic(SDDS_dataset->row_flag[i], 0, logic & ~(SDDS_AND | SDDS_OR));
       if ((SDDS_dataset->row_flag[i] = match))
@@ -3680,17 +3759,17 @@ int64_t SDDS_FilterRowsOfInterest(SDDS_DATASET *SDDS_dataset, char *filter_colum
  *
  * @param SDDS_dataset Pointer to the `SDDS_DATASET` structure representing the dataset.
  * @param filter_column A null-terminated string specifying the name of the column used for numeric scanning.
- *                      This column must not be of string type.
+ *                      This column must be of string type.
  * @param mode An unsigned integer representing mode flags. Supported flags include:
  *             - `NUMSCANFILTER_INVERT`: Invert the filtering criterion (select rows where the entry is not a number).
  *
  * @return On success, returns the number of rows marked as "of interest" after filtering. On failure, returns `-1` and sets an appropriate error message.
  *
- * @retval -1 Indicates that an error occurred (e.g., invalid dataset, unrecognized filter column, filter column is of string type).
+ * @retval -1 Indicates that an error occurred (e.g., invalid dataset, unrecognized filter column, filter column is not string type).
  * @retval Non-negative Integer representing the count of rows marked as "of interest".
  *
  * @note
- * - The filter column must exist and must not be of string type.
+ * - The filter column must exist and must be of string type.
  * - The function uses `tokenIsNumber` to determine if an entry is a valid number.
  *
  * @sa SDDS_SetRowsOfInterest, SDDS_MatchRowsOfInterest, SDDS_DeleteUnsetRows
@@ -3711,21 +3790,9 @@ int64_t SDDS_FilterRowsByNumScan(SDDS_DATASET *SDDS_dataset, char *filter_column
     SDDS_SetError("Unable to filter rows--column name is unrecognized (SDDS_FilterRowsByNumScan)");
     return (-1);
   }
-  switch (SDDS_GetColumnType(SDDS_dataset, index)) {
-  case SDDS_SHORT:
-  case SDDS_USHORT:
-  case SDDS_LONG:
-  case SDDS_ULONG:
-  case SDDS_LONG64:
-  case SDDS_ULONG64:
-  case SDDS_FLOAT:
-  case SDDS_DOUBLE:
-  case SDDS_LONGDOUBLE:
-  case SDDS_CHARACTER:
+  if (SDDS_GetColumnType(SDDS_dataset, index) != SDDS_STRING) {
     SDDS_SetError("Unable to filter rows--filter column is not string type (SDDS_FilterRowsByNumScan)");
     return (-1);
-  default:
-    break;
   }
   invert = mode & NUMSCANFILTER_INVERT ? 1 : 0;
   for (i = count = 0; i < SDDS_dataset->n_rows; i++) {
@@ -3936,6 +4003,15 @@ int32_t SDDS_CopyColumn(SDDS_DATASET *SDDS_dataset, int32_t target, int32_t sour
   }
   cd_target = SDDS_dataset->layout.column_definition + target;
   cd_source = SDDS_dataset->layout.column_definition + source;
+  if (cd_target->type == SDDS_ENUM || cd_source->type == SDDS_ENUM) {
+    if (!SDDS_CheckEnumFieldCompatibility(SDDS_dataset, SDDS_dataset, 0, target, source)) return 0;
+    if (SDDS_dataset->data) {
+      if (!SDDS_ValidateEnumData(cd_source->enum_definition, SDDS_dataset->data[source], SDDS_dataset->n_rows)) return 0;
+      if (target != source) memcpy(SDDS_dataset->data[target], SDDS_dataset->data[source], sizeof(int32_t) * SDDS_dataset->n_rows);
+    }
+    return 1;
+  }
+
   SDDS_dataset->column_flag[target] = SDDS_dataset->column_flag[source];
   if (SDDS_dataset->n_rows_allocated) {
     if (cd_target->type != cd_source->type) {
@@ -3984,6 +4060,11 @@ int32_t SDDS_DeleteParameter(SDDS_DATASET *SDDS_dataset, char *parameter_name) {
     SDDS_SetError("Unable to delete parameter--unrecognized parameter name (SDDS_DeleteParameter)");
     return (0);
   }
+  for (i = 0; i < SDDS_dataset->layout.n_parameters; i++)
+    if (SDDS_dataset->layout.parameter_definition[i].type == SDDS_ENUM) {
+      SDDS_SetError("In-place legacy parameter deletion with enums is unsupported; construct a new layout");
+      return 0;
+    }
   for (i = index + 1; i < SDDS_dataset->layout.n_parameters; i++) {
     if (!SDDS_CopyParameter(SDDS_dataset, i - 1, i)) {
       SDDS_SetError("Unable to delete parameter--error copying parameter (SDDS_DeleteParameter)");
@@ -4025,6 +4106,15 @@ int32_t SDDS_CopyParameter(SDDS_DATASET *SDDS_dataset, int32_t target, int32_t s
   }
   cd_target = SDDS_dataset->layout.parameter_definition + target;
   cd_source = SDDS_dataset->layout.parameter_definition + source;
+  if (cd_target->type == SDDS_ENUM || cd_source->type == SDDS_ENUM) {
+    if (!SDDS_CheckEnumFieldCompatibility(SDDS_dataset, SDDS_dataset, 1, target, source)) return 0;
+    if (SDDS_dataset->parameter) {
+      if (!SDDS_ValidateEnumData(cd_source->enum_definition, SDDS_dataset->parameter[source], 1)) return 0;
+      if (target != source) memcpy(SDDS_dataset->parameter[target], SDDS_dataset->parameter[source], sizeof(int32_t) * 1);
+    }
+    return 1;
+  }
+
   if (SDDS_dataset->parameter) {
     if (cd_target->type != cd_source->type) {
       if (!(SDDS_dataset->parameter[target] = SDDS_Realloc(SDDS_dataset->data[target], SDDS_type_size[cd_source->type - 1]))) {
@@ -4316,6 +4406,21 @@ char **SDDS_GetArrayInString(SDDS_DATASET *SDDS_dataset, char *array_name, int32
   }
   rawData = original->data;
   switch (type) {
+  case SDDS_ENUM:
+    if (!SDDS_ValidateEnumData(original->definition->enum_definition, rawData, elements)) {
+      free(data);
+      return NULL;
+    }
+    for (i = 0; i < elements; i++) {
+      const char *label = SDDS_EnumCodeToLabel(original->definition->enum_definition, ((int32_t *)rawData)[i]);
+      if (!SDDS_CopyString(&data[i], label)) {
+        while (i > 0) free(data[--i]);
+        free(data);
+        SDDS_SetError("Unable to get array--enum label copy failure (SDDS_GetArrayInString)");
+        return NULL;
+      }
+    }
+    break;
   case SDDS_LONGDOUBLE:
     for (i = 0; i < elements; i++) {
       if (LDBL_DIG == 18) {
@@ -4385,6 +4490,10 @@ char **SDDS_GetArrayInString(SDDS_DATASET *SDDS_dataset, char *array_name, int32
       SDDS_CopyString(&data[i], ((char **)rawData)[i]);
     }
     break;
+  default:
+    free(data);
+    SDDS_SetError("Unable to get array--unknown type (SDDS_GetArrayInString)");
+    return NULL;
   }
   *values = elements;
   return data;
@@ -4407,7 +4516,7 @@ char **SDDS_GetArrayInString(SDDS_DATASET *SDDS_dataset, char *array_name, int32
  *
  * @note
  * - The caller is responsible for freeing the allocated memory for the returned `double` array.
- * - The function does not handle string-type arrays; attempting to retrieve a string array will result in an error.
+ * - Only numeric and character arrays are supported; categorical enums require explicit conversion.
  *
  * @sa SDDS_GetArray, SDDS_GetArrayInString, SDDS_GetArrayInLong
  */
@@ -4429,8 +4538,9 @@ double *SDDS_GetArrayInDoubles(SDDS_DATASET *SDDS_dataset, char *array_name, int
     return (NULL);
   }
   original = SDDS_dataset->array + index;
-  if ((type = original->definition->type) == SDDS_STRING) {
-    SDDS_SetError("Unable to get array--string type (SDDS_GetArrayInDoubles)");
+  type = original->definition->type;
+  if (!SDDS_NUMERIC_TYPE(type) && type != SDDS_CHARACTER) {
+    SDDS_SetError("Unable to get array--nonnumeric type (SDDS_GetArrayInDoubles)");
     return (NULL);
   }
   elements = original->elements;
@@ -4512,7 +4622,7 @@ double *SDDS_GetArrayInDoubles(SDDS_DATASET *SDDS_dataset, char *array_name, int
  *
  * @note
  * - The caller is responsible for freeing the allocated memory for the returned `int32_t` array.
- * - The function does not handle string-type arrays; attempting to retrieve a string array will result in an error.
+ * - Only numeric and character arrays are supported; categorical enums require explicit conversion.
  *
  * @sa SDDS_GetArray, SDDS_GetArrayInDoubles, SDDS_GetArrayInString
  */
@@ -4534,8 +4644,9 @@ int32_t *SDDS_GetArrayInLong(SDDS_DATASET *SDDS_dataset, char *array_name, int32
     return (NULL);
   }
   original = SDDS_dataset->array + index;
-  if ((type = original->definition->type) == SDDS_STRING) {
-    SDDS_SetError("Unable to get array--string type (SDDS_GetArrayInLong)");
+  type = original->definition->type;
+  if (!SDDS_NUMERIC_TYPE(type) && type != SDDS_CHARACTER) {
+    SDDS_SetError("Unable to get array--nonnumeric type (SDDS_GetArrayInLong)");
     return (NULL);
   }
   elements = original->elements;
@@ -4669,7 +4780,7 @@ int32_t SDDS_GetDescription(SDDS_DATASET *SDDS_dataset, char **text, char **cont
  * @note
  * - The `new_units` parameter must not be `NULL`. Passing `NULL` will result in an error.
  * - If the dataset has not been read yet (`pages_read == 0`), the conversion factor is stored but not applied immediately.
- * - The function handles various data types, ensuring that the conversion factor is appropriately applied based on the array's type.
+ * - Only numeric arrays are supported; categorical enums require explicit conversion before scaling.
  *
  * @sa SDDS_SetColumnUnitsConversion, SDDS_SetParameterUnitsConversion, SDDS_GetArray
  */
@@ -4689,6 +4800,10 @@ int32_t  SDDS_SetArrayUnitsConversion(SDDS_DATASET *SDDS_dataset, char *array_na
   }
   if (!(type = SDDS_GetArrayType(SDDS_dataset, index))) {
     SDDS_SetError("Unable to get array--data type undefined (SDDS_SetArrayUnitsConversion)");
+    return(0);
+  }
+  if (!SDDS_NUMERIC_TYPE(type)) {
+    SDDS_SetError("Unable to convert units of nonnumeric array (SDDS_SetArrayUnitsConversion)");
     return(0);
   }
   if (SDDS_dataset->layout.array_definition[index].units != NULL) {
@@ -4782,7 +4897,7 @@ int32_t  SDDS_SetArrayUnitsConversion(SDDS_DATASET *SDDS_dataset, char *array_na
  * @note
  * - The `new_units` parameter must not be `NULL`. Passing `NULL` will result in an error.
  * - If the dataset has not been read yet (`pages_read == 0`), the conversion factor is stored but not applied immediately.
- * - The function handles various data types, ensuring that the conversion factor is appropriately applied based on the column's type.
+ * - Only numeric columns are supported; categorical enums require explicit conversion before scaling.
  *
  * @sa SDDS_SetArrayUnitsConversion, SDDS_SetParameterUnitsConversion, SDDS_GetColumn
  */
@@ -4802,6 +4917,10 @@ int32_t  SDDS_SetColumnUnitsConversion(SDDS_DATASET *SDDS_dataset, char *column_
   }
   if (!(type = SDDS_GetColumnType(SDDS_dataset, index))) {
     SDDS_SetError("Unable to get column--data type undefined (SDDS_SetColumnUnitsConversion)");
+    return(0);
+  }
+  if (!SDDS_NUMERIC_TYPE(type)) {
+    SDDS_SetError("Unable to convert units of nonnumeric column (SDDS_SetColumnUnitsConversion)");
     return(0);
   }
   if (SDDS_dataset->layout.column_definition[index].units != NULL) {
@@ -4897,7 +5016,7 @@ int32_t  SDDS_SetColumnUnitsConversion(SDDS_DATASET *SDDS_dataset, char *column_
  * @note
  * - The `new_units` parameter must not be `NULL`. Passing `NULL` will result in an error.
  * - If the dataset has not been read yet (`pages_read == 0`), the conversion factor is stored but not applied immediately.
- * - The function handles various data types, ensuring that the conversion factor is appropriately applied based on the parameter's type.
+ * - Only numeric parameters are supported; categorical enums require explicit conversion before scaling.
  *
  * @sa SDDS_SetArrayUnitsConversion, SDDS_SetColumnUnitsConversion, SDDS_GetParameter
  */
@@ -4916,6 +5035,10 @@ int32_t  SDDS_SetParameterUnitsConversion(SDDS_DATASET *SDDS_dataset, char *para
   }
   if (!(type = SDDS_GetParameterType(SDDS_dataset, index))) {
     SDDS_SetError("Unable to get parameter--data type undefined (SDDS_SetParameterUnitsConversion)");
+    return(0);
+  }
+  if (!SDDS_NUMERIC_TYPE(type)) {
+    SDDS_SetError("Unable to convert units of nonnumeric parameter (SDDS_SetParameterUnitsConversion)");
     return(0);
   }
   if (SDDS_dataset->layout.parameter_definition[index].units != NULL) {

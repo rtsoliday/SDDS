@@ -91,7 +91,7 @@ char *option[N_OPTIONS] = {
 #define CLO_FLOAT 6
 #define CLO_DOUBLE 7
 #define CLO_LONGDOUBLE 8
-#define TYPES 9
+#define TYPES 11
 
 char *types[TYPES] = {
   "short",
@@ -103,6 +103,8 @@ char *types[TYPES] = {
   "float",
   "double",
   "longdouble",
+  "enum",
+  "string",
 };
 
 typedef struct {
@@ -118,12 +120,48 @@ typedef struct {
   char *new_type;
 } CAST_REQUEST;
 
+typedef struct {
+  int32_t kind;
+  char *name, *mapping, *storage;
+  int used;
+} ENUM_TARGET;
+
+/** @brief Apply an explicit enum conversion only to a new output layout. */
+static int configureCast(SDDS_DATASET *output, CAST_NAME *casts, int32_t kind, ENUM_TARGET *targets, long count) {
+  long i, j;
+  int converted = 0;
+  for (i = 0; i < casts->n; i++) {
+    int32_t index = (int32_t)casts->index[i];
+    int32_t oldType = kind == COLUMN_MODE ? output->layout.column_definition[index].type :
+      kind == PARAMETER_MODE ? output->layout.parameter_definition[index].type : output->layout.array_definition[index].type;
+    int32_t newType = SDDS_IdentifyType(casts->new_type[i]);
+    const char *mapping = NULL;
+    for (j = 0; j < count; j++)
+      if (targets[j].kind == kind && !strcmp(targets[j].name, casts->name[i])) {
+        if (mapping) SDDS_Bomb("duplicate -enumValues definition");
+        mapping = targets[j].mapping; targets[j].used = 1;
+      }
+    if (oldType == SDDS_ENUM || newType == SDDS_ENUM) {
+      if (!SDDS_ConfigureEnumConversion(output, kind, index, newType, mapping))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      converted = 1;
+    } else {
+      int32_t ok = kind == COLUMN_MODE ? SDDS_ChangeColumnInformation(output, "type", casts->new_type[i], SDDS_PASS_BY_STRING | SDDS_SET_BY_NAME, casts->name[i]) :
+        kind == PARAMETER_MODE ? SDDS_ChangeParameterInformation(output, "type", casts->new_type[i], SDDS_PASS_BY_STRING | SDDS_SET_BY_NAME, casts->name[i]) :
+        SDDS_ChangeArrayInformation(output, "type", casts->new_type[i], SDDS_PASS_BY_STRING | SDDS_SET_BY_NAME, casts->name[i]);
+      if (!ok) SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    }
+  }
+  return converted;
+}
+
 char *USAGE =
   "sddscast [<source-file>] [<target-file>] \n"
   "         [-pipe=[<input>][,<output>]] \n"
   "         [-noWarnings] \n"
   "          -cast=<mode>,<columnNames>,<typeNames>,<newType>\n"
   "         [-majorOrder=row|column]\n"
+  "         [-enumValues=<column|parameter|array>,<name>,<code:label,...>]\n"
   "Options:\n"
   "  -pipe=[<input>][,<output>]  Specify input and/or output pipes.\n"
   "  -noWarnings                 Suppress warning messages.\n"
@@ -133,7 +171,8 @@ char *USAGE =
   "                              <names>: Comma-separated list of names (supports wildcards).\n"
   "                              <types>: Comma-separated list of current types.\n"
   "                              <newType>: Target datatype (long, ulong, long64, ulong64, short, ushort,\n"
-  "                                         longdouble, double, float).\n\n"
+  "                                         longdouble, double, float, enum, string).\n"
+  "  Enums convert explicitly to/from long codes or string labels; enum targets require -enumValues.\n\n"
   "Description:\n"
   "  sddscast converts the numeric columns, parameters, or arrays from one datatype to another within an SDDS file.\n\n"
   "Author: Hairong Shang\n"
@@ -155,6 +194,10 @@ int main(int argc, char **argv) {
   long col_requests, par_requests, array_requests, rows;
   unsigned long pipeFlags, majorOrderFlag;
   short columnMajorOrder = -1;
+  ENUM_TARGET *enumTargets = NULL;
+  long enumTargetCount = 0, writeArg = 1;
+  int enumConversions = 0;
+  int32_t readResult;
 
   column_cast.n = parameter_cast.n = array_cast.n = 0;
   column_cast.name = column_cast.new_type = NULL;
@@ -165,6 +208,23 @@ int main(int argc, char **argv) {
   col_requests = par_requests = array_requests = rows = 0;
 
   SDDS_RegisterProgramName(argv[0]);
+  /* Consume exactly two structural commas; leave the logical mapping untouched. */
+  for (i = 1; i < argc; i++) {
+    if (!strncmp(argv[i], "-enumValues=", 12)) {
+      char *text = NULL, *first, *second;
+      int32_t kind;
+      if (!SDDS_CopyString(&text, argv[i] + 12)) SDDS_Bomb("enum option allocation failed");
+      first = strchr(text, ',');
+      second = first ? strchr(first + 1, ',') : NULL;
+      if (!first || !second || !second[1]) SDDS_Bomb("invalid -enumValues syntax");
+      *first++ = 0; *second++ = 0;
+      kind = match_string(text, mode_name, MODES, EXACT_MATCH);
+      if (kind < 0 || !*first) SDDS_Bomb("invalid -enumValues element kind/name");
+      enumTargets = SDDS_Realloc(enumTargets, sizeof(*enumTargets) * (enumTargetCount + 1));
+      enumTargets[enumTargetCount++] = (ENUM_TARGET){kind, first, second, text, 0};
+    } else argv[writeArg++] = argv[i];
+  }
+  argc = writeArg;
   argc = scanargs(&s_arg, argc, argv);
   if (argc < 3)
     bomb(NULL, USAGE);
@@ -197,10 +257,10 @@ int main(int argc, char **argv) {
           SDDS_Bomb("invalid -pipe syntax");
         break;
       case SET_CAST:
-        if (s_arg[i_arg].n_items < 4)
+        if (s_arg[i_arg].n_items != 5)
           SDDS_Bomb("invalid -cast syntax");
         if (match_string(s_arg[i_arg].list[4], types, TYPES, MATCH_WHOLE_STRING) < 0) {
-          SDDS_Bomb("The new type to cast has to be a numeric type!");
+          SDDS_Bomb("Invalid target type; enum conversions support enum, long and string.");
         }
         switch (match_string(s_arg[i_arg].list[1], mode_name, MODES, 0)) {
         case COLUMN_MODE:
@@ -264,36 +324,25 @@ int main(int argc, char **argv) {
   process_cast_parameters(&SDDS_input, &parameter_cast, par_request, par_requests, noWarnings);
   process_cast_arrays(&SDDS_input, &array_cast, array_request, array_requests, noWarnings);
 
-  for (i = 0; i < column_cast.n; i++) {
-    if (!SDDS_ChangeColumnInformation(&SDDS_output, "type", column_cast.new_type[i], SDDS_PASS_BY_STRING | SDDS_SET_BY_NAME, column_cast.name[i])) {
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-      exit(EXIT_FAILURE);
-    }
-  }
-  for (i = 0; i < parameter_cast.n; i++) {
-    if (!SDDS_ChangeParameterInformation(&SDDS_output, "type", parameter_cast.new_type[i], SDDS_PASS_BY_STRING | SDDS_SET_BY_NAME, parameter_cast.name[i])) {
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-      exit(EXIT_FAILURE);
-    }
-  }
-
-  for (i = 0; i < array_cast.n; i++) {
-    if (!SDDS_ChangeArrayInformation(&SDDS_output, "type", array_cast.new_type[i], SDDS_PASS_BY_STRING | SDDS_SET_BY_NAME, array_cast.name[i])) {
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-      exit(EXIT_FAILURE);
-    }
-  }
+  enumConversions |= configureCast(&SDDS_output, &column_cast, COLUMN_MODE, enumTargets, enumTargetCount);
+  enumConversions |= configureCast(&SDDS_output, &parameter_cast, PARAMETER_MODE, enumTargets, enumTargetCount);
+  enumConversions |= configureCast(&SDDS_output, &array_cast, ARRAY_MODE, enumTargets, enumTargetCount);
+  for (i = 0; i < enumTargetCount; i++)
+    if (!enumTargets[i].used) SDDS_Bomb("-enumValues did not match a cast target");
 
   if (!SDDS_WriteLayout(&SDDS_output))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-  while (SDDS_ReadPage(&SDDS_input) > 0) {
-    if (!SDDS_CopyPage(&SDDS_output, &SDDS_input) || !SDDS_WritePage(&SDDS_output)) {
+  while ((readResult = SDDS_ReadPage(&SDDS_input)) > 0) {
+    if (!(enumConversions ? SDDS_CopyPageWithEnumConversions(&SDDS_output, &SDDS_input) : SDDS_CopyPage(&SDDS_output, &SDDS_input)) || !SDDS_WritePage(&SDDS_output)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
       exit(EXIT_FAILURE);
     }
   }
 
+  if (!readResult) SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  for (i = 0; i < enumTargetCount; i++) free(enumTargets[i].storage);
+  free(enumTargets);
   if (!SDDS_Terminate(&SDDS_input) || !SDDS_Terminate(&SDDS_output)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);
@@ -556,15 +605,16 @@ void process_cast_arrays(SDDS_DATASET *SDDS_input, CAST_NAME *array_cast, CAST_R
 long add_casts(char *old_type, long sdds_type, CAST_NAME *cast_name, char *add_name, char *new_type, long index, long noWarnings) {
   long add = 0;
 
-  if (!(SDDS_NUMERIC_TYPE(sdds_type))) {
-    if (!noWarnings)
-      fprintf(stderr, "Warning: The type of '%s' is not numeric and cannot be cast to a numeric type.\n", add_name);
-    return 0;
-  }
   if (strcmp(old_type, "*") == 0)
     add = 1;
   else {
     switch (sdds_type) {
+    case SDDS_ENUM:
+      if (!strcmp(old_type, "enum")) add = 1;
+      break;
+    case SDDS_STRING:
+      if (!strcmp(old_type, "string")) add = 1;
+      break;
     case SDDS_LONGDOUBLE:
       if (strcmp(old_type, "longdouble") == 0)
         add = 1;
@@ -609,6 +659,18 @@ long add_casts(char *old_type, long sdds_type, CAST_NAME *cast_name, char *add_n
     if (!noWarnings)
       fprintf(stderr, "Warning: The type of '%s' does not match '%s'.\n", add_name, old_type);
     return 0;
+  }
+  /* A name wildcard can include fields excluded by the source-type filter. */
+  {
+    int32_t target = SDDS_IdentifyType(new_type);
+    if (sdds_type == SDDS_ENUM || target == SDDS_ENUM) {
+      if (!((sdds_type == SDDS_ENUM && (target == SDDS_ENUM || target == SDDS_LONG || target == SDDS_STRING)) ||
+            (target == SDDS_ENUM && (sdds_type == SDDS_LONG || sdds_type == SDDS_STRING))))
+        SDDS_Bomb("enum conversions require enum, long codes, or string labels");
+    } else if (!SDDS_NUMERIC_TYPE(sdds_type) || !SDDS_NUMERIC_TYPE(target)) {
+      if (!noWarnings) fprintf(stderr, "Warning: unsupported nonnumeric cast for %s\n", add_name);
+      return 0;
+    }
   }
   cast_name->name = SDDS_Realloc(cast_name->name, sizeof(char *) * (cast_name->n + 1));
   cast_name->new_type = SDDS_Realloc(cast_name->new_type, sizeof(char *) * (cast_name->n + 1));

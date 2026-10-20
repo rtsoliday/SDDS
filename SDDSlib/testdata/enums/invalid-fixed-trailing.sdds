@@ -1,0 +1,6 @@
+SDDS6
+&parameter name=fixed, type=enum, enum_values="-1:FAULT", fixed_value="-1 0" &end
+&column name=state, type=enum, enum_values="-1:FAULT" &end
+&data mode=ascii &end
+1
+-1

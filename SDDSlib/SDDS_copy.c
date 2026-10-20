@@ -81,19 +81,19 @@ int32_t SDDS_InitializeCopy(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source
     if ((extension = strrchr(filename, '.')) && ((strcmp(extension, ".xz") == 0) || (strcmp(extension, ".lzma") == 0))) {
       SDDS_target->layout.lzmaFile = 1;
       if (!filemode) {
-        sprintf(s, "Unable to open file %s (SDDS_InitializeCopy)", filename);
+        snprintf(s, sizeof(s), "Unable to open file %s (SDDS_InitializeCopy)", filename);
         SDDS_SetError(s);
         return (0);
       }
       if (!(SDDS_target->layout.lzmafp = lzma_open(filename, filemode))) {
-        sprintf(s, "Unable to open file %s for writing (SDDS_InitializeCopy)", filename);
+        snprintf(s, sizeof(s), "Unable to open file %s for writing (SDDS_InitializeCopy)", filename);
         SDDS_SetError(s);
         return 0;
       }
       SDDS_target->layout.fp = SDDS_target->layout.lzmafp->fp;
     } else {
       if (!filemode || !(SDDS_target->layout.fp = fopen(filename, filemode))) {
-        sprintf(s, "Unable to open file %s (SDDS_InitializeCopy)", filename);
+        snprintf(s, sizeof(s), "Unable to open file %s (SDDS_InitializeCopy)", filename);
         SDDS_SetError(s);
         return (0);
       }
@@ -108,7 +108,7 @@ int32_t SDDS_InitializeCopy(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source
     if ((extension = strrchr(filename, '.')) && strcmp(extension, ".gz") == 0) {
       SDDS_target->layout.gzipFile = 1;
       if ((SDDS_target->layout.gzfp = gzdopen(fileno(SDDS_target->layout.fp), filemode)) == NULL) {
-        sprintf(s, "Unable to open compressed file %s for writing (SDDS_InitializeCopy)", filename);
+        snprintf(s, sizeof(s), "Unable to open compressed file %s for writing (SDDS_InitializeCopy)", filename);
         SDDS_SetError(s);
         return 0;
       }
@@ -168,8 +168,8 @@ int32_t SDDS_AppendLayout(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source, 
 
   for (i = 0; i < source->n_columns; i++)
     if (SDDS_GetColumnIndex(SDDS_target, source->column_definition[i].name) < 0 &&
-        SDDS_DefineColumn(SDDS_target, source->column_definition[i].name,
-                          source->column_definition[i].symbol, source->column_definition[i].units, source->column_definition[i].description, source->column_definition[i].format_string, source->column_definition[i].type, source->column_definition[i].field_length) < 0) {
+        (source->column_definition[i].type == SDDS_ENUM ? SDDS_DefineEnumColumn(SDDS_target, source->column_definition[i].name, source->column_definition[i].symbol, source->column_definition[i].units, source->column_definition[i].description, source->column_definition[i].format_string, source->column_definition[i].enum_values, source->column_definition[i].field_length) : SDDS_DefineColumn(SDDS_target, source->column_definition[i].name,
+                          source->column_definition[i].symbol, source->column_definition[i].units, source->column_definition[i].description, source->column_definition[i].format_string, source->column_definition[i].type, source->column_definition[i].field_length)) < 0) {
       SDDS_DeferSavingLayout(SDDS_target, 0);
       SDDS_SetError("Unable to define column (SDDS_AppendLayout)");
       return (0);
@@ -177,8 +177,8 @@ int32_t SDDS_AppendLayout(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source, 
 
   for (i = 0; i < source->n_parameters; i++)
     if (SDDS_GetParameterIndex(SDDS_target, source->parameter_definition[i].name) < 0 &&
-        SDDS_DefineParameter(SDDS_target, source->parameter_definition[i].name,
-                             source->parameter_definition[i].symbol, source->parameter_definition[i].units, source->parameter_definition[i].description, source->parameter_definition[i].format_string, source->parameter_definition[i].type, source->parameter_definition[i].fixed_value) < 0) {
+        (source->parameter_definition[i].type == SDDS_ENUM ? SDDS_DefineEnumParameter(SDDS_target, source->parameter_definition[i].name, source->parameter_definition[i].symbol, source->parameter_definition[i].units, source->parameter_definition[i].description, source->parameter_definition[i].format_string, source->parameter_definition[i].enum_values, source->parameter_definition[i].fixed_value) : SDDS_DefineParameter(SDDS_target, source->parameter_definition[i].name,
+                             source->parameter_definition[i].symbol, source->parameter_definition[i].units, source->parameter_definition[i].description, source->parameter_definition[i].format_string, source->parameter_definition[i].type, source->parameter_definition[i].fixed_value)) < 0) {
       SDDS_DeferSavingLayout(SDDS_target, 0);
       SDDS_SetError("Unable to define parameter (SDDS_AppendLayout)");
       return (0);
@@ -194,10 +194,10 @@ int32_t SDDS_AppendLayout(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source, 
 
   for (i = 0; i < source->n_arrays; i++)
     if (SDDS_GetArrayIndex(SDDS_target, source->array_definition[i].name) < 0 &&
-        SDDS_DefineArray(SDDS_target, source->array_definition[i].name,
+        (source->array_definition[i].type == SDDS_ENUM ? SDDS_DefineEnumArray(SDDS_target, source->array_definition[i].name, source->array_definition[i].symbol, source->array_definition[i].units, source->array_definition[i].description, source->array_definition[i].format_string, source->array_definition[i].enum_values, source->array_definition[i].field_length, source->array_definition[i].dimensions, source->array_definition[i].group_name) : SDDS_DefineArray(SDDS_target, source->array_definition[i].name,
                          source->array_definition[i].symbol,
                          source->array_definition[i].units, source->array_definition[i].description,
-                         source->array_definition[i].format_string, source->array_definition[i].type, source->array_definition[i].field_length, source->array_definition[i].dimensions, source->array_definition[i].group_name) < 0) {
+                         source->array_definition[i].format_string, source->array_definition[i].type, source->array_definition[i].field_length, source->array_definition[i].dimensions, source->array_definition[i].group_name)) < 0) {
       SDDS_DeferSavingLayout(SDDS_target, 0);
       SDDS_SetError("Unable to define array (SDDS_AppendLayout)");
       return (0);
@@ -242,14 +242,14 @@ int32_t SDDS_CopyLayout(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
     SDDS_CopyString(&target->contents, source->contents);
   SDDS_DeferSavingLayout(SDDS_target, 1);
   for (i = 0; i < source->n_columns; i++)
-    if (SDDS_DefineColumn(SDDS_target, source->column_definition[i].name, source->column_definition[i].symbol,
-                          source->column_definition[i].units, source->column_definition[i].description, source->column_definition[i].format_string, source->column_definition[i].type, source->column_definition[i].field_length) < 0) {
+    if ((source->column_definition[i].type == SDDS_ENUM ? SDDS_DefineEnumColumn(SDDS_target, source->column_definition[i].name, source->column_definition[i].symbol, source->column_definition[i].units, source->column_definition[i].description, source->column_definition[i].format_string, source->column_definition[i].enum_values, source->column_definition[i].field_length) : SDDS_DefineColumn(SDDS_target, source->column_definition[i].name, source->column_definition[i].symbol,
+                          source->column_definition[i].units, source->column_definition[i].description, source->column_definition[i].format_string, source->column_definition[i].type, source->column_definition[i].field_length)) < 0) {
       SDDS_SetError("Unable to define column (SDDS_CopyLayout)");
       return (0);
     }
   for (i = 0; i < source->n_parameters; i++)
-    if (SDDS_DefineParameter(SDDS_target, source->parameter_definition[i].name, source->parameter_definition[i].symbol,
-                             source->parameter_definition[i].units, source->parameter_definition[i].description, source->parameter_definition[i].format_string, source->parameter_definition[i].type, source->parameter_definition[i].fixed_value) < 0) {
+    if ((source->parameter_definition[i].type == SDDS_ENUM ? SDDS_DefineEnumParameter(SDDS_target, source->parameter_definition[i].name, source->parameter_definition[i].symbol, source->parameter_definition[i].units, source->parameter_definition[i].description, source->parameter_definition[i].format_string, source->parameter_definition[i].enum_values, source->parameter_definition[i].fixed_value) : SDDS_DefineParameter(SDDS_target, source->parameter_definition[i].name, source->parameter_definition[i].symbol,
+                             source->parameter_definition[i].units, source->parameter_definition[i].description, source->parameter_definition[i].format_string, source->parameter_definition[i].type, source->parameter_definition[i].fixed_value)) < 0) {
       SDDS_SetError("Unable to define parameter (SDDS_CopyLayout)");
       return (0);
     }
@@ -261,9 +261,9 @@ int32_t SDDS_CopyLayout(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
     }
 
   for (i = 0; i < source->n_arrays; i++)
-    if (SDDS_DefineArray(SDDS_target, source->array_definition[i].name, source->array_definition[i].symbol,
+    if ((source->array_definition[i].type == SDDS_ENUM ? SDDS_DefineEnumArray(SDDS_target, source->array_definition[i].name, source->array_definition[i].symbol, source->array_definition[i].units, source->array_definition[i].description, source->array_definition[i].format_string, source->array_definition[i].enum_values, source->array_definition[i].field_length, source->array_definition[i].dimensions, source->array_definition[i].group_name) : SDDS_DefineArray(SDDS_target, source->array_definition[i].name, source->array_definition[i].symbol,
                          source->array_definition[i].units, source->array_definition[i].description,
-                         source->array_definition[i].format_string, source->array_definition[i].type, source->array_definition[i].field_length, source->array_definition[i].dimensions, source->array_definition[i].group_name) < 0) {
+                         source->array_definition[i].format_string, source->array_definition[i].type, source->array_definition[i].field_length, source->array_definition[i].dimensions, source->array_definition[i].group_name)) < 0) {
       SDDS_SetError("Unable to define array (SDDS_CopyLayout)");
       return (0);
     }
@@ -284,6 +284,7 @@ int32_t SDDS_CopyLayout(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
  * @return Returns 1 on success; 0 on failure, with an error message recorded.
  */
 int32_t SDDS_CopyParameters(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
+  if (!SDDS_CheckEnumCopy(SDDS_target, SDDS_source, 1)) return 0;
   int32_t i, target_index;
   char *buffer = NULL; /* will be sized to hold any SDDS data type with room to spare */
   char messageBuffer[1024];
@@ -303,17 +304,17 @@ int32_t SDDS_CopyParameters(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source
       continue;
     if (SDDS_source->layout.parameter_definition[i].type != SDDS_target->layout.parameter_definition[target_index].type) {
       if (!SDDS_NUMERIC_TYPE(SDDS_source->layout.parameter_definition[i].type) || !SDDS_NUMERIC_TYPE(SDDS_target->layout.parameter_definition[target_index].type)) {
-        sprintf(messageBuffer, "Can't cast between nonnumeric types for parameters %s and %s (SDDS_CopyParameters)", SDDS_source->layout.parameter_definition[i].name, SDDS_target->layout.parameter_definition[target_index].name);
+        snprintf(messageBuffer, sizeof(messageBuffer), "Can't cast between nonnumeric types for parameters %s and %s (SDDS_CopyParameters)", SDDS_source->layout.parameter_definition[i].name, SDDS_target->layout.parameter_definition[target_index].name);
         SDDS_SetError(messageBuffer);
         return 0;
       }
       if (!SDDS_SetParameters(SDDS_target, SDDS_SET_BY_INDEX | SDDS_PASS_BY_REFERENCE, target_index, SDDS_CastValue(SDDS_source->parameter[i], 0, SDDS_source->layout.parameter_definition[i].type, SDDS_target->layout.parameter_definition[target_index].type, buffer), -1)) {
-        sprintf(messageBuffer, "Error setting parameter with cast value for parameters %s and %s (SDDS_CopyParameters)", SDDS_source->layout.parameter_definition[i].name, SDDS_target->layout.parameter_definition[target_index].name);
+        snprintf(messageBuffer, sizeof(messageBuffer), "Error setting parameter with cast value for parameters %s and %s (SDDS_CopyParameters)", SDDS_source->layout.parameter_definition[i].name, SDDS_target->layout.parameter_definition[target_index].name);
         SDDS_SetError(messageBuffer);
         return 0;
       }
     } else if (!SDDS_SetParameters(SDDS_target, SDDS_SET_BY_INDEX | SDDS_PASS_BY_REFERENCE, target_index, SDDS_source->parameter[i], -1)) {
-      sprintf(messageBuffer, "Unable to copy parameters for parameters %s and %s (SDDS_CopyParameters)", SDDS_source->layout.parameter_definition[i].name, SDDS_target->layout.parameter_definition[target_index].name);
+      snprintf(messageBuffer, sizeof(messageBuffer), "Unable to copy parameters for parameters %s and %s (SDDS_CopyParameters)", SDDS_source->layout.parameter_definition[i].name, SDDS_target->layout.parameter_definition[target_index].name);
       SDDS_SetError(messageBuffer);
       return (0);
     }
@@ -332,6 +333,7 @@ int32_t SDDS_CopyParameters(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source
  * @return Returns 1 on success; 0 on failure, with an error message recorded.
  */
 int32_t SDDS_CopyArrays(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
+  if (!SDDS_CheckEnumCopy(SDDS_target, SDDS_source, 2)) return 0;
   int32_t i, j, target_index;
   char messageBuffer[1024];
 
@@ -354,7 +356,7 @@ int32_t SDDS_CopyArrays(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
     }
     if (SDDS_source->layout.array_definition[i].type != SDDS_target->layout.array_definition[target_index].type) {
       if (!SDDS_NUMERIC_TYPE(SDDS_source->layout.array_definition[i].type) || !SDDS_NUMERIC_TYPE(SDDS_target->layout.array_definition[target_index].type)) {
-        sprintf(messageBuffer, "Can't cast between nonnumeric types for parameters %s and %s (SDDS_CopyArrays)", SDDS_source->layout.array_definition[i].name, SDDS_target->layout.array_definition[target_index].name);
+        snprintf(messageBuffer, sizeof(messageBuffer), "Can't cast between nonnumeric types for parameters %s and %s (SDDS_CopyArrays)", SDDS_source->layout.array_definition[i].name, SDDS_target->layout.array_definition[target_index].name);
         SDDS_SetError(messageBuffer);
         return 0;
       }
@@ -385,6 +387,7 @@ int32_t SDDS_CopyArrays(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
  * @return Returns 1 on success; 0 on failure, with an error message recorded.
  */
 int32_t SDDS_CopyColumns(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
+  if (!SDDS_CheckEnumCopy(SDDS_target, SDDS_source, 0)) return 0;
   int64_t i, j;
   int32_t target_index;
   SDDS_target->n_rows = 0;
@@ -437,6 +440,7 @@ int32_t SDDS_CopyColumns(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
  * @return Returns 1 on success; 0 on failure, with an error message recorded.
  */
 int32_t SDDS_CopyRowsOfInterest(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
+  if (!SDDS_CheckEnumCopy(SDDS_target, SDDS_source, 0)) return 0;
   int64_t i, j, k;
   int32_t size, target_index;
   /*  int32_t rows; */
@@ -474,7 +478,7 @@ int32_t SDDS_CopyRowsOfInterest(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_so
         for (k = 0; k < roi; k++) {
           if (!SDDS_CastValue(SDDS_source->data[i], rowList[k],
                               SDDS_source->layout.column_definition[i].type, SDDS_target->layout.column_definition[target_index].type, (char *)(SDDS_target->data[target_index]) + k * SDDS_type_size[SDDS_target->layout.column_definition[target_index].type - 1])) {
-            sprintf(buffer, "Problem with cast for column %s (SDDS_CopyRowsOfInterest)", SDDS_source->layout.column_definition[i].name);
+            snprintf(buffer, sizeof(buffer), "Problem with cast for column %s (SDDS_CopyRowsOfInterest)", SDDS_source->layout.column_definition[i].name);
             SDDS_SetError(buffer);
             return 0;
           }
@@ -482,7 +486,7 @@ int32_t SDDS_CopyRowsOfInterest(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_so
       }
     } else {
       if (SDDS_source->layout.column_definition[i].type != SDDS_target->layout.column_definition[target_index].type) {
-        sprintf(buffer, "Unable to copy columns---inconsistent data types for %s (SDDS_CopyRowsOfInterest)", SDDS_source->layout.column_definition[i].name);
+        snprintf(buffer, sizeof(buffer), "Unable to copy columns---inconsistent data types for %s (SDDS_CopyRowsOfInterest)", SDDS_source->layout.column_definition[i].name);
         SDDS_SetError(buffer);
         return (0);
       }
@@ -517,6 +521,7 @@ int32_t SDDS_CopyRowsOfInterest(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_so
  * @return Returns 1 on success; 0 on failure, with an error message recorded.
  */
 int32_t SDDS_CopyAdditionalRows(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source) {
+  if (!SDDS_CheckEnumCopy(SDDS_target, SDDS_source, 0)) return 0;
   int64_t i, j, sum;
   int32_t size, target_index;
   char buffer[1024];
@@ -538,7 +543,7 @@ int32_t SDDS_CopyAdditionalRows(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_so
         for (j = 0; j < SDDS_source->n_rows; j++) {
           if (!SDDS_CastValue(SDDS_source->data[i], j,
                               SDDS_source->layout.column_definition[i].type, SDDS_target->layout.column_definition[target_index].type, (char *)(SDDS_target->data[target_index]) + (j + SDDS_target->n_rows) * SDDS_type_size[SDDS_target->layout.column_definition[target_index].type - 1])) {
-            sprintf(buffer, "Problem with cast for column %s (SDDS_CopyAdditionalRows)", SDDS_source->layout.column_definition[i].name);
+            snprintf(buffer, sizeof(buffer), "Problem with cast for column %s (SDDS_CopyAdditionalRows)", SDDS_source->layout.column_definition[i].name);
             SDDS_SetError(buffer);
             return 0;
           }
@@ -546,7 +551,7 @@ int32_t SDDS_CopyAdditionalRows(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_so
       }
     } else {
       if (SDDS_source->layout.column_definition[i].type != SDDS_target->layout.column_definition[target_index].type) {
-        sprintf(buffer, "Unable to copy columns---inconsistent data types for %s (SDDS_CopyAdditionalRows)", SDDS_source->layout.column_definition[i].name);
+        snprintf(buffer, sizeof(buffer), "Unable to copy columns---inconsistent data types for %s (SDDS_CopyAdditionalRows)", SDDS_source->layout.column_definition[i].name);
         SDDS_SetError(buffer);
         return (0);
       }
@@ -763,6 +768,18 @@ int32_t SDDS_RestoreLayout(SDDS_DATASET *SDDS_dataset) {
   return (1);
 }
 
+/** @brief Check dictionaries only for columns selected for a row copy. */
+static int32_t checkSelectedEnumColumns(SDDS_DATASET *target, SDDS_DATASET *source) {
+  int32_t i, j;
+  for (i = 0; i < target->layout.n_columns; i++) {
+    j = SDDS_GetColumnIndex(source, target->layout.column_definition[i].name);
+    if (j >= 0 && source->column_flag[j] &&
+        !SDDS_CheckEnumFieldCompatibility(target, source, 0, i, j))
+      return 0;
+  }
+  return 1;
+}
+
 /**
  * Copies a row from the source SDDS_DATASET to the target SDDS_DATASET.
  * Only columns that exist in both datasets are copied.
@@ -783,6 +800,8 @@ int32_t SDDS_CopyRow(SDDS_DATASET *SDDS_target, int64_t target_row, SDDS_DATASET
     return (0);
   if (!SDDS_CheckDataset(SDDS_source, "SDDS_CopyRow"))
     return (0);
+  if (!checkSelectedEnumColumns(SDDS_target, SDDS_source))
+    return 0;
 
   if (target_row >= SDDS_target->n_rows_allocated) {
     SDDS_SetError("Unable to copy row--target page not large enough");
@@ -839,6 +858,8 @@ int32_t SDDS_CopyRowDirect(SDDS_DATASET *SDDS_target, int64_t target_row, SDDS_D
     return (0);
   if (!SDDS_CheckDataset(SDDS_source, "SDDS_CopyRow"))
     return (0);
+  if (!checkSelectedEnumColumns(SDDS_target, SDDS_source))
+    return 0;
 
   if (target_row >= SDDS_target->n_rows_allocated) {
     SDDS_SetError("Unable to copy row--target page not large enough");
@@ -880,6 +901,7 @@ int32_t SDDS_CopyRowDirect(SDDS_DATASET *SDDS_target, int64_t target_row, SDDS_D
  * @return Returns 1 on success; 0 on failure, with an error message recorded.
  */
 int32_t SDDS_CopyRows(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source, int64_t firstRow, int64_t lastRow) {
+  if (!SDDS_CheckEnumCopy(SDDS_target, SDDS_source, 0)) return 0;
   int64_t i, j, k;
   int32_t size, target_index;
   char buffer[1024];
@@ -915,7 +937,7 @@ int32_t SDDS_CopyRows(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source, int6
         for (k = 0; k < roi; k++) {
           if (!SDDS_CastValue(SDDS_source->data[i], rowList[k],
                               SDDS_source->layout.column_definition[i].type, SDDS_target->layout.column_definition[target_index].type, (char *)(SDDS_target->data[target_index]) + k * SDDS_type_size[SDDS_target->layout.column_definition[target_index].type - 1])) {
-            sprintf(buffer, "Problem with cast for column %s (SDDS_CopyRows)", SDDS_source->layout.column_definition[i].name);
+            snprintf(buffer, sizeof(buffer), "Problem with cast for column %s (SDDS_CopyRows)", SDDS_source->layout.column_definition[i].name);
             SDDS_SetError(buffer);
             return 0;
           }
@@ -923,7 +945,7 @@ int32_t SDDS_CopyRows(SDDS_DATASET *SDDS_target, SDDS_DATASET *SDDS_source, int6
       }
     } else {
       if (SDDS_source->layout.column_definition[i].type != SDDS_target->layout.column_definition[target_index].type) {
-        sprintf(buffer, "Unable to copy columns---inconsistent data types for %s (SDDS_CopyRows)", SDDS_source->layout.column_definition[i].name);
+        snprintf(buffer, sizeof(buffer), "Unable to copy columns---inconsistent data types for %s (SDDS_CopyRows)", SDDS_source->layout.column_definition[i].name);
         SDDS_SetError(buffer);
         return (0);
       }

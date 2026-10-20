@@ -54,6 +54,28 @@
 
 #include "SDDS.h"
 
+void SDDS_FreeUnownedEnums(SDDS_DATASET *dataset);
+void SDDS_InvalidateRpnColumnArray(COLUMN_DEFINITION *definition);
+int32_t SDDS_ScanFixedValue(const char *text, int32_t type, void *data);
+int32_t SDDS_ValidateEnumLayout(SDDS_DATASET *dataset);
+int32_t SDDS_ValidateEnumReadPage(SDDS_DATASET *dataset);
+int32_t SDDS_ValidateFixedEnumValue(const SDDS_ENUM_DEFINITION *definition, const char *text);
+int32_t SDDS6_GetNamelist(SDDS_DATASET *dataset, void *stream, int32_t compression);
+int32_t SDDS_FindFieldIndex(char *tag, SDDS_FIELD_INFORMATION *fields, int32_t count);
+int32_t SDDS_MatchEnum(char *value, SDDS_ENUM_PAIR *pairs);
+int32_t SDDS6_ParseNamelist(void *data, SDDS_FIELD_INFORMATION *fields, int32_t count, char *text);
+char *SDDS6_QuoteEnumValues(const char *text);
+char *SDDS6_CreateNamelist(const char *command, const void *data, SDDS_FIELD_INFORMATION *fields, int32_t count);
+int32_t SDDS6_WriteNamelist(void *stream, int32_t compression, const char *command, const void *data, SDDS_FIELD_INFORMATION *fields, int32_t count);
+#if SDDS_MPI_IO
+int32_t SDDS_MPI_BroadcastLayout6(SDDS_DATASET *dataset);
+int32_t SDDS_MPI_BroadcastEnums(SDDS_DATASET *dataset);
+int32_t SDDS_MPI_CheckEnumLayout(SDDS_DATASET *dataset);
+int32_t SDDS_MPI_ValidateEnumPage(SDDS_DATASET *dataset);
+int32_t SDDS_MPI_ValidateEnumReadPage(SDDS_DATASET *dataset);
+int32_t SDDS_MPI_BroadcastTitleData(SDDS_DATASET *dataset);
+#endif
+
 #if !defined(_SDDS_internal_)
 #  define _SDDS_internal_ 1
 

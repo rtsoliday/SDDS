@@ -90,11 +90,14 @@
  */
 #define SDDS_CHARACTER     11
 
+/** @brief Categorical signed 32-bit code, interpreted through an element dictionary. */
+#define SDDS_ENUM          12
+
 /**
  * @def SDDS_NUM_TYPES
  * @brief Total number of defined SDDS data types.
  */
-#define SDDS_NUM_TYPES     11
+#define SDDS_NUM_TYPES     12
 
 /**
  * @def SDDS_INTEGER_TYPE(type)
@@ -154,7 +157,7 @@
  *
  * This value extends beyond the defined types to allow functions to accept any numeric type.
  */
-#define SDDS_ANY_NUMERIC_TYPE (SDDS_NUM_TYPES + 1)
+#define SDDS_ANY_NUMERIC_TYPE 0x10001
 
 /**
  * @def SDDS_ANY_FLOATING_TYPE
@@ -162,7 +165,7 @@
  *
  * This value extends beyond the defined types to allow functions to accept any floating-point type.
  */
-#define SDDS_ANY_FLOATING_TYPE (SDDS_NUM_TYPES + 2)
+#define SDDS_ANY_FLOATING_TYPE 0x10002
 
 /**
  * @def SDDS_ANY_INTEGER_TYPE
@@ -170,7 +173,7 @@
  *
  * This value extends beyond the defined types to allow functions to accept any integer type.
  */
-#define SDDS_ANY_INTEGER_TYPE (SDDS_NUM_TYPES + 3)
+#define SDDS_ANY_INTEGER_TYPE 0x10003
 
 /**
  * @brief Indicates that the SDDS types have been defined.

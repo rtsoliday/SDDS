@@ -185,6 +185,9 @@ int main( int argc, char **argv ) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return(1);
   }
+  if (!SDDS_CheckEnumExport(&SDDS_table))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
   file_id = H5Fcreate(output, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
 
   if (!SDDS_GetDescription(&SDDS_table, &description, &contents)) {

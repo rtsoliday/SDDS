@@ -99,7 +99,7 @@ template <class To>
 Scalar convertTo(const Scalar &value, RoundingMode rounding) {
   return std::visit([&](const auto &source) -> Scalar {
     using From = std::decay_t<decltype(source)>;
-    if constexpr (std::is_same_v<From, std::string>) {
+    if constexpr (std::is_same_v<From, std::string> || std::is_same_v<From, EnumValue>) {
       typeError("strings cannot be converted to numeric SDDS types");
     } else {
       return checkedNumericCast<To>(source, rounding);
@@ -138,6 +138,7 @@ Values emptyValues(Type type) {
   case Type::UInt16: return std::vector<std::uint16_t>{};
   case Type::String: return std::vector<std::string>{};
   case Type::Character: return std::vector<char>{};
+  case Type::Enum: return std::vector<EnumValue>{};
   }
   typeError("unknown SDDS type");
 }
@@ -208,11 +209,11 @@ std::vector<std::string> namesOf(const std::vector<Definition> &definitions) {
 }
 
 Scalar scaledScalar(const Scalar &value, Type type, long double factor) {
-  if (type == Type::String)
+  if (type == Type::String || type == Type::Enum)
     typeError("unit conversion requires numeric data");
   const long double source = std::visit([](const auto &item) -> long double {
     using Value = std::decay_t<decltype(item)>;
-    if constexpr (std::is_same_v<Value, std::string>)
+    if constexpr (std::is_same_v<Value, std::string> || std::is_same_v<Value, EnumValue>)
       typeError("unit conversion requires numeric data");
     else
       return static_cast<long double>(item);
@@ -247,6 +248,7 @@ Scalar convertScalar(const Scalar &value, Type target, RoundingMode rounding) {
   case Type::Int16: return convertTo<std::int16_t>(value, rounding);
   case Type::UInt16: return convertTo<std::uint16_t>(value, rounding);
   case Type::Character: return convertTo<char>(value, rounding);
+  case Type::Enum: typeError("enum conversion requires a dictionary-aware operation");
   case Type::String: break;
   }
   typeError("unknown conversion target");
@@ -255,6 +257,8 @@ Scalar convertScalar(const Scalar &value, Type target, RoundingMode rounding) {
 Values convertValues(const Values &values, Type target, RoundingMode rounding) {
   if (typeOf(values) == target)
     return values;
+  if (typeOf(values) == Type::Enum || target == Type::Enum)
+    typeError("enum conversion requires a dictionary-aware operation");
   Values result = emptyValues(target);
   const std::size_t count = std::visit([](const auto &items) { return items.size(); }, values);
   for (std::size_t index = 0; index < count; ++index)

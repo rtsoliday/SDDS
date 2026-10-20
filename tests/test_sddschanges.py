@@ -11,6 +11,7 @@ SDDSPRINTOUT = BIN_DIR / "sddsprintout"
 SDDSCHECK = BIN_DIR / "sddscheck"
 PLAINDATA2SDDS = BIN_DIR / "plaindata2sdds"
 SDDSCOMBINE = BIN_DIR / "sddscombine"
+SDDS2STREAM = BIN_DIR / "sdds2stream"
 
 SRC_FILE = Path("SDDSaps/sddschanges.c")
 
@@ -248,3 +249,67 @@ def test_pipe(sample_files):
     check=True,
   )
   assert _numeric_lines(result.stdout.decode()) == ["3.000000e+00"] * 3
+
+
+def _write_baseline_state(path, field_type="enum", mapping="0:OFF,1:ON", values=(0, 1)):
+  enum_values = f', enum_values="{mapping}"' if field_type == "enum" else ""
+  path.write_text(("SDDS6\n" if field_type == "enum" else "SDDS1\n") +
+                  f'&column name=state, type={field_type}{enum_values} &end\n'
+                  '&column name=x, type=double &end\n'
+                  '&data mode=ascii &end\n' +
+                  ''.join(f'1\n{value} {10 + page}\n' for page, value in enumerate(values)),
+                  encoding="utf8")
+
+
+def _changes_with_state_baseline(source, baseline, output, parallel_pages):
+  return subprocess.run([str(SDDSCHANGES), str(source), str(output), "-changesIn=x",
+                         "-copy=state", f"-baseline={baseline}"] +
+                        (["-parallelPages"] if parallel_pages else []),
+                        capture_output=True, text=True)
+
+
+@pytest.mark.skipif(not all(p.exists() for p in [SDDSCHANGES, SDDS2STREAM]), reason="tools not built")
+@pytest.mark.parametrize("parallel_pages", [False, True])
+@pytest.mark.parametrize("mapping", ["0:OFF,1:ON", "1:ON,0:OFF"])
+def test_baseline_copy_accepts_equal_enum_dictionaries(tmp_path, parallel_pages, mapping):
+  source, baseline, output = [tmp_path / name for name in ("source.sdds", "baseline.sdds", "out.sdds")]
+  _write_baseline_state(source, values=(1, 0))
+  _write_baseline_state(baseline, mapping=mapping)
+  result = _changes_with_state_baseline(source, baseline, output, parallel_pages)
+  assert result.returncode == 0, result.stderr
+  stream = subprocess.run([str(SDDS2STREAM), str(output), "-column=state", "-noquotes"],
+                          capture_output=True, text=True, check=True)
+  assert stream.stdout.split() == (["OFF", "ON"] if parallel_pages else ["OFF", "OFF"])
+
+
+@pytest.mark.skipif(not SDDSCHANGES.exists(), reason="sddschanges not built")
+@pytest.mark.parametrize("parallel_pages", [False, True])
+@pytest.mark.parametrize("source_type,baseline_type,mapping,values", [
+  ("enum", "enum", "0:ON,1:OFF", (0, 1)),
+  ("enum", "enum", "7:OFF,8:ON", (7, 8)),
+  ("enum", "enum", "0:OFF,1:ON,2:FAULT", (0, 1)),
+  ("enum", "long", None, (0, 1)),
+  ("long", "enum", "0:OFF,1:ON", (0, 1)),
+])
+def test_baseline_copy_rejects_incompatible_enum_definitions(tmp_path, parallel_pages,
+                                                            source_type, baseline_type,
+                                                            mapping, values):
+  source, baseline, output = [tmp_path / name for name in ("source.sdds", "baseline.sdds", "out.sdds")]
+  _write_baseline_state(source, field_type=source_type)
+  _write_baseline_state(baseline, field_type=baseline_type, mapping=mapping, values=values)
+  result = _changes_with_state_baseline(source, baseline, output, parallel_pages)
+  assert result.returncode > 0
+  assert "Incompatible enum mappings" in result.stderr
+
+
+@pytest.mark.skipif(not all(p.exists() for p in [SDDSCHANGES, SDDS2STREAM]), reason="tools not built")
+@pytest.mark.parametrize("parallel_pages", [False, True])
+def test_baseline_copy_keeps_primitive_type_mixing(tmp_path, parallel_pages):
+  source, baseline, output = [tmp_path / name for name in ("source.sdds", "baseline.sdds", "out.sdds")]
+  _write_baseline_state(source, field_type="long")
+  _write_baseline_state(baseline, field_type="ulong", values=(1, 2))
+  result = _changes_with_state_baseline(source, baseline, output, parallel_pages)
+  assert result.returncode == 0, result.stderr
+  stream = subprocess.run([str(SDDS2STREAM), str(output), "-column=state", "-noquotes"],
+                          capture_output=True, text=True, check=True)
+  assert stream.stdout.split() == (["1", "2"] if parallel_pages else ["1", "1"])

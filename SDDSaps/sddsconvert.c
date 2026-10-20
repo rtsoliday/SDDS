@@ -842,7 +842,8 @@ int main(int argc, char **argv) {
       if (!recover) {
         fprintf(stderr, "error: SDDS data garbled--consider using -recover option\n");
         fprintf(stderr, "warning: one or more data pages may be missing\n");
-        break;
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+        return EXIT_FAILURE;
       } else {
         if (recover != 2 && SDDS_ReadRecoveryPossible(&SDDS_orig))
           recovered = 1;

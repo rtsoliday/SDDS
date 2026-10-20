@@ -333,3 +333,127 @@ def test_xzlevel(tmp_path):
     check=True,
   )
   assert _sddscheck_ok(output) == "ok"
+
+
+def _write_collapse_state(path, field_type="enum", mapping="0:OFF,1:ON", values=(0,)):
+  enum_values = f', enum_values="{mapping}"' if field_type == "enum" else ""
+  state = (f'&parameter name=state, type={field_type}{enum_values} &end\n'
+           if field_type else "")
+  path.write_text(("SDDS6\n" if field_type == "enum" else "SDDS1\n") + state +
+                  '&parameter name=other, type=long &end\n'
+                  '&column name=x, type=long &end\n'
+                  '&data mode=ascii &end\n' +
+                  ''.join((f'{value}\n' if field_type else '') + '5\n1\n1\n'
+                          for value in values), encoding="utf8")
+
+
+@pytest.mark.parametrize("mapping", ["0:OFF,1:ON", "1:ON,0:OFF"])
+def test_collapse_accepts_equal_enum_dictionaries(tmp_path, mapping):
+  first, second, output = [tmp_path / name for name in ("first.sdds", "second.sdds", "out.sdds")]
+  _write_collapse_state(first, values=(1, 0))
+  _write_collapse_state(second, mapping=mapping, values=(0, 1))
+  subprocess.run([str(SDDSCOMBINE), str(first), str(second), str(output), "-collapse"], check=True)
+  assert _sddscheck_ok(output) == "ok"
+  assert _stream(output, columns="state").split() == ['"ON"', '"OFF"', '"OFF"', '"ON"']
+
+
+@pytest.mark.parametrize("first_type,second_type,second_mapping,second_value", [
+  ("enum", "enum", "0:ON,1:OFF", 0),
+  ("enum", "enum", "7:OFF,8:ON", 7),
+  ("enum", "enum", "0:OFF,1:ON,2:FAULT", 0),
+  ("enum", "long", None, 0),
+  ("long", "enum", "0:OFF,1:ON", 0),
+])
+def test_collapse_rejects_incompatible_enum_definitions(tmp_path, first_type,
+                                                       second_type, second_mapping,
+                                                       second_value):
+  first, second, output = [tmp_path / name for name in ("first.sdds", "second.sdds", "out.sdds")]
+  _write_collapse_state(first, field_type=first_type)
+  _write_collapse_state(second, field_type=second_type, mapping=second_mapping,
+                        values=(second_value,))
+  result = subprocess.run([str(SDDSCOMBINE), str(first), str(second), str(output), "-collapse"],
+                          capture_output=True, text=True)
+  assert result.returncode > 0
+  assert "Incompatible enum mappings" in result.stderr
+
+
+@pytest.mark.parametrize("field_type", ["long", "enum"])
+def test_collapse_missing_parameters_keep_zero_default(tmp_path, field_type):
+  first, second, output = [tmp_path / name for name in ("first.sdds", "second.sdds", "out.sdds")]
+  _write_collapse_state(first, field_type=field_type, values=(1,))
+  _write_collapse_state(second, field_type=None)
+  subprocess.run([str(SDDSCOMBINE), str(first), str(second), str(output), "-collapse"], check=True)
+  expected = ['"ON"', '"OFF"'] if field_type == "enum" else ["1", "0"]
+  assert _stream(output, columns="state").split() == expected
+
+
+def test_collapse_missing_enum_requires_mapped_zero(tmp_path):
+  first, second, output = [tmp_path / name for name in ("first.sdds", "second.sdds", "out.sdds")]
+  _write_collapse_state(first, mapping="1:ON,2:OFF", values=(1,))
+  _write_collapse_state(second, field_type=None)
+  result = subprocess.run([str(SDDSCOMBINE), str(first), str(second), str(output), "-collapse"],
+                          capture_output=True, text=True)
+  assert result.returncode > 0
+  assert "mapped enum code 0" in result.stderr
+
+
+def test_collapse_keeps_primitive_type_mixing(tmp_path):
+  first, second, output = [tmp_path / name for name in ("first.sdds", "second.sdds", "out.sdds")]
+  _write_collapse_state(first, field_type="long", values=(1,))
+  _write_collapse_state(second, field_type="ulong", values=(2,))
+  subprocess.run([str(SDDSCOMBINE), str(first), str(second), str(output), "-collapse"], check=True)
+  assert _stream(output, columns="state").split() == ["1", "2"]
+
+
+@pytest.mark.parametrize("collapse", [False, True])
+@pytest.mark.parametrize("delete_key", [False, True])
+@pytest.mark.parametrize("reorder_mapping", [False, True])
+def test_merge_enum_parameter(tmp_path, collapse, delete_key, reorder_mapping):
+  first, second, output = [tmp_path / name for name in ("first.sdds", "second.sdds", "out.sdds")]
+  mapping = "-2147483648:OFF,2147483647:ON,0:IDLE"
+  second_mapping = "0:IDLE,2147483647:ON,-2147483648:OFF" if reorder_mapping else mapping
+  _write_collapse_state(first, mapping=mapping, values=(2147483647, 2147483647, -2147483648))
+  _write_collapse_state(second, mapping=second_mapping, values=(-2147483648, 0, 0, 2147483647))
+  options = ["-merge=state"]
+  if collapse:
+    options.append("-collapse")
+  if delete_key:
+    options.append("-delete=parameter,state")
+  subprocess.run([str(SDDSCOMBINE), str(first), str(second), str(output), *options], check=True)
+  assert _sddscheck_ok(output) == "ok"
+  if collapse:
+    assert _npages(output) == 1
+    assert _stream(output, columns="other").split() == ["5"] * 4
+    if not delete_key:
+      assert _stream(output, columns="state").split() == ['"ON"', '"OFF"', '"IDLE"', '"ON"']
+  else:
+    assert _npages(output) == 4
+    for page, rows in enumerate((2, 2, 2, 1), start=1):
+      assert _stream(output, page=page, columns="x").split() == ["1"] * rows
+    if not delete_key:
+      result = subprocess.run([str(SDDS2STREAM), str(output), "-parameters=state"],
+                              capture_output=True, text=True, check=True)
+      assert result.stdout.split() == ['"ON"', '"OFF"', '"IDLE"', '"ON"']
+
+
+@pytest.mark.parametrize("collapse", [False, True])
+@pytest.mark.parametrize("delete_key", [False, True])
+@pytest.mark.parametrize("mapping,value", [
+  ("0:ON,1:OFF", 0),
+  ("7:OFF,8:ON", 7),
+  ("0:OFF,1:ON,2:FAULT", 0),
+])
+def test_merge_enum_parameter_rejects_incompatible_mappings(tmp_path, collapse, delete_key,
+                                                          mapping, value):
+  first, second, output = [tmp_path / name for name in ("first.sdds", "second.sdds", "out.sdds")]
+  _write_collapse_state(first)
+  _write_collapse_state(second, mapping=mapping, values=(value,))
+  options = ["-merge=state"]
+  if collapse:
+    options.append("-collapse")
+  if delete_key:
+    options.append("-delete=parameter,state")
+  result = subprocess.run([str(SDDSCOMBINE), str(first), str(second), str(output), *options],
+                          capture_output=True, text=True)
+  assert result.returncode > 0
+  assert "Incompatible enum mappings for -merge parameter" in result.stderr

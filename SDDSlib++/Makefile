@@ -34,8 +34,14 @@ FUZZ_PROGRAM = $(OBJ_DIR)/fuzz_sddspp
 SANITIZER_TEST_PROGRAM = $(OBJ_DIR)/test_sddspp_sanitized$(EXEEXT)
 BENCHMARK_PROGRAM = $(OBJ_DIR)/benchmark_sddspp$(EXEEXT)
 TEST_ARTIFACTS = $(OBJ_DIR)/test-artifacts
+ENUM_TEST_PROGRAM = $(OBJ_DIR)/test_sddspp_enum$(EXEEXT)
 FUZZ_CXX ?= clang++
-SANITIZER_CXX ?= clang++
+SANITIZER_CXX ?= $(CCC)
+ifeq ($(OS), Linux)
+ifneq ($(findstring g++,$(SANITIZER_CXX)),)
+SANITIZER_RUNTIME_FLAGS = -static-libasan -static-libubsan
+endif
+endif
 
 ifeq ($(OS), Windows)
 DIFFERENTIAL_LIBS = $(LIB_DIR)/SDDS1.lib $(LIB_DIR)/rpnlib.lib \
@@ -67,8 +73,18 @@ $(FUZZ_SMOKE_PROGRAM): fuzz_sdds3.cc $(LIBRARY)
 
 .PHONY: test differential-test
 test: $(TEST_PROGRAM) $(ADVANCED_TEST_PROGRAM) differential-test
+	$(MAKE) enum-test
 	$(TEST_PROGRAM) $(TEST_ARTIFACTS)
 	$(ADVANCED_TEST_PROGRAM) $(TEST_ARTIFACTS)/advanced
+
+$(ENUM_TEST_PROGRAM): test_sdds_enum.cc $(LIBRARY) $(if $(filter Windows,$(OS)),$(LIB_DIR)/SDDS1.lib,$(LIB_DIR)/libSDDS1.a)
+	$(CCC) $(CCFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds_enum.cc $(LIBRARY) $(DIFFERENTIAL_LIBS) $(TEST_SYS_LIBS)
+
+.PHONY: enum-test
+enum-test:
+	$(MAKE) -C ../SDDSlib enum-test
+	$(MAKE) $(ENUM_TEST_PROGRAM)
+	$(ENUM_TEST_PROGRAM) ../SDDSlib/$(OBJ_DIR)/test-artifacts/enum $(TEST_ARTIFACTS)/enum
 
 differential-test: $(DIFFERENTIAL_TEST_PROGRAM)
 	$(DIFFERENTIAL_TEST_PROGRAM) $(TEST_ARTIFACTS)/differential
@@ -109,7 +125,7 @@ benchmark-gate: $(BENCHMARK_PROGRAM)
 
 .PHONY: fuzz-smoke
 fuzz-smoke: $(FUZZ_SMOKE_PROGRAM)
-	$(FUZZ_SMOKE_PROGRAM) testdata/malformed/*.sdds
+	$(FUZZ_SMOKE_PROGRAM) testdata/malformed/*.sdds ../SDDSlib/testdata/enums/*.sdds
 
 ifeq ($(OS), Windows)
 .PHONY: sanitizer-test fuzz
@@ -119,13 +135,18 @@ fuzz:
 	@echo "the libFuzzer target is supported on Unix-like builds"
 else
 $(SANITIZER_TEST_PROGRAM): test_sdds3_advanced.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc SDDSTransform.cc
-	$(SANITIZER_CXX) $(CCFLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined \
+	$(SANITIZER_CXX) $(CCFLAGS) $(SANITIZER_RUNTIME_FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined \
 		-std=c++17 -I../include -o $@ test_sdds3_advanced.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc \
 		SDDSTransform.cc -lz -llzma
 
 .PHONY: sanitizer-test
-sanitizer-test: $(SANITIZER_TEST_PROGRAM)
+sanitizer-test: $(SANITIZER_TEST_PROGRAM) $(OBJ_DIR)/test_sddspp_enum_sanitized
 	ASAN_OPTIONS=detect_leaks=0 $(SANITIZER_TEST_PROGRAM) $(TEST_ARTIFACTS)/sanitized
+	$(MAKE) -C ../SDDSlib enum-test
+	ASAN_OPTIONS=detect_leaks=0 $(OBJ_DIR)/test_sddspp_enum_sanitized ../SDDSlib/$(OBJ_DIR)/test-artifacts/enum $(TEST_ARTIFACTS)/enum-sanitized
+
+$(OBJ_DIR)/test_sddspp_enum_sanitized: test_sdds_enum.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc SDDSTransform.cc | $(OBJ_DIR)
+	$(SANITIZER_CXX) $(CCFLAGS) $(SANITIZER_RUNTIME_FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined -std=c++17 -I../include -o $@ test_sdds_enum.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc SDDSTransform.cc $(DIFFERENTIAL_LIBS) $(TEST_SYS_LIBS)
 
 $(FUZZ_PROGRAM): fuzz_sdds3.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc SDDSTransform.cc
 	$(FUZZ_CXX) -O1 -g -fno-omit-frame-pointer -fsanitize=fuzzer,address,undefined \

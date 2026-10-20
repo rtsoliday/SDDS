@@ -1,0 +1,6 @@
+SDDS6
+&parameter name=fixed, type=enum, enum_values="10:ON", fixed_value="+10" &end
+&column name=state, type=enum, enum_values="10:ON" &end
+&data mode=ascii &end
+1
+10

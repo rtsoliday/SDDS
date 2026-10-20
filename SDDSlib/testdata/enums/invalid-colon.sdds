@@ -1,0 +1,5 @@
+SDDS6
+&column name=state, type=enum, enum_values="0:A:B" &end
+&data mode=ascii &end
+1
+10

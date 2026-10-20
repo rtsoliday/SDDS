@@ -223,6 +223,10 @@ int main(int argc, char **argv) {
         fprintf(stderr, "First inconsistent column is %s\n", group[i].old_name[j]);
         exit(EXIT_FAILURE);
       }
+      if (!SDDS_CheckEnumFieldCompatibility(&sdds_in, &sdds_in, 0,
+                                           SDDS_GetColumnIndex(&sdds_in, group[i].old_name[0]),
+                                           SDDS_GetColumnIndex(&sdds_in, group[i].old_name[j])))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
   }
 

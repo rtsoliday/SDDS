@@ -25,6 +25,39 @@
 #include "mdb.h"
 #include "mdb_thread.h"
 #include "SDDS.h"
+#include "SDDS_internal.h"
+
+static MPI_Offset getTitleOffset(SDDS_DATASET *dataset, int32_t inputPage);
+static int32_t readBinaryPage(SDDS_DATASET *dataset);
+static int32_t readNonNativeBinaryPage(SDDS_DATASET *dataset);
+
+/** @brief Share the size of the title serialized only by rank zero. */
+static int32_t getOutputTitleOffset(SDDS_DATASET *dataset, int64_t totalRows, MPI_Offset *offset) {
+  SDDS_DATASET page = *dataset;
+  page.n_rows = totalRows;
+  *offset = 0;
+  if (!dataset->MPI_dataset->myid)
+    *offset = getTitleOffset(&page, 0);
+  if (MPI_Bcast(offset, 1, MPI_OFFSET, 0, dataset->MPI_dataset->comm) != MPI_SUCCESS) {
+    SDDS_SetError("Unable to broadcast MPI output title size");
+    return 0;
+  }
+  return 1;
+}
+
+/** @brief Validate a completed MPI read collectively, after restoring native byte order. */
+static int32_t validateBinaryPageRead(SDDS_DATASET *dataset, int32_t result) {
+  int32_t local = result > 0, minimum, maximum;
+  MPI_Allreduce(&local, &minimum, 1, MPI_INT32_T, MPI_MIN, dataset->MPI_dataset->comm);
+  MPI_Allreduce(&local, &maximum, 1, MPI_INT32_T, MPI_MAX, dataset->MPI_dataset->comm);
+  if (minimum != maximum) {
+    SDDS_SetError("MPI page read failed on one or more ranks");
+    return 0;
+  }
+  if (result > 0 && !SDDS_MPI_ValidateEnumReadPage(dataset))
+    return 0;
+  return result;
+}
 
 static MDB_THREAD_LOCK defaultStringLengthLock = MDB_THREAD_LOCK_INITIALIZER;
 static int32_t defaultStringLength = SDDS_MPI_STRING_COLUMN_LEN;
@@ -459,11 +492,14 @@ int32_t SDDS_MPI_WriteNonNativeBinaryArrays(SDDS_DATASET *SDDS_dataset) {
       }
       continue;
     }
-    writeSize = sizeof(*(SDDS_dataset->array)[i].dimension) * layout->array_definition[i].dimensions;
-    if (!SDDS_MPI_BufferedWrite(SDDS_dataset->array[i].dimension, writeSize, SDDS_dataset)) {
-      SDDS_SetError("Unable to write arrays--failure writing dimensions (SDDS_MPI_WriteBinaryArrays)");
-      SDDS_SwapEndsArrayData(SDDS_dataset);
-      return (0);
+    for (j = 0; j < layout->array_definition[i].dimensions; j++) {
+      int32_t dimension = SDDS_dataset->array[i].dimension[j];
+      SDDS_SwapLong(&dimension);
+      if (!SDDS_MPI_BufferedWrite(&dimension, sizeof(dimension), SDDS_dataset)) {
+        SDDS_SetError("Unable to write non-native MPI array dimensions");
+        SDDS_SwapEndsArrayData(SDDS_dataset);
+        return 0;
+      }
     }
     if (layout->array_definition[i].type == SDDS_STRING) {
       for (j = 0; j < SDDS_dataset->array[i].elements; j++) {
@@ -962,6 +998,8 @@ int32_t SDDS_MPI_WriteNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset) {
 
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_MPI_WriteNonNativeBinaryPage"))
     return (0);
+  if (!SDDS_MPI_CheckEnumLayout(SDDS_dataset) || !SDDS_MPI_ValidateEnumPage(SDDS_dataset))
+    return 0;
 
   fBuffer = &SDDS_dataset->fBuffer;
   if (SDDS_dataset->layout.data_mode.column_major)
@@ -981,7 +1019,6 @@ int32_t SDDS_MPI_WriteNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset) {
   }
   if (MPI_dataset->n_page >= 1)
     MPI_File_set_view(MPI_dataset->MPI_file, MPI_dataset->file_offset, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
-  rowcount_offset = MPI_dataset->file_offset + SDDS_MPI_GetTitleOffset(SDDS_dataset); /* the offset before writing rows */
   /*get total number of rows writing */
   column_offset = MPI_dataset->column_offset;
   if (!(n_rows = calloc(sizeof(*n_rows), MPI_dataset->n_processors))) {
@@ -995,6 +1032,11 @@ int32_t SDDS_MPI_WriteNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset) {
   total_rows = 0;
   for (i = 0; i < MPI_dataset->n_processors; i++)
     total_rows += n_rows[i];
+  if (!getOutputTitleOffset(SDDS_dataset, total_rows, &rowcount_offset)) {
+    free(n_rows);
+    return 0;
+  }
+  rowcount_offset += MPI_dataset->file_offset;
   if (MPI_dataset->myid == 0) {
     fixed_rows = total_rows;
     if (!fBuffer->buffer) {
@@ -1115,15 +1157,20 @@ int32_t SDDS_MPI_WriteContinuousBinaryPage(SDDS_DATASET *SDDS_dataset) {
 
   /* usleep(10000); This doesn't really help */
 
-  if ((outputEndianess = getenv("SDDS_OUTPUT_ENDIANESS"))) {
+  if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_MPI_WriteContinuousBinaryPage"))
+    return (0);
+  if (SDDS_dataset->layout.version == 6 && SDDS_dataset->layout.byteOrderDeclared &&
+      ((SDDS_dataset->layout.byteOrderDeclared == SDDS_BIGENDIAN) != SDDS_IsBigEndianMachine()))
+    return SDDS_MPI_WriteNonNativeBinaryPage(SDDS_dataset);
+  if (SDDS_dataset->layout.version != 6 && (outputEndianess = getenv("SDDS_OUTPUT_ENDIANESS"))) {
     if (((strncmp(outputEndianess, "big", 3) == 0) && (SDDS_IsBigEndianMachine() == 0)) || ((strncmp(outputEndianess, "little", 6) == 0) && (SDDS_IsBigEndianMachine() == 1)))
       return SDDS_MPI_WriteNonNativeBinaryPage(SDDS_dataset);
   }
 
   MPI_dataset = SDDS_dataset->MPI_dataset;
 
-  if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_MPI_WriteContinuousBinaryPage"))
-    return (0);
+  if (!SDDS_MPI_CheckEnumLayout(SDDS_dataset) || !SDDS_MPI_ValidateEnumPage(SDDS_dataset))
+    return 0;
 
   fBuffer = &SDDS_dataset->fBuffer;
   if (SDDS_dataset->layout.data_mode.column_major)
@@ -1143,7 +1190,6 @@ int32_t SDDS_MPI_WriteContinuousBinaryPage(SDDS_DATASET *SDDS_dataset) {
   }
   if (MPI_dataset->n_page >= 1)
     MPI_File_set_view(MPI_dataset->MPI_file, MPI_dataset->file_offset, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
-  rowcount_offset = MPI_dataset->file_offset + SDDS_MPI_GetTitleOffset(SDDS_dataset); /* the offset before writing rows */
   /*get total number of rows writing */
   column_offset = MPI_dataset->column_offset;
   if (!(n_rows = calloc(sizeof(*n_rows), MPI_dataset->n_processors))) {
@@ -1157,6 +1203,11 @@ int32_t SDDS_MPI_WriteContinuousBinaryPage(SDDS_DATASET *SDDS_dataset) {
   total_rows = 0;
   for (i = 0; i < MPI_dataset->n_processors; i++)
     total_rows += n_rows[i];
+  if (!getOutputTitleOffset(SDDS_dataset, total_rows, &rowcount_offset)) {
+    free(n_rows);
+    return 0;
+  }
+  rowcount_offset += MPI_dataset->file_offset;
   if (MPI_dataset->myid == 0) {
     fixed_rows = total_rows;
     if (!fBuffer->buffer) {
@@ -1524,7 +1575,6 @@ int32_t SDDS_MPI_ReadBinaryParameters(SDDS_DATASET *SDDS_dataset, SDDS_FILEBUFFE
   int32_t i;
   SDDS_LAYOUT *layout;
   /*  char *predefined_format; */
-  char buffer[SDDS_MAXLINE];
 
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_MPI_ReadBinaryParameters"))
     return (0);
@@ -1535,8 +1585,7 @@ int32_t SDDS_MPI_ReadBinaryParameters(SDDS_DATASET *SDDS_dataset, SDDS_FILEBUFFE
     if (layout->parameter_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
       continue;
     if (layout->parameter_definition[i].fixed_value) {
-      strcpy(buffer, layout->parameter_definition[i].fixed_value);
-      if (!SDDS_ScanData(buffer, layout->parameter_definition[i].type, 0, SDDS_dataset->parameter[i], 0, 1)) {
+      if (!SDDS_ScanFixedValue(layout->parameter_definition[i].fixed_value, layout->parameter_definition[i].type, SDDS_dataset->parameter[i])) {
         SDDS_SetError("Unable to read page--parameter scanning error (SDDS_MPI_ReadBinaryParameters)");
         return (0);
       }
@@ -1660,8 +1709,12 @@ int32_t SDDS_MPI_ReadBinaryArrays(SDDS_DATASET *SDDS_dataset, SDDS_FILEBUFFER *f
       return (0);
     }
     array->elements = 1;
-    for (j = 0; j < array->definition->dimensions; j++)
+    for (j = 0; j < array->definition->dimensions; j++) {
+      if (array->dimension[j] < 0 || (array->dimension[j] && array->elements > INT32_MAX / array->dimension[j])) {
+        SDDS_SetError("Invalid or overflowing MPI array dimensions"); return 0;
+      }
       array->elements *= array->dimension[j];
+    }
     if (array->data)
       free(array->data);
     array->data = array->pointer = NULL;
@@ -1709,7 +1762,6 @@ int32_t SDDS_MPI_ReadBinaryArrays(SDDS_DATASET *SDDS_dataset, SDDS_FILEBUFFER *f
 int32_t SDDS_MPI_ReadNonNativeBinaryParameters(SDDS_DATASET *SDDS_dataset, SDDS_FILEBUFFER *fBuffer) {
   int32_t i;
   SDDS_LAYOUT *layout;
-  char buffer[SDDS_MAXLINE];
 
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_MPI_ReadNonNativeBinaryParameters"))
     return (0);
@@ -1720,8 +1772,7 @@ int32_t SDDS_MPI_ReadNonNativeBinaryParameters(SDDS_DATASET *SDDS_dataset, SDDS_
     if (layout->parameter_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
       continue;
     if (layout->parameter_definition[i].fixed_value) {
-      strcpy(buffer, layout->parameter_definition[i].fixed_value);
-      if (!SDDS_ScanData(buffer, layout->parameter_definition[i].type, 0, SDDS_dataset->parameter[i], 0, 1)) {
+      if (!SDDS_ScanFixedValue(layout->parameter_definition[i].fixed_value, layout->parameter_definition[i].type, SDDS_dataset->parameter[i])) {
         SDDS_SetError("Unable to read page--parameter scanning error (SDDS_MPI_ReadNonNativeBinaryParameters)");
         return (0);
       }
@@ -1788,10 +1839,14 @@ int32_t SDDS_MPI_ReadNonNativeBinaryArrays(SDDS_DATASET *SDDS_dataset, SDDS_FILE
       SDDS_SetError("Unable to read arrays--failure reading dimensions (SDDS_MPI_ReadNonNativeBinaryArrays)");
       return (0);
     }
-    SDDS_SwapLong(array->dimension);
+    for (j = 0; j < array->definition->dimensions; j++) SDDS_SwapLong(array->dimension + j);
     array->elements = 1;
-    for (j = 0; j < array->definition->dimensions; j++)
+    for (j = 0; j < array->definition->dimensions; j++) {
+      if (array->dimension[j] < 0 || (array->dimension[j] && array->elements > INT32_MAX / array->dimension[j])) {
+        SDDS_SetError("Invalid or overflowing MPI array dimensions"); return 0;
+      }
       array->elements *= array->dimension[j];
+    }
     if (array->data)
       free(array->data);
     array->data = array->pointer = NULL;
@@ -1886,7 +1941,7 @@ int32_t SDDS_MPI_ReadNonNativeBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row,
  */
 int32_t SDDS_MPI_BroadcastTitleData(SDDS_DATASET *SDDS_dataset) {
   char *par_data = NULL;
-  int32_t type, size;
+  int32_t type, size, local = 1, all;
   int64_t i, count = 0, *data_len = NULL;
   MPI_DATASET *MPI_dataset;
   SDDS_LAYOUT *layout;
@@ -1932,7 +1987,13 @@ int32_t SDDS_MPI_BroadcastTitleData(SDDS_DATASET *SDDS_dataset) {
     }
 
     MPI_Bcast(par_data, count, MPI_BYTE, 0, MPI_dataset->comm);
-    if (!SDDS_StartPage(SDDS_dataset, 0)) {
+    /* Root has already read the title, and serial master readers have also
+     * read their columns. Starting another page would discard string columns. */
+    if (MPI_dataset->myid) local = SDDS_StartPage(SDDS_dataset, 0);
+    MPI_Allreduce(&local, &all, 1, MPI_INT32_T, MPI_MIN, MPI_dataset->comm);
+    if (!all) {
+      free(data_len);
+      free(par_data);
       SDDS_SetError("Unable to read page--couldn't start page (SDDS_MPI_BroadcastTitleData)");
       return (0);
     }
@@ -1944,6 +2005,7 @@ int32_t SDDS_MPI_BroadcastTitleData(SDDS_DATASET *SDDS_dataset) {
           string = malloc(sizeof(char) * (data_len[i + 1] + 1));
           memcpy((char *)string, (char *)par_data + count, data_len[i + 1]);
           string[data_len[i + 1]] = '\0';
+          free(*(char **)SDDS_dataset->parameter[i]);
           *(char **)SDDS_dataset->parameter[i] = string;
         } else
           memcpy((char *)(SDDS_dataset->parameter[i]), (char *)par_data + count, data_len[i + 1]);
@@ -1955,25 +2017,65 @@ int32_t SDDS_MPI_BroadcastTitleData(SDDS_DATASET *SDDS_dataset) {
   free(par_data);
   data_len = NULL;
   par_data = NULL;
-  if (layout->n_arrays) {
-    data_len = malloc(sizeof(*data_len) * layout->n_arrays);
-    if (MPI_dataset->myid == 0) {
-      for (i = 0; i < layout->n_arrays; i++)
-        data_len[i] = layout->array_definition[i].dimensions;
+  for (i = 0; i < layout->n_arrays; i++) {
+    int local, all, d;
+    int32_t dimensions = layout->array_definition[i].dimensions;
+    int32_t *shape = calloc((size_t)dimensions, sizeof(*shape));
+    uint64_t elements = 1, bytes;
+    void *values = NULL;
+    type = layout->array_definition[i].type;
+    size = SDDS_type_size[type - 1];
+    local = shape != NULL;
+    if (!MPI_dataset->myid && local) {
+      local = SDDS_dataset->array[i].dimension != NULL;
+      if (local) memcpy(shape, SDDS_dataset->array[i].dimension, (size_t)dimensions * sizeof(*shape));
     }
-    MPI_Bcast(data_len, layout->n_arrays, MPI_INT64_T, 0, MPI_dataset->comm);
-    for (i = 0; i < layout->n_arrays; i++) {
-      type = layout->array_definition[i].type;
-      size = SDDS_type_size[type - 1];
-      if (data_len[i]) {
-        if (type == SDDS_STRING) {
-          if (MPI_dataset->myid == 0) {
-            /* it is not easy to broad cast string array, will implement it in the future */
-          }
-        } else
-          MPI_Bcast((char *)SDDS_dataset->array[i].data, data_len[i] * size, MPI_BYTE, 0, MPI_dataset->comm);
+    MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, MPI_dataset->comm);
+    if (!all) { free(shape); SDDS_SetError("MPI array shape allocation failed"); return 0; }
+    MPI_Bcast(shape, dimensions, MPI_INT32_T, 0, MPI_dataset->comm);
+    for (d = 0; d < dimensions; d++) {
+      if (shape[d] < 0 || (shape[d] && elements > INT32_MAX / (uint64_t)shape[d])) { local = 0; break; }
+      elements *= shape[d];
+    }
+    bytes = elements * (uint64_t)size;
+    if (bytes > INT_MAX) local = 0;
+    if (local && (elements || MPI_dataset->myid)) {
+      /* SDDS_SetArray checks intermediate dimension products before finding a
+       * later zero dimension. Supply unused storage for empty receiving arrays
+       * so shapes such as {3, 0} still follow its normal installation path. */
+      values = MPI_dataset->myid ? calloc((size_t)(elements ? elements : 1), (size_t)size) : SDDS_dataset->array[i].data;
+      local = values != NULL;
+    }
+    MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, MPI_dataset->comm);
+    if (!all) {
+      if (MPI_dataset->myid) free(values);
+      free(shape); SDDS_SetError("MPI array size or allocation failed"); return 0;
+    }
+    if (type == SDDS_STRING) {
+      uint64_t j;
+      for (j = 0; j < elements; j++) {
+        uint64_t length = 0;
+        char **strings = values;
+        if (!MPI_dataset->myid && strings[j]) length = strlen(strings[j]);
+        MPI_Bcast(&length, 1, MPI_UINT64_T, 0, MPI_dataset->comm);
+        local = length < INT_MAX;
+        if (MPI_dataset->myid && local) local = (strings[j] = malloc((size_t)length + 1)) != NULL;
+        MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, MPI_dataset->comm);
+        if (!all) break;
+        if (length) MPI_Bcast(strings[j], (int)length, MPI_CHAR, 0, MPI_dataset->comm);
+        if (MPI_dataset->myid) strings[j][length] = 0;
       }
+    } else if (bytes) MPI_Bcast(values, (int)bytes, MPI_BYTE, 0, MPI_dataset->comm);
+    local = all;
+    if (local && MPI_dataset->myid)
+      local = SDDS_SetArray(SDDS_dataset, layout->array_definition[i].name, SDDS_CONTIGUOUS_DATA, values, shape);
+    if (MPI_dataset->myid) {
+      if (type == SDDS_STRING) SDDS_FreeStringArray(values, (int32_t)elements);
+      free(values);
     }
+    free(shape);
+    MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, MPI_dataset->comm);
+    if (!all) { SDDS_SetError("MPI array broadcast failed"); return 0; }
   }
   /*MPI_dataset->file_offset += SDDS_MPI_GetTitleOffset(MPI_dataset); */
   return 1;
@@ -1992,6 +2094,13 @@ int32_t SDDS_MPI_BroadcastTitleData(SDDS_DATASET *SDDS_dataset) {
  * @return int32_t Returns the page number on success, 0 on failure, or -1 if end-of-file is reached.
  */
 int32_t SDDS_MPI_ReadBinaryPage(SDDS_DATASET *SDDS_dataset) {
+  if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_MPI_ReadBinaryPage"))
+    return 0;
+  return validateBinaryPageRead(SDDS_dataset, readBinaryPage(SDDS_dataset));
+}
+
+/** @brief Read a native binary page without repeating public-entry validation. */
+static int32_t readBinaryPage(SDDS_DATASET *SDDS_dataset) {
   int32_t mpi_code, type = 0, retval, master_read;
   int64_t i, j, n_rows, prev_rows;
   MPI_DATASET *MPI_dataset;
@@ -2006,7 +2115,7 @@ int32_t SDDS_MPI_ReadBinaryPage(SDDS_DATASET *SDDS_dataset) {
   if (SDDS_dataset->autoRecovered)
     return -1;
   if (SDDS_dataset->swapByteOrder) {
-    return SDDS_MPI_ReadNonNativeBinaryPage(SDDS_dataset);
+    return readNonNativeBinaryPage(SDDS_dataset);
   }
   /*  static char s[SDDS_MAXLINE]; */
   n_rows = 0;
@@ -2033,9 +2142,9 @@ int32_t SDDS_MPI_ReadBinaryPage(SDDS_DATASET *SDDS_dataset) {
     return 0;
   }
 #if defined(MASTER_READTITLE_ONLY)
-  SDDS_MPI_BroadcastTitleData(SDDS_dataset);
+  if (!SDDS_MPI_BroadcastTitleData(SDDS_dataset)) return 0;
 #endif
-  MPI_dataset->file_offset += SDDS_MPI_GetTitleOffset(SDDS_dataset);
+  MPI_dataset->file_offset += getTitleOffset(SDDS_dataset, 1);
   if (MPI_dataset->total_rows < 0) {
     SDDS_SetError("Unable to read page--negative number of rows (SDDS_MPI_ReadBinaryPage)");
     return (0);
@@ -2077,6 +2186,8 @@ int32_t SDDS_MPI_ReadBinaryPage(SDDS_DATASET *SDDS_dataset) {
   if (SDDS_dataset->layout.data_mode.column_major) {
     /*read by column buffer is not need */
     for (i = 0; i < SDDS_dataset->layout.n_columns; i++) {
+      if (SDDS_dataset->layout.column_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
+        continue;
       type = SDDS_dataset->layout.column_definition[i].type;
       if (type == SDDS_STRING) {
         SDDS_SetError("Can not read string column from SDDS3 (SDDS_MPI_ReadBinaryPage");
@@ -2216,6 +2327,13 @@ int32_t SDDS_MPI_ReadNonNativePageSparse(SDDS_DATASET *SDDS_dataset, uint32_t mo
  * @return int32_t Returns the page number on success, 0 on failure, or -1 if end-of-file is reached.
  */
 int32_t SDDS_MPI_ReadNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset) {
+  if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_MPI_ReadNonNativeBinaryPage"))
+    return 0;
+  return validateBinaryPageRead(SDDS_dataset, readNonNativeBinaryPage(SDDS_dataset));
+}
+
+/** @brief Read and byte-swap a non-native page before public-entry validation. */
+static int32_t readNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset) {
   int32_t ID_offset, mpi_code, master_read, type, retval;
   int64_t i, j, n_rows, total_rows, prev_rows;
   SDDS_FILEBUFFER *fBuffer;
@@ -2252,9 +2370,9 @@ int32_t SDDS_MPI_ReadNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset) {
     return 0;
   }
 #if defined(MASTER_READTITLE_ONLY)
-  SDDS_MPI_BroadcastTitleData(SDDS_dataset);
+  if (!SDDS_MPI_BroadcastTitleData(SDDS_dataset)) return 0;
 #endif
-  MPI_dataset->file_offset += SDDS_MPI_GetTitleOffset(SDDS_dataset);
+  MPI_dataset->file_offset += getTitleOffset(SDDS_dataset, 1);
   if (MPI_dataset->total_rows < 0) {
     SDDS_SetError("Unable to read page--negative number of rows (SDDS_MPI_ReadBinaryPage)");
     return (0);
@@ -2297,6 +2415,8 @@ int32_t SDDS_MPI_ReadNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset) {
   if (SDDS_dataset->layout.data_mode.column_major) {
     /*read by column buffer is not need */
     for (i = 0; i < SDDS_dataset->layout.n_columns; i++) {
+      if (SDDS_dataset->layout.column_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
+        continue;
       type = SDDS_dataset->layout.column_definition[i].type;
       if (type == SDDS_STRING) {
         SDDS_SetError("Can not read string column from SDDS3 (SDDS_MPI_ReadBinaryPage");
@@ -2445,7 +2565,7 @@ int32_t SDDS_MPI_BufferedReadNonNativeBinaryTitle(SDDS_DATASET *SDDS_dataset) {
  *
  * @return MPI_Offset The total byte offset of the title section in the binary file.
  */
-MPI_Offset SDDS_MPI_GetTitleOffset(SDDS_DATASET *SDDS_dataset) {
+static MPI_Offset getTitleOffset(SDDS_DATASET *SDDS_dataset, int32_t inputPage) {
   int64_t i, j;
   MPI_Offset offset = 0;
   SDDS_LAYOUT *layout;
@@ -2456,7 +2576,8 @@ MPI_Offset SDDS_MPI_GetTitleOffset(SDDS_DATASET *SDDS_dataset) {
     offset += sizeof(int64_t);
   }
   for (i = 0; i < layout->n_parameters; i++) {
-    if (layout->parameter_definition[i].fixed_value)
+    if (layout->parameter_definition[i].fixed_value ||
+        (inputPage && (layout->parameter_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)))
       continue;
     if (layout->parameter_definition[i].type == SDDS_STRING) {
       if (*(char **)SDDS_dataset->parameter[i])
@@ -2486,6 +2607,9 @@ MPI_Offset SDDS_MPI_GetTitleOffset(SDDS_DATASET *SDDS_dataset) {
   }
   return offset;
 }
+
+/** @brief Return the complete output title size, including output-only parameters. */
+MPI_Offset SDDS_MPI_GetTitleOffset(SDDS_DATASET *SDDS_dataset) { return getTitleOffset(SDDS_dataset, 0); }
 
 /*use a small size of buffer to read the total_rows, parameters and arrays of each page */
 /**
@@ -2700,6 +2824,8 @@ int32_t SDDS_MPI_CollectiveReadByRow(SDDS_DATASET *SDDS_dataset) {
   min_rows = MPI_dataset->total_rows / MPI_dataset->n_processors;
   for (i = 0; i < min_rows; i++) {
     for (j = 0; j < layout->n_columns; j++) {
+      if (layout->column_definition[j].definition_mode & SDDS_WRITEONLY_DEFINITION)
+        continue;
       type = layout->column_definition[j].type;
       size = SDDS_type_size[type - 1];
       if (type == SDDS_STRING) {

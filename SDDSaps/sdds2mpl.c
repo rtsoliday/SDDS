@@ -176,6 +176,9 @@ int main(int argc, char **argv) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);
   }
+  if (!SDDS_CheckEnumExport(&sdds_dataset))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
 
   for (i = 0; i < outputs; i++) {
     if (!output[i]->parameter_output) {

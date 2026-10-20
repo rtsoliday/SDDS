@@ -329,6 +329,8 @@ int32_t SDDS_GZipWriteDescription(char *text, char *contents, gzFile gzfp) {
 int32_t SDDS_WriteColumnDefinition(COLUMN_DEFINITION *column_definition, FILE *fp) {
   if (!fp || column_definition->type <= 0 || column_definition->type > SDDS_NUM_TYPES)
     return (0);
+  if (column_definition->type == SDDS_ENUM)
+    return SDDS6_WriteNamelist(fp, 0, "column", column_definition, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS);
 
   fputs("&column ", fp);
   SDDS_PrintNamelistField(fp, "name", column_definition->name);
@@ -356,6 +358,8 @@ int32_t SDDS_WriteColumnDefinition(COLUMN_DEFINITION *column_definition, FILE *f
 int32_t SDDS_LZMAWriteColumnDefinition(COLUMN_DEFINITION *column_definition, struct lzmafile *lzmafp) {
   if (!lzmafp || column_definition->type <= 0 || column_definition->type > SDDS_NUM_TYPES)
     return (0);
+  if (column_definition->type == SDDS_ENUM)
+    return SDDS6_WriteNamelist(lzmafp, 2, "column", column_definition, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS);
 
   lzma_puts("&column ", lzmafp);
   SDDS_LZMAPrintNamelistField(lzmafp, "name", column_definition->name);
@@ -384,6 +388,8 @@ int32_t SDDS_LZMAWriteColumnDefinition(COLUMN_DEFINITION *column_definition, str
 int32_t SDDS_GZipWriteColumnDefinition(COLUMN_DEFINITION *column_definition, gzFile gzfp) {
   if (!gzfp || column_definition->type <= 0 || column_definition->type > SDDS_NUM_TYPES)
     return (0);
+  if (column_definition->type == SDDS_ENUM)
+    return SDDS6_WriteNamelist(gzfp, 1, "column", column_definition, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS);
 
   gzputs(gzfp, "&column ");
   SDDS_GZipPrintNamelistField(gzfp, "name", column_definition->name);
@@ -411,6 +417,8 @@ int32_t SDDS_GZipWriteColumnDefinition(COLUMN_DEFINITION *column_definition, gzF
 int32_t SDDS_WriteParameterDefinition(PARAMETER_DEFINITION *parameter_definition, FILE *fp) {
   if (!fp || parameter_definition->type <= 0 || parameter_definition->type > SDDS_NUM_TYPES)
     return (0);
+  if (parameter_definition->type == SDDS_ENUM)
+    return SDDS6_WriteNamelist(fp, 0, "parameter", parameter_definition, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS);
   fputs("&parameter ", fp);
   SDDS_PrintNamelistField(fp, "name", parameter_definition->name);
   SDDS_PrintNamelistField(fp, "symbol", SDDS_BlankToNull(parameter_definition->symbol));
@@ -438,6 +446,8 @@ int32_t SDDS_WriteParameterDefinition(PARAMETER_DEFINITION *parameter_definition
 int32_t SDDS_LZMAWriteParameterDefinition(PARAMETER_DEFINITION *parameter_definition, struct lzmafile *lzmafp) {
   if (!lzmafp || parameter_definition->type <= 0 || parameter_definition->type > SDDS_NUM_TYPES)
     return (0);
+  if (parameter_definition->type == SDDS_ENUM)
+    return SDDS6_WriteNamelist(lzmafp, 2, "parameter", parameter_definition, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS);
   lzma_puts("&parameter ", lzmafp);
   SDDS_LZMAPrintNamelistField(lzmafp, "name", parameter_definition->name);
   SDDS_LZMAPrintNamelistField(lzmafp, "symbol", SDDS_BlankToNull(parameter_definition->symbol));
@@ -466,6 +476,8 @@ int32_t SDDS_LZMAWriteParameterDefinition(PARAMETER_DEFINITION *parameter_defini
 int32_t SDDS_GZipWriteParameterDefinition(PARAMETER_DEFINITION *parameter_definition, gzFile gzfp) {
   if (!gzfp || parameter_definition->type <= 0 || parameter_definition->type > SDDS_NUM_TYPES)
     return (0);
+  if (parameter_definition->type == SDDS_ENUM)
+    return SDDS6_WriteNamelist(gzfp, 1, "parameter", parameter_definition, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS);
   gzputs(gzfp, "&parameter ");
   SDDS_GZipPrintNamelistField(gzfp, "name", parameter_definition->name);
   SDDS_GZipPrintNamelistField(gzfp, "symbol", SDDS_BlankToNull(parameter_definition->symbol));
@@ -692,6 +704,8 @@ int32_t SDDS_GZipWriteDataMode(SDDS_LAYOUT *layout, gzFile gzfp) {
 int32_t SDDS_WriteArrayDefinition(ARRAY_DEFINITION *array_definition, FILE *fp) {
   if (!fp || array_definition->type <= 0 || array_definition->type > SDDS_NUM_TYPES)
     return (0);
+  if (array_definition->type == SDDS_ENUM)
+    return SDDS6_WriteNamelist(fp, 0, "array", array_definition, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS);
 
   fputs("&array ", fp);
   SDDS_PrintNamelistField(fp, "name", array_definition->name);
@@ -722,6 +736,8 @@ int32_t SDDS_WriteArrayDefinition(ARRAY_DEFINITION *array_definition, FILE *fp) 
 int32_t SDDS_LZMAWriteArrayDefinition(ARRAY_DEFINITION *array_definition, struct lzmafile *lzmafp) {
   if (!lzmafp || array_definition->type <= 0 || array_definition->type > SDDS_NUM_TYPES)
     return (0);
+  if (array_definition->type == SDDS_ENUM)
+    return SDDS6_WriteNamelist(lzmafp, 2, "array", array_definition, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS);
 
   lzma_puts("&array ", lzmafp);
   SDDS_LZMAPrintNamelistField(lzmafp, "name", array_definition->name);
@@ -753,6 +769,8 @@ int32_t SDDS_LZMAWriteArrayDefinition(ARRAY_DEFINITION *array_definition, struct
 int32_t SDDS_GZipWriteArrayDefinition(ARRAY_DEFINITION *array_definition, gzFile gzfp) {
   if (!gzfp || array_definition->type <= 0 || array_definition->type > SDDS_NUM_TYPES)
     return (0);
+  if (array_definition->type == SDDS_ENUM)
+    return SDDS6_WriteNamelist(gzfp, 1, "array", array_definition, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS);
 
   gzputs(gzfp, "&array ");
   SDDS_GZipPrintNamelistField(gzfp, "name", array_definition->name);

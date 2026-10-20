@@ -167,6 +167,14 @@ int main(int argc, char **argv) {
 
   processFilenames("sdds2math", &input, &output, pipeFlags, 0, NULL);
 
+  /* Validate the input before opening or replacing the destination. */
+  if (!SDDS_InitializeInput(&SDDS_table, input)) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    exit(EXIT_FAILURE);
+  }
+  if (!SDDS_CheckEnumExport(&SDDS_table))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
   if (output) {
     outfile = fopen(output, "w");
     if (!outfile) {
@@ -199,12 +207,6 @@ int main(int argc, char **argv) {
   strcpy(rformat, format);
   if ((ptr = strpbrk(rformat, "eg")))
     *ptr = 'f';
-
-  /* Initialize SDDS input */
-  if (!SDDS_InitializeInput(&SDDS_table, input)) {
-    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-    exit(EXIT_FAILURE);
-  }
 
   layout = &SDDS_table.layout;
 

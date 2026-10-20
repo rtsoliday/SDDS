@@ -21,6 +21,7 @@
 #include <cerrno>
 #include <cfloat>
 #include <charconv>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -150,10 +151,23 @@ T parseInteger(const std::string &text, const char *what) {
   return result;
 }
 
-std::string unescape(std::string_view input) {
+/** @brief Accept the whitespace permitted around C-library enum codes. */
+std::int32_t parseEnumCode(const std::string &text, const char *what) {
+  const auto first = std::find_if_not(text.begin(), text.end(), [](unsigned char c) {
+    return std::isspace(c);
+  });
+  const auto last = std::find_if_not(text.rbegin(), text.rend(), [](unsigned char c) {
+    return std::isspace(c);
+  }).base();
+  return parseInteger<std::int32_t>(first < last ? std::string(first, last) : std::string{}, what);
+}
+
+std::string unescape(std::string_view input, bool strict = false) {
   std::string result;
   result.reserve(input.size());
   for (std::size_t i = 0; i < input.size(); ++i) {
+    if (strict && (!input[i] || (input[i] == '\\' && i + 1 == input.size())))
+      throwFormat("NUL or dangling escape in SDDS6 namelist");
     if (input[i] != '\\' || i + 1 >= input.size()) {
       result.push_back(input[i]);
       continue;
@@ -167,6 +181,7 @@ std::string unescape(std::string_view input) {
         value = value * 8U + static_cast<unsigned>(input[++i] - '0');
         ++digits;
       }
+      if (strict && (!value || value > 255)) throwFormat("invalid SDDS6 octal escape");
       result.push_back(static_cast<char>(value));
     } else if (next == 'n') {
       result.push_back('\n');
@@ -175,6 +190,7 @@ std::string unescape(std::string_view input) {
     } else if (next == 't') {
       result.push_back('\t');
     } else {
+      if (strict && next != '\\' && next != '"' && next != '!') throwFormat("unknown SDDS6 namelist escape");
       result.push_back(next);
     }
   }
@@ -205,6 +221,17 @@ std::string quoteRequired(const std::string &value) {
   return quote(std::optional<std::string>(value));
 }
 
+/** Encode fixed string/character data independently of SDDS6 namelist quoting. */
+std::string encodeFixedString(std::string_view text) {
+  std::string encoded;
+  for (const unsigned char c : text) {
+    char octal[5];
+    std::snprintf(octal, sizeof(octal), "\\%03o", c);
+    encoded += octal;
+  }
+  return encoded;
+}
+
 Type parseType(const std::string &name) {
   const std::string value = lower(trim(name));
   if (value == "longdouble") return Type::LongDouble;
@@ -218,6 +245,7 @@ Type parseType(const std::string &name) {
   if (value == "ushort") return Type::UInt16;
   if (value == "string") return Type::String;
   if (value == "character") return Type::Character;
+  if (value == "enum") return Type::Enum;
   throwFormat("unknown SDDS type: " + name);
 }
 
@@ -234,6 +262,7 @@ Values emptyValues(Type type) {
   case Type::UInt16: return std::vector<std::uint16_t>{};
   case Type::String: return std::vector<std::string>{};
   case Type::Character: return std::vector<char>{};
+  case Type::Enum: return std::vector<EnumValue>{};
   }
   throwType("unknown SDDS type");
 }
@@ -251,6 +280,7 @@ Scalar defaultScalar(Type type) {
   case Type::UInt16: return static_cast<std::uint16_t>(0);
   case Type::String: return std::string{};
   case Type::Character: return static_cast<char>(0);
+  case Type::Enum: return EnumValue{};
   }
   throwType("unknown SDDS type");
 }
@@ -1205,7 +1235,7 @@ class BufferedStream {
 
 using Tags = std::vector<std::pair<std::string, std::string>>;
 
-Tags parseTags(std::string_view text) {
+Tags parseTags(std::string_view text, bool strict) {
   Tags tags;
   std::size_t position = 0;
   while (position < text.size()) {
@@ -1240,15 +1270,15 @@ Tags parseTags(std::string_view text) {
         else
           escaped = false;
       }
-      value = unescape(value);
+      value = unescape(value, strict);
     } else {
       const std::size_t valueStart = position;
       while (position < text.size() && text[position] != ',' &&
              !std::isspace(static_cast<unsigned char>(text[position])))
         ++position;
-      value = unescape(text.substr(valueStart, position - valueStart));
+      value = unescape(text.substr(valueStart, position - valueStart), strict);
     }
-    tags.emplace_back(lower(std::move(key)), std::move(value));
+    tags.emplace_back(strict ? std::move(key) : lower(std::move(key)), std::move(value));
   }
   return tags;
 }
@@ -1272,10 +1302,68 @@ struct Namelist {
   Tags tags;
 };
 
+/** Read SDDS6 in one pass, retaining quoted controls for strict dictionary validation. */
+std::optional<Namelist> readNamelist6(BufferedStream &stream, const ReaderOptions &options,
+    const std::filesystem::path &path, std::optional<ByteOrder> &commentOrder,
+    bool &fixedRowComment) {
+  std::string command, comment;
+  bool started = false, quoted = false, escaped = false, inComment = false;
+  auto specialComment = [&]() {
+    const auto text = lower(comment);
+    auto order = [&](ByteOrder value) {
+      if (commentOrder && *commentOrder != value) throwFormat("conflicting SDDS6 byte-order comments", path);
+      commentOrder = value;
+    };
+    if (!text.empty() && text.front() == '#') {
+      if (text.find("big-endian") != std::string::npos) order(ByteOrder::Big);
+      if (text.find("little-endian") != std::string::npos) order(ByteOrder::Little);
+      if (text.find("fixed-rowcount") != std::string::npos || text.find("fixed-row-count") != std::string::npos)
+        fixedRowComment = true;
+    }
+  };
+  while (const auto byte = stream.get()) {
+    const char c = static_cast<char>(*byte);
+    if (!c) throwFormat("NUL in SDDS6 header", path);
+    if (inComment) {
+      if (c == '\n') { specialComment(); comment.clear(); inComment = false; }
+      else if (comment.size() < 255) comment.push_back(c);
+      continue;
+    }
+    if (!quoted && c == '!') { inComment = true; continue; }
+    if (!started) {
+      if (c != '&') continue;
+      started = true;
+    }
+    if (command.size() + 1 >= options.limits.maxLayoutCommandBytes)
+      throwLimit("SDDS6 layout command exceeds configured limit", path);
+    command.push_back((c == '\n' || c == '\r') && !quoted ? ' ' : c);
+    if (c == '"' && !escaped) quoted = !quoted;
+    if (!quoted && command.size() >= 4 && command.compare(command.size() - 4, 4, "&end") == 0) {
+      bool trailingComment = false;
+      while (const auto tail = stream.get()) {
+        const char character = static_cast<char>(*tail);
+        if (!character) throwFormat("NUL after SDDS6 namelist", path);
+        if (character == '\n') break;
+        if (character == '!') trailingComment = true;
+        if (!trailingComment && character != ' ' && character != '\t' && character != '\r' && character != ',')
+          throwFormat("unexpected text after SDDS6 &end", path);
+      }
+      command.resize(command.size() - 4);
+      const auto separator = command.find_first_of(" \t\r\n");
+      if (separator == std::string::npos) throwFormat("missing SDDS6 command body", path);
+      return Namelist{command.substr(1, separator - 1), parseTags(std::string_view(command).substr(separator + 1), true)};
+    }
+    escaped = c == '\\' && !escaped;
+  }
+  if (started) throwFormat("unterminated SDDS6 namelist", path);
+  return std::nullopt;
+}
+
 std::optional<Namelist> readNamelist(BufferedStream &stream, const ReaderOptions &options,
                                      const std::filesystem::path &path,
                                      std::optional<ByteOrder> &commentOrder,
-                                     bool &fixedRowComment) {
+                                     bool &fixedRowComment, bool strict) {
+  if (strict) return readNamelist6(stream, options, path, commentOrder, fixedRowComment);
   std::string command;
   bool started = false;
   while (true) {
@@ -1318,7 +1406,7 @@ std::optional<Namelist> readNamelist(BufferedStream &stream, const ReaderOptions
         Namelist result;
         result.name = lower(separator == std::string::npos ? body : body.substr(0, separator));
         result.tags = parseTags(separator == std::string::npos ? std::string_view{} :
-                               std::string_view(body).substr(separator + 1));
+                               std::string_view(body).substr(separator + 1), false);
         return result;
       }
       if (c == '\\' && !escaped)
@@ -1334,6 +1422,10 @@ void validateLayout(Layout &layout) {
   auto validateFields = [&](auto &definitions, const char *kind) {
     names.clear();
     for (auto &definition : definitions) {
+      if ((definition.type == Type::Enum) != static_cast<bool>(definition.enumDefinition))
+        throwFormat("enum type requires a dictionary; primitive types cannot have one", {}, 0, definition.name);
+      if (definition.type == Type::Enum && definition.format)
+        throwFormat("enum format_string must be absent", {}, 0, definition.name);
       if (definition.name.empty())
         throwFormat(std::string(kind) + " name is empty");
       if (!names.insert(definition.name).second)
@@ -1358,11 +1450,19 @@ void validateLayout(Layout &layout) {
   if (layout.data.rowCountMode == RowCountMode::Fixed && layout.data.fixedRowIncrement < 1)
     throwFormat("fixed row increment must be positive");
 
+  for (const auto &definition : layout.parameters)
+    if (definition.type == Type::Enum && definition.fixedValue)
+      definition.enumDefinition->label(parseEnumCode(*definition.fixedValue, "fixed enum code"));
+  for (const auto &definition : layout.columns)
+    if (definition.type == Type::Enum && definition.fieldLength) throwFormat("enum field_length must be zero");
+  for (const auto &definition : layout.arrays)
+    if (definition.type == Type::Enum && definition.fieldLength) throwFormat("enum field_length must be zero");
   std::int32_t version = 1;
   auto consider = [&](Type type) {
     if (type == Type::UInt16 || type == Type::UInt32) version = std::max(version, 2);
     if (type == Type::LongDouble) version = std::max(version, 4);
     if (type == Type::Int64 || type == Type::UInt64) version = std::max(version, 5);
+    if (type == Type::Enum) version = 6;
   };
   for (const auto &definition : layout.parameters) consider(definition.type);
   for (const auto &definition : layout.arrays) consider(definition.type);
@@ -1372,14 +1472,21 @@ void validateLayout(Layout &layout) {
   layout.version = version;
 }
 
-FieldMetadata fieldFrom(const Tags &tags) {
+FieldMetadata fieldFrom(const Tags &tags, std::int32_t version, const ReaderLimits &limits) {
   FieldMetadata field;
   field.name = requiredTag(tags, "name");
-  field.type = parseType(requiredTag(tags, "type"));
+  const auto type = requiredTag(tags, "type");
+  field.type = parseType(type);
+  if (version == 6 && type != typeName(field.type)) throwFormat("invalid SDDS6 type spelling", {}, 0, field.name);
   field.symbol = tag(tags, "symbol");
   field.units = tag(tags, "units");
   field.description = tag(tags, "description");
   field.format = tag(tags, "format_string");
+  const auto mapping = tag(tags, "enum_values");
+  if (field.type == Type::Enum) {
+    if (version < 6 || !mapping) throwFormat("enum definitions require SDDS6 and enum_values", {}, 0, field.name);
+    field.enumDefinition = std::make_shared<const EnumDefinition>(*mapping, limits.maxEnumDefinitionBytes);
+  } else if (mapping) throwFormat("enum_values is only valid for type=enum", {}, 0, field.name);
   return field;
 }
 
@@ -1395,29 +1502,45 @@ void parseLayoutStream(BufferedStream &stream, Layout &layout, const ReaderOptio
     if (!header || header->rfind("SDDS", 0) != 0)
       throwFormat("missing SDDS version header", path);
     const std::int32_t version = parseInteger<std::int32_t>(header->substr(4), "SDDS version");
-    if (version < 1 || version > 5)
+    if (version < 1 || version > 6)
       throwFormat("unsupported SDDS version " + std::to_string(version), path);
     layout.version = version;
   }
 
-  while (auto command = readNamelist(stream, options, path, commentOrder, fixedRowComment)) {
+  while (auto command = readNamelist(stream, options, path, commentOrder, fixedRowComment, layout.version == 6)) {
+    if (layout.version == 6) {
+      std::unordered_set<std::string> seen;
+      std::string allowed;
+      if (command->name == "column") allowed = " name symbol units description format_string type field_length enum_values ";
+      else if (command->name == "parameter") allowed = " name symbol units description format_string type fixed_value enum_values ";
+      else if (command->name == "array") allowed = " name symbol units description format_string type field_length dimensions group_name enum_values ";
+      else if (command->name == "description") allowed = " text contents ";
+      else if (command->name == "data") allowed = " mode lines_per_row no_row_counts fixed_row_count additional_header_lines endian column_major_order ";
+      else if (command->name == "associate") allowed = " name filename path description contents sdds ";
+      else if (command->name == "include") allowed = " filename ";
+      for (const auto &entry : command->tags)
+        if (!seen.insert(entry.first).second || allowed.find(" " + entry.first + " ") == std::string::npos)
+          throwFormat("duplicate or unknown SDDS6 namelist attribute: " + entry.first, path);
+    }
     if (command->name == "description") {
       layout.description = tag(command->tags, "text");
       layout.contents = tag(command->tags, "contents");
     } else if (command->name == "parameter") {
       ParameterDefinition definition;
-      static_cast<FieldMetadata &>(definition) = fieldFrom(command->tags);
+      static_cast<FieldMetadata &>(definition) = fieldFrom(command->tags, layout.version, options.limits);
       definition.fixedValue = tag(command->tags, "fixed_value");
+      if (layout.version == 6 && (definition.type == Type::String || definition.type == Type::Character) && definition.fixedValue)
+        definition.fixedValue = unescape(*definition.fixedValue);
       layout.parameters.push_back(std::move(definition));
     } else if (command->name == "column") {
       ColumnDefinition definition;
-      static_cast<FieldMetadata &>(definition) = fieldFrom(command->tags);
+      static_cast<FieldMetadata &>(definition) = fieldFrom(command->tags, layout.version, options.limits);
       if (auto value = tag(command->tags, "field_length"))
         definition.fieldLength = parseInteger<std::int32_t>(*value, "field_length");
       layout.columns.push_back(std::move(definition));
     } else if (command->name == "array") {
       ArrayDefinition definition;
-      static_cast<FieldMetadata &>(definition) = fieldFrom(command->tags);
+      static_cast<FieldMetadata &>(definition) = fieldFrom(command->tags, layout.version, options.limits);
       if (auto value = tag(command->tags, "field_length"))
         definition.fieldLength = parseInteger<std::int32_t>(*value, "field_length");
       if (auto value = tag(command->tags, "dimensions"))
@@ -1530,8 +1653,17 @@ Page::Page(std::shared_ptr<const Layout> layout, LoadMode load) : layout_(std::m
   if (!layout_)
     throwState("page requires a layout");
   parameters_.reserve(layout_->parameters.size());
-  for (const auto &definition : layout_->parameters)
-    parameters_.push_back(defaultScalar(definition.type));
+  for (const auto &definition : layout_->parameters) {
+    if (definition.type == Type::Enum && definition.fixedValue) {
+      const auto code = parseEnumCode(*definition.fixedValue, "fixed enum code");
+      if (!definition.enumDefinition)
+        throwFormat("enum parameter requires a dictionary", {}, 0, definition.name);
+      definition.enumDefinition->label(code);
+      parameters_.push_back(EnumValue{code});
+    } else {
+      parameters_.push_back(defaultScalar(definition.type));
+    }
+  }
   arrays_.reserve(layout_->arrays.size());
   for (const auto &definition : layout_->arrays)
     arrays_.push_back({std::vector<std::int32_t>(static_cast<std::size_t>(definition.dimensions), 0),
@@ -1589,6 +1721,7 @@ const Values &Page::column(std::string_view name) const { return column(layout()
 void Page::setParameter(std::size_t index, Scalar value) {
   if (typeOf(value) != layout().parameters.at(index).type)
     throwType("parameter type mismatch", layout().parameters.at(index).name);
+  if (layout().parameters.at(index).enumDefinition) layout().parameters.at(index).enumDefinition->label(std::get<EnumValue>(value).code);
   parameters_.at(index) = std::move(value);
   parametersLoaded_.at(index) = true;
 }
@@ -1611,6 +1744,8 @@ void Page::setArray(std::size_t index, ArrayData value) {
   }
   if (elements != valuesSize(value.values))
     throwType("array element count does not match dimensions", definition.name);
+  if (definition.enumDefinition)
+    for (const auto item : std::get<std::vector<EnumValue>>(value.values)) definition.enumDefinition->label(item.code);
   arrays_.at(index) = std::move(value);
   arraysLoaded_.at(index) = true;
 }
@@ -1621,6 +1756,8 @@ void Page::setColumn(std::size_t index, Values value) {
   const auto &definition = layout().columns.at(index);
   if (typeOf(value) != definition.type)
     throwType("column type mismatch", definition.name);
+  if (definition.enumDefinition)
+    for (const auto item : std::get<std::vector<EnumValue>>(value)) definition.enumDefinition->label(item.code);
   columns_.at(index) = std::move(value);
   columnsLoaded_.at(index) = true;
   rowCount_ = 0;
@@ -1739,7 +1876,7 @@ std::array<unsigned char, 16> encodeExtended80(long double value, ByteOrder orde
   return bytes;
 }
 
-Scalar parseAsciiScalar(Type type, const std::string &text) {
+Scalar parseAsciiScalar(Type type, const std::string &text, const EnumDefinition *dictionary = nullptr) {
   if (type == Type::String)
     return text;
   if (type == Type::Character) {
@@ -1771,6 +1908,11 @@ Scalar parseAsciiScalar(Type type, const std::string &text) {
   case Type::Int64: return parseInteger<std::int64_t>(value, "long64 value");
   case Type::UInt64: return parseInteger<std::uint64_t>(value, "ulong64 value");
   case Type::Int32: return parseInteger<std::int32_t>(value, "long value");
+  case Type::Enum: {
+    const auto code = parseEnumCode(value, "enum code");
+    if (dictionary) dictionary->label(code);
+    return EnumValue{code};
+  }
   case Type::UInt32: return parseInteger<std::uint32_t>(value, "ulong value");
   case Type::Int16: return parseInteger<std::int16_t>(value, "short value");
   case Type::UInt16: return parseInteger<std::uint16_t>(value, "ushort value");
@@ -1785,6 +1927,8 @@ std::string formatAsciiScalar(const Scalar &value) {
     using T = std::decay_t<decltype(item)>;
     if constexpr (std::is_same_v<T, std::string>) {
       return quoteRequired(item);
+    } else if constexpr (std::is_same_v<T, EnumValue>) {
+      return std::to_string(item.code);
     } else if constexpr (std::is_same_v<T, char>) {
       return quoteRequired(std::string(1, item));
     } else if constexpr (std::is_floating_point_v<T>) {
@@ -1803,7 +1947,7 @@ std::string formatAsciiScalar(const Scalar &value) {
 Scalar readBinaryScalar(BufferedStream &stream, Type type, ByteOrder order,
                         LongDoubleEncoding longDoubleEncoding,
                         const ReaderLimits &limits, const std::filesystem::path &path,
-                        std::int64_t page) {
+                        std::int64_t page, const EnumDefinition *dictionary = nullptr) {
   switch (type) {
   case Type::LongDouble:
     if (longDoubleEncoding == LongDoubleEncoding::LegacyFloat64)
@@ -1818,6 +1962,11 @@ Scalar readBinaryScalar(BufferedStream &stream, Type type, ByteOrder order,
   case Type::Int64: return readPod<std::int64_t>(stream, order, path, page);
   case Type::UInt64: return readPod<std::uint64_t>(stream, order, path, page);
   case Type::Int32: return readPod<std::int32_t>(stream, order, path, page);
+  case Type::Enum: {
+    const auto code = readPod<std::int32_t>(stream, order, path, page);
+    if (dictionary) dictionary->label(code);
+    return EnumValue{code};
+  }
   case Type::UInt32: return readPod<std::uint32_t>(stream, order, path, page);
   case Type::Int16: return readPod<std::int16_t>(stream, order, path, page);
   case Type::UInt16: return readPod<std::uint16_t>(stream, order, path, page);
@@ -1850,6 +1999,7 @@ std::uint64_t binaryScalarBytes(Type type, LongDoubleEncoding longDoubleEncoding
   case Type::Int64: return sizeof(std::int64_t);
   case Type::UInt64: return sizeof(std::uint64_t);
   case Type::Int32: return sizeof(std::int32_t);
+  case Type::Enum: return sizeof(std::int32_t);
   case Type::UInt32: return sizeof(std::uint32_t);
   case Type::Int16: return sizeof(std::int16_t);
   case Type::UInt16: return sizeof(std::uint16_t);
@@ -1861,7 +2011,12 @@ std::uint64_t binaryScalarBytes(Type type, LongDoubleEncoding longDoubleEncoding
 
 void skipBinaryScalar(BufferedStream &stream, Type type, ByteOrder order,
                       LongDoubleEncoding longDoubleEncoding, const ReaderLimits &limits,
-                      const std::filesystem::path &path, std::int64_t page) {
+                      const std::filesystem::path &path, std::int64_t page,
+                      const EnumDefinition *dictionary = nullptr) {
+  if (type == Type::Enum) {
+    readBinaryScalar(stream, type, order, longDoubleEncoding, limits, path, page, dictionary);
+    return;
+  }
   if (type != Type::String) {
     stream.skip(binaryScalarBytes(type, longDoubleEncoding), path, page);
     return;
@@ -1889,6 +2044,17 @@ T fixedValue(const unsigned char *data, ByteOrder order) {
   return value;
 }
 
+/** @brief Validate a buffered enum code while retaining its input location. */
+void validateFixedBinaryEnum(const ColumnDefinition &definition, const unsigned char *data,
+                             ByteOrder order, const std::filesystem::path &path,
+                             std::int64_t page, std::uint64_t offset, std::int64_t row) {
+  try {
+    definition.enumDefinition->label(fixedValue<std::int32_t>(data, order));
+  } catch (const Error &error) {
+    throwWithContext(error, path, page, offset, row, definition.name);
+  }
+}
+
 void appendFixedBinaryValue(Values &values, Type type, const unsigned char *data,
                             ByteOrder order, LongDoubleEncoding longDoubleEncoding) {
   switch (type) {
@@ -1911,6 +2077,8 @@ void appendFixedBinaryValue(Values &values, Type type, const unsigned char *data
   case Type::UInt64:
     std::get<std::vector<std::uint64_t>>(values).push_back(
         fixedValue<std::uint64_t>(data, order)); return;
+  case Type::Enum:
+    std::get<std::vector<EnumValue>>(values).push_back(EnumValue{fixedValue<std::int32_t>(data, order)}); return;
   case Type::Int32:
     std::get<std::vector<std::int32_t>>(values).push_back(
         fixedValue<std::int32_t>(data, order)); return;
@@ -1946,6 +2114,8 @@ void writeBinaryScalar(BufferedStream &stream, const Scalar &value, ByteOrder or
         throwLimit("string is too large for SDDS binary encoding");
       writePod(stream, static_cast<std::int32_t>(item.size()), order);
       stream.write(item.data(), item.size());
+    } else if constexpr (std::is_same_v<T, EnumValue>) {
+      writePod(stream, item.code, order);
     } else if constexpr (std::is_same_v<T, char>) {
       stream.write(&item, 1);
     } else {
@@ -1987,6 +2157,8 @@ void storeFixedBinaryValue(unsigned char *destination, const Values &values,
   case Type::UInt64:
     storeFixedValue(destination, std::get<std::vector<std::uint64_t>>(values).at(index), order);
     return;
+  case Type::Enum:
+    storeFixedValue(destination, std::get<std::vector<EnumValue>>(values).at(index).code, order); return;
   case Type::Int32:
     storeFixedValue(destination, std::get<std::vector<std::int32_t>>(values).at(index), order);
     return;
@@ -2114,13 +2286,14 @@ std::string fieldTags(const FieldMetadata &field) {
   if (field.description) result += "description=" + quote(field.description) + ", ";
   if (field.format) result += "format_string=" + quote(field.format) + ", ";
   result += "type=" + std::string(typeName(field.type)) + ", ";
+  if (field.enumDefinition) result += "enum_values=" + quoteRequired(std::string(field.enumDefinition->values())) + ", ";
   return result;
 }
 
 void writeLayout(BufferedStream &stream, Layout &layout, const WriterOptions &options) {
   validateLayout(layout);
   layout.version = std::max(layout.version, options.minimumVersion);
-  if (layout.version < 1 || layout.version > 5)
+  if (layout.version < 1 || layout.version > 6)
     throwState("minimum SDDS version must be in the range 1 through 5");
   stream.write("SDDS" + std::to_string(layout.version) + "\n");
   if (layout.data.mode == DataMode::Binary) {
@@ -2137,7 +2310,11 @@ void writeLayout(BufferedStream &stream, Layout &layout, const WriterOptions &op
   }
   for (const auto &definition : layout.parameters) {
     std::string command = "&parameter " + fieldTags(definition);
-    if (definition.fixedValue) command += "fixed_value=" + quote(definition.fixedValue) + ", ";
+    if (definition.fixedValue) {
+      const auto fixed = layout.version == 6 && (definition.type == Type::String || definition.type == Type::Character)
+          ? encodeFixedString(*definition.fixedValue) : *definition.fixedValue;
+      command += "fixed_value=" + quoteRequired(fixed) + ", ";
+    }
     stream.write(command + "&end\n");
   }
   for (const auto &definition : layout.arrays) {
@@ -2184,6 +2361,30 @@ void validatePage(const Page &page, const Layout &layout) {
     throwType("page does not match writer layout");
   if (!page.allFieldsLoaded())
     throwState("a projected page must be completed before it can be written");
+  auto validateEnum = [](const FieldMetadata &target, const FieldMetadata &source, const auto &values) {
+    if (target.type != Type::Enum) return;
+    if (!target.enumDefinition || !source.enumDefinition || *target.enumDefinition != *source.enumDefinition)
+      throwType("incompatible enum mappings; explicit remapping required", target.name);
+    if constexpr (std::is_same_v<std::decay_t<decltype(values)>, Scalar>) {
+      target.enumDefinition->label(std::get<EnumValue>(values).code);
+    } else {
+      for (const auto value : std::get<std::vector<EnumValue>>(values)) target.enumDefinition->label(value.code);
+    }
+  };
+  for (std::size_t i = 0; i < layout.parameters.size(); ++i) {
+    const auto &definition = layout.parameters[i];
+    if (definition.type == Type::Enum && definition.fixedValue) {
+      // Fixed parameters are serialized from the header, not the unused page slot.
+      const Scalar fixed = EnumValue{parseEnumCode(*definition.fixedValue, "fixed enum code")};
+      validateEnum(definition, page.layout().parameters[i], fixed);
+    } else {
+      validateEnum(definition, page.layout().parameters[i], page.parameters()[i]);
+    }
+  }
+  for (std::size_t i = 0; i < layout.arrays.size(); ++i)
+    validateEnum(layout.arrays[i], page.layout().arrays[i], page.arrays()[i].values);
+  for (std::size_t i = 0; i < layout.columns.size(); ++i)
+    validateEnum(layout.columns[i], page.layout().columns[i], page.columns()[i]);
   std::optional<std::size_t> rows;
   for (std::size_t i = 0; i < layout.parameters.size(); ++i)
     if (typeOf(page.parameters()[i]) != layout.parameters[i].type)
@@ -2325,7 +2526,7 @@ std::vector<std::string> readAsciiTokens(AsciiCursor &cursor, std::size_t count,
 void discardAsciiTokens(AsciiCursor &cursor, std::size_t count, const std::string &what,
                         Type type, const ReaderOptions &options,
                         const std::filesystem::path &path, std::int64_t page,
-                        const std::string &field) {
+                        const std::string &field, const EnumDefinition *dictionary) {
   std::size_t consumed = 0;
   while (consumed < count) {
     auto line = cursor.nextLine(false);
@@ -2337,6 +2538,15 @@ void discardAsciiTokens(AsciiCursor &cursor, std::size_t count, const std::strin
       for (const auto &token : tokens)
         if (token.size() > options.limits.maxStringBytes)
           throwLimit("ASCII string exceeds configured limit", path, page, field);
+    if (type == Type::Enum) {
+      for (const auto &token : tokens) {
+        try {
+          parseAsciiScalar(type, token, dictionary);
+        } catch (const Error &error) {
+          throwWithContext(error, path, page, std::nullopt, std::nullopt, field);
+        }
+      }
+    }
     consumed += tokens.size();
   }
 }
@@ -2393,9 +2603,10 @@ DecodedPage readAsciiPage(BufferedStream &stream, const std::shared_ptr<const La
     }
     if (definition.type == Type::String && value.size() > options.limits.maxStringBytes)
       throwLimit("ASCII string exceeds configured limit", path, pageNumber, definition.name);
-    if (request.parameters[i]) {
+    if (request.parameters[i] || definition.type == Type::Enum) {
       try {
-        page.setParameter(i, parseAsciiScalar(definition.type, value));
+        auto parsed = parseAsciiScalar(definition.type, value, definition.enumDefinition.get());
+        if (request.parameters[i]) page.setParameter(i, std::move(parsed));
       } catch (const Error &error) {
         throwWithContext(error, path, pageNumber, stream.offset(), std::nullopt,
                          definition.name);
@@ -2427,7 +2638,8 @@ DecodedPage readAsciiPage(BufferedStream &stream, const std::shared_ptr<const La
         if (definition.type == Type::String && value.size() > options.limits.maxStringBytes)
           throwLimit("ASCII string exceeds configured limit", path, pageNumber, definition.name);
         try {
-          appendScalar(array.values, parseAsciiScalar(definition.type, value));
+          auto parsed = parseAsciiScalar(definition.type, value, definition.enumDefinition.get());
+          if (request.arrays[i]) appendScalar(array.values, std::move(parsed));
         } catch (const Error &error) {
           throwWithContext(error, path, pageNumber, stream.offset(), std::nullopt,
                            definition.name);
@@ -2436,7 +2648,7 @@ DecodedPage readAsciiPage(BufferedStream &stream, const std::shared_ptr<const La
     } else if (elements) {
       discardAsciiTokens(cursor, static_cast<std::size_t>(elements),
                          "array " + definition.name, definition.type, options,
-                         path, pageNumber, definition.name);
+                         path, pageNumber, definition.name, definition.enumDefinition.get());
     }
     if (request.arrays[i]) page.setArray(i, std::move(array));
   }
@@ -2507,14 +2719,15 @@ DecodedPage readAsciiPage(BufferedStream &stream, const std::shared_ptr<const La
           } else {
             selected = selectKnownRow(request.rows, rows, expectedRows);
           }
-          if (request.columns[i] && selected) {
+          if ((request.columns[i] && selected) || layout->columns[i].type == Type::Enum) {
             Scalar value;
             try {
-              value = parseAsciiScalar(layout->columns[i].type, rowTokens[i]);
+              value = parseAsciiScalar(layout->columns[i].type, rowTokens[i], layout->columns[i].enumDefinition.get());
             } catch (const Error &error) {
               throwWithContext(error, path, pageNumber, stream.offset(), rows,
                                layout->columns[i].name);
             }
+            if (!request.columns[i] || !selected) continue;
             if (layout->data.rowCountMode == RowCountMode::None && request.rows.last) {
               const auto limit = static_cast<std::size_t>(*request.rows.last);
               appendRingScalar(columns[i], std::move(value), limit,
@@ -2591,10 +2804,10 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
       } else if (request.parameters[i]) {
         page.setParameter(i, readBinaryScalar(stream, definition.type, order,
                                               options.longDoubleEncoding, options.limits,
-                                              path, pageNumber));
+                                              path, pageNumber, definition.enumDefinition.get()));
       } else {
         skipBinaryScalar(stream, definition.type, order, options.longDoubleEncoding,
-                         options.limits, path, pageNumber);
+                         options.limits, path, pageNumber, definition.enumDefinition.get());
       }
     } catch (const Error &error) {
       throwWithContext(error, path, pageNumber, stream.offset(), std::nullopt,
@@ -2615,10 +2828,10 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
           appendScalar(array.values,
                        readBinaryScalar(stream, definition.type, order,
                                         options.longDoubleEncoding, options.limits,
-                                        path, pageNumber));
+                                        path, pageNumber, definition.enumDefinition.get()));
         else
           skipBinaryScalar(stream, definition.type, order, options.longDoubleEncoding,
-                           options.limits, path, pageNumber);
+                           options.limits, path, pageNumber, definition.enumDefinition.get());
       }
       if (request.arrays[i]) page.setArray(i, std::move(array));
     } catch (const Error &error) {
@@ -2638,6 +2851,7 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
       [](const auto &definition) { return definition.type == Type::String; });
   if (fixedWidthColumns && layout->data.majorOrder == MajorOrder::Row) {
     std::vector<std::uint64_t> offsets(layout->columns.size());
+    std::vector<std::size_t> enumColumns;
     std::uint64_t rowBytes = 0;
     bool anySelected = false;
     std::size_t selectedCapacity = 0;
@@ -2645,6 +2859,7 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
       if (selectKnownRow(request.rows, row, expectedRows)) ++selectedCapacity;
     for (std::size_t i = 0; i < layout->columns.size(); ++i) {
       offsets[i] = rowBytes;
+      if (layout->columns[i].type == Type::Enum) enumColumns.push_back(i);
       const std::uint64_t width = binaryScalarBytes(layout->columns[i].type,
                                                      options.longDoubleEncoding);
       if (width > UINT64_MAX - rowBytes)
@@ -2657,7 +2872,7 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
     }
     if (rowBytes && static_cast<std::uint64_t>(expectedRows) > UINT64_MAX / rowBytes)
       throwLimit("binary page size overflow", path, pageNumber);
-    if (!anySelected && !recoveryEnabled(*layout, options)) {
+    if (!anySelected && enumColumns.empty() && !recoveryEnabled(*layout, options)) {
       const std::uint64_t startOffset = stream.offset();
       try {
         stream.skip(rowBytes * static_cast<std::uint64_t>(expectedRows), path, pageNumber);
@@ -2683,12 +2898,19 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
         const std::uint64_t requestedRows = std::min<std::uint64_t>(
             static_cast<std::uint64_t>(expectedRows - rows), chunkRows);
         const std::size_t requestedBytes = static_cast<std::size_t>(requestedRows * rowBytes);
+        const std::uint64_t startOffset = stream.offset();
         const std::size_t bytesRead = stream.read(buffer.data(), requestedBytes);
         const std::int64_t completeRows = static_cast<std::int64_t>(bytesRead / rowBytes);
         for (std::int64_t localRow = 0; localRow < completeRows; ++localRow) {
           const std::int64_t sourceRow = rows + localRow;
-          if (!selectKnownRow(request.rows, sourceRow, expectedRows)) continue;
           const auto *rowData = buffer.data() + static_cast<std::size_t>(localRow * rowBytes);
+          // Discarded fields and rows still need categorical membership checks.
+          for (const auto i : enumColumns)
+            validateFixedBinaryEnum(layout->columns[i], rowData + offsets[i], order,
+                                    path, pageNumber,
+                                    startOffset + localRow * rowBytes + offsets[i] + sizeof(std::int32_t),
+                                    sourceRow);
+          if (!selectKnownRow(request.rows, sourceRow, expectedRows)) continue;
           for (std::size_t i = 0; i < layout->columns.size(); ++i)
             if (request.columns[i])
               appendFixedBinaryValue(columns[i], layout->columns[i].type,
@@ -2697,8 +2919,16 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
         }
         rows += completeRows;
         if (bytesRead != requestedBytes) {
+          // A recoverable partial row can still contain a complete invalid enum.
+          const std::uint64_t withinRow = bytesRead % rowBytes;
+          const auto *rowData = buffer.data() + static_cast<std::size_t>(completeRows * rowBytes);
+          for (const auto i : enumColumns)
+            if (offsets[i] + sizeof(std::int32_t) <= withinRow)
+              validateFixedBinaryEnum(layout->columns[i], rowData + offsets[i], order,
+                                      path, pageNumber,
+                                      startOffset + completeRows * rowBytes + offsets[i] + sizeof(std::int32_t),
+                                      rows);
           if (!recoveryEnabled(*layout, options)) {
-            const std::uint64_t withinRow = bytesRead % rowBytes;
             std::optional<std::string> field;
             for (std::size_t i = 0; i < layout->columns.size(); ++i)
               if (withinRow >= offsets[i]) field = layout->columns[i].name;
@@ -2720,7 +2950,9 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
                                                      options.longDoubleEncoding);
       if (width && static_cast<std::uint64_t>(expectedRows) > UINT64_MAX / width)
         throwLimit("binary column size overflow", path, pageNumber);
-      if (!request.columns[i] && !recoveryEnabled(*layout, options)) {
+      const auto &definition = layout->columns[i];
+      if (!request.columns[i] && definition.type != Type::Enum &&
+          !recoveryEnabled(*layout, options)) {
         const std::uint64_t startOffset = stream.offset();
         try {
           stream.skip(width * static_cast<std::uint64_t>(expectedRows), path, pageNumber);
@@ -2741,8 +2973,15 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
         const std::uint64_t requestedRows = std::min<std::uint64_t>(
             static_cast<std::uint64_t>(expectedRows - columnRows[i]), chunkRows);
         const std::size_t requestedBytes = static_cast<std::size_t>(requestedRows * width);
+        const std::uint64_t startOffset = stream.offset();
         const std::size_t bytesRead = stream.read(buffer.data(), requestedBytes);
         const std::int64_t completeRows = static_cast<std::int64_t>(bytesRead / width);
+        if (definition.type == Type::Enum)
+          for (std::int64_t localRow = 0; localRow < completeRows; ++localRow)
+            validateFixedBinaryEnum(definition,
+                                    buffer.data() + static_cast<std::size_t>(localRow * width),
+                                    order, path, pageNumber, startOffset + (localRow + 1) * width,
+                                    columnRows[i] + localRow);
         if (request.columns[i])
           for (std::int64_t localRow = 0; localRow < completeRows; ++localRow) {
             const std::int64_t sourceRow = columnRows[i] + localRow;
@@ -2783,10 +3022,10 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
           if (request.columns[currentColumn] && selected)
             appendScalar(columns[currentColumn], readBinaryScalar(
                 stream, definition.type, order, options.longDoubleEncoding,
-                options.limits, path, pageNumber));
+                options.limits, path, pageNumber, definition.enumDefinition.get()));
           else
             skipBinaryScalar(stream, definition.type, order, options.longDoubleEncoding,
-                             options.limits, path, pageNumber);
+                             options.limits, path, pageNumber, definition.enumDefinition.get());
         }
       } catch (const FormatError &error) {
         if (!recoveryEnabled(*layout, options) || !endOfStreamError(error))
@@ -2806,10 +3045,10 @@ DecodedPage readBinaryPage(BufferedStream &stream, const std::shared_ptr<const L
           if (request.columns[i] && selectKnownRow(request.rows, columnRows[i], expectedRows))
             appendScalar(columns[i], readBinaryScalar(stream, layout->columns[i].type, order,
                                                        options.longDoubleEncoding, options.limits,
-                                                       path, pageNumber));
+                                                       path, pageNumber, layout->columns[i].enumDefinition.get()));
           else
             skipBinaryScalar(stream, layout->columns[i].type, order,
-                             options.longDoubleEncoding, options.limits, path, pageNumber);
+                             options.longDoubleEncoding, options.limits, path, pageNumber, layout->columns[i].enumDefinition.get());
         }
       } catch (const FormatError &error) {
         if (!recoveryEnabled(*layout, options) || !endOfStreamError(error))
@@ -3703,6 +3942,18 @@ void Writer::setColumn(std::string_view name, Values value, std::int64_t startRo
   if (startRow == 0)
     impl_->current->setColumn(index, std::move(value));
   else {
+    if (startRow < 0)
+      throwState("column start row cannot be negative");
+    const auto &definition = impl_->layout->columns[index];
+    if (typeOf(value) != definition.type)
+      throwType("column type mismatch", definition.name);
+    if (definition.enumDefinition) {
+      for (const auto item : std::get<std::vector<EnumValue>>(value))
+        definition.enumDefinition->label(item.code);
+      // Extending past the end also creates zero-initialized intervening rows.
+      if (static_cast<std::uint64_t>(startRow) > valuesSize(impl_->current->columns_[index]))
+        definition.enumDefinition->label(0);
+    }
     mergeValuesInPlace(impl_->current->columns_.at(index), std::move(value), startRow);
     impl_->current->columnsLoaded_.at(index) = true;
     impl_->current->rowCount_ = 0;

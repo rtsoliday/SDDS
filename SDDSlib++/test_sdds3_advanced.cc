@@ -452,7 +452,7 @@ void limitsAndMalformedProjection(const std::filesystem::path &path,
 }  // namespace
 
 int main(int argc, char **argv) {
-  assert(sdds::cppApiVersion == 2);
+  assert(sdds::cppApiVersion == 3);
   if (argc != 2) return 2;
   const std::filesystem::path directory(argv[1]);
   std::filesystem::create_directories(directory);

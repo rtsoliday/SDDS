@@ -6,6 +6,8 @@ The **SDDS (Self Describing Data Sets) Library** is a C/C++ library designed for
 ## Features
 - Read and write **ASCII** and **binary** SDDS files.
 - Supports **parameters**, **arrays**, and **column** data.
+- Native categorical **SDDS6 enums**, with checked code/label dictionaries. See
+  [enum format, APIs and migration requirements](SDDSlib/doc/enums.md).
 - Includes utilities for **data compression (LZMA, Zstd, GZIP)**.
 - Compatible with **MPI for parallel processing**.
 - Provides numerical manipulation and mathematical utilities.

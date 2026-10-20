@@ -131,6 +131,10 @@ C     constants in the SDDS library.
       integer SDDS_USHORT
       integer SDDS_STRING
       integer SDDS_CHARACTER
+      integer SDDS_ENUM
+      integer SDDS_ANY_NUMERIC_TYPE
+      integer SDDS_ANY_FLOATING_TYPE
+      integer SDDS_ANY_INTEGER_TYPE
       integer SDDS_NUM_TYPES
       integer SDDS_BINARY
       integer SDDS_ASCII
@@ -148,6 +152,10 @@ C     constants in the SDDS library.
       parameter (SDDS_USHORT = 9)
       parameter (SDDS_STRING = 10)
       parameter (SDDS_CHARACTER = 11)
-      parameter (SDDS_NUM_TYPES = 11)
+      parameter (SDDS_ENUM = 12)
+      parameter (SDDS_NUM_TYPES = 12)
+      parameter (SDDS_ANY_NUMERIC_TYPE = 65537)
+      parameter (SDDS_ANY_FLOATING_TYPE = 65538)
+      parameter (SDDS_ANY_INTEGER_TYPE = 65539)
       parameter (SDDS_BINARY = 1)
       parameter (SDDS_ASCII = 2)

@@ -545,6 +545,9 @@ char **ConfirmMatchingColumns(COLLECTION *collection, long collections, SDDS_DAT
                 collection[ic].part ? collection[ic].part : collection[ic].match);
         exit(EXIT_FAILURE);
       }
+      if (!SDDS_CheckEnumFieldCompatibility(SDDSout, SDDSin, 0, collection[ic].targetIndex,
+                                           SDDS_GetColumnIndex(SDDSin, collection[ic].oldColumn[ii])))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       if (SDDS_CheckColumn(SDDSin, collection[ic].oldColumn[ii], units, type, NULL) == SDDS_CHECK_WRONGUNITS)
         unitsMismatch = 1;
     }

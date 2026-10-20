@@ -129,6 +129,16 @@ class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
    * accept the metadata serialized in the corresponding namelist command.
    */
   /** @{ */
+  /**
+   * @brief Define categorical metadata before creating any pages.
+   * @return Zero-based field index on success, or -1 on failure. Failures record
+   * an error and leave the field definitions unchanged.
+   */
+  int32_t defineEnumParameter(char *name, char *mapping, char *fixedValue = nullptr);
+  /** @copydoc defineEnumParameter */
+  int32_t defineEnumColumn(char *name, char *mapping);
+  /** @copydoc defineEnumParameter */
+  int32_t defineEnumArray(char *name, char *mapping, uint32_t dimensions);
   int32_t defineParameter(char *name, int32_t type);
   int32_t defineParameter(char *name, char *type);
   int32_t defineParameter(char *name, char *symbol, char *units, char *description,
@@ -146,6 +156,10 @@ class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
 
   /** @name Field inspection */
   /** @{ */
+  /** @brief Borrowed canonical dictionary, or nullptr for a primitive field. */
+  const char *getColumnEnumValues(int32_t index) const;
+  const char *getParameterEnumValues(int32_t index) const;
+  const char *getArrayEnumValues(int32_t index) const;
   int32_t getParameterCount() const;
   int32_t getColumnCount() const;
   int32_t getArrayCount() const;

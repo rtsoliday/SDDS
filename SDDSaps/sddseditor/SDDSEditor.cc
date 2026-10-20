@@ -310,9 +310,10 @@ public:
 
   /** Commit delegate editors even when another window owns keyboard focus. */
   void finishEditing() {
-    const auto editors = viewport()->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
-    for (QLineEdit *editor : editors) {
-      if (!editor->isHidden()) {
+    const auto editors = viewport()->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
+    for (QWidget *editor : editors) {
+      if (!editor->isHidden() &&
+          (qobject_cast<QLineEdit *>(editor) || qobject_cast<QComboBox *>(editor))) {
         commitData(editor);
         closeEditor(editor, QAbstractItemDelegate::NoHint);
       }
@@ -576,11 +577,45 @@ static QString longDoubleToText(long double value) {
  * immediately copies every one into a QString.  Avoiding that intermediate
  * allocation is particularly important for multi-million-cell files.
  */
-static QString sddsValueToString(const void *data, int64_t index, int32_t type) {
+/** Enum choices are carried through proxy models to the shared item delegate. */
+static constexpr int EnumChoicesRole = Qt::UserRole + 146;
+
+static bool enumLabelCode(const SDDS_ENUM_DEFINITION *definition, const QString &text, int32_t *code) {
+  if (text.contains(QChar(0))) return false;
+  const QByteArray utf8 = text.toUtf8();
+  return SDDS_EnumLabelToCode(definition, utf8.constData(), code) != 0;
+}
+
+static QVariant enumChoices(const SDDS_ENUM_DEFINITION *definition) {
+  if (!definition)
+    return QVariant();
+  QVariantList choices;
+  for (int32_t i = 0; i < SDDS_EnumCount(definition); ++i) {
+    int32_t code;
+    const char *label;
+    if (SDDS_EnumEntry(definition, i, &code, &label)) {
+      QVariantMap entry;
+      entry[QStringLiteral("label")] = QString::fromUtf8(label);
+      entry[QStringLiteral("code")] = code;
+      choices.append(entry);
+    }
+  }
+  return choices;
+}
+
+static QString enumDisplay(const SDDS_ENUM_DEFINITION *definition, const QString &label) {
+  int32_t code;
+  return enumLabelCode(definition, label, &code) ? QStringLiteral("%1 (%2)").arg(label).arg(code) : label;
+}
+
+static QString sddsValueToString(const void *data, int64_t index, int32_t type, const SDDS_ENUM_DEFINITION *definition = nullptr) {
   if (!data || index < 0)
     return QString();
 
   switch (type) {
+  case SDDS_ENUM:
+    return QString::fromUtf8(SDDS_EnumCodeToLabel(definition, static_cast<const int32_t *>(data)[index]));
+
   case SDDS_SHORT:
     return QString::number(static_cast<qlonglong>(static_cast<const short *>(data)[index]));
   case SDDS_USHORT:
@@ -668,6 +703,11 @@ static QString fixedValueForDefinition(const QString &text, int32_t type) {
 static QString fixedValueForDisplay(const PARAMETER_DEFINITION &definition) {
   if (!definition.fixed_value)
     return QString();
+  if (definition.type == SDDS_ENUM) {
+    bool ok;
+    const int code = QString::fromLatin1(definition.fixed_value).toInt(&ok);
+    return ok ? QString::fromUtf8(SDDS_EnumCodeToLabel(definition.enum_definition, code)) : QString();
+  }
   if (definition.type != SDDS_STRING && definition.type != SDDS_CHARACTER)
     return QString::fromLocal8Bit(definition.fixed_value);
   QByteArray encoded(definition.fixed_value);
@@ -709,7 +749,8 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
     const QString val = pdef.fixed_value ? fixedValueForDisplay(pdef)
                                          : pd.parameters[i];
     const int32_t type = pdef.type;
-    if (!validateTextForType(val, type, false)) {
+    int32_t enumCode;
+    if (!validateTextForType(val, type, false) || (type == SDDS_ENUM && !enumLabelCode(pdef.enum_definition, val, &enumCode))) {
       if (errorText) {
         *errorText = QObject::tr("Page %1: parameter '%2' has invalid value '%3' for type %4")
                          .arg(pageIndex + 1)
@@ -747,7 +788,8 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
       const int32_t type = layout.column_definition[c].type;
       for (int64_t r = 0; r < rows; ++r) {
         const QString &cell = pd.columns[c][r];
-        if (!validateTextForType(cell, type, false)) {
+        int32_t enumCode;
+        if (!validateTextForType(cell, type, false) || (type == SDDS_ENUM && !enumLabelCode(layout.column_definition[c].enum_definition, cell, &enumCode))) {
           if (errorText) {
             const char *name = layout.column_definition[c].name;
             *errorText = QObject::tr("Page %1: column '%2', row %3 has invalid value '%4' for type %5")
@@ -801,7 +843,8 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
       const int32_t type = adef.type;
       for (int i = 0; i < as.values.size(); ++i) {
         const QString &cell = as.values[i];
-        if (!validateTextForType(cell, type, false)) {
+        int32_t enumCode;
+        if (!validateTextForType(cell, type, false) || (type == SDDS_ENUM && !enumLabelCode(adef.enum_definition, cell, &enumCode))) {
           if (errorText) {
             *errorText = QObject::tr("Page %1: array '%2', element %3 has invalid value '%4' for type %5")
                              .arg(pageIndex + 1)
@@ -886,6 +929,27 @@ static bool validateTextForType(const QString &text, int type,
     }
   }
   return true;
+}
+
+/** Validate categorical labels before creating undo commands or undo macros. */
+static bool validateEnumCellText(const QModelIndex &index, const QString &text,
+                                 bool showMessage = false) {
+  const QVariant choices = index.data(EnumChoicesRole);
+  if (!choices.isValid())
+    return true;
+  for (const QVariant &choice : choices.toList())
+    if (choice.toMap().value(QStringLiteral("label")).toString() == text)
+      return true;
+  if (showMessage)
+    QMessageBox::warning(nullptr, QObject::tr("SDDS"),
+                         QObject::tr("Value must match a declared enum label"));
+  return false;
+}
+
+static bool validateTextForCell(const QModelIndex &index, const QString &text,
+                                int type, bool showMessage = true) {
+  return validateTextForType(text, type, showMessage) &&
+         validateEnumCellText(index, text, showMessage);
 }
 
 static int dimProduct(const QVector<int> &dims) {
@@ -1204,20 +1268,27 @@ private:
   QString newValue;
 };
 
-static bool applyCellEditWithUndo(QUndoStack *undoStack, QAbstractItemModel *model,
-                                  const QModelIndex &index, const QString &newValue) {
+static bool canApplyCellEdit(QAbstractItemModel *model, const QModelIndex &index,
+                             const QString &newValue) {
   if (!model || !index.isValid())
     return false;
   // Read-only metadata cells, such as parameter types, never become undo entries.
   if (!(model->flags(index) & Qt::ItemIsEditable))
     return false;
-  const QString oldValue = index.data(Qt::EditRole).toString();
-  if (oldValue == newValue)
+  if (index.data(Qt::EditRole).toString() == newValue)
     return false;
+  return validateEnumCellText(index, newValue);
+}
+
+static bool applyCellEditWithUndo(QUndoStack *undoStack, QAbstractItemModel *model,
+                                  const QModelIndex &index, const QString &newValue) {
+  if (!canApplyCellEdit(model, index, newValue))
+    return false;
+  const QString oldValue = index.data(Qt::EditRole).toString();
   if (undoStack)
     undoStack->push(new SetDataCommand(model, index, oldValue, newValue));
   else
-    model->setData(index, newValue);
+    return model->setData(index, newValue);
   return true;
 }
 
@@ -1231,8 +1302,7 @@ static bool applyCellEditsWithUndo(QUndoStack *undoStack, QAbstractItemModel *mo
   bool changed = false;
   bool macroStarted = false;
   for (const auto &edit : edits) {
-    if (!(model->flags(edit.idx) & Qt::ItemIsEditable) ||
-        edit.idx.data(Qt::EditRole).toString() == edit.value)
+    if (!canApplyCellEdit(model, edit.idx, edit.value))
       continue;
     if (undoStack && !macroStarted) {
       undoStack->beginMacro(label);
@@ -1738,8 +1808,9 @@ private:
 
 struct RowFilterValue {
   QString text;
-  bool hasNumber;
-  long double number;
+  bool hasNumber = false;
+  long double number = 0;
+  bool categorical = false;
 };
 
 /*
@@ -1880,8 +1951,8 @@ struct RowFilterToken {
 
 class RowFilterParser {
 public:
-  /* Resolve (identifier, column only) to its text for the current row. */
-  using Resolver = std::function<bool(const QString &, bool, QString *)>;
+  /* Resolve the current row's value while preserving categorical label semantics. */
+  using Resolver = std::function<bool(const QString &, bool, RowFilterValue *)>;
 
   RowFilterParser(const QString &expression, Resolver resolver)
       : input(expression), pos(0), resolver(std::move(resolver)), depth(0) {
@@ -2042,13 +2113,11 @@ private:
         return true;
       }
 
-      QString resolved;
-      if (!resolver(ident, current.bracketed, &resolved)) {
+      if (!resolver(ident, current.bracketed, out)) {
         if (errorText)
           *errorText = QObject::tr("Unknown row variable/column '%1'").arg(ident);
         return false;
       }
-      out->text = resolved;
       out->hasNumber = parseNumericValueForFilter(out->text, &out->number);
       next();
       return true;
@@ -2069,9 +2138,13 @@ private:
   static bool compareValues(const RowFilterValue &left,
                             RowFilterTokenKind op,
                             const RowFilterValue &right) {
+    // A label such as "01" remains distinct from "1", including against a
+    // quoted or numeric literal and when the enum is the right-hand operand.
+    const bool categorical = left.categorical || right.categorical;
     int integerComparison;
-    if (compareIntegerText(left.text, right.text, &integerComparison) ||
-        (left.hasNumber && right.hasNumber && compareDecimalText(left.text, right.text, &integerComparison))) {
+    if (!categorical &&
+        (compareIntegerText(left.text, right.text, &integerComparison) ||
+         (left.hasNumber && right.hasNumber && compareDecimalText(left.text, right.text, &integerComparison)))) {
       switch (op) {
       case RowFilterTokenKind::Eq: return integerComparison == 0;
       case RowFilterTokenKind::Ne: return integerComparison != 0;
@@ -2082,7 +2155,7 @@ private:
       default: return false;
       }
     }
-    if (left.hasNumber && right.hasNumber) {
+    if (!categorical && left.hasNumber && right.hasNumber) {
       switch (op) {
       case RowFilterTokenKind::Eq:
         return left.number == right.number;
@@ -2101,7 +2174,8 @@ private:
       }
     }
 
-    const int cmp = QString::compare(left.text, right.text, Qt::CaseSensitive);
+    const int cmp = categorical ? left.text.toUtf8().compare(right.text.toUtf8())
+                                : QString::compare(left.text, right.text, Qt::CaseSensitive);
     switch (op) {
     case RowFilterTokenKind::Eq:
       return cmp == 0;
@@ -4310,6 +4384,8 @@ public:
         return def.units ? QString::fromLocal8Bit(def.units) : QString();
       return def.description ? QString::fromLocal8Bit(def.description) : QString();
     }
+    if (role == EnumChoicesRole && index.row() >= 0 && index.row() < dataset->layout.n_parameters)
+      return enumChoices(dataset->layout.parameter_definition[index.row()].enum_definition);
     if (role != Qt::DisplayRole && role != Qt::EditRole)
       return QVariant();
     if (*currentPage < 0 || *currentPage >= pages->size())
@@ -4320,6 +4396,8 @@ public:
       return QVariant();
     if (r >= pd.parameters.size())
       return QVariant();
+    if (role == Qt::DisplayRole && dataset->layout.parameter_definition[index.row()].type == SDDS_ENUM)
+      return enumDisplay(dataset->layout.parameter_definition[index.row()].enum_definition, pd.parameters[r]);
     return pd.parameters[r];
   }
 
@@ -4339,6 +4417,9 @@ public:
     if (r >= pd.parameters.size())
       return false;
     QString text = value.toString();
+    int32_t enumCode;
+    if (dataset->layout.parameter_definition[index.row()].type == SDDS_ENUM &&
+        !enumLabelCode(dataset->layout.parameter_definition[index.row()].enum_definition, text, &enumCode)) return false;
     if (pd.parameters[r] == text)
       return false;
     pd.parameters[r] = text;
@@ -4698,6 +4779,8 @@ public:
         return QVariant();
       return numericAlignment(dataset->layout.column_definition[index.column()].type);
     }
+    if (role == EnumChoicesRole && index.column() >= 0 && index.column() < dataset->layout.n_columns)
+      return enumChoices(dataset->layout.column_definition[index.column()].enum_definition);
     if (role != Qt::DisplayRole && role != Qt::EditRole && role != Qt::ToolTipRole)
       return QVariant();
     if (*currentPage < 0 || *currentPage >= pages->size())
@@ -4719,6 +4802,8 @@ public:
       return tr("Epoch seconds: %1\nDisplayed: %2\nEditing and copying use the epoch value.")
           .arg(col[r], shown);
     }
+    if (role == Qt::DisplayRole && dataset->layout.column_definition[index.column()].type == SDDS_ENUM)
+      return enumDisplay(dataset->layout.column_definition[index.column()].enum_definition, col[r]);
     return col[r];
   }
 
@@ -4738,6 +4823,9 @@ public:
     if (r < 0 || r >= col.size())
       return false;
     QString text = value.toString();
+    int32_t enumCode;
+    if (dataset->layout.column_definition[index.column()].type == SDDS_ENUM &&
+        !enumLabelCode(dataset->layout.column_definition[index.column()].enum_definition, text, &enumCode)) return false;
     if (col[r] == text)
       return false;
     col[r] = text;
@@ -4830,6 +4918,8 @@ public:
     if (!index.isValid() || !dataset || index.column() < 0 || index.column() >= dataset->layout.n_columns)
       return QString();
     const QString text = data(index, Qt::EditRole).toString();
+    const auto &definition = dataset->layout.column_definition[index.column()];
+    if (definition.type == SDDS_ENUM) return enumDisplay(definition.enum_definition, text);
     const TimeDisplayMode mode = timeDisplayMode(index.column());
     return mode == TimeDisplayMode::Raw ?
         canonicalizeForDisplay(text, dataset->layout.column_definition[index.column()].type) :
@@ -4927,6 +5017,8 @@ public:
         return QVariant();
       return numericAlignment(dataset->layout.array_definition[index.column()].type);
     }
+    if (role == EnumChoicesRole && index.column() >= 0 && index.column() < dataset->layout.n_arrays)
+      return enumChoices(dataset->layout.array_definition[index.column()].enum_definition);
     if (role != Qt::DisplayRole && role != Qt::EditRole)
       return QVariant();
     if (*currentPage < 0 || *currentPage >= pages->size())
@@ -4939,6 +5031,8 @@ public:
     const QVector<QString> &vals = pd.arrays[c].values;
     if (r < 0 || r >= vals.size())
       return QVariant();
+    if (role == Qt::DisplayRole && dataset->layout.array_definition[index.column()].type == SDDS_ENUM)
+      return enumDisplay(dataset->layout.array_definition[index.column()].enum_definition, vals[r]);
     return vals[r];
   }
 
@@ -4958,6 +5052,9 @@ public:
     if (r < 0 || r >= vals.size())
       return false;
     QString text = value.toString();
+    int32_t enumCode;
+    if (dataset->layout.array_definition[index.column()].type == SDDS_ENUM &&
+        !enumLabelCode(dataset->layout.array_definition[index.column()].enum_definition, text, &enumCode)) return false;
     if (vals[r] == text)
       return false;
     vals[r] = text;
@@ -5078,6 +5175,16 @@ public:
 
   QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
                         const QModelIndex &index) const override {
+    const QVariantList choices = index.data(EnumChoicesRole).toList();
+    if (!choices.isEmpty()) {
+      QComboBox *combo = new QComboBox(parent);
+      for (const QVariant &choice : choices) {
+        const QVariantMap entry = choice.toMap();
+        const QString label = entry.value(QStringLiteral("label")).toString();
+        combo->addItem(QStringLiteral("%1 (%2)").arg(label).arg(entry.value(QStringLiteral("code")).toInt()), label);
+      }
+      return combo;
+    }
     Q_UNUSED(option);
     Q_UNUSED(index);
     CaretOnDoubleClickLineEdit *editor = new CaretOnDoubleClickLineEdit(parent);
@@ -5158,6 +5265,10 @@ public:
   }
 
   void setEditorData(QWidget *editor, const QModelIndex &index) const override {
+    if (QComboBox *combo = qobject_cast<QComboBox *>(editor)) {
+      combo->setCurrentIndex(combo->findData(index.data(Qt::EditRole).toString()));
+      return;
+    }
     QLineEdit *line = qobject_cast<QLineEdit *>(editor);
     if (!line) {
       QStyledItemDelegate::setEditorData(editor, index);
@@ -5168,6 +5279,11 @@ public:
 
   void setModelData(QWidget *editorWidget, QAbstractItemModel *model,
                     const QModelIndex &index) const override {
+    if (QComboBox *combo = qobject_cast<QComboBox *>(editorWidget)) {
+      const QString newValue = combo->currentData().toString();
+      applyCellEditWithUndo(undoStack, model, index, newValue);
+      return;
+    }
     QLineEdit *line = qobject_cast<QLineEdit *>(editorWidget);
     if (!line) {
       QStyledItemDelegate::setModelData(editorWidget, model, index);
@@ -5179,15 +5295,12 @@ public:
     if (oldVal == editedText)
       return;
 
-    if (!validateTextForType(editedText, typeFunc(index)))
+    if (!validateTextForCell(index, editedText, typeFunc(index)))
       return;
     QString newVal = canonicalizeForDisplay(editedText, typeFunc(index));
     if (oldVal == newVal)
       return;
-    if (undoStack)
-      undoStack->push(new SetDataCommand(model, index, oldVal, newVal));
-    else
-      model->setData(index, newVal);
+    applyCellEditWithUndo(undoStack, model, index, newVal);
   }
 
 private:
@@ -7176,7 +7289,7 @@ void SDDSEditor::copy() {
     for (int c = minCol; c <= maxCol; ++c) {
       if (selected.contains(keyFor(r, c))) {
         QModelIndex idx = model->index(r, c);
-        const QString value = idx.isValid() ? idx.data().toString() : QString();
+        const QString value = idx.isValid() ? idx.data(Qt::EditRole).toString() : QString();
         cols << value;
         rowCells.append(value);
       } else {
@@ -7266,7 +7379,7 @@ void SDDSEditor::paste() {
       else if (view == arrayView)
         type = dataset.layout.array_definition[idx.column()].type;
       bool show = multiPaste ? !warned : true;
-      bool valid = validateTextForType(cols[c], type, show);
+      bool valid = validateTextForCell(idx, cols[c], type, show);
       if (valid) {
         if (idx.data(Qt::EditRole).toString() == cols[c])
           continue;
@@ -7301,7 +7414,7 @@ void SDDSEditor::deleteCells() {
   for (const QModelIndex &idx : indexes) {
     if (!idx.isValid())
       continue;
-    if (idx.data(Qt::EditRole).toString().isEmpty())
+    if (!canApplyCellEdit(model, idx, QString()))
       continue;
     if (undoStack && !macroStarted) {
       undoStack->beginMacro(tr("Delete Cells"));
@@ -8087,7 +8200,7 @@ bool SDDSEditor::loadFile(const QString &path) {
     for (int32_t i = 0; i < pcount; ++i) {
       pd.parameters[i] = sddsValueToString(
           in.parameter ? in.parameter[i] : nullptr, 0,
-          in.layout.parameter_definition[i].type);
+          in.layout.parameter_definition[i].type, in.layout.parameter_definition[i].enum_definition);
       if (in.layout.parameter_definition[i].type == SDDS_STRING)
         countUndecodable(in.parameter ? in.parameter[i] : nullptr, 1);
       ++doneUnits;
@@ -8100,7 +8213,7 @@ bool SDDSEditor::loadFile(const QString &path) {
       const int32_t type = in.layout.column_definition[c].type;
       pd.columns[c].resize(static_cast<int>(rows));
       for (int64_t r = 0; r < rows; ++r) {
-        pd.columns[c][static_cast<int>(r)] = sddsValueToString(data, r, type);
+        pd.columns[c][static_cast<int>(r)] = sddsValueToString(data, r, type, in.layout.column_definition[c].enum_definition);
         if (((r + 1) & (progressStride - 1)) == 0)
           updateConvertedProgress(doneUnits + r + 1);
       }
@@ -8125,7 +8238,7 @@ bool SDDSEditor::loadFile(const QString &path) {
       pd.arrays[a].values.resize(valueCount);
       for (int i = 0; i < valueCount; ++i) {
         pd.arrays[a].values[i] = sddsValueToString(
-            source ? source->data : nullptr, i, adef.type);
+            source ? source->data : nullptr, i, adef.type, adef.enum_definition);
         if (((static_cast<int64_t>(i) + 1) & (progressStride - 1)) == 0)
           updateConvertedProgress(doneUnits + i + 1);
       }
@@ -8584,6 +8697,13 @@ bool SDDSEditor::writeDatasetFile(const QString &path, bool forceAscii) {
           return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
         break;
       }
+      case SDDS_ENUM: {
+        int32_t code;
+        if (!enumLabelCode(dataset.layout.parameter_definition[i].enum_definition, text, &code) ||
+            !SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, code, NULL))
+          return failWriteCall(tr("Invalid enum parameter"));
+        break;
+      }
       case SDDS_STRING:
         if (!SDDS_SetParameters(&out, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, name, text.toLocal8Bit().data(), NULL))
           return failWriteCall(tr("Failed to set parameter '%1' on page %2").arg(QString::fromLocal8Bit(name)).arg(pg + 1));
@@ -8606,7 +8726,13 @@ bool SDDSEditor::writeDatasetFile(const QString &path, bool forceAscii) {
       const char *name = dataset.layout.column_definition[c].name;
       int32_t type = dataset.layout.column_definition[c].type;
       bool ok = true;
-      if (type == SDDS_STRING) {
+      if (type == SDDS_ENUM) {
+        QVector<int32_t> codes(static_cast<int>(rows));
+        for (int64_t r = 0; r < rows; ++r)
+          if (!enumLabelCode(dataset.layout.column_definition[c].enum_definition, pd.columns[c][static_cast<int>(r)], &codes[static_cast<int>(r)]))
+            return failWriteCall(tr("Invalid enum column value"));
+        if (!SDDS_SetColumn(&out, SDDS_SET_BY_NAME, codes.data(), rows, name)) return failWriteCall(tr("Failed to set enum column"));
+      } else if (type == SDDS_STRING) {
         QVector<QByteArray> encoded(static_cast<int>(rows));
         QVector<char *> arr(static_cast<int>(rows));
         for (int64_t r = 0; r < rows; ++r) {
@@ -8805,7 +8931,12 @@ bool SDDSEditor::writeDatasetFile(const QString &path, bool forceAscii) {
           return failWriteCall(tr("Failed to set empty array '%1'").arg(QString::fromLocal8Bit(name)));
         continue;
       }
-      if (type == SDDS_STRING) {
+      if (type == SDDS_ENUM) {
+        QVector<int32_t> codes(elements);
+        for (int i = 0; i < elements; ++i)
+          if (!enumLabelCode(dataset.layout.array_definition[a].enum_definition, as.values[i], &codes[i])) return failWriteCall(tr("Invalid enum array value"));
+        if (!SDDS_SetArray(&out, const_cast<char *>(name), SDDS_CONTIGUOUS_DATA, codes.data(), dims.data())) return failWriteCall(tr("Failed to set enum array"));
+      } else if (type == SDDS_STRING) {
         QVector<QByteArray> encoded(elements);
         QVector<char *> arr(elements);
         for (int i = 0; i < elements; ++i) {
@@ -8983,6 +9114,16 @@ bool SDDSEditor::writeDatasetFile(const QString &path, bool forceAscii) {
 bool SDDSEditor::writeHDF(const QString &path) {
   if (!datasetLoaded)
     return false;
+  for (int kind = 0; kind < 3; ++kind) {
+    const int count = kind == 0 ? dataset.layout.n_columns : kind == 1 ? dataset.layout.n_parameters : dataset.layout.n_arrays;
+    for (int i = 0; i < count; ++i) {
+      const int type = kind == 0 ? dataset.layout.column_definition[i].type : kind == 1 ? dataset.layout.parameter_definition[i].type : dataset.layout.array_definition[i].type;
+      if (type == SDDS_ENUM) {
+        QMessageBox::warning(this, tr("Enum export"), tr("Convert enum elements to integer codes or label strings before exporting to this format."));
+        return false;
+      }
+    }
+  }
   commitModels();
 
   QString errorText;
@@ -9479,6 +9620,16 @@ bool SDDSEditor::writeHDF(const QString &path) {
 bool SDDSEditor::writeCSV(const QString &path) {
   if (!datasetLoaded)
     return false;
+  for (int kind = 0; kind < 3; ++kind) {
+    const int count = kind == 0 ? dataset.layout.n_columns : kind == 1 ? dataset.layout.n_parameters : dataset.layout.n_arrays;
+    for (int i = 0; i < count; ++i) {
+      const int type = kind == 0 ? dataset.layout.column_definition[i].type : kind == 1 ? dataset.layout.parameter_definition[i].type : dataset.layout.array_definition[i].type;
+      if (type == SDDS_ENUM) {
+        QMessageBox::warning(this, tr("Enum export"), tr("Convert enum elements to integer codes or label strings before exporting to this format."));
+        return false;
+      }
+    }
+  }
   commitModels();
 
   QString errorText;
@@ -10024,7 +10175,11 @@ void SDDSEditor::commitModels() {
                   i < dataset.original_layout.n_parameters
               ? &dataset.original_layout.parameter_definition[i]
               : nullptr;
-      const QString fixedValue = fixedValueForDefinition(val, def->type);
+      int32_t enumCode = 0;
+      if (def->type == SDDS_ENUM && !enumLabelCode(def->enum_definition, val, &enumCode))
+        continue;
+      const QString fixedValue = def->type == SDDS_ENUM ? QString::number(enumCode)
+                                                       : fixedValueForDefinition(val, def->type);
       if (savedDef && QString::fromLocal8Bit(def->fixed_value) != fixedValue) {
         if (!replaceSharedLayoutString(&def->fixed_value,
                                        &savedDef->fixed_value,
@@ -10058,6 +10213,31 @@ void SDDSEditor::commitModels() {
   }
 }
 
+/** Replace enum metadata through an independently owned layout; page labels retain meaning. */
+bool SDDSEditor::replaceEnumMapping(int kind, int index, const QString &mapping) {
+  SDDS_DATASET fresh = {};
+  if (!SDDS_InitializeCopy(&fresh, &dataset, nullptr, const_cast<char *>("m"))) return false;
+  fresh.mode = SDDS_WRITEMODE;
+  const QByteArray encoded = mapping.toUtf8();
+  if (mapping.contains(QChar(0)) || !SDDS_ConfigureEnumConversion(&fresh, kind, index, SDDS_ENUM, encoded.constData())) {
+    SDDS_Terminate(&fresh);
+    QMessageBox::warning(this, tr("SDDS"), tr("Invalid enum mapping"));
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return false;
+  }
+  fresh.mode = SDDS_MEMMODE;
+  QString error;
+  for (int pg = 0; pg < pages.size(); ++pg)
+    if (!validatePageForWrite(fresh.layout, pages[pg], pg, &error)) {
+      SDDS_Terminate(&fresh);
+      QMessageBox::warning(this, tr("SDDS"), error);
+      return false;
+    }
+  SDDS_Terminate(&dataset);
+  dataset = fresh;
+  return true;
+}
+
 void SDDSEditor::editParameterAttributes() {
   if (!datasetLoaded)
     return;
@@ -10077,6 +10257,8 @@ void SDDSEditor::editParameterAttributes() {
   SDDSTextEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
   SDDSTextEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
   SDDSTextEdit fixed(fixedValueForDisplay(*def), &dlg);
+  SDDSTextEdit enumMapping(QString::fromUtf8(def->enum_values ? def->enum_values : ""), &dlg);
+  enumMapping.setObjectName(QStringLiteral("enumMapping"));
   QHBoxLayout *typeLayout = new QHBoxLayout();
   QButtonGroup typeGroup(&dlg);
   QMap<int, QRadioButton *> btns;
@@ -10097,6 +10279,11 @@ void SDDSEditor::editParameterAttributes() {
   addBtn(tr("long double"), SDDS_LONGDOUBLE);
   addBtn(tr("string"), SDDS_STRING);
   addBtn(tr("character"), SDDS_CHARACTER);
+  if (def->type == SDDS_ENUM) {
+    addBtn(tr("enum"), SDDS_ENUM);
+    for (auto it = btns.begin(); it != btns.end(); ++it) it.value()->setEnabled(it.key() == SDDS_ENUM);
+    fmt.setEnabled(false);
+  }
   if (btns.contains(def->type))
     btns[def->type]->setChecked(true);
   form.addRow(tr("Name"), &name);
@@ -10106,6 +10293,7 @@ void SDDSEditor::editParameterAttributes() {
   form.addRow(tr("Format"), &fmt);
   form.addRow(tr("Fixed value"), &fixed);
   form.addRow(tr("Type"), typeLayout);
+  if (def->type == SDDS_ENUM) form.addRow(tr("Enum mapping"), &enumMapping);
   QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                            Qt::Horizontal, &dlg);
   form.addRow(&buttons);
@@ -10137,7 +10325,8 @@ void SDDSEditor::editParameterAttributes() {
     return;
   }
 
-  if (definitionTextMatches(def->name, name.text()) &&
+  if (QString::fromUtf8(def->enum_values ? def->enum_values : "") == enumMapping.text() &&
+      definitionTextMatches(def->name, name.text()) &&
       definitionTextMatches(def->symbol, symbol.text()) &&
       definitionTextMatches(def->units, units.text()) &&
       definitionTextMatches(def->description, desc.text()) &&
@@ -10148,6 +10337,10 @@ void SDDSEditor::editParameterAttributes() {
   StructuralSnapshot before;
   if (!captureStructuralSnapshot(this, &before))
     return;
+  if (def->type == SDDS_ENUM && QString::fromUtf8(def->enum_values) != enumMapping.text()) {
+    if (!replaceEnumMapping(1, row, enumMapping.text())) return;
+    def = &dataset.layout.parameter_definition[row];
+  }
   PARAMETER_DEFINITION *savedDef =
       &dataset.original_layout.parameter_definition[row];
   auto replaceField = [&](char **workingField, char **savedField,
@@ -10191,10 +10384,16 @@ void SDDSEditor::editParameterAttributes() {
     return;
   if (!replaceText(&def->format_string, &savedDef->format_string, fmt.text()))
     return;
+  int32_t enumFixedCode = 0;
+  if (tval == SDDS_ENUM && !fixed.text().isEmpty() && !enumLabelCode(def->enum_definition, fixed.text(), &enumFixedCode)) {
+    restoreStructuralSnapshot(this, before);
+    QMessageBox::warning(this, tr("SDDS"), tr("Fixed enum value must be a declared label"));
+    return;
+  }
   const bool hasFixedValue = !fixed.text().isEmpty() ||
                             (def->fixed_value && fixedValueForDisplay(*def).isEmpty());
   if (!replaceField(&def->fixed_value, &savedDef->fixed_value,
-                    hasFixedValue ? fixedValueForDefinition(fixed.text(), tval) : QString(), !hasFixedValue))
+                    hasFixedValue ? (tval == SDDS_ENUM ? QString::number(enumFixedCode) : fixedValueForDefinition(fixed.text(), tval)) : QString(), !hasFixedValue))
     return;
   def->type = savedDef->type = tval;
   if (def->fixed_value) {
@@ -10233,6 +10432,8 @@ void SDDSEditor::editColumnAttributesAt(int col) {
   SDDSTextEdit desc(QString::fromLocal8Bit(def->description ? def->description : ""), &dlg);
   SDDSTextEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
   QSpinBox length(&dlg);
+  SDDSTextEdit enumMapping(QString::fromUtf8(def->enum_values ? def->enum_values : ""), &dlg);
+  enumMapping.setObjectName(QStringLiteral("enumMapping"));
   // Negative string field lengths are valid; clamping them would change the definition.
   length.setRange(-std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max());
   length.setValue(def->field_length);
@@ -10256,6 +10457,12 @@ void SDDSEditor::editColumnAttributesAt(int col) {
   addBtn(tr("long double"), SDDS_LONGDOUBLE);
   addBtn(tr("string"), SDDS_STRING);
   addBtn(tr("character"), SDDS_CHARACTER);
+  if (def->type == SDDS_ENUM) {
+    addBtn(tr("enum"), SDDS_ENUM);
+    for (auto it = btns.begin(); it != btns.end(); ++it) it.value()->setEnabled(it.key() == SDDS_ENUM);
+    fmt.setEnabled(false);
+    length.setEnabled(false);
+  }
   if (btns.contains(def->type))
     btns[def->type]->setChecked(true);
   form.addRow(tr("Name"), &name);
@@ -10265,6 +10472,7 @@ void SDDSEditor::editColumnAttributesAt(int col) {
   form.addRow(tr("Format"), &fmt);
   form.addRow(tr("Field length"), &length);
   form.addRow(tr("Type"), typeLayout);
+  if (def->type == SDDS_ENUM) form.addRow(tr("Enum mapping"), &enumMapping);
   QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                            Qt::Horizontal, &dlg);
   form.addRow(&buttons);
@@ -10289,7 +10497,8 @@ void SDDSEditor::editColumnAttributesAt(int col) {
     return;
   }
 
-  if (definitionTextMatches(def->name, name.text()) &&
+  if (QString::fromUtf8(def->enum_values ? def->enum_values : "") == enumMapping.text() &&
+      definitionTextMatches(def->name, name.text()) &&
       definitionTextMatches(def->symbol, symbol.text()) &&
       definitionTextMatches(def->units, units.text()) &&
       definitionTextMatches(def->description, desc.text()) &&
@@ -10300,6 +10509,10 @@ void SDDSEditor::editColumnAttributesAt(int col) {
   StructuralSnapshot before;
   if (!captureStructuralSnapshot(this, &before))
     return;
+  if (def->type == SDDS_ENUM && QString::fromUtf8(def->enum_values) != enumMapping.text()) {
+    if (!replaceEnumMapping(0, col, enumMapping.text())) return;
+    def = &dataset.layout.column_definition[col];
+  }
   COLUMN_DEFINITION *savedDef = &dataset.original_layout.column_definition[col];
   auto replaceField = [&](char **workingField, char **savedField,
                           const QString &value,
@@ -10375,6 +10588,8 @@ void SDDSEditor::editArrayAttributesAt(int col) {
   SDDSTextEdit fmt(QString::fromLocal8Bit(def->format_string ? def->format_string : ""), &dlg);
   SDDSTextEdit group(QString::fromLocal8Bit(def->group_name ? def->group_name : ""), &dlg);
   QSpinBox length(&dlg);
+  SDDSTextEdit enumMapping(QString::fromUtf8(def->enum_values ? def->enum_values : ""), &dlg);
+  enumMapping.setObjectName(QStringLiteral("enumMapping"));
   // Negative string field lengths are valid; clamping them would change the definition.
   length.setRange(-std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max());
   length.setValue(def->field_length);
@@ -10401,6 +10616,12 @@ void SDDSEditor::editArrayAttributesAt(int col) {
   addBtn(tr("long double"), SDDS_LONGDOUBLE);
   addBtn(tr("string"), SDDS_STRING);
   addBtn(tr("character"), SDDS_CHARACTER);
+  if (def->type == SDDS_ENUM) {
+    addBtn(tr("enum"), SDDS_ENUM);
+    for (auto it = btns.begin(); it != btns.end(); ++it) it.value()->setEnabled(it.key() == SDDS_ENUM);
+    fmt.setEnabled(false);
+    length.setEnabled(false);
+  }
   if (btns.contains(def->type))
     btns[def->type]->setChecked(true);
   form.addRow(tr("Name"), &name);
@@ -10412,6 +10633,7 @@ void SDDSEditor::editArrayAttributesAt(int col) {
   form.addRow(tr("Field length"), &length);
   form.addRow(tr("Dimensions"), &dimsCount);
   form.addRow(tr("Type"), typeLayout);
+  if (def->type == SDDS_ENUM) form.addRow(tr("Enum mapping"), &enumMapping);
   QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                            Qt::Horizontal, &dlg);
   form.addRow(&buttons);
@@ -10451,7 +10673,8 @@ void SDDSEditor::editArrayAttributesAt(int col) {
     return;
   }
 
-  if (definitionTextMatches(def->name, name.text()) &&
+  if (QString::fromUtf8(def->enum_values ? def->enum_values : "") == enumMapping.text() &&
+      definitionTextMatches(def->name, name.text()) &&
       definitionTextMatches(def->symbol, symbol.text()) &&
       definitionTextMatches(def->units, units.text()) &&
       definitionTextMatches(def->description, desc.text()) &&
@@ -10464,6 +10687,10 @@ void SDDSEditor::editArrayAttributesAt(int col) {
   StructuralSnapshot before;
   if (!captureStructuralSnapshot(this, &before))
     return;
+  if (def->type == SDDS_ENUM && QString::fromUtf8(def->enum_values) != enumMapping.text()) {
+    if (!replaceEnumMapping(2, col, enumMapping.text())) return;
+    def = &dataset.layout.array_definition[col];
+  }
   ARRAY_DEFINITION *savedDef = &dataset.original_layout.array_definition[col];
   auto replaceField = [&](char **workingField, char **savedField,
                           const QString &value,
@@ -10543,6 +10770,10 @@ void SDDSEditor::changeParameterType(int row) {
         << "character";
   if (row < 0 || row >= dataset.layout.n_parameters)
     return;
+  if (dataset.layout.parameter_definition[row].type == SDDS_ENUM) {
+    QMessageBox::information(this, tr("Enum"), tr("Edit the enum mapping in Attributes. Convert enum values explicitly before changing their type."));
+    return;
+  }
   QString current = SDDS_GetTypeName(dataset.layout.parameter_definition[row].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Parameter Type"), tr("Type"), types,
@@ -10625,6 +10856,10 @@ void SDDSEditor::changeColumnType(int column) {
         << "character";
   if (column < 0 || column >= dataset.layout.n_columns)
     return;
+  if (dataset.layout.column_definition[column].type == SDDS_ENUM) {
+    QMessageBox::information(this, tr("Enum"), tr("Edit the enum mapping in Attributes. Convert enum values explicitly before changing their type."));
+    return;
+  }
   QString current = SDDS_GetTypeName(dataset.layout.column_definition[column].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Column Type"), tr("Type"), types,
@@ -10884,7 +11119,9 @@ void SDDSEditor::openArrayViewer(int column) {
       [this](const QModelIndex &index, const QString &text) {
         return applyCellEditWithUndo(undoStack, arrayModel, index, text);
       },
-      [type](const QString &text) { return validateTextForType(text, type(), false); },
+      [this, state, type](const QString &text) {
+        return validateTextForCell(arrayModel->index(0, state().column), text, type(), false);
+      },
       [type](long double value) { return numericResultText(value, type()); },
       [this]() { flushPendingEdits(); }, this);
   // The slice model creates undo commands against flat source coordinates.
@@ -11103,6 +11340,12 @@ void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {
       QByteArray bb = bt.toUtf8();
       int r = strcmp_nh(aa.constData(), bb.constData());
       return order == Qt::AscendingOrder ? r < 0 : r > 0;
+    } else if (type == SDDS_ENUM) {
+      // Enum ordering follows the exact UTF-8 label bytes used by sddssort.
+      const QByteArray aa = av.toUtf8();
+      const QByteArray bb = bv.toUtf8();
+      const int r = strcmp(aa.constData(), bb.constData());
+      return order == Qt::AscendingOrder ? r < 0 : r > 0;
     } else if (type == SDDS_STRING) {
       QByteArray aa = av.toUtf8();
       QByteArray bb = bv.toUtf8();
@@ -11275,7 +11518,7 @@ void SDDSEditor::searchColumn(int column) {
       return;
     }
     val.replace(m.start, pattern.size(), replaceEdit->text());
-    if (!validateTextForType(val, columnType, true))
+    if (!validateTextForCell(idx, val, columnType, true))
       return;
     if (applyCellEditWithUndo(undoStack, columnModel, idx, val))
       markDirty();
@@ -11318,7 +11561,7 @@ void SDDSEditor::searchColumn(int column) {
         if (val == idx.data(Qt::EditRole).toString())
           continue;
         bool show = !warned;
-        if (validateTextForType(val, columnType, show)) {
+        if (validateTextForCell(idx, val, columnType, show)) {
           if (undoStack && !macroStarted) {
             undoStack->beginMacro(tr("Replace All"));
             macroStarted = true;
@@ -11366,7 +11609,7 @@ void SDDSEditor::searchColumn(int column) {
         if (val == idx.data(Qt::EditRole).toString())
           continue;
         bool show = !warned;
-        if (validateTextForType(val, columnType, show)) {
+        if (validateTextForCell(idx, val, columnType, show)) {
           if (undoStack && !macroStarted) {
             undoStack->beginMacro(tr("Replace Selected"));
             macroStarted = true;
@@ -11601,7 +11844,7 @@ void SDDSEditor::searchArray(int column) {
       return;
     }
     val.replace(m.start, pattern.size(), replaceEdit.text());
-    if (!validateTextForType(val, arrayType, true))
+    if (!validateTextForCell(idx, val, arrayType, true))
       return;
     if (applyCellEditWithUndo(undoStack, arrayModel, idx, val))
       markDirty();
@@ -11639,7 +11882,7 @@ void SDDSEditor::searchArray(int column) {
         if (val == idx.data(Qt::EditRole).toString())
           continue;
         bool show = !warned;
-        if (validateTextForType(val, arrayType, show)) {
+        if (validateTextForCell(idx, val, arrayType, show)) {
           if (undoStack && !macroStarted) {
             undoStack->beginMacro(tr("Replace All"));
             macroStarted = true;
@@ -11698,6 +11941,10 @@ void SDDSEditor::changeArrayType(int column) {
         << "character";
   if (column < 0 || column >= dataset.layout.n_arrays)
     return;
+  if (dataset.layout.array_definition[column].type == SDDS_ENUM) {
+    QMessageBox::information(this, tr("Enum"), tr("Edit the enum mapping in Attributes. Convert enum values explicitly before changing their type."));
+    return;
+  }
   QString current = SDDS_GetTypeName(dataset.layout.array_definition[column].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Array Type"), tr("Type"), types,
@@ -11756,6 +12003,7 @@ static void removeParameterFromLayout(SDDS_LAYOUT *layout, int row) {
     free(defs[row].format_string);
   if (defs[row].fixed_value)
     free(defs[row].fixed_value);
+  SDDS_FreeEnumDefinition(defs[row].enum_definition);
 
   for (int i = row + 1; i < count; ++i)
     defs[i - 1] = defs[i];
@@ -11823,6 +12071,7 @@ static void removeColumnFromLayout(SDDS_LAYOUT *layout, int col) {
     free(defs[col].description);
   if (defs[col].format_string)
     free(defs[col].format_string);
+  SDDS_FreeEnumDefinition(defs[col].enum_definition);
 
   for (int i = col + 1; i < count; ++i)
     defs[i - 1] = defs[i];
@@ -11892,6 +12141,7 @@ static void removeArrayFromLayout(SDDS_LAYOUT *layout, int col) {
     free(defs[col].format_string);
   if (defs[col].group_name)
     free(defs[col].group_name);
+  SDDS_FreeEnumDefinition(defs[col].enum_definition);
 
   for (int i = col + 1; i < count; ++i)
     defs[i - 1] = defs[i];
@@ -12612,12 +12862,13 @@ bool SDDSEditor::applyColumnRowFilter(QString *errorText, int *visibleRows) {
       columnLookup.insert(n.toLower(), c);
   }
 
-  auto resolverForRow = [&](int row, const QString &ident, bool columnOnly, QString *outText) -> bool {
-    if (!outText)
+  auto resolverForRow = [&](int row, const QString &ident, bool columnOnly, RowFilterValue *outValue) -> bool {
+    if (!outValue)
       return false;
+    QString &outText = outValue->text;
     const QString lowered = ident.toLower();
     if (!columnOnly && (lowered == "row" || lowered == "i")) {
-      *outText = QString::number(row);
+      outText = QString::number(row);
       return true;
     }
 
@@ -12629,23 +12880,24 @@ bool SDDSEditor::applyColumnRowFilter(QString *errorText, int *visibleRows) {
     }
 
     const int col = it.value();
+    outValue->categorical = dataset.layout.column_definition[col].type == SDDS_ENUM;
     if (col < 0 || col >= pd.columns.size()) {
-      *outText = QString();
+      outText = QString();
       return true;
     }
     const QVector<QString> &values = pd.columns[col];
-    *outText = (row >= 0 && row < values.size()) ? values[row] : QString();
+    outText = (row >= 0 && row < values.size()) ? values[row] : QString();
     // An empty numeric cell is saved as zero, so filter it as zero.
     if (SDDS_NUMERIC_TYPE(dataset.layout.column_definition[col].type) &&
-        outText->trimmed().isEmpty())
-      *outText = QStringLiteral("0");
+        outText.trimmed().isEmpty())
+      outText = QStringLiteral("0");
     return true;
   };
 
   const QString expression = rowFilterExpression;
   for (int r = 0; r < rows; ++r) {
     RowFilterParser parser(expression,
-                           [&](const QString &ident, bool columnOnly, QString *value) {
+                           [&](const QString &ident, bool columnOnly, RowFilterValue *value) {
                              return resolverForRow(r, ident, columnOnly, value);
                            });
     bool pass = false;
@@ -12801,7 +13053,7 @@ void SDDSEditor::fillSeries(QTableView *view) {
       }
       newText = numericResultText(result, type);
     }
-    if (!validateTextForType(newText, type, true))
+    if (!validateTextForCell(idx, newText, type, true))
       return;
     updates.append({idx, newText});
   }
@@ -12969,7 +13221,7 @@ void SDDSEditor::applyNumericalExpression(QTableView *view) {
       }
       newText = numericResultText(result, type);
     }
-    if (!validateTextForType(newText, type, true))
+    if (!validateTextForCell(idx, newText, type, true))
       return;
     updates.append({idx, newText});
   }
@@ -13036,7 +13288,7 @@ void SDDSEditor::applyTextFormula(QTableView *view) {
                                              idx.row(), idx.column(),
                                              idx.row() - minRow,
                                              idx.column() - minCol);
-    if (!validateTextForType(newText, type, true))
+    if (!validateTextForCell(idx, newText, type, true))
       return;
     updates.append({idx, newText, type});
   }

@@ -16,6 +16,8 @@
 #include "SDDS3Legacy.h"
 
 #include <algorithm>
+#include <charconv>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -29,7 +31,7 @@ namespace {
 
 sdds::Type checkedType(std::int32_t type) {
   if (type < static_cast<std::int32_t>(sdds::Type::LongDouble) ||
-      type > static_cast<std::int32_t>(sdds::Type::Character))
+      type > static_cast<std::int32_t>(sdds::Type::Enum))
     throw sdds::TypeError(sdds::ErrorKind::Type, "invalid SDDS type number");
   return static_cast<sdds::Type>(type);
 }
@@ -37,7 +39,7 @@ sdds::Type checkedType(std::int32_t type) {
 sdds::Type checkedType(const char *name) {
   if (!name)
     throw sdds::TypeError(sdds::ErrorKind::Type, "null SDDS type name");
-  for (std::int32_t value = 1; value <= 11; ++value) {
+  for (std::int32_t value = 1; value <= 12; ++value) {
     const auto type = static_cast<sdds::Type>(value);
     if (sdds::typeName(type) == name)
       return type;
@@ -67,6 +69,9 @@ sdds::Scalar convertedScalar(sdds::Type type, const T &value) {
     case sdds::Type::Int16: return static_cast<std::int16_t>(value);
     case sdds::Type::UInt16: return static_cast<std::uint16_t>(value);
     case sdds::Type::Character: return static_cast<char>(value);
+    case sdds::Type::Enum:
+      if constexpr (std::is_same_v<T, std::int32_t>) return sdds::EnumValue{value};
+      else throw sdds::TypeError(sdds::ErrorKind::Type, "enum assignment requires int32_t codes");
     case sdds::Type::String:
       throw sdds::TypeError(sdds::ErrorKind::Type, "numeric value used for a string field");
     }
@@ -90,6 +95,7 @@ sdds::Values convertedValues(sdds::Type type, const T *values, std::size_t count
   case sdds::Type::Int16: result = std::vector<std::int16_t>{}; break;
   case sdds::Type::UInt16: result = std::vector<std::uint16_t>{}; break;
   case sdds::Type::Character: result = std::vector<char>{}; break;
+  case sdds::Type::Enum: result = std::vector<sdds::EnumValue>{}; break;
   case sdds::Type::String:
     throw sdds::TypeError(sdds::ErrorKind::Type, "numeric data used for a string column");
   }
@@ -99,6 +105,10 @@ sdds::Values convertedValues(sdds::Type type, const T *values, std::size_t count
     if constexpr (std::is_same_v<Value, std::string>) {
       throw sdds::TypeError(sdds::ErrorKind::Type,
                             "numeric data used for a string column");
+    } else if constexpr (std::is_same_v<Value, sdds::EnumValue>) {
+      if constexpr (std::is_same_v<T, std::int32_t>)
+        for (std::size_t i = 0; i < count; ++i) destination.push_back(sdds::EnumValue{values[i]});
+      else throw sdds::TypeError(sdds::ErrorKind::Type, "enum assignment requires int32_t codes");
     } else {
       destination.reserve(count);
       for (std::size_t i = 0; i < count; ++i)
@@ -122,6 +132,8 @@ T scalarNumber(const sdds::Scalar &value) {
     using Value = std::decay_t<decltype(item)>;
     if constexpr (std::is_same_v<Value, std::string>)
       return static_cast<T>(std::strtold(item.c_str(), nullptr));
+    else if constexpr (std::is_same_v<Value, sdds::EnumValue>)
+      throw sdds::TypeError(sdds::ErrorKind::Type, "numeric enum extraction requires explicit conversion");
     else
       return static_cast<T>(item);
   }, value);
@@ -137,6 +149,8 @@ std::vector<T> vectorNumbers(const sdds::Values &values) {
     for (const auto &item : source) {
       if constexpr (std::is_same_v<Value, std::string>)
         result.push_back(static_cast<T>(std::strtold(item.c_str(), nullptr)));
+      else if constexpr (std::is_same_v<Value, sdds::EnumValue>)
+        throw sdds::TypeError(sdds::ErrorKind::Type, "numeric enum extraction requires explicit conversion");
       else
         result.push_back(static_cast<T>(item));
     }
@@ -355,6 +369,73 @@ uint32_t SDDSFile::rowCount(uint32_t page) const {
 }
 void SDDSFile::freePage() { impl_->pages.clear(); impl_->readCursor = 0; }
 
+int32_t SDDSFile::defineEnumParameter(char *name, char *mapping, char *fixedValue) {
+  try {
+    impl_->requireMutableLayout();
+    auto dictionary = std::make_shared<const sdds::EnumDefinition>(mapping ? mapping : "");
+    std::optional<std::string> canonicalFixedValue;
+    if (fixedValue) {
+      // Match the modern reader/writer integer grammar, including its whitespace.
+      std::string_view text(fixedValue);
+      while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())))
+        text.remove_prefix(1);
+      while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))
+        text.remove_suffix(1);
+      if (text.empty())
+        throw sdds::TypeError(sdds::ErrorKind::Type, "invalid fixed enum code");
+      const char *begin = text.data();
+      const char *end = begin + text.size();
+      std::int32_t code;
+      const auto parsed = std::from_chars(begin, end, code, 10);
+      if (parsed.ec != std::errc() || parsed.ptr != end)
+        throw sdds::TypeError(sdds::ErrorKind::Type, "invalid fixed enum code");
+      dictionary->label(code);
+      canonicalFixedValue = std::to_string(code);
+    }
+    sdds::ParameterDefinition definition;
+    definition.name = name ? name : "";
+    definition.type = sdds::Type::Enum;
+    definition.enumDefinition = std::move(dictionary);
+    definition.fixedValue = std::move(canonicalFixedValue);
+    impl_->layout->parameters.push_back(std::move(definition));
+    return static_cast<int32_t>(impl_->layout->parameters.size() - 1);
+  } catch (const std::exception &error) {
+    impl_->fail(error);
+    return -1;
+  }
+}
+int32_t SDDSFile::defineEnumColumn(char *name, char *mapping) {
+  try {
+    impl_->requireMutableLayout();
+    auto dictionary = std::make_shared<const sdds::EnumDefinition>(mapping ? mapping : "");
+    sdds::ColumnDefinition definition;
+    definition.name = name ? name : "";
+    definition.type = sdds::Type::Enum;
+    definition.enumDefinition = std::move(dictionary);
+    impl_->layout->columns.push_back(std::move(definition));
+    return static_cast<int32_t>(impl_->layout->columns.size() - 1);
+  } catch (const std::exception &error) {
+    impl_->fail(error);
+    return -1;
+  }
+}
+int32_t SDDSFile::defineEnumArray(char *name, char *mapping, uint32_t dimensions) {
+  try {
+    impl_->requireMutableLayout();
+    auto dictionary = std::make_shared<const sdds::EnumDefinition>(mapping ? mapping : "");
+    sdds::ArrayDefinition definition;
+    definition.name = name ? name : "";
+    definition.type = sdds::Type::Enum;
+    definition.enumDefinition = std::move(dictionary);
+    definition.dimensions = static_cast<std::int32_t>(dimensions);
+    impl_->layout->arrays.push_back(std::move(definition));
+    return static_cast<int32_t>(impl_->layout->arrays.size() - 1);
+  } catch (const std::exception &error) {
+    impl_->fail(error);
+    return -1;
+  }
+}
+
 int32_t SDDSFile::defineParameter(char *name, int32_t type) {
   return defineParameter(name, nullptr, nullptr, nullptr, nullptr, type, nullptr);
 }
@@ -373,6 +454,8 @@ int32_t SDDSFile::defineParameter(char *name, char *symbol, char *units, char *d
     definition.description = optionalText(description);
     definition.format = optionalText(formatString);
     definition.type = checkedType(type);
+    if (definition.type == sdds::Type::Enum)
+      throw sdds::TypeError(sdds::ErrorKind::Type, "use defineEnumParameter/Column/Array with a mapping");
     definition.fixedValue = optionalText(fixedValue);
     impl_->layout->parameters.push_back(std::move(definition));
     return static_cast<int32_t>(impl_->layout->parameters.size() - 1);
@@ -397,6 +480,8 @@ int32_t SDDSFile::defineColumn(char *name, char *symbol, char *units, char *desc
     definition.description = optionalText(description);
     definition.format = optionalText(formatString);
     definition.type = checkedType(type);
+    if (definition.type == sdds::Type::Enum)
+      throw sdds::TypeError(sdds::ErrorKind::Type, "use defineEnumParameter/Column/Array with a mapping");
     definition.fieldLength = static_cast<std::int32_t>(fieldLength);
     impl_->layout->columns.push_back(std::move(definition));
     return static_cast<int32_t>(impl_->layout->columns.size() - 1);
@@ -423,6 +508,8 @@ int32_t SDDSFile::defineArray(char *name, char *symbol, char *units, char *descr
     definition.format = optionalText(formatString);
     definition.groupName = optionalText(groupName);
     definition.type = checkedType(type);
+    if (definition.type == sdds::Type::Enum)
+      throw sdds::TypeError(sdds::ErrorKind::Type, "use defineEnumParameter/Column/Array with a mapping");
     definition.fieldLength = static_cast<std::int32_t>(fieldLength);
     definition.dimensions = static_cast<std::int32_t>(dimensions);
     impl_->layout->arrays.push_back(std::move(definition));
@@ -430,6 +517,18 @@ int32_t SDDSFile::defineArray(char *name, char *symbol, char *units, char *descr
   } catch (const std::exception &error) { return impl_->fail(error); }
 }
 
+const char *SDDSFile::getColumnEnumValues(int32_t index) const {
+  const auto &dictionary = impl_->layout->columns.at(index).enumDefinition;
+  return dictionary ? dictionary->values().data() : nullptr;
+}
+const char *SDDSFile::getParameterEnumValues(int32_t index) const {
+  const auto &dictionary = impl_->layout->parameters.at(index).enumDefinition;
+  return dictionary ? dictionary->values().data() : nullptr;
+}
+const char *SDDSFile::getArrayEnumValues(int32_t index) const {
+  const auto &dictionary = impl_->layout->arrays.at(index).enumDefinition;
+  return dictionary ? dictionary->values().data() : nullptr;
+}
 int32_t SDDSFile::getParameterCount() const { return static_cast<int32_t>(impl_->layout->parameters.size()); }
 int32_t SDDSFile::getColumnCount() const { return static_cast<int32_t>(impl_->layout->columns.size()); }
 int32_t SDDSFile::getArrayCount() const { return static_cast<int32_t>(impl_->layout->arrays.size()); }
@@ -507,10 +606,11 @@ double SDDSFile::getParameterInDouble(char *name, uint32_t page) { return getPar
 char *SDDSFile::getParameterInString(int32_t index, uint32_t page) {
   const auto &value = impl_->page(page).parameter(index);
   if (const auto *text = std::get_if<std::string>(&value)) return const_cast<char *>(text->c_str());
-  impl_->stringScratch = std::visit([](const auto &item) {
+  impl_->stringScratch = std::visit([&](const auto &item) {
     using Value = std::decay_t<decltype(item)>;
     if constexpr (std::is_same_v<Value, std::string>) return item;
     else if constexpr (std::is_same_v<Value, char>) return std::string(1, item);
+    else if constexpr (std::is_same_v<Value, sdds::EnumValue>) return std::string(impl_->layout->parameters.at(index).enumDefinition->label(item.code));
     else return std::to_string(item);
   }, value);
   return impl_->stringScratch.data();
@@ -523,7 +623,13 @@ uint32_t *SDDSFile::getColumnInUInt32(char *name, uint32_t page) { return getCol
 double *SDDSFile::getColumnInDouble(int32_t index, uint32_t page) { impl_->doubleScratch = vectorNumbers<double>(impl_->page(page).column(index)); return impl_->doubleScratch.data(); }
 double *SDDSFile::getColumnInDouble(char *name, uint32_t page) { return getColumnInDouble(getColumnIndex(name), page); }
 char **SDDSFile::getColumnInString(int32_t index, uint32_t page) {
-  impl_->stringsScratch = std::get<std::vector<std::string>>(impl_->page(page).column(index));
+  const auto &values = impl_->page(page).column(index);
+  if (sdds::typeOf(values) == sdds::Type::Enum) {
+    impl_->stringsScratch.clear();
+    const auto &dictionary = impl_->layout->columns.at(index).enumDefinition;
+    for (const auto value : std::get<std::vector<sdds::EnumValue>>(values))
+      impl_->stringsScratch.emplace_back(dictionary->label(value.code));
+  } else impl_->stringsScratch = std::get<std::vector<std::string>>(values);
   impl_->stringPointers.clear();
   for (auto &text : impl_->stringsScratch) impl_->stringPointers.push_back(text.data());
   return impl_->stringPointers.data();

@@ -219,6 +219,7 @@ private:
   void refreshColumnRowFilter(bool showMessageOnError);
   void message(const QString &text);
   void markDirty();
+  bool replaceEnumMapping(int kind, int index, const QString &mapping);
   bool maybeSave();
   void updateWindowTitle();
   void closeEvent(QCloseEvent *event) override;

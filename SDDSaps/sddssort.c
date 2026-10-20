@@ -175,6 +175,7 @@ int main(int argc, char **argv) {
 
   long tmpfile_used, sort_requests, noWarnings, uniqueRows, provideIdenticalCount, tmpfileForInternalPipe;
   long sort_parameters;
+  int32_t pageReadStatus;
   SORT_REQUEST *sort_request, *sort_parameter;
   unsigned long pipeFlags, majorOrderFlag;
   short columnMajorOrder = -1;
@@ -226,10 +227,8 @@ int main(int argc, char **argv) {
         if (s_arg[i_arg].n_items < 2 || s_arg[i_arg].n_items > 4)
           SDDS_Bomb("invalid -column syntax");
         sort_request = trealloc(sort_request, sizeof(*sort_request) * (sort_requests + 1));
+        memset(&sort_request[sort_requests], 0, sizeof(*sort_request));
         sort_request[sort_requests].name = s_arg[i_arg].list[1];
-        sort_request[sort_requests].maximize_order = 0;
-        sort_request[sort_requests].decreasing_order = 0;
-        sort_request[sort_requests].absolute = 0;
         if (s_arg[i_arg].n_items >= 3) {
           int j;
           for (j = 2; j < s_arg[i_arg].n_items; j++) {
@@ -260,6 +259,7 @@ int main(int argc, char **argv) {
         if (s_arg[i_arg].n_items < 2 || s_arg[i_arg].n_items > 3)
           SDDS_Bomb("invalid -parameter syntax");
         sort_parameter = trealloc(sort_parameter, sizeof(*sort_parameter) * (sort_parameters + 1));
+        memset(&sort_parameter[sort_parameters], 0, sizeof(*sort_parameter));
         sort_parameter[sort_parameters].name = s_arg[i_arg].list[1];
         if (s_arg[i_arg].n_items == 3) {
           if ((sort_parameter[sort_parameters].decreasing_order = match_string(s_arg[i_arg].list[2], order_mode, 2, 0)) < 0)
@@ -354,11 +354,15 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
       exit(EXIT_FAILURE);
     }
-    while (SDDS_ReadPage(&SDDS_input) > 0) {
+    while ((pageReadStatus = SDDS_ReadPage(&SDDS_input)) > 0) {
       if (!SDDS_CopyPage(&SDDS_tmp, &SDDS_input) || !SDDS_WritePage(&SDDS_tmp)) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
         exit(EXIT_FAILURE);
       }
+    }
+    if (pageReadStatus == 0) {
+      SDDS_SetError("Problem reading input data for temporary copy");
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
     if (!SDDS_Terminate(&SDDS_tmp)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
@@ -420,6 +424,16 @@ static SDDS_DATASET *SDDS_sort;
 static SORT_REQUEST *sort_request;
 static long sort_requests;
 static int64_t *sort_row_index;
+
+/** @brief Sort categorical values by exact label bytes. */
+static int compareEnumCodes(const SDDS_ENUM_DEFINITION *definition, const void *a, const void *b, int absolute) {
+  const char *left, *right;
+  if (absolute) SDDS_Bomb("absolute/numeric sorting is not supported for enums; explicitly cast to long first");
+  left = SDDS_EnumCodeToLabel(definition, *(const int32_t *)a);
+  right = SDDS_EnumCodeToLabel(definition, *(const int32_t *)b);
+  if (!left || !right) SDDS_Bomb("unmapped enum code in sort");
+  return strcmp(left, right);
+}
 
 int SDDS_CompareData(SDDS_DATASET *SDDS_dataset, short type, short absolute, void *data1, void *data2) {
   long double ldouble1, ldouble2;
@@ -595,8 +609,9 @@ int SDDS_CompareRows(const void *vrow1, const void *vrow2) {
   for (i = 0; i < sort_requests; i++) {
     data1 = (char *)sort_request[i].column_data + row1 * sort_request[i].element_size;
     data2 = (char *)sort_request[i].column_data + row2 * sort_request[i].element_size;
-    if ((comparison = SDDS_CompareData(SDDS_sort, sort_request[i].type, sort_request[i].absolute,
-                                       data1, data2))) {
+    if ((comparison = sort_request[i].type == SDDS_ENUM ?
+         compareEnumCodes(SDDS_sort->layout.column_definition[sort_request[i].index].enum_definition, data1, data2, sort_request[i].absolute) :
+         SDDS_CompareData(SDDS_sort, sort_request[i].type, sort_request[i].absolute, data1, data2))) {
       return (sort_request[i].decreasing_order ? -comparison : comparison);
     }
   }
@@ -838,8 +853,9 @@ int SDDS_ComparePages(const void *vpage1, const void *vpage2) {
   page2 = *(int32_t *)vpage2;
 
   for (i = 0; i < sort_parameters; i++) {
-    if ((comparison = SDDS_CompareData(SDDS_sortpage, sort_parameter[i].type, sort_parameter[i].absolute,
-                                       (void *)&(sort_parameter[i].data[page1]), (void *)&(sort_parameter[i].data[page2])))) {
+    if ((comparison = sort_parameter[i].type == SDDS_ENUM ?
+         compareEnumCodes(SDDS_sortpage->layout.parameter_definition[sort_parameter[i].index].enum_definition, &sort_parameter[i].data[page1], &sort_parameter[i].data[page2], sort_parameter[i].absolute) :
+         SDDS_CompareData(SDDS_sortpage, sort_parameter[i].type, sort_parameter[i].absolute, &sort_parameter[i].data[page1], &sort_parameter[i].data[page2]))) {
       /* if (sort_parameter[i].type==SDDS_STRING) {
        *   free(*((char**)&(sort_parameter[i].data[page1])));
        *   free(*((char**)&(sort_parameter[i].data[page2])));
@@ -859,6 +875,7 @@ long SDDS_SortAll(SDDS_DATASET *SDDS_inputx, SDDS_DATASET *SDDS_outputx, SORT_RE
                   long provideIdenticalCount, long xpipeFlags, long non_dominate_sort) {
   long i, j, k, pages;
   int32_t *xsort_page_index;
+  int32_t pageReadStatus;
   char s[1024];
   SDDS_DATASET *tmp_datasets;
 
@@ -884,7 +901,7 @@ long SDDS_SortAll(SDDS_DATASET *SDDS_inputx, SDDS_DATASET *SDDS_outputx, SORT_RE
       SDDS_SetDefaultIOBufferSize(0);
     for (i = 0; i < sort_parameters; i++)
       sort_parameter[i].data = NULL;
-    while (SDDS_ReadPage(SDDS_sortpage) > 0) {
+    while ((pageReadStatus = SDDS_ReadPage(SDDS_sortpage)) > 0) {
       if (xpipeFlags || SDDS_sortpage->layout.gzipFile) {
         /* copy each page of sortpage into tmp_datasets indexed by the pages, i.e.
          * tmp_datasets[pages] contains only one page */
@@ -908,6 +925,10 @@ long SDDS_SortAll(SDDS_DATASET *SDDS_inputx, SDDS_DATASET *SDDS_outputx, SORT_RE
         }
       }
       pages++;
+    }
+    if (pageReadStatus == 0) {
+      SDDS_SetError("Problem reading parameter values for sort (SDDS_SortAll)");
+      return 0;
     }
     /* sort pages by parameter */
     xsort_page_index = tmalloc(sizeof(*xsort_page_index) * pages);
@@ -968,7 +989,7 @@ long SDDS_SortAll(SDDS_DATASET *SDDS_inputx, SDDS_DATASET *SDDS_outputx, SORT_RE
       }
     }
   } else {
-    while (SDDS_ReadPage(SDDS_inputx) > 0) {
+    while ((pageReadStatus = SDDS_ReadPage(SDDS_inputx)) > 0) {
       if (!SDDS_CopyPage(SDDS_outputx, SDDS_inputx)) {
         SDDS_SetError("Problem copying data for output file");
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -991,6 +1012,10 @@ long SDDS_SortAll(SDDS_DATASET *SDDS_inputx, SDDS_DATASET *SDDS_outputx, SORT_RE
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         exit(EXIT_FAILURE);
       }
+    }
+    if (pageReadStatus == 0) {
+      SDDS_SetError("Problem reading input data for sort (SDDS_SortAll)");
+      return 0;
     }
   }
   if (tmp_datasets)

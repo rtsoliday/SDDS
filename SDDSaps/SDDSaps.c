@@ -1171,6 +1171,17 @@ void set_up_output(char *filename, OUTPUT_REQUEST *output, LABEL_PARAMETER *labe
 
 #define DEBUG 0
 
+/** @brief Extract owned string or enum labels for a processing match qualifier. */
+static char **getProcessingMatchData(SDDS_DATASET *dataset, char *name) {
+  int32_t index = SDDS_GetColumnIndex(dataset, name);
+  int32_t type = index < 0 ? 0 : SDDS_GetColumnType(dataset, index);
+  if (type != SDDS_STRING && type != SDDS_ENUM) {
+    SDDS_SetError("Processing match column must have string or enum type");
+    return NULL;
+  }
+  return SDDS_GetColumnInString(dataset, name);
+}
+
 long process_column(SDDS_DATASET *Dataset, PROCESSING_DEFINITION *processing_ptr,
                     double *result, char **stringResult, long warnings, int threads) {
   double *data, *indepData, *weightData;
@@ -1270,7 +1281,7 @@ long process_column(SDDS_DATASET *Dataset, PROCESSING_DEFINITION *processing_ptr
       keep[i] = 1;
   }
   if (processing_ptr->flags & PROCESSING_MATCHCOLUMN_GIVEN) {
-    if (!(matchData = SDDS_GetColumn(Dataset, processing_ptr->match_column)))
+    if (!(matchData = getProcessingMatchData(Dataset, processing_ptr->match_column)))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     for (i = 0; i < n_data; i++)
       keep[i] = 0;
@@ -1928,7 +1939,7 @@ char *process_string_column(SDDS_DATASET *Dataset, PROCESSING_DEFINITION *proces
   }
 
   if (processing_ptr->flags & PROCESSING_MATCHCOLUMN_GIVEN) {
-    if (!(matchData = SDDS_GetColumn(Dataset, processing_ptr->match_column)))
+    if (!(matchData = getProcessingMatchData(Dataset, processing_ptr->match_column)))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     for (i = 0; i < n_data; i++)
       keep[i] = 0;
@@ -2231,7 +2242,7 @@ long complete_processing_definitions(PROCESSING_DEFINITION **processing_definiti
   static char s[SDDS_MAXLINE], t[SDDS_MAXLINE];
   long i, index, index1;
   PARAMETER_DEFINITION *pardef = NULL, pardef1;
-  SDDS_FIELD_INFORMATION SDDS_ParameterFieldInformation_local[SDDS_PARAMETER_FIELDS] = {
+  SDDS_FIELD_INFORMATION SDDS_ParameterFieldInformation_local[SDDS_PARAMETER_FIELDS - 1] = {
     {"name", offsetof(PARAMETER_DEFINITION, name), SDDS_STRING},
     {"symbol", offsetof(PARAMETER_DEFINITION, symbol), SDDS_STRING},
     {"units", offsetof(PARAMETER_DEFINITION, units), SDDS_STRING},
@@ -2378,7 +2389,7 @@ long complete_processing_definitions(PROCESSING_DEFINITION **processing_definiti
         pardef1.format_string = pardef1.fixed_value = NULL;
       pardef1.type = -1;
       if (!SDDS_ParseNamelist((void *)&pardef1, SDDS_ParameterFieldInformation_local,
-                              SDDS_PARAMETER_FIELDS, s)) {
+                              SDDS_PARAMETER_FIELDS - 1, s)) {
         SDDS_SetError("Problem parsing parameter namelist");
         return 0;
       }

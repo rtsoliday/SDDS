@@ -325,6 +325,21 @@ static double (*const SDDS_ConvertTypeToDouble[SDDS_NUM_TYPES + 1])(void *data, 
     SDDS_ConvertStringToDouble,
     SDDS_ConvertCharToDouble};
 
+/** @brief Never expose an enum through a previously created numeric RPN memory. */
+static int32_t storeEnumRpnValue(const char *name, int64_t memory, const char *label) {
+  double value;
+  char *string = NULL;
+  long isString = 0;
+  int valid = label && is_memory(&value, &string, &isString, (char *)name) >= 0 && isString;
+  free(string);
+  if (!valid) {
+    SDDS_SetError("Enum RPN access requires a mapped label and a string memory; a numeric memory with this name may already exist");
+    return 0;
+  }
+  rpn_quick_store(0, (char *)label, memory);
+  return 1;
+}
+
 // Static variables to store memory identifiers for RPN operations
 static MDB_THREAD_LOCAL int64_t table_number_mem = -1;
 static MDB_THREAD_LOCAL int64_t i_page_mem = -1;
@@ -369,6 +384,52 @@ int64_t SDDS_CreateRpnArray(char *name) {
   return memnum;
 }
 
+typedef struct {
+  int64_t memory;
+  double array;
+} INVALIDATED_RPN_ARRAY;
+
+/* RPN memories and arrays live for the process lifetime.  Retain their binding
+ * while an enum layout is active so switching layouts does not allocate arrays. */
+static INVALIDATED_RPN_ARRAY *invalidatedRpnArrays;
+static size_t invalidatedRpnArrayCount, invalidatedRpnArrayCapacity;
+
+/** @brief Find a pointer memory's saved binding while holding the RPN lock. */
+static size_t invalidatedRpnArraySlot(int64_t memory) {
+  size_t low = 0, high = invalidatedRpnArrayCount;
+  while (low < high) {
+    size_t middle = low + (high - low) / 2;
+    if (invalidatedRpnArrays[middle].memory < memory) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+/** @brief Make categorical array access fail without changing arrays held by aliases. */
+void SDDS_InvalidateRpnColumnArray(COLUMN_DEFINITION *definition) {
+  double array;
+  size_t slot;
+  if (definition->pointer_number < 0) return;
+  rpn_lock();
+  array = rpn_recall(definition->pointer_number);
+  if (array != -1) {
+    slot = invalidatedRpnArraySlot(definition->pointer_number);
+    if (slot == invalidatedRpnArrayCount || invalidatedRpnArrays[slot].memory != definition->pointer_number) {
+      if (invalidatedRpnArrayCount == invalidatedRpnArrayCapacity) {
+        invalidatedRpnArrayCapacity = invalidatedRpnArrayCapacity ? 2 * invalidatedRpnArrayCapacity : 8;
+        invalidatedRpnArrays = trealloc(invalidatedRpnArrays, invalidatedRpnArrayCapacity * sizeof(*invalidatedRpnArrays));
+      }
+      memmove(invalidatedRpnArrays + slot + 1, invalidatedRpnArrays + slot,
+              (invalidatedRpnArrayCount - slot) * sizeof(*invalidatedRpnArrays));
+      invalidatedRpnArrayCount++;
+      invalidatedRpnArrays[slot].memory = definition->pointer_number;
+    }
+    invalidatedRpnArrays[slot].array = array;
+  }
+  rpn_store(-1, NULL, definition->pointer_number);
+  rpn_unlock();
+}
+
 /**
  * @brief Computes a parameter in the SDDS dataset using an RPN equation.
  *
@@ -388,6 +449,11 @@ int32_t SDDS_ComputeParameter(SDDS_DATASET *SDDS_dataset, int32_t parameter, cha
   layout = &SDDS_dataset->layout;
   if (parameter < 0 || parameter >= layout->n_parameters)
     goto cleanup;
+  if (!SDDS_NUMERIC_TYPE(layout->parameter_definition[parameter].type) &&
+      layout->parameter_definition[parameter].type != SDDS_CHARACTER) {
+    SDDS_SetError("Unable to compute nonnumeric parameter; explicit conversion is required (SDDS_ComputeParameter)");
+    goto cleanup;
+  }
 
   if (!equation) {
     SDDS_SetError("Unable to compute defined parameter--no equation for named parameter (SDDS_ComputeParameter)");
@@ -468,6 +534,11 @@ int32_t SDDS_ComputeColumn(SDDS_DATASET *SDDS_dataset, int32_t column, char *equ
   layout = &SDDS_dataset->layout;
   if (column < 0 || column >= layout->n_columns)
     goto cleanup;
+  if (!SDDS_NUMERIC_TYPE(layout->column_definition[column].type) &&
+      layout->column_definition[column].type != SDDS_CHARACTER) {
+    SDDS_SetError("Unable to compute nonnumeric column; explicit conversion is required (SDDS_ComputeColumn)");
+    goto cleanup;
+  }
 
   if (!SDDS_StoreParametersInRpnMemories(SDDS_dataset))
     goto cleanup;
@@ -576,6 +647,8 @@ int32_t SDDS_FilterRowsWithRpnTest(SDDS_DATASET *SDDS_dataset, char *rpn_test) {
   rpn_store((double)SDDS_dataset->n_rows, NULL, n_rows_mem);
 
   for (i = 0; i < layout->n_columns; i++) {
+    if (layout->column_definition[i].type == SDDS_ENUM)
+      SDDS_InvalidateRpnColumnArray(layout->column_definition + i);
     if (layout->column_definition[i].memory_number < 0) {
       SDDS_SetError("Unable to compute equations--column lacks rpn memory number (SDDS_FilterRowsWithRpnTest)");
       goto cleanup;
@@ -590,7 +663,9 @@ int32_t SDDS_FilterRowsWithRpnTest(SDDS_DATASET *SDDS_dataset, char *rpn_test) {
     /* store values in memories */
     coldef = layout->column_definition;
     for (i = 0; i < n_columns; i++, coldef++) {
-      if (coldef->type != SDDS_STRING) {
+      if (coldef->type == SDDS_ENUM) {
+        if (!storeEnumRpnValue(coldef->name, coldef->memory_number, SDDS_EnumCodeToLabel(coldef->enum_definition, ((int32_t *)SDDS_dataset->data[i])[j]))) goto cleanup;
+      } else if (coldef->type != SDDS_STRING) {
         rpn_quick_store((*SDDS_ConvertTypeToDouble[coldef->type])(SDDS_dataset->data[i], j), NULL, coldef->memory_number);
       } else {
         rpn_quick_store(0, ((char **)SDDS_dataset->data[i])[j], coldef->memory_number);
@@ -631,6 +706,9 @@ int32_t SDDS_StoreParametersInRpnMemories(SDDS_DATASET *SDDS_dataset) {
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_StoreParametersInRpnMemories"))
     goto cleanup;
   layout = &SDDS_dataset->layout;
+  for (i = 0; i < layout->n_columns; i++)
+    if (layout->column_definition[i].type == SDDS_ENUM)
+      SDDS_InvalidateRpnColumnArray(layout->column_definition + i);
 
   rpn_clear();
 #  if defined(DEBUG)
@@ -641,7 +719,9 @@ int32_t SDDS_StoreParametersInRpnMemories(SDDS_DATASET *SDDS_dataset) {
       SDDS_SetError("Unable to compute equations--parameter lacks rpn memory number (SDDS_StoreParametersInRpnMemories");
       goto cleanup;
     }
-    if (layout->parameter_definition[i].type != SDDS_STRING) {
+    if (layout->parameter_definition[i].type == SDDS_ENUM) {
+      if (!storeEnumRpnValue(layout->parameter_definition[i].name, layout->parameter_definition[i].memory_number, SDDS_EnumCodeToLabel(layout->parameter_definition[i].enum_definition, *(int32_t *)SDDS_dataset->parameter[i]))) goto cleanup;
+    } else if (layout->parameter_definition[i].type != SDDS_STRING) {
       rpn_quick_store((*SDDS_ConvertTypeToDouble[layout->parameter_definition[i].type])(SDDS_dataset->parameter[i], 0), NULL, layout->parameter_definition[i].memory_number);
 #  if defined(DEBUG)
       fprintf(stderr, "%s = %le ", layout->parameter_definition[i].name, rpn_recall(layout->parameter_definition[i].memory_number));
@@ -694,7 +774,10 @@ int32_t SDDS_StoreRowInRpnMemories(SDDS_DATASET *SDDS_dataset, int64_t row) {
   }
   coldef = SDDS_dataset->layout.column_definition;
   for (i = 0; i < columns; i++, coldef++) {
-    if (coldef->type != SDDS_STRING) {
+    if (coldef->type == SDDS_ENUM) {
+      SDDS_InvalidateRpnColumnArray(coldef);
+      if (!storeEnumRpnValue(coldef->name, coldef->memory_number, SDDS_EnumCodeToLabel(coldef->enum_definition, ((int32_t *)SDDS_dataset->data[i])[row]))) goto cleanup;
+    } else if (coldef->type != SDDS_STRING) {
       rpn_quick_store((*SDDS_ConvertTypeToDouble[coldef->type])(SDDS_dataset->data[i], row), NULL, coldef->memory_number);
     } else {
       rpn_quick_store(0, ((char **)SDDS_dataset->data[i])[row], coldef->memory_number);
@@ -736,10 +819,23 @@ int32_t SDDS_StoreColumnsInRpnArrays(SDDS_DATASET *SDDS_dataset) {
   layout = &SDDS_dataset->layout;
   rpn_clear();
   for (i = 0; i < layout->n_columns; i++) {
+    if (layout->column_definition[i].type == SDDS_ENUM) {
+      SDDS_InvalidateRpnColumnArray(layout->column_definition + i);
+      continue;
+    }
     if (layout->column_definition[i].type != SDDS_STRING) {
       if (layout->column_definition[i].pointer_number < 0) {
         SDDS_SetError("Unable to compute equations--column lacks rpn pointer number (SDDS_StoreColumnsInRpnArrays)");
         goto cleanup;
+      }
+      /* Restore the existing array after switching back from an enum layout. */
+      if (rpn_recall(layout->column_definition[i].pointer_number) == -1) {
+        size_t slot = invalidatedRpnArraySlot(layout->column_definition[i].pointer_number);
+        if (slot == invalidatedRpnArrayCount || invalidatedRpnArrays[slot].memory != layout->column_definition[i].pointer_number) {
+          SDDS_SetError("Unable to compute equations--column has an invalid rpn array pointer (SDDS_StoreColumnsInRpnArrays)");
+          goto cleanup;
+        }
+        rpn_store(invalidatedRpnArrays[slot].array, NULL, layout->column_definition[i].pointer_number);
       }
       if (!rpn_resizearray((int32_t)rpn_recall(layout->column_definition[i].pointer_number), SDDS_dataset->n_rows)) {
         SDDS_SetError("Unable to compute equations--couldn't resize rpn arrays (SDDS_StoreColumnsInRpnArrays)");
@@ -814,6 +910,11 @@ cleanup:
 }
 
 #else /* end of RPN_SUPPORT section */
+
+/** @brief No array memories exist when RPN support is disabled. */
+void SDDS_InvalidateRpnColumnArray(COLUMN_DEFINITION *definition) {
+  (void)definition;
+}
 
 /**
  * @brief Stub function for creating RPN memory when RPN_SUPPORT is not enabled.

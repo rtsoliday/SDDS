@@ -350,3 +350,103 @@ def test_threads_must_be_positive():
 
   assert result.returncode != 0
   assert "-threads must be >= 1" in result.stderr
+
+
+def write_enum_input(path, group_mapping, group_code, copy_mapping=None, copy_code=0, value=10):
+  def definition(kind, name, mapping):
+    if mapping is None:
+      return f'&{kind} name={name}, type=long &end\n'
+    return f'&{kind} name={name}, type=enum, enum_values="{mapping}" &end\n'
+
+  path.write_text(
+    ("SDDS6\n" if group_mapping is not None or copy_mapping is not None else "SDDS1\n") +
+    definition("parameter", "Group", group_mapping) +
+    definition("column", "State", copy_mapping) +
+    '&column name=y, type=double &end\n' +
+    f'&data mode=ascii &end\n{group_code}\n1\n{copy_code} {value}\n',
+    encoding="utf8",
+  )
+
+
+def enum_group_command(input_dir, output, threads, copy=False):
+  return [
+    str(SDDSGROUPEDENVELOPE),
+    "-inputDir", str(input_dir), "-pattern=test-*.sdds", "-groupBy=Group",
+    "-mean=y", f"-threads={threads}", "-output", str(output),
+  ] + (["-copy=State"] if copy else [])
+
+
+@pytest.mark.skipif(not SDDSGROUPEDENVELOPE.exists(), reason="sddsgroupedenvelope not built")
+@pytest.mark.parametrize("threads", [1, 2])
+@pytest.mark.parametrize("first_mapping,second_mapping,second_code", [
+  ("0:OFF,1:ON", "0:FAULT,1:ON", 0),
+  ("0:OFF,1:ON", "7:OFF,8:ON", 7),
+  ("0:OFF,1:ON", None, 0),
+  (None, "0:OFF,1:ON", 0),
+])
+def test_grouping_enums_require_compatible_input_dictionaries(
+    tmp_path, threads, first_mapping, second_mapping, second_code):
+  input_dir = tmp_path / "input"
+  input_dir.mkdir()
+  write_enum_input(input_dir / "test-01.sdds", first_mapping, 0)
+  write_enum_input(input_dir / "test-02.sdds", second_mapping, second_code)
+  output = tmp_path / "envelope"
+
+  result = subprocess.run(enum_group_command(input_dir, output, threads),
+                          capture_output=True, text=True)
+
+  assert result.returncode != 0
+  assert "incompatible grouping parameter Group" in result.stderr
+  assert "Incompatible enum mappings" in result.stderr
+  assert "test-02.sdds" in result.stderr
+  assert not output.exists()
+
+
+@pytest.mark.skipif(
+  not (SDDSGROUPEDENVELOPE.exists() and SDDS2STREAM.exists()),
+  reason="sddsgroupedenvelope or sdds2stream not built",
+)
+@pytest.mark.parametrize("threads", [1, 2])
+@pytest.mark.parametrize("second_mapping", ["0:OFF,1:ON", "1:ON,0:OFF"])
+def test_grouping_and_copy_enums_accept_equivalent_dictionaries(tmp_path, threads, second_mapping):
+  input_dir = tmp_path / "input"
+  input_dir.mkdir()
+  write_enum_input(input_dir / "test-01.sdds", "0:OFF,1:ON", 0,
+                   "0:OFF,1:ON", 1, value=10)
+  write_enum_input(input_dir / "test-02.sdds", second_mapping, 0,
+                   second_mapping, 1, value=14)
+  output = tmp_path / "envelope"
+
+  subprocess.run(enum_group_command(input_dir, output, threads, copy=True), check=True)
+
+  assert stream_columns(output, ["yMean"]) == [[12]]
+  for option in ("-parameter=Group", "-column=State"):
+    result = subprocess.run([str(SDDS2STREAM), str(output), option, "-noquotes"],
+                            capture_output=True, text=True, check=True)
+    assert result.stdout.split() == (["OFF"] if option.startswith("-parameter") else ["ON"])
+
+
+@pytest.mark.skipif(not SDDSGROUPEDENVELOPE.exists(), reason="sddsgroupedenvelope not built")
+@pytest.mark.parametrize("threads", [1, 2])
+@pytest.mark.parametrize("first_mapping,second_mapping,second_code", [
+  ("0:OFF,1:ON", "0:FAULT,1:ON", 0),
+  ("0:OFF,1:ON", "7:OFF,8:ON", 7),
+  ("0:OFF,1:ON", None, 0),
+  (None, "0:OFF,1:ON", 0),
+])
+def test_copied_enums_require_compatible_input_dictionaries(
+    tmp_path, threads, first_mapping, second_mapping, second_code):
+  input_dir = tmp_path / "input"
+  input_dir.mkdir()
+  write_enum_input(input_dir / "test-01.sdds", None, 0, first_mapping, 0)
+  write_enum_input(input_dir / "test-02.sdds", None, 1, second_mapping, second_code)
+  output = tmp_path / "envelope"
+
+  result = subprocess.run(enum_group_command(input_dir, output, threads, copy=True),
+                          capture_output=True, text=True)
+
+  assert result.returncode != 0
+  assert "incompatible copy column State" in result.stderr
+  assert "Incompatible enum mappings" in result.stderr
+  assert "test-02.sdds" in result.stderr
+  assert not output.exists()

@@ -107,9 +107,10 @@ class ArraySliceTableView : public QTableView {
 public:
   explicit ArraySliceTableView(QWidget *parent) : QTableView(parent) {}
   void finishEditing() {
-    const auto editors = viewport()->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
-    for (QLineEdit *editor : editors) {
-      if (!editor->isHidden()) {
+    const auto editors = viewport()->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
+    for (QWidget *editor : editors) {
+      if (!editor->isHidden() &&
+          (qobject_cast<QLineEdit *>(editor) || qobject_cast<QComboBox *>(editor))) {
         commitData(editor);
         closeEditor(editor, QAbstractItemDelegate::NoHint);
       }

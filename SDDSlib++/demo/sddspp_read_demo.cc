@@ -27,24 +27,26 @@ namespace {
 
 /** @brief Prints one value from an SDDS variant. */
 template <class T>
-void printValue(const T &value) {
-  if constexpr (std::is_floating_point_v<T>)
+void printValue(const T &value, const sdds::EnumDefinition *definition = nullptr) {
+  if constexpr (std::is_same_v<T, sdds::EnumValue>)
+    std::cout << (definition ? std::string(definition->label(value.code)) : std::to_string(value.code));
+  else if constexpr (std::is_floating_point_v<T>)
     std::cout << std::scientific << std::setprecision(15) << value;
   else
     std::cout << value;
 }
 
 /** @brief Prints an SDDS scalar without switching on a numeric type ID. */
-void printScalar(const sdds::Scalar &value) {
-  std::visit([](const auto &item) { printValue(item); }, value);
+void printScalar(const sdds::Scalar &value, const sdds::EnumDefinition *definition = nullptr) {
+  std::visit([&](const auto &item) { printValue(item, definition); }, value);
 }
 
 /** @brief Prints all elements in an SDDS values vector. */
-void printValues(const sdds::Values &values) {
-  std::visit([](const auto &items) {
+void printValues(const sdds::Values &values, const sdds::EnumDefinition *definition = nullptr) {
+  std::visit([&](const auto &items) {
     for (const auto &item : items) {
       std::cout << "    ";
-      printValue(item);
+      printValue(item, definition);
       std::cout << '\n';
     }
   }, values);
@@ -57,7 +59,7 @@ void printPage(const sdds::Page &page) {
   for (const auto &definition : page.layout().parameters) {
     std::cout << "  parameter " << definition.name << " ("
               << sdds::typeName(definition.type) << ") = ";
-    printScalar(page.parameter(definition.name));
+    printScalar(page.parameter(definition.name), definition.enumDefinition.get());
     std::cout << '\n';
   }
 
@@ -71,13 +73,13 @@ void printPage(const sdds::Page &page) {
       std::cout << array.dimensions[index];
     }
     std::cout << '\n';
-    printValues(array.values);
+    printValues(array.values, definition.enumDefinition.get());
   }
 
   for (const auto &definition : page.layout().columns) {
     std::cout << "  column " << definition.name << " ("
               << sdds::typeName(definition.type) << ")\n";
-    printValues(page.column(definition.name));
+    printValues(page.column(definition.name), definition.enumDefinition.get());
   }
 }
 

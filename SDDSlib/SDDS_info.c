@@ -407,6 +407,17 @@ int32_t SDDS_ChangeColumnInformation(SDDS_DATASET *SDDS_dataset, char *field_nam
     SDDS_SetError("Unknown field name given (SDDS_ChangeColumnInformation)");
     return (0);
   }
+  if (memory && columndef->type == SDDS_ENUM &&
+      (!strcmp(field_name, "format_string") || !strcmp(field_name, "field_length"))) {
+    SDDS_SetError("Enum definitions require no format_string and zero field_length");
+    return 0;
+  }
+  if (memory && (!strcmp(field_name, "enum_values") ||
+      (!strcmp(field_name, "type") && (columndef->type == SDDS_ENUM ||
+       ((mode & SDDS_PASS_BY_STRING) ? !strcmp((char *)memory, "enum") : *(int32_t *)memory == SDDS_ENUM))))) {
+    SDDS_SetError("Enum dictionaries/types are immutable; use a new layout and explicit conversion");
+    return 0;
+  }
   type = SDDS_ColumnFieldInformation[field_index].type;
   if (!memory)
     return (type);
@@ -434,6 +445,13 @@ int32_t SDDS_ChangeColumnInformation(SDDS_DATASET *SDDS_dataset, char *field_nam
       else if (!SDDS_ScanData((char *)memory, type, 0, (void *)buffer, 0, 0)) {
         SDDS_SetError("Unable to scan string data (SDDS_ChangeColumnInformation)");
         return (0);
+      }
+      if (!strcmp(field_name, "type")) {
+        memcpy(&givenType, buffer, sizeof(givenType));
+        if (givenType == SDDS_ENUM) {
+          SDDS_SetError("Enum dictionaries/types are immutable; use a new layout and explicit conversion");
+          return 0;
+        }
       }
       memcpy((char *)columndef + SDDS_ColumnFieldInformation[field_index].offset, (void *)buffer, SDDS_type_size[type - 1]);
     } else
@@ -527,6 +545,19 @@ int32_t SDDS_ChangeParameterInformation(SDDS_DATASET *SDDS_dataset, char *field_
     SDDS_SetError("Unknown field name given (SDDS_ChangeParameterInformation)");
     return (0);
   }
+  if (memory && parameterdef->type == SDDS_ENUM && !strcmp(field_name, "fixed_value") &&
+      !SDDS_ValidateFixedEnumValue(parameterdef->enum_definition, (const char *)memory)) return 0;
+  if (memory && parameterdef->type == SDDS_ENUM &&
+      (!strcmp(field_name, "format_string") || !strcmp(field_name, "field_length"))) {
+    SDDS_SetError("Enum definitions require no format_string and zero field_length");
+    return 0;
+  }
+  if (memory && (!strcmp(field_name, "enum_values") ||
+      (!strcmp(field_name, "type") && (parameterdef->type == SDDS_ENUM ||
+       ((mode & SDDS_PASS_BY_STRING) ? !strcmp((char *)memory, "enum") : *(int32_t *)memory == SDDS_ENUM))))) {
+    SDDS_SetError("Enum dictionaries/types are immutable; use a new layout and explicit conversion");
+    return 0;
+  }
   type = SDDS_ParameterFieldInformation[field_index].type;
   if (!memory)
     return (type);
@@ -545,6 +576,13 @@ int32_t SDDS_ChangeParameterInformation(SDDS_DATASET *SDDS_dataset, char *field_
       else if (!SDDS_ScanData((char *)memory, type, 0, (void *)buffer, 0, 0)) {
         SDDS_SetError("Unable to scan string data (SDDS_ChangeParameterInformation)");
         return (0);
+      }
+      if (!strcmp(field_name, "type")) {
+        memcpy(&givenType, buffer, sizeof(givenType));
+        if (givenType == SDDS_ENUM) {
+          SDDS_SetError("Enum dictionaries/types are immutable; use a new layout and explicit conversion");
+          return 0;
+        }
       }
       memcpy((char *)parameterdef + SDDS_ParameterFieldInformation[field_index].offset, (void *)buffer, SDDS_type_size[type - 1]);
     } else
@@ -639,6 +677,17 @@ int32_t SDDS_ChangeArrayInformation(SDDS_DATASET *SDDS_dataset, char *field_name
     SDDS_SetError("Unknown field name given (SDDS_ChangeArrayInformation)");
     return (0);
   }
+  if (memory && arraydef->type == SDDS_ENUM &&
+      (!strcmp(field_name, "format_string") || !strcmp(field_name, "field_length"))) {
+    SDDS_SetError("Enum definitions require no format_string and zero field_length");
+    return 0;
+  }
+  if (memory && (!strcmp(field_name, "enum_values") ||
+      (!strcmp(field_name, "type") && (arraydef->type == SDDS_ENUM ||
+       ((mode & SDDS_PASS_BY_STRING) ? !strcmp((char *)memory, "enum") : *(int32_t *)memory == SDDS_ENUM))))) {
+    SDDS_SetError("Enum dictionaries/types are immutable; use a new layout and explicit conversion");
+    return 0;
+  }
   type = SDDS_ArrayFieldInformation[field_index].type;
   if (!memory)
     return (type);
@@ -657,6 +706,13 @@ int32_t SDDS_ChangeArrayInformation(SDDS_DATASET *SDDS_dataset, char *field_name
       else if (!SDDS_ScanData((char *)memory, type, 0, (void *)buffer, 0, 0)) {
         SDDS_SetError("Unable to scan string data (SDDS_ChangeArrayInformation)");
         return (0);
+      }
+      if (!strcmp(field_name, "type")) {
+        memcpy(&givenType, buffer, sizeof(givenType));
+        if (givenType == SDDS_ENUM) {
+          SDDS_SetError("Enum dictionaries/types are immutable; use a new layout and explicit conversion");
+          return 0;
+        }
       }
       memcpy((char *)arraydef + SDDS_ArrayFieldInformation[field_index].offset, (void *)buffer, SDDS_type_size[type - 1]);
     } else

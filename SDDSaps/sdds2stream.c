@@ -88,7 +88,8 @@
 #define SET_IGNOREFORMATS 10
 #define SET_DESCRIPTION 11
 #define SET_SHOW_PAGES 12
-#define N_OPTIONS 13
+#define SET_ENUM_CODES 13
+#define N_OPTIONS 14
 
 char *option[N_OPTIONS] =
   {
@@ -105,6 +106,7 @@ char *option[N_OPTIONS] =
     "ignoreformats",
     "description",
     "npages",
+    "enumCodes",
   };
 
 char *USAGE = "\n"
@@ -120,6 +122,7 @@ char *USAGE = "\n"
   "              [-npages[=<bare>]] \n"
   "              [-noquotes]\n"
   "              [-ignoreFormats] \n"
+  "              [-enumCodes] (show enum codes instead of labels)\n"
   "              [-description]\n"
   "sdds2stream provides stream output to the standard output of data values from "
   "a group of columns or parameters.  Each line of the output contains a different "
@@ -145,7 +148,9 @@ int main(int argc, char **argv) {
   void **data;
   char *buffer;
   long filenames, print_rows, print_pages, noQuotes, pipe, ignoreFormats;
-  static char printBuffer[SDDS_MAXLINE * 16];
+  int enumCodes = 0;
+  char *printBuffer;
+  size_t printBufferSize = 4 * (size_t)SDDS_GetEnumMappingLimit() + SDDS_MAXLINE * 16;
   long n_rows_bare, n_rows_total, n_pages, n_pages_bare, n_rows_scinotation;
   int64_t n_rows;
 
@@ -171,6 +176,9 @@ int main(int argc, char **argv) {
     if (s_arg[i_arg].arg_type == OPTION) {
       int optIndex = match_string(s_arg[i_arg].list[0], option, N_OPTIONS, 0);
       switch (optIndex) {
+      case SET_ENUM_CODES:
+        enumCodes = 1;
+        break;
       case SET_COLUMNS:
         if (s_arg[i_arg].n_items < 2)
           SDDS_Bomb("invalid -columns syntax");
@@ -301,6 +309,7 @@ int main(int argc, char **argv) {
     input[0] = NULL;
   }
 
+  printBuffer = tmalloc(printBufferSize);
   if (!column_names && !parameter_names && !array_names && !print_rows && !description && !print_pages)
     SDDS_Bomb("you must specify one of -columns, -parameters, "
               "-arrays, -rows or -description");
@@ -464,10 +473,7 @@ int main(int argc, char **argv) {
           }
           for (j = 0; j < rows; j++) {
             for (i = 0; i < column_names; i++) {
-              if (!SDDS_SprintTypedValue(data[i], j, type[i],
-                                         ignoreFormats ? NULL : columnFormat[i],
-                                         printBuffer,
-                                         noQuotes ? SDDS_PRINT_NOQUOTES : 0)) {
+              if (!(type[i] == SDDS_ENUM ? SDDS_SprintEnumValue(SDDS_dataset.layout.column_definition[SDDS_GetColumnIndex(&SDDS_dataset, column_name[i])].enum_definition, (const int32_t *)data[i], j, ignoreFormats ? NULL : columnFormat[i], printBuffer, printBufferSize, noQuotes ? SDDS_PRINT_NOQUOTES : 0, 1, enumCodes) : SDDS_SprintTypedValue(data[i], j, type[i], ignoreFormats ? NULL : columnFormat[i], printBuffer, noQuotes ? SDDS_PRINT_NOQUOTES : 0))) {
                 SDDS_PrintErrors(stderr,
                                  SDDS_VERBOSE_PrintErrors);
                 exit(1);
@@ -493,10 +499,7 @@ int main(int argc, char **argv) {
             exit(1);
           }
           for (j = 0; j < array->elements; j++) {
-            if (!SDDS_SprintTypedValue(array->data, j, type[i],
-                                       ignoreFormats ? NULL : arrayFormat[i],
-                                       printBuffer,
-                                       noQuotes ? SDDS_PRINT_NOQUOTES : 0)) {
+            if (!(type[i] == SDDS_ENUM ? SDDS_SprintEnumValue(array->definition->enum_definition, (const int32_t *)array->data, j, ignoreFormats ? NULL : arrayFormat[i], printBuffer, printBufferSize, noQuotes ? SDDS_PRINT_NOQUOTES : 0, 1, enumCodes) : SDDS_SprintTypedValue(array->data, j, type[i], ignoreFormats ? NULL : arrayFormat[i], printBuffer, noQuotes ? SDDS_PRINT_NOQUOTES : 0))) {
               SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
               exit(1);
             }
@@ -515,10 +518,7 @@ int main(int argc, char **argv) {
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
             exit(1);
           }
-          if (!SDDS_SprintTypedValue(buffer, 0, type[i],
-                                     ignoreFormats ? NULL : parameterFormat[i],
-                                     printBuffer,
-                                     noQuotes ? SDDS_PRINT_NOQUOTES : 0)) {
+          if (!(type[i] == SDDS_ENUM ? SDDS_SprintEnumValue(SDDS_dataset.layout.parameter_definition[SDDS_GetParameterIndex(&SDDS_dataset, parameter_name[i])].enum_definition, (const int32_t *)buffer, 0, ignoreFormats ? NULL : parameterFormat[i], printBuffer, printBufferSize, noQuotes ? SDDS_PRINT_NOQUOTES : 0, 1, enumCodes) : SDDS_SprintTypedValue(buffer, 0, type[i], ignoreFormats ? NULL : parameterFormat[i], printBuffer, noQuotes ? SDDS_PRINT_NOQUOTES : 0))) {
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
             exit(1);
           }
@@ -564,6 +564,7 @@ int main(int argc, char **argv) {
       exit(1);
     }
   }
+  free(printBuffer);
   return 0;
 }
 

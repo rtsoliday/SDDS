@@ -71,6 +71,7 @@ int32_t SDDS_ProcessDescription(SDDS_DATASET *SDDS_dataset, char *s) {
   case 4:
     return (SDDS1_ProcessDescription(SDDS_dataset, s));
   case 5:
+  case 6:
     return (SDDS1_ProcessDescription(SDDS_dataset, s));
   default:
     SDDS_SetError("Unable to process description--protocol version number is invalid (SDDS_ProcessDescription)");
@@ -102,6 +103,7 @@ int32_t SDDS_ProcessColumnDefinition(SDDS_DATASET *SDDS_dataset, char *s) {
   case 4:
     return (SDDS1_ProcessColumnDefinition(SDDS_dataset, s));
   case 5:
+  case 6:
     return (SDDS1_ProcessColumnDefinition(SDDS_dataset, s));
   default:
     SDDS_SetError("Unable to process column definition--protocol version number is invalid (SDDS_ProcessColumnDefinition)");
@@ -133,6 +135,7 @@ int32_t SDDS_ProcessParameterDefinition(SDDS_DATASET *SDDS_dataset, char *s) {
   case 4:
     return (SDDS1_ProcessParameterDefinition(SDDS_dataset, s));
   case 5:
+  case 6:
     return (SDDS1_ProcessParameterDefinition(SDDS_dataset, s));
   default:
     SDDS_SetError("Unable to process parameter definition--protocol version number is invalid (SDDS_ProcessParameterDefinition)");
@@ -164,6 +167,7 @@ FILE *SDDS_ProcessIncludeCommand(SDDS_DATASET *SDDS_dataset, char *s) {
   case 4:
     return (SDDS1_ProcessIncludeCommand(SDDS_dataset, s));
   case 5:
+  case 6:
     return (SDDS1_ProcessIncludeCommand(SDDS_dataset, s));
   default:
     SDDS_SetError("Unable to process parameter definition--protocol version number is invalid (SDDS_ProcessIncludeCommand)");
@@ -195,6 +199,7 @@ int32_t SDDS_ProcessAssociateDefinition(SDDS_DATASET *SDDS_dataset, char *s) {
   case 4:
     return (SDDS1_ProcessAssociateDefinition(SDDS_dataset, s));
   case 5:
+  case 6:
     return (SDDS1_ProcessAssociateDefinition(SDDS_dataset, s));
   default:
     SDDS_SetError("Unable to process associate definition--protocol version number is invalid (SDDS_ProcessAssociateDefinition)");
@@ -226,6 +231,7 @@ int32_t SDDS_ProcessDataMode(SDDS_DATASET *SDDS_dataset, char *s) {
   case 4:
     return (SDDS1_ProcessDataMode(SDDS_dataset, s));
   case 5:
+  case 6:
     return (SDDS1_ProcessDataMode(SDDS_dataset, s));
   default:
     SDDS_SetError("Unable to process data mode--protocol version number is invalid (SDDS_ProcessDataMode)");
@@ -257,6 +263,7 @@ int32_t SDDS_ProcessArrayDefinition(SDDS_DATASET *SDDS_dataset, char *s) {
   case 4:
     return (SDDS1_ProcessArrayDefinition(SDDS_dataset, s));
   case 5:
+  case 6:
     return (SDDS1_ProcessArrayDefinition(SDDS_dataset, s));
   default:
     SDDS_SetError("Unable to process array definition--protocol version number is invalid (SDDS_ProcessArrayDefinition)");
@@ -693,6 +700,18 @@ int32_t SDDS_ParseNamelist(void *data, SDDS_FIELD_INFORMATION *fieldInfo, int32_
 /* SDDS protocol version 1 routines begin here */
 /***********************************************/
 
+/** @brief Release strings owned by a temporary parsed namelist, on any exit path. */
+static void freeParsedNamelistStrings(void *data, SDDS_FIELD_INFORMATION *fields, int32_t count) {
+  int32_t i;
+  for (i = 0; i < count; i++) {
+    if (fields[i].type == SDDS_STRING) {
+      char **value = (char **)((char *)data + fields[i].offset);
+      free(*value);
+      *value = NULL;
+    }
+  }
+}
+
 /**
  * @brief Process the description section for SDDS protocol version 1.
  *
@@ -704,8 +723,9 @@ int32_t SDDS1_ProcessDescription(SDDS_DATASET *SDDS_dataset, char *s) {
   SDDS_dataset->layout.description = NULL;
   SDDS_dataset->layout.contents = NULL;
 
-  if (!SDDS_ParseNamelist((void *)&SDDS_dataset->layout, SDDS_DescriptionFieldInformation, SDDS_DESCRIPTION_FIELDS, s)) {
+  if (!(SDDS_dataset->layout.version == 6 ? SDDS6_ParseNamelist((void *)&SDDS_dataset->layout, SDDS_DescriptionFieldInformation, SDDS_DESCRIPTION_FIELDS, s) : SDDS_ParseNamelist((void *)&SDDS_dataset->layout, SDDS_DescriptionFieldInformation, SDDS_DESCRIPTION_FIELDS, s))) {
     SDDS_SetError("Problem parsing description namelist");
+    freeParsedNamelistStrings(&SDDS_dataset->layout, SDDS_DescriptionFieldInformation, SDDS_DESCRIPTION_FIELDS);
     return 0;
   }
 #if DEBUG
@@ -729,33 +749,31 @@ int32_t SDDS1_ProcessDescription(SDDS_DATASET *SDDS_dataset, char *s) {
  */
 int32_t SDDS1_ProcessColumnDefinition(SDDS_DATASET *SDDS_dataset, char *s) {
   COLUMN_DEFINITION colDef;
-  int32_t code;
+  int32_t code = -1;
 
+  memset(&colDef, 0, sizeof(colDef));
   colDef.name = colDef.symbol = colDef.units = colDef.description = colDef.format_string = NULL;
   colDef.type = -1;
   colDef.field_length = 0;
 
-  if (!SDDS_ParseNamelist((void *)&colDef, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS, s)) {
+  if (!(SDDS_dataset->layout.version == 6 ? SDDS6_ParseNamelist((void *)&colDef, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS, s) : SDDS_ParseNamelist((void *)&colDef, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS, s))) {
     SDDS_SetError("Problem parsing column namelist");
-    return 0;
+    goto cleanup;
   }
-  code = SDDS_DefineColumn(SDDS_dataset, colDef.name, colDef.symbol, colDef.units, colDef.description, colDef.format_string, colDef.type, colDef.field_length);
-  if (colDef.name)
-    free(colDef.name);
-  if (colDef.symbol)
-    free(colDef.symbol);
-  if (colDef.units)
-    free(colDef.units);
-  if (colDef.description)
-    free(colDef.description);
-  if (colDef.format_string)
-    free(colDef.format_string);
-
-  if (code < 0) {
+  if ((colDef.type == SDDS_ENUM || colDef.enum_values) && SDDS_dataset->layout.version < 6) {
+    SDDS_SetError("Enum definitions require SDDS6");
+    goto cleanup;
+  }
+  if (colDef.type != SDDS_ENUM && colDef.enum_values) {
+    SDDS_SetError("enum_values is only valid for type=enum");
+    goto cleanup;
+  }
+  code = (colDef.type == SDDS_ENUM ? SDDS_DefineEnumColumn(SDDS_dataset, colDef.name, colDef.symbol, colDef.units, colDef.description, colDef.format_string, colDef.enum_values, colDef.field_length) : SDDS_DefineColumn(SDDS_dataset, colDef.name, colDef.symbol, colDef.units, colDef.description, colDef.format_string, colDef.type, colDef.field_length));
+  if (code < 0)
     SDDS_SetError("Unable to process column definition--call to define column failed (SDDS1_ProcessColumnDefinition)");
-    return (0);
-  }
-  return (1);
+cleanup:
+  freeParsedNamelistStrings(&colDef, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS);
+  return code >= 0;
 }
 
 /**
@@ -773,32 +791,30 @@ int32_t SDDS1_ProcessColumnDefinition(SDDS_DATASET *SDDS_dataset, char *s) {
  */
 int32_t SDDS1_ProcessParameterDefinition(SDDS_DATASET *SDDS_dataset, char *s) {
   PARAMETER_DEFINITION paramDef;
-  int32_t code;
+  int32_t code = -1;
 
+  memset(&paramDef, 0, sizeof(paramDef));
   paramDef.name = paramDef.symbol = paramDef.units = paramDef.description = paramDef.format_string = paramDef.fixed_value = NULL;
   paramDef.type = -1;
 
-  if (!SDDS_ParseNamelist((void *)&paramDef, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS, s)) {
+  if (!(SDDS_dataset->layout.version == 6 ? SDDS6_ParseNamelist((void *)&paramDef, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS, s) : SDDS_ParseNamelist((void *)&paramDef, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS, s))) {
     SDDS_SetError("Problem parsing parameter namelist");
-    return 0;
+    goto cleanup;
   }
-  code = SDDS_DefineParameter(SDDS_dataset, paramDef.name, paramDef.symbol, paramDef.units, paramDef.description, paramDef.format_string, paramDef.type, paramDef.fixed_value);
-  if (paramDef.name)
-    free(paramDef.name);
-  if (paramDef.symbol)
-    free(paramDef.symbol);
-  if (paramDef.units)
-    free(paramDef.units);
-  if (paramDef.description)
-    free(paramDef.description);
-  if (paramDef.format_string)
-    free(paramDef.format_string);
-
-  if (code < 0) {
+  if ((paramDef.type == SDDS_ENUM || paramDef.enum_values) && SDDS_dataset->layout.version < 6) {
+    SDDS_SetError("Enum definitions require SDDS6");
+    goto cleanup;
+  }
+  if (paramDef.type != SDDS_ENUM && paramDef.enum_values) {
+    SDDS_SetError("enum_values is only valid for type=enum");
+    goto cleanup;
+  }
+  code = (paramDef.type == SDDS_ENUM ? SDDS_DefineEnumParameter(SDDS_dataset, paramDef.name, paramDef.symbol, paramDef.units, paramDef.description, paramDef.format_string, paramDef.enum_values, paramDef.fixed_value) : SDDS_DefineParameter(SDDS_dataset, paramDef.name, paramDef.symbol, paramDef.units, paramDef.description, paramDef.format_string, paramDef.type, paramDef.fixed_value));
+  if (code < 0)
     SDDS_SetError("Unable to process parameter definition--call to define parameter failed (SDDS1_ProcessParameterDefinition)");
-    return (0);
-  }
-  return (1);
+cleanup:
+  freeParsedNamelistStrings(&paramDef, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS);
+  return code >= 0;
 }
 
 /**
@@ -816,19 +832,19 @@ int32_t SDDS1_ProcessParameterDefinition(SDDS_DATASET *SDDS_dataset, char *s) {
  *   - Returns `NULL` if parsing fails or the file cannot be opened.
  */
 FILE *SDDS1_ProcessIncludeCommand(SDDS_DATASET *SDDS_dataset, char *s) {
-  FILE *fp;
+  FILE *fp = NULL;
   char *filename;
 
   filename = NULL;
-  if (!SDDS_ParseNamelist((void *)&filename, SDDS_IncludeFieldInformation, SDDS_INCLUDE_FIELDS, s)) {
+  if (!(SDDS_dataset->layout.version == 6 ? SDDS6_ParseNamelist((void *)&filename, SDDS_IncludeFieldInformation, SDDS_INCLUDE_FIELDS, s) : SDDS_ParseNamelist((void *)&filename, SDDS_IncludeFieldInformation, SDDS_INCLUDE_FIELDS, s))) {
     SDDS_SetError("Problem parsing include namelist");
-    return 0;
+    goto cleanup;
   }
-  if (!filename || !(fp = fopen(filename, "r"))) {
+  if (!filename || !(fp = fopen(filename, "r")))
     SDDS_SetError("Unable to process include command--invalid/nonexistent file (SDDS1_ProcessIncludeCommand)");
-    return (NULL);
-  }
-  return (fp);
+cleanup:
+  freeParsedNamelistStrings(&filename, SDDS_IncludeFieldInformation, SDDS_INCLUDE_FIELDS);
+  return fp;
 }
 
 /**
@@ -846,21 +862,21 @@ FILE *SDDS1_ProcessIncludeCommand(SDDS_DATASET *SDDS_dataset, char *s) {
  */
 int32_t SDDS1_ProcessAssociateDefinition(SDDS_DATASET *SDDS_dataset, char *s) {
   ASSOCIATE_DEFINITION assocDef;
-  int32_t code;
+  int32_t code = -1;
 
   assocDef.name = assocDef.filename = assocDef.path = assocDef.description = assocDef.contents = NULL;
   assocDef.sdds = 0;
-  if (!SDDS_ParseNamelist((void *)&assocDef, SDDS_AssociateFieldInformation, SDDS_ASSOCIATE_FIELDS, s)) {
+  if (!(SDDS_dataset->layout.version == 6 ? SDDS6_ParseNamelist((void *)&assocDef, SDDS_AssociateFieldInformation, SDDS_ASSOCIATE_FIELDS, s) : SDDS_ParseNamelist((void *)&assocDef, SDDS_AssociateFieldInformation, SDDS_ASSOCIATE_FIELDS, s))) {
     SDDS_SetError("Problem parsing associate namelist");
-    return 0;
+    goto cleanup;
   }
 
   code = SDDS_DefineAssociate(SDDS_dataset, assocDef.name, assocDef.filename, assocDef.path, assocDef.description, assocDef.contents, assocDef.sdds);
-  if (code < 0) {
+  if (code < 0)
     SDDS_SetError("Unable to process associate definition--call to define associate failed (SDDS1_ProcessAssociateDefinition)");
-    return (0);
-  }
-  return (1);
+cleanup:
+  freeParsedNamelistStrings(&assocDef, SDDS_AssociateFieldInformation, SDDS_ASSOCIATE_FIELDS);
+  return code >= 0;
 }
 
 /**
@@ -885,7 +901,7 @@ int32_t SDDS1_ProcessDataMode(SDDS_DATASET *SDDS_dataset, char *s) {
   dataMode->no_row_counts = dataMode->additional_header_lines = 0;
   dataMode->fixed_row_count = 0;
   dataMode->column_major = 0;
-  if (!SDDS_ParseNamelist((void *)dataMode, SDDS_DataFieldInformation, SDDS_DATA_FIELDS, s)) {
+  if (!(SDDS_dataset->layout.version == 6 ? SDDS6_ParseNamelist((void *)dataMode, SDDS_DataFieldInformation, SDDS_DATA_FIELDS, s) : SDDS_ParseNamelist((void *)dataMode, SDDS_DataFieldInformation, SDDS_DATA_FIELDS, s))) {
     SDDS_SetError("Problem parsing data namelist");
     return 0;
   }
@@ -915,34 +931,30 @@ int32_t SDDS1_ProcessDataMode(SDDS_DATASET *SDDS_dataset, char *s) {
  */
 int32_t SDDS1_ProcessArrayDefinition(SDDS_DATASET *SDDS_dataset, char *s) {
   ARRAY_DEFINITION arrayDef;
-  int32_t code;
+  int32_t code = -1;
 
+  memset(&arrayDef, 0, sizeof(arrayDef));
   arrayDef.name = arrayDef.symbol = arrayDef.units = arrayDef.description = arrayDef.format_string = arrayDef.group_name = NULL;
   arrayDef.type = -1;
   arrayDef.field_length = 0;
   arrayDef.dimensions = 1;
 
-  if (!SDDS_ParseNamelist((void *)&arrayDef, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS, s)) {
+  if (!(SDDS_dataset->layout.version == 6 ? SDDS6_ParseNamelist((void *)&arrayDef, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS, s) : SDDS_ParseNamelist((void *)&arrayDef, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS, s))) {
     SDDS_SetError("Problem parsing array namelist");
-    return 0;
+    goto cleanup;
   }
-  code = SDDS_DefineArray(SDDS_dataset, arrayDef.name, arrayDef.symbol, arrayDef.units, arrayDef.description, arrayDef.format_string, arrayDef.type, arrayDef.field_length, arrayDef.dimensions, arrayDef.group_name);
-  if (arrayDef.name)
-    free(arrayDef.name);
-  if (arrayDef.symbol)
-    free(arrayDef.symbol);
-  if (arrayDef.units)
-    free(arrayDef.units);
-  if (arrayDef.description)
-    free(arrayDef.description);
-  if (arrayDef.format_string)
-    free(arrayDef.format_string);
-  if (arrayDef.group_name)
-    free(arrayDef.group_name);
-
-  if (code < 0) {
+  if ((arrayDef.type == SDDS_ENUM || arrayDef.enum_values) && SDDS_dataset->layout.version < 6) {
+    SDDS_SetError("Enum definitions require SDDS6");
+    goto cleanup;
+  }
+  if (arrayDef.type != SDDS_ENUM && arrayDef.enum_values) {
+    SDDS_SetError("enum_values is only valid for type=enum");
+    goto cleanup;
+  }
+  code = (arrayDef.type == SDDS_ENUM ? SDDS_DefineEnumArray(SDDS_dataset, arrayDef.name, arrayDef.symbol, arrayDef.units, arrayDef.description, arrayDef.format_string, arrayDef.enum_values, arrayDef.field_length, arrayDef.dimensions, arrayDef.group_name) : SDDS_DefineArray(SDDS_dataset, arrayDef.name, arrayDef.symbol, arrayDef.units, arrayDef.description, arrayDef.format_string, arrayDef.type, arrayDef.field_length, arrayDef.dimensions, arrayDef.group_name));
+  if (code < 0)
     SDDS_SetError("Unable to process array definition--call to define array failed (SDDS1_ProcessArrayDefinition)");
-    return (0);
-  }
-  return (1);
+cleanup:
+  freeParsedNamelistStrings(&arrayDef, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS);
+  return code >= 0;
 }

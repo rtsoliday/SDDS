@@ -173,6 +173,7 @@ int main(int argc, char **argv) {
   long buffer[16];
   char *param, *last_param, *this_param, *text, *contents, **column;
   long param_index, param_type, param_size, output_pending;
+  SDDS_ENUM_DEFINITION *paramEnumDefinition = NULL;
   unsigned long pipeFlags, majorOrderFlag;
   long xzLevel = SDDS_GetLZMACompressionLevel();
 
@@ -611,8 +612,19 @@ int main(int argc, char **argv) {
           if (param_type) {
             if (param_type != SDDS_GetParameterType(&SDDS_input, param_index))
               SDDS_Bomb("-merge parameter changes type in subsequent files");
+            if (param_type == SDDS_ENUM) {
+              if (!SDDS_EnumDefinitionsEqual(paramEnumDefinition,
+                                             SDDS_input.layout.parameter_definition[param_index].enum_definition))
+                SDDS_Bomb("Incompatible enum mappings for -merge parameter; use explicit remapping");
+              memcpy(last_param, this_param, param_size);
+            }
           } else {
             param_size = SDDS_GetTypeSize(param_type = SDDS_GetParameterType(&SDDS_input, param_index));
+            /* Keep the comparison dictionary after the first input is terminated,
+             * even when the merge parameter is omitted from the output. */
+            if (param_type == SDDS_ENUM &&
+                !(paramEnumDefinition = SDDS_CreateEnumDefinition(SDDS_input.layout.parameter_definition[param_index].enum_values)))
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
             this_param = tmalloc(param_size);
             last_param = tmalloc(param_size);
             if (!SDDS_GetParameter(&SDDS_input, param, last_param))
@@ -793,6 +805,7 @@ int main(int argc, char **argv) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);
   }
+  SDDS_FreeEnumDefinition(paramEnumDefinition);
 
   return EXIT_SUCCESS;
 }
@@ -889,6 +902,7 @@ static void CombineStandardInputThreaded(SDDS_DATASET *SDDS_output, char **input
 
 void *SDDS_GetParameterMod(SDDS_DATASET *SDDS_dataset, SDDS_DATASET *SDDS_output, char *parameter_name, void *memory) {
   long index, type, size;
+  int32_t outputIndex, outputType;
   void *data;
   float floatdata;
   double doubledata;
@@ -952,6 +966,15 @@ void *SDDS_GetParameterMod(SDDS_DATASET *SDDS_dataset, SDDS_DATASET *SDDS_output
     case SDDS_LONG:
       data = memcpy(data, &longdata, size);
       break;
+    case SDDS_ENUM:
+      if (!SDDS_EnumCodeToLabel(SDDS_output->layout.column_definition[index].enum_definition, 0)) {
+        char message[256];
+        snprintf(message, sizeof(message), "Missing collapse parameter %.160s requires a mapped enum code 0", parameter_name);
+        SDDS_SetError(message);
+        return NULL;
+      }
+      data = memcpy(data, &longdata, size);
+      break;
     case SDDS_USHORT:
       data = memcpy(data, &ushortdata, size);
       break;
@@ -969,6 +992,18 @@ void *SDDS_GetParameterMod(SDDS_DATASET *SDDS_dataset, SDDS_DATASET *SDDS_output
     if (!(type = SDDS_GetParameterType(SDDS_dataset, index))) {
       SDDS_SetError("Unable to get parameter value--parameter data type is invalid (SDDS_GetParameterMod)");
       return (NULL);
+    }
+    if ((outputIndex = SDDS_GetColumnIndex(SDDS_output, parameter_name)) < 0)
+      return NULL;
+    outputType = SDDS_GetColumnType(SDDS_output, outputIndex);
+    if ((type == SDDS_ENUM || outputType == SDDS_ENUM) &&
+        (type != outputType ||
+         !SDDS_EnumDefinitionsEqual(SDDS_dataset->layout.parameter_definition[index].enum_definition,
+                                    SDDS_output->layout.column_definition[outputIndex].enum_definition))) {
+      char message[256];
+      snprintf(message, sizeof(message), "Incompatible enum mappings for collapse parameter %.120s; use explicit remapping", parameter_name);
+      SDDS_SetError(message);
+      return NULL;
     }
     if (!SDDS_dataset->parameter || !SDDS_dataset->parameter[index]) {
       SDDS_SetError("Unable to get parameter value--parameter data array is NULL (SDDS_GetParameterMod)");
@@ -1007,6 +1042,9 @@ long SDDS_CompareParameterValues(void *param1, void *param2, long type) {
   case SDDS_ULONG64:
     ldiff = *((uint64_t *)param1) - *((uint64_t *)param2);
     return ldiff < 0 ? -1 : ldiff > 0 ? 1 : 0;
+  case SDDS_ENUM:
+    return *((int32_t *)param1) < *((int32_t *)param2) ? -1 :
+      *((int32_t *)param1) > *((int32_t *)param2) ? 1 : 0;
   case SDDS_LONG:
     ldiff = *((int32_t *)param1) - *((int32_t *)param2);
     return ldiff < 0 ? -1 : ldiff > 0 ? 1 : 0;

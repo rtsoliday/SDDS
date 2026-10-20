@@ -220,5 +220,6 @@ distclean: clean
 	rm -rf lib/$(OS)-$(ARCH)
 
 test: all
+	$(MAKE) -C SDDSlib enum-test
 	$(MAKE) -C SDDSlib++ test
 	$(PYTEST)

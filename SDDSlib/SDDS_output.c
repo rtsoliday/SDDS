@@ -34,7 +34,7 @@
 #  include <unistd.h>
 #endif
 
-#if SDDS_VERSION != 5
+#if SDDS_VERSION != 6
 #  error "SDDS_VERSION does not match version of this file"
 #endif
 
@@ -914,6 +914,8 @@ int32_t SDDS_WriteLayout(SDDS_DATASET *SDDS_dataset) {
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_WriteLayout"))
     return 0;
 
+  if (!SDDS_ValidateEnumLayout(SDDS_dataset)) return 0;
+
   if (!SDDS_SaveLayout(SDDS_dataset))
     return 0;
 
@@ -1005,6 +1007,18 @@ int32_t SDDS_WriteLayout(SDDS_DATASET *SDDS_dataset) {
     }
   }
 
+  for (i = 0; i < layout->n_columns; i++)
+    if (layout->column_definition[i].type == SDDS_ENUM) layout->version = 6;
+  for (i = 0; i < layout->n_parameters; i++)
+    if (layout->parameter_definition[i].type == SDDS_ENUM) layout->version = 6;
+  for (i = 0; i < layout->n_arrays; i++)
+    if (layout->array_definition[i].type == SDDS_ENUM) layout->version = 6;
+
+  if (layout->version == 6) {
+    layout->data_mode.endian = (int32_t)layout->byteOrderDeclared;
+    SDDS_dataset->original_layout.version = 6;
+  }
+
   // force layout version 5 because the row and column indexes are now 64bit long integers
   // layout->version = 5;
 
@@ -1031,38 +1045,38 @@ int32_t SDDS_WriteLayout(SDDS_DATASET *SDDS_dataset) {
         gzprintf(gzfp, "!# fixed-rowcount\n");
       }
     }
-    if (!SDDS_GZipWriteDescription(layout->description, layout->contents, gzfp)) {
+    if (!(layout->version == 6 ? SDDS6_WriteNamelist(gzfp, 1, "description", layout, SDDS_DescriptionFieldInformation, SDDS_DESCRIPTION_FIELDS) : SDDS_GZipWriteDescription(layout->description, layout->contents, gzfp))) {
       SDDS_SetError("Can't write SDDS layout--error writing description (SDDS_WriteLayout)");
       return 0;
     }
 
     for (i = 0; i < layout->n_parameters; i++)
-      if (!SDDS_GZipWriteParameterDefinition(layout->parameter_definition + i, gzfp)) {
+      if (!(layout->version == 6 ? SDDS6_WriteNamelist(gzfp, 1, "parameter", layout->parameter_definition + i, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS) : SDDS_GZipWriteParameterDefinition(layout->parameter_definition + i, gzfp))) {
         SDDS_SetError("Unable to write layout--error writing parameter definition (SDDS_WriteLayout)");
         return 0;
       }
 
     for (i = 0; i < layout->n_arrays; i++)
-      if (!SDDS_GZipWriteArrayDefinition(layout->array_definition + i, gzfp)) {
+      if (!(layout->version == 6 ? SDDS6_WriteNamelist(gzfp, 1, "array", layout->array_definition + i, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS) : SDDS_GZipWriteArrayDefinition(layout->array_definition + i, gzfp))) {
         SDDS_SetError("Unable to write layout--error writing array definition (SDDS_WriteLayout)");
         return 0;
       }
 
     for (i = 0; i < layout->n_columns; i++)
-      if (!SDDS_GZipWriteColumnDefinition(layout->column_definition + i, gzfp)) {
+      if (!(layout->version == 6 ? SDDS6_WriteNamelist(gzfp, 1, "column", layout->column_definition + i, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS) : SDDS_GZipWriteColumnDefinition(layout->column_definition + i, gzfp))) {
         SDDS_SetError("Unable to write layout--error writing column definition (SDDS_WriteLayout)");
         return 0;
       }
 
 #  if RW_ASSOCIATES != 0
     for (i = 0; i < layout->n_associates; i++)
-      if (!SDDS_GZipWriteAssociateDefinition(layout->associate_definition + i, gzfp)) {
+      if (!(layout->version == 6 ? SDDS6_WriteNamelist(gzfp, 1, "associate", layout->associate_definition + i, SDDS_AssociateFieldInformation, SDDS_ASSOCIATE_FIELDS) : SDDS_GZipWriteAssociateDefinition(layout->associate_definition + i, gzfp))) {
         SDDS_SetError("Unable to write layout--error writing associated file data (SDDS_WriteLayout)");
         return 0;
       }
 #  endif
 
-    if (!SDDS_GZipWriteDataMode(layout, gzfp)) {
+    if (!(layout->version == 6 ? SDDS6_WriteNamelist(gzfp, 1, "data", &layout->data_mode, SDDS_DataFieldInformation, SDDS_DATA_FIELDS) : SDDS_GZipWriteDataMode(layout, gzfp))) {
       SDDS_SetError("Unable to write layout--error writing data mode (SDDS_WriteLayout)");
       return 0;
     }
@@ -1093,35 +1107,35 @@ int32_t SDDS_WriteLayout(SDDS_DATASET *SDDS_dataset) {
           lzma_printf(lzmafp, "!# fixed-rowcount\n");
         }
       }
-      if (!SDDS_LZMAWriteDescription(layout->description, layout->contents, lzmafp)) {
+      if (!(layout->version == 6 ? SDDS6_WriteNamelist(lzmafp, 2, "description", layout, SDDS_DescriptionFieldInformation, SDDS_DESCRIPTION_FIELDS) : SDDS_LZMAWriteDescription(layout->description, layout->contents, lzmafp))) {
         SDDS_SetError("Can't write SDDS layout--error writing description (SDDS_WriteLayout)");
         return 0;
       }
       for (i = 0; i < layout->n_parameters; i++)
-        if (!SDDS_LZMAWriteParameterDefinition(layout->parameter_definition + i, lzmafp)) {
+        if (!(layout->version == 6 ? SDDS6_WriteNamelist(lzmafp, 2, "parameter", layout->parameter_definition + i, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS) : SDDS_LZMAWriteParameterDefinition(layout->parameter_definition + i, lzmafp))) {
           SDDS_SetError("Unable to write layout--error writing parameter definition (SDDS_WriteLayout)");
           return 0;
         }
       for (i = 0; i < layout->n_arrays; i++)
-        if (!SDDS_LZMAWriteArrayDefinition(layout->array_definition + i, lzmafp)) {
+        if (!(layout->version == 6 ? SDDS6_WriteNamelist(lzmafp, 2, "array", layout->array_definition + i, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS) : SDDS_LZMAWriteArrayDefinition(layout->array_definition + i, lzmafp))) {
           SDDS_SetError("Unable to write layout--error writing array definition (SDDS_WriteLayout)");
           return 0;
         }
       for (i = 0; i < layout->n_columns; i++)
-        if (!SDDS_LZMAWriteColumnDefinition(layout->column_definition + i, lzmafp)) {
+        if (!(layout->version == 6 ? SDDS6_WriteNamelist(lzmafp, 2, "column", layout->column_definition + i, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS) : SDDS_LZMAWriteColumnDefinition(layout->column_definition + i, lzmafp))) {
           SDDS_SetError("Unable to write layout--error writing column definition (SDDS_WriteLayout)");
           return 0;
         }
 
 #if RW_ASSOCIATES != 0
       for (i = 0; i < layout->n_associates; i++)
-        if (!SDDS_LZMAWriteAssociateDefinition(layout->associate_definition + i, lzmafp)) {
+        if (!(layout->version == 6 ? SDDS6_WriteNamelist(lzmafp, 2, "associate", layout->associate_definition + i, SDDS_AssociateFieldInformation, SDDS_ASSOCIATE_FIELDS) : SDDS_LZMAWriteAssociateDefinition(layout->associate_definition + i, lzmafp))) {
           SDDS_SetError("Unable to write layout--error writing associated file data (SDDS_WriteLayout)");
           return 0;
         }
 #endif
 
-      if (!SDDS_LZMAWriteDataMode(layout, lzmafp)) {
+      if (!(layout->version == 6 ? SDDS6_WriteNamelist(lzmafp, 2, "data", &layout->data_mode, SDDS_DataFieldInformation, SDDS_DATA_FIELDS) : SDDS_LZMAWriteDataMode(layout, lzmafp))) {
         SDDS_SetError("Unable to write layout--error writing data mode (SDDS_WriteLayout)");
         return 0;
       }
@@ -1150,38 +1164,38 @@ int32_t SDDS_WriteLayout(SDDS_DATASET *SDDS_dataset) {
           fprintf(fp, "!# fixed-rowcount\n");
         }
       }
-      if (!SDDS_WriteDescription(layout->description, layout->contents, fp)) {
+      if (!(layout->version == 6 ? SDDS6_WriteNamelist(fp, 0, "description", layout, SDDS_DescriptionFieldInformation, SDDS_DESCRIPTION_FIELDS) : SDDS_WriteDescription(layout->description, layout->contents, fp))) {
         SDDS_SetError("Can't write SDDS layout--error writing description (SDDS_WriteLayout)");
         return 0;
       }
 
       for (i = 0; i < layout->n_parameters; i++)
-        if (!SDDS_WriteParameterDefinition(layout->parameter_definition + i, fp)) {
+        if (!(layout->version == 6 ? SDDS6_WriteNamelist(fp, 0, "parameter", layout->parameter_definition + i, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS) : SDDS_WriteParameterDefinition(layout->parameter_definition + i, fp))) {
           SDDS_SetError("Unable to write layout--error writing parameter definition (SDDS_WriteLayout)");
           return 0;
         }
 
       for (i = 0; i < layout->n_arrays; i++)
-        if (!SDDS_WriteArrayDefinition(layout->array_definition + i, fp)) {
+        if (!(layout->version == 6 ? SDDS6_WriteNamelist(fp, 0, "array", layout->array_definition + i, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS) : SDDS_WriteArrayDefinition(layout->array_definition + i, fp))) {
           SDDS_SetError("Unable to write layout--error writing array definition (SDDS_WriteLayout)");
           return 0;
         }
 
       for (i = 0; i < layout->n_columns; i++)
-        if (!SDDS_WriteColumnDefinition(layout->column_definition + i, fp)) {
+        if (!(layout->version == 6 ? SDDS6_WriteNamelist(fp, 0, "column", layout->column_definition + i, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS) : SDDS_WriteColumnDefinition(layout->column_definition + i, fp))) {
           SDDS_SetError("Unable to write layout--error writing column definition (SDDS_WriteLayout)");
           return 0;
         }
 
 #if RW_ASSOCIATES != 0
       for (i = 0; i < layout->n_associates; i++)
-        if (!SDDS_WriteAssociateDefinition(layout->associate_definition + i, fp)) {
+        if (!(layout->version == 6 ? SDDS6_WriteNamelist(fp, 0, "associate", layout->associate_definition + i, SDDS_AssociateFieldInformation, SDDS_ASSOCIATE_FIELDS) : SDDS_WriteAssociateDefinition(layout->associate_definition + i, fp))) {
           SDDS_SetError("Unable to write layout--error writing associated file data (SDDS_WriteLayout)");
           return 0;
         }
 #endif
 
-      if (!SDDS_WriteDataMode(layout, fp)) {
+      if (!(layout->version == 6 ? SDDS6_WriteNamelist(fp, 0, "data", &layout->data_mode, SDDS_DataFieldInformation, SDDS_DATA_FIELDS) : SDDS_WriteDataMode(layout, fp))) {
         SDDS_SetError("Unable to write layout--error writing data mode (SDDS_WriteLayout)");
         return 0;
       }
@@ -1233,6 +1247,7 @@ int32_t SDDS_WritePage(SDDS_DATASET *SDDS_dataset) {
   if (SDDS_dataset->parallel_io)
     return SDDS_MPI_WritePage(SDDS_dataset);
 #endif
+  if (!SDDS_ValidateEnumPage(SDDS_dataset)) return 0;
   if (!SDDS_CheckDataset(SDDS_dataset, "SDDS_WritePage"))
     return 0;
   if (!SDDS_dataset->layout.layout_written) {
@@ -1407,6 +1422,10 @@ int32_t SDDS_SyncDataSet(SDDS_DATASET *SDDS_dataset) {
  *   - Passing a NULL fixed value for non-string types will result in an error.
  */
 int32_t SDDS_DefineParameter1(SDDS_DATASET *SDDS_dataset, const char *name, const char *symbol, const char *units, const char *description, const char *format_string, int32_t type, void *fixed_value) {
+  if (type == SDDS_ENUM) {
+    SDDS_SetError("Use SDDS_DefineEnumColumn/Parameter/Array to supply an enum dictionary");
+    return -1;
+  }
   char buffer[SDDS_MAXLINE];
   if (!SDDS_IsValidName(name, "parameter"))
     return -1;
@@ -1472,6 +1491,10 @@ int32_t SDDS_DefineParameter1(SDDS_DATASET *SDDS_dataset, const char *name, cons
  *   - Passing an improperly formatted fixed value string for the specified type may lead to unexpected behavior.
  */
 int32_t SDDS_DefineParameter(SDDS_DATASET *SDDS_dataset, const char *name, const char *symbol, const char *units, const char *description, const char *format_string, int32_t type, char *fixed_value) {
+  if (type == SDDS_ENUM) {
+    SDDS_SetError("Use SDDS_DefineEnumColumn/Parameter/Array to supply an enum dictionary");
+    return -1;
+  }
   SDDS_LAYOUT *layout;
   PARAMETER_DEFINITION *definition;
   char s[SDDS_MAXLINE];
@@ -1497,7 +1520,7 @@ int32_t SDDS_DefineParameter(SDDS_DATASET *SDDS_dataset, const char *name, const
     return -1;
   index = binaryInsert((void **)layout->parameter_index, layout->n_parameters, new_indexed_parameter, SDDS_CompareIndexedNames, &duplicate);
   if (duplicate) {
-    sprintf(s, "Parameter %s already exists (SDDS_DefineParameter)", name);
+    snprintf(s, sizeof(s), "Parameter %.800s already exists (SDDS_DefineParameter)", name);
     SDDS_SetError(s);
     return (-1);
   }
@@ -1598,6 +1621,10 @@ int32_t SDDS_DefineParameter(SDDS_DATASET *SDDS_dataset, const char *name, const
  *   - Attempting to define an array with a name that already exists within the dataset will result in an error.
  */
 int32_t SDDS_DefineArray(SDDS_DATASET *SDDS_dataset, const char *name, const char *symbol, const char *units, const char *description, const char *format_string, int32_t type, int32_t field_length, int32_t dimensions, const char *group_name) {
+  if (type == SDDS_ENUM) {
+    SDDS_SetError("Use SDDS_DefineEnumColumn/Parameter/Array to supply an enum dictionary");
+    return -1;
+  }
   SDDS_LAYOUT *layout;
   ARRAY_DEFINITION *definition;
   char s[SDDS_MAXLINE];
@@ -1624,7 +1651,7 @@ int32_t SDDS_DefineArray(SDDS_DATASET *SDDS_dataset, const char *name, const cha
     return -1;
   index = binaryInsert((void **)layout->array_index, layout->n_arrays, new_indexed_array, SDDS_CompareIndexedNames, &duplicate);
   if (duplicate) {
-    sprintf(s, "Array %s already exists (SDDS_DefineArray)", name);
+    snprintf(s, sizeof(s), "Array %.800s already exists (SDDS_DefineArray)", name);
     SDDS_SetError(s);
     return (-1);
   }
@@ -1715,9 +1742,15 @@ int32_t SDDS_DefineArray(SDDS_DATASET *SDDS_dataset, const char *name, const cha
  *   - Memory allocation failures during the definition process will lead to an error.
  */
 int32_t SDDS_DefineColumn(SDDS_DATASET *SDDS_dataset, const char *name, const char *symbol, const char *units, const char *description, const char *format_string, int32_t type, int32_t field_length) {
+  if (type == SDDS_ENUM) {
+    SDDS_SetError("Use SDDS_DefineEnumColumn/Parameter/Array to supply an enum dictionary");
+    return -1;
+  }
   SDDS_LAYOUT *layout;
   COLUMN_DEFINITION *definition;
   char s[SDDS_MAXLINE];
+  char *rpnArrayName;
+  size_t nameLength;
   SORTED_INDEX *new_indexed_column;
   int32_t index;
   int32_t duplicate;
@@ -1741,7 +1774,7 @@ int32_t SDDS_DefineColumn(SDDS_DATASET *SDDS_dataset, const char *name, const ch
     return -1;
   index = binaryInsert((void **)layout->column_index, layout->n_columns, new_indexed_column, SDDS_CompareIndexedNames, &duplicate);
   if (duplicate) {
-    sprintf(s, "Column %s already exists (SDDS_DefineColumn)", name);
+    snprintf(s, sizeof(s), "Column %.800s already exists (SDDS_DefineColumn)", name);
     SDDS_SetError(s);
     return (-1);
   }
@@ -1802,8 +1835,15 @@ int32_t SDDS_DefineColumn(SDDS_DATASET *SDDS_dataset, const char *name, const ch
   else {
     definition->memory_number = SDDS_CreateRpnMemory(name, 0);
   }
-  sprintf(s, "&%s", name);
-  definition->pointer_number = SDDS_CreateRpnArray(s);
+  nameLength = strlen(name);
+  if (nameLength > SIZE_MAX - 2 || !(rpnArrayName = SDDS_Malloc(nameLength + 2))) {
+    SDDS_SetError("Memory allocation failure for RPN column array name (SDDS_DefineColumn)");
+    return -1;
+  }
+  rpnArrayName[0] = '&';
+  memcpy(rpnArrayName + 1, name, nameLength + 1);
+  definition->pointer_number = SDDS_CreateRpnArray(rpnArrayName);
+  free(rpnArrayName);
 
   layout->n_columns += 1;
   return (layout->n_columns - 1);
@@ -2105,6 +2145,10 @@ int32_t SDDS_IsValidName(const char *name, const char *class) {
   static const char *const startChars = ".:";
   uint32_t flags = SDDS_GetLockedNameValidityFlags();
 
+  if (!name) {
+    SDDS_SetError("NULL SDDS element name");
+    return 0;
+  }
   if (flags & SDDS_ALLOW_ANY_NAME)
     return 1;
   ptr = (char *)name;
@@ -2113,16 +2157,16 @@ int32_t SDDS_IsValidName(const char *name, const char *class) {
   else if (!(flags & SDDS_ALLOW_V15_NAME)) {
     /* post V1.5 allows only alpha and startChars members as first character */
     /* V1.5 allows alpha, digits, and any validChars members */
-    if (!(isalpha(*ptr) || strchr(startChars, *ptr)))
+    if (!(isalpha((unsigned char)*ptr) || strchr(startChars, *ptr)))
       isValid = 0;
   }
   while (isValid && *ptr) {
-    if (!(isalnum(*ptr) || strchr(validChars, *ptr)))
+    if (!(isalnum((unsigned char)*ptr) || strchr(validChars, *ptr)))
       isValid = 0;
     ptr++;
   }
   if (!isValid) {
-    sprintf(s, "The following %s name is invalid: >%s<\n(sddsconvert may be used to change the name)\n", class, name);
+    snprintf(s, sizeof(s), "The following %.32s name is invalid: >%.800s<\n(sddsconvert may be used to change the name)\n", class ? class : "element", name);
     SDDS_SetError(s);
     return 0;
   }
@@ -2197,7 +2241,7 @@ int32_t SDDS_DefineAssociate(SDDS_DATASET *SDDS_dataset, const char *name, const
     return (-1);
   }
   if (SDDS_GetAssociateIndex(SDDS_dataset, name) >= 0) {
-    sprintf(s, "Associate with name %s already exists (SDDS_DefineAssociate)", name);
+    snprintf(s, sizeof(s), "Associate with name %.800s already exists (SDDS_DefineAssociate)", name);
     SDDS_SetError(s);
     return (-1);
   }

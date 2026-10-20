@@ -237,6 +237,8 @@ char *SDDS_CreateDescription(char *text, char *contents) {
  * @return A newly allocated string containing the parameter definition block.
  */
 char *SDDS_CreateParameterDefinition(PARAMETER_DEFINITION *parameter_definition) {
+  if (parameter_definition->type == SDDS_ENUM)
+    return SDDS6_CreateNamelist("parameter", parameter_definition, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS);
   char *par, *tmpstr;
   par = (char *)malloc(sizeof(char) * 2048);
   par[0] = 0;
@@ -268,6 +270,8 @@ char *SDDS_CreateParameterDefinition(PARAMETER_DEFINITION *parameter_definition)
  * @return A newly allocated string containing the column definition block.
  */
 char *SDDS_CreateColumnDefinition(COLUMN_DEFINITION *column_definition) {
+  if (column_definition->type == SDDS_ENUM)
+    return SDDS6_CreateNamelist("column", column_definition, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS);
   char *col = NULL, *tmpStr;
   col = (char *)malloc(sizeof(char) * 2048);
   col[0] = 0;
@@ -295,6 +299,8 @@ char *SDDS_CreateColumnDefinition(COLUMN_DEFINITION *column_definition) {
  * @return A newly allocated string containing the array definition block.
  */
 char *SDDS_CreateArrayDefinition(ARRAY_DEFINITION *array_definition) {
+  if (array_definition->type == SDDS_ENUM)
+    return SDDS6_CreateNamelist("array", array_definition, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS);
   char *array = NULL, *tmpstr;
   char buf[40];
   array = (char *)malloc(sizeof(char) * 2048);
@@ -451,6 +457,14 @@ int32_t SDDS_MPI_WriteAsciiString(SDDS_DATASET *SDDS_dataset, char *string) {
   }
 }
 
+/** @brief Require successful header serialization on every rank. */
+static int32_t checkMPIHeaderSerialization(SDDS_DATASET *dataset, const char *field) {
+  int local = field != NULL, all;
+  MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, dataset->MPI_dataset->comm);
+  if (!all) SDDS_SetError("MPI header serialization failed on a rank");
+  return all;
+}
+
 /**
  * @brief Writes the layout of the SDDS dataset to the MPI file.
  *
@@ -460,6 +474,7 @@ int32_t SDDS_MPI_WriteAsciiString(SDDS_DATASET *SDDS_dataset, char *string) {
  * @return `1` if the layout was successfully written, `0` otherwise.
  */
 int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
+  if (!SDDS_MPI_CheckEnumLayout(SDDS_dataset)) return 0;
   MPI_DATASET *MPI_dataset;
   SDDS_LAYOUT *layout;
   char buf[2048], *field = NULL;
@@ -573,6 +588,15 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
       break;
     }
   }
+  for (i = 0; i < layout->n_columns; i++)
+    if (layout->column_definition[i].type == SDDS_ENUM) layout->version = 6;
+  for (i = 0; i < layout->n_parameters; i++)
+    if (layout->parameter_definition[i].type == SDDS_ENUM) layout->version = 6;
+  for (i = 0; i < layout->n_arrays; i++)
+    if (layout->array_definition[i].type == SDDS_ENUM) layout->version = 6;
+
+  if (layout->version == 6) layout->data_mode.endian = (int32_t)layout->byteOrderDeclared;
+
   // force layout version 5 because the row and column indexes are now 64bit long integers
   //layout->version = 5;
   sprintf(buf, "SDDS%" PRId32 "\n", layout->version);
@@ -602,8 +626,9 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
     }
     MPI_dataset->file_offset += strlen(buf) * sizeof(char);
   }
-  field = NULL;
-  if ((field = SDDS_CreateDescription(layout->description, layout->contents)) != NULL) {
+  field = (layout->version == 6 ? SDDS6_CreateNamelist("description", layout, SDDS_DescriptionFieldInformation, SDDS_DESCRIPTION_FIELDS) : SDDS_CreateDescription(layout->description, layout->contents));
+  if (layout->version == 6 && !checkMPIHeaderSerialization(SDDS_dataset, field)) { free(field); return 0; }
+  if (field) {
     if (MPI_dataset->myid == 0 && !SDDS_MPI_WriteAsciiString(SDDS_dataset, field)) {
       fprintf(stderr, "SDDS_MPI_WriteLayout(error1): Unable to write layout.\n");
       return 0;
@@ -614,7 +639,8 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
   }
 
   for (i = 0; i < layout->n_parameters; i++) {
-    field = SDDS_CreateParameterDefinition(layout->parameter_definition + i);
+    field = (layout->version == 6 ? SDDS6_CreateNamelist("parameter", layout->parameter_definition + i, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS) : SDDS_CreateParameterDefinition(layout->parameter_definition + i));
+    if (!checkMPIHeaderSerialization(SDDS_dataset, field)) { free(field); return 0; }
     if (MPI_dataset->myid == 0 && !SDDS_MPI_WriteAsciiString(SDDS_dataset, field)) {
       fprintf(stderr, "SDDS_MPI_WriteLayout(error1): Unable to write layout.\n");
       return 0;
@@ -624,7 +650,8 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
     field = NULL;
   }
   for (i = 0; i < layout->n_arrays; i++) {
-    field = SDDS_CreateArrayDefinition(layout->array_definition + i);
+    field = (layout->version == 6 ? SDDS6_CreateNamelist("array", layout->array_definition + i, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS) : SDDS_CreateArrayDefinition(layout->array_definition + i));
+    if (!checkMPIHeaderSerialization(SDDS_dataset, field)) { free(field); return 0; }
     if (MPI_dataset->myid == 0 && !SDDS_MPI_WriteAsciiString(SDDS_dataset, field)) {
       fprintf(stderr, "SDDS_MPI_WriteLayout(error1): Unable to write layout.\n");
       return 0;
@@ -634,7 +661,8 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
     field = NULL;
   }
   for (i = 0; i < layout->n_columns; i++) {
-    field = SDDS_CreateColumnDefinition(layout->column_definition + i);
+    field = (layout->version == 6 ? SDDS6_CreateNamelist("column", layout->column_definition + i, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS) : SDDS_CreateColumnDefinition(layout->column_definition + i));
+    if (!checkMPIHeaderSerialization(SDDS_dataset, field)) { free(field); return 0; }
     if (MPI_dataset->myid == 0 && !SDDS_MPI_WriteAsciiString(SDDS_dataset, field)) {
       fprintf(stderr, "SDDS_MPI_WriteLayout(error1): Unable to write layout.\n");
       return 0;
@@ -646,7 +674,8 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
 
 #if RW_ASSOCIATES != 0
   for (i = 0; i < layout->n_associates; i++) {
-    field = SDDS_CreateAssociateDefinition(layout->associate_definition + i);
+    field = (layout->version == 6 ? SDDS6_CreateNamelist("associate", layout->associate_definition + i, SDDS_AssociateFieldInformation, SDDS_ASSOCIATE_FIELDS) : SDDS_CreateAssociateDefinition(layout->associate_definition + i));
+    if (!checkMPIHeaderSerialization(SDDS_dataset, field)) { free(field); return 0; }
     if (MPI_dataset->myid == 0 && !SDDS_MPI_WriteAsciiString(SDDS_dataset, field)) {
       fprintf(stderr, "SDDS_MPI_WriteLayout(error1): Unable to write layout.\n");
       return 0;
@@ -656,15 +685,15 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
     field = NULL;
   }
 #endif
-  if ((field = SDDS_CreateDataMode(&layout->data_mode)) != NULL) {
-    if (MPI_dataset->myid == 0 && !SDDS_MPI_WriteAsciiString(SDDS_dataset, field)) {
-      fprintf(stderr, "SDDS_MPI_WriteLayout(error1): Unable to write layout.\n");
-      return 0;
-    }
-    MPI_dataset->file_offset += strlen(field) * sizeof(char);
-    free(field);
-    field = NULL;
+  field = (layout->version == 6 ? SDDS6_CreateNamelist("data", &layout->data_mode, SDDS_DataFieldInformation, SDDS_DATA_FIELDS) : SDDS_CreateDataMode(&layout->data_mode));
+  if (!checkMPIHeaderSerialization(SDDS_dataset, field)) { free(field); return 0; }
+  if (MPI_dataset->myid == 0 && !SDDS_MPI_WriteAsciiString(SDDS_dataset, field)) {
+    fprintf(stderr, "SDDS_MPI_WriteLayout(error1): Unable to write layout.\n");
+    return 0;
   }
+  MPI_dataset->file_offset += strlen(field) * sizeof(char);
+  free(field);
+  field = NULL;
   MPI_dataset->column_offset = SDDS_MPI_Get_Column_Size(SDDS_dataset);
   layout->layout_written = 1;
   if (MPI_dataset->myid == 0) {
@@ -742,6 +771,8 @@ MPI_Datatype Convert_SDDStype_To_MPItype(int32_t SDDS_type) {
     return MPI_SHORT;
   case SDDS_USHORT:
     return MPI_UNSIGNED_SHORT;
+  case SDDS_ENUM:
+    return MPI_INT32_T;
   case SDDS_LONG:
     /* SDDS_LONG type is actually int32_t */
     return MPI_INT;
@@ -777,6 +808,7 @@ MPI_Datatype Convert_SDDStype_To_MPItype(int32_t SDDS_type) {
  * @return `1` if termination was successful, `0` otherwise.
  */
 int32_t SDDS_MPI_Terminate(SDDS_DATASET *SDDS_dataset) {
+  SDDS_FreeUnownedEnums(SDDS_dataset);
   MPI_DATASET *MPI_dataset;
   SDDS_LAYOUT *layout;
   char **ptr;
@@ -869,6 +901,7 @@ int32_t SDDS_MPI_Terminate(SDDS_DATASET *SDDS_dataset) {
     for (i = 0; i < layout->n_columns; i++) {
       if (layout->column_index[i])
         free(layout->column_index[i]);
+      SDDS_FreeEnumDefinition(layout->column_definition[i].enum_definition);
       if (layout->column_definition[i].name)
         free(layout->column_definition[i].name);
       if (layout->column_definition[i].symbol)
@@ -887,6 +920,7 @@ int32_t SDDS_MPI_Terminate(SDDS_DATASET *SDDS_dataset) {
     for (i = 0; i < layout->n_parameters; i++) {
       if (layout->parameter_index[i])
         free(layout->parameter_index[i]);
+      SDDS_FreeEnumDefinition(layout->parameter_definition[i].enum_definition);
       if (layout->parameter_definition[i].name)
         free(layout->parameter_definition[i].name);
       if (layout->parameter_definition[i].symbol)
@@ -907,6 +941,7 @@ int32_t SDDS_MPI_Terminate(SDDS_DATASET *SDDS_dataset) {
     for (i = 0; i < layout->n_arrays; i++) {
       if (layout->array_index[i])
         free(layout->array_index[i]);
+      SDDS_FreeEnumDefinition(layout->array_definition[i].enum_definition);
       if (layout->array_definition[i].name)
         free(layout->array_definition[i].name);
       if (layout->array_definition[i].symbol)
@@ -956,6 +991,7 @@ int32_t SDDS_MPI_Terminate(SDDS_DATASET *SDDS_dataset) {
     free(layout->parameter_index);
   if (layout->array_index)
     free(layout->array_index);
+  free(SDDS_dataset->layout.s);
   SDDS_ZeroMemory(&SDDS_dataset->layout, sizeof(SDDS_LAYOUT));
   SDDS_ZeroMemory(SDDS_dataset, sizeof(SDDS_DATASET));
 #if DEBUG
@@ -985,6 +1021,10 @@ int32_t SDDS_MPI_Terminate(SDDS_DATASET *SDDS_dataset) {
 int32_t SDDS_MPI_InitializeOutput(SDDS_DATASET *SDDS_dataset, char *description, char *contents, char *filename, unsigned long flags, short column_major) {
   MPI_DATASET *MPI_dataset = SDDS_dataset->MPI_dataset;
 
+  const char *suffix = filename ? strrchr(filename, '.') : NULL;
+  if (suffix && (!strcmp(suffix, ".gz") || !strcmp(suffix, ".xz") || !strcmp(suffix, ".lzma"))) {
+    SDDS_SetError("MPI output requires an uncompressed binary file; compress using serial SDDS afterward"); return 0;
+  }
   if (!SDDS_Parallel_InitializeOutput(SDDS_dataset, description, contents, filename))
     return 0;
   if (flags & SDDS_MPI_READ_ONLY) {

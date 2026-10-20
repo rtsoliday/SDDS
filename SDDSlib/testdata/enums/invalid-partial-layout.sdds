@@ -1,0 +1,6 @@
+SDDS6
+&column name=firstState, type=enum, enum_values="0:OFF,10:ON" &end
+&column name=secondState, type=enum &end
+&data mode=ascii &end
+1
+0 0

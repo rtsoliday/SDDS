@@ -141,10 +141,12 @@ Program by Hairong Shang. (" __DATE__ " " __TIME__ ", SVN revision: " SVN_VERSIO
 #define SDDS_ARRAY_TYPE 2
 /* type=0,1,2 for Column, Parameter, Array */
 long CompareDefinitions(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, char *file2, int32_t *names, char ***name, int32_t **dataType, long type, long compareCommon, char *rowLabelColumn, long notCompareRowLabel, short ignoreUnits);
+static const SDDS_ENUM_DEFINITION *comparisonEnum;
+
 long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, char *file2, long names, char **name, int32_t *dataType, long type, long page, long double tolerance, long double relativeTolerance, long double precisionTolerance, char *floatFormat, char *doubleFormat, char *ldoubleFormat, char *stringFormat,
                  long absolute, void *rowLabel, long rowLabelType, char *labelName);
 long compare_two_data(void *data1, void *data2, long index, long datatype, long first, long flags, char *name, long page, long double tolerance, long double relativeTolerance, long double precisionTolerance, char *floatFormat, char *doubleFormat, char *ldoubleFormat, char *stringFormat, char *longFormat, char *ulongFormat,
-                      char *shortFormat, char *ushortFormat, char *charFormat, long absolute, long parameter, char *labelName);
+                      char *shortFormat, char *ushortFormat, char *charFormat, long absolute, long parameter, char *labelName, const char *rowLabelValue);
 void printTitle(long flags, char *name, long page, long absolute, char *labelName);
 
 #define COMPARE_COMMON_COLUMN 0x0001U
@@ -395,7 +397,17 @@ int main(int argc, char **argv) {
       while (1) {
         pagediff = 0;
         pages1 = SDDS_ReadPage(&table1);
+        if (pages1 == 0) {
+          fprintf(stderr, "Unable to read page from \"%s\".\n", file1);
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+          return EXIT_FAILURE;
+        }
         pages2 = SDDS_ReadPage(&table2);
+        if (pages2 == 0) {
+          fprintf(stderr, "Unable to read page from \"%s\".\n", file2);
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+          return EXIT_FAILURE;
+        }
         if (pages1 > 0 && pages2 > 0) {
           /* Compare data */
           rows1 = SDDS_CountRowsOfInterest(&table1);
@@ -412,20 +424,18 @@ int main(int argc, char **argv) {
 
             if (columns && rows1) {
               if (rowLabelColumn) {
-                if (labelFromSecondFile) {
-                  if (!(rowLabel = SDDS_GetColumn(&table2, rowLabelColumn)))
-                    SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
-                } else {
-                  if (!(rowLabel = SDDS_GetColumn(&table1, rowLabelColumn)))
-                    SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
-                }
+                SDDS_DATASET *labelDataset = labelFromSecondFile ? &table2 : &table1;
+                /* Display enum row labels as text; compared enum columns retain their codes. */
+                rowLabel = rowLabelType == SDDS_ENUM ? (void *)SDDS_GetColumnInString(labelDataset, rowLabelColumn) :
+                  SDDS_GetColumn(labelDataset, rowLabelColumn);
+                if (!rowLabel)
+                  SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
               }
               pagediff += CompareData(&table1, &table2, file1, file2, columns, columnName, columnDataType, SDDS_COLUMN_TYPE, pages1, tolerance, relativeTolerance, precisionTolerance, floatFormat, doubleFormat, ldoubleFormat, stringFormat, absolute, rowLabel, rowLabelType, rowLabelColumn);
               if (rowLabelColumn) {
-                if (rowLabelType == SDDS_STRING)
+                if (rowLabelType == SDDS_STRING || rowLabelType == SDDS_ENUM)
                   SDDS_FreeStringArray((char **)rowLabel, rows1);
-                else
-                  free(rowLabel);
+                free(rowLabel);
                 rowLabel = NULL;
               }
             }
@@ -698,6 +708,16 @@ long CompareDefinitions(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *fi
         }
         break;
       }
+      if (type1 == SDDS_ENUM && type2 == SDDS_ENUM) {
+        const SDDS_ENUM_DEFINITION *a = type == SDDS_COLUMN_TYPE ? dataset1->layout.column_definition[index1].enum_definition :
+          type == SDDS_PARAMETER_TYPE ? dataset1->layout.parameter_definition[index1].enum_definition : dataset1->layout.array_definition[index1].enum_definition;
+        const SDDS_ENUM_DEFINITION *b = type == SDDS_COLUMN_TYPE ? dataset2->layout.column_definition[index2].enum_definition :
+          type == SDDS_PARAMETER_TYPE ? dataset2->layout.parameter_definition[index2].enum_definition : dataset2->layout.array_definition[index2].enum_definition;
+        if (!SDDS_EnumDefinitionsEqual(a, b)) {
+          fprintf(stderr, "Incompatible enum mapping for %s; explicit remapping required\n", same_name[i]);
+          returnValue++; same[i] = 0; sames--; continue;
+        }
+      }
       datatype[i] = type1;
       if (type1 != type2) {
         if (first && !compareCommon) {
@@ -800,6 +820,11 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
       break;
     for (i = 0; i < names; i++) {
       first = 1;
+      comparisonEnum = dataType[i] != SDDS_ENUM ? NULL : type == SDDS_COLUMN_TYPE ?
+        dataset1->layout.column_definition[SDDS_GetColumnIndex(dataset1, name[i])].enum_definition : type == SDDS_PARAMETER_TYPE ?
+        dataset1->layout.parameter_definition[SDDS_GetParameterIndex(dataset1, name[i])].enum_definition :
+        dataset1->layout.array_definition[SDDS_GetArrayIndex(dataset1, name[i])].enum_definition;
+
       if (!(data1 = SDDS_GetColumn(dataset1, name[i])) || !(data2 = SDDS_GetColumn(dataset2, name[i]))) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
         exit(EXIT_FAILURE);
@@ -807,6 +832,7 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
       for (j = 0; j < rows; j++) {
         if (rowLabel) {
           switch (rowLabelType) {
+          case SDDS_ENUM:
           case SDDS_STRING:
             snprintf(labelFormat, sizeof(labelFormat), "%20s", ((char **)rowLabel)[j]);
             break;
@@ -854,7 +880,7 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
           snprintf(ushortFormat, sizeof(ushortFormat), "%s%%25hu%%25hu%%25hd\n", labelFormat);
           snprintf(cFormat, sizeof(cFormat), "%s%%25c%%25c%%25d\n", labelFormat);
         }
-        if (compare_two_data(data1, data2, j, dataType[i], first, SDDS_COLUMN_TYPE, name[i], page, tolerance, relativeTolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 0, rowLabelColumn) != 0) {
+        if (compare_two_data(data1, data2, j, dataType[i], first, SDDS_COLUMN_TYPE, name[i], page, tolerance, relativeTolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 0, rowLabelColumn, rowLabel ? labelFormat : NULL) != 0) {
           diff++;
           if (first)
             first = 0;
@@ -872,11 +898,16 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
   case SDDS_PARAMETER_TYPE:
     for (i = 0; i < names; i++) {
       first = 1;
+      comparisonEnum = dataType[i] != SDDS_ENUM ? NULL : type == SDDS_COLUMN_TYPE ?
+        dataset1->layout.column_definition[SDDS_GetColumnIndex(dataset1, name[i])].enum_definition : type == SDDS_PARAMETER_TYPE ?
+        dataset1->layout.parameter_definition[SDDS_GetParameterIndex(dataset1, name[i])].enum_definition :
+        dataset1->layout.array_definition[SDDS_GetArrayIndex(dataset1, name[i])].enum_definition;
+
       if (!(data1 = SDDS_GetParameter(dataset1, name[i], NULL)) || !(data2 = SDDS_GetParameter(dataset2, name[i], NULL))) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
         exit(EXIT_FAILURE);
       }
-      if (compare_two_data(data1, data2, 0, dataType[i], first, SDDS_PARAMETER_TYPE, name[i], page, tolerance, relativeTolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 1, NULL) != 0) {
+      if (compare_two_data(data1, data2, 0, dataType[i], first, SDDS_PARAMETER_TYPE, name[i], page, tolerance, relativeTolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 1, NULL, NULL) != 0) {
         diff++;
         if (first)
           first = 0;
@@ -893,6 +924,11 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
   case SDDS_ARRAY_TYPE:
     for (i = 0; i < names; i++) {
       first = 1;
+      comparisonEnum = dataType[i] != SDDS_ENUM ? NULL : type == SDDS_COLUMN_TYPE ?
+        dataset1->layout.column_definition[SDDS_GetColumnIndex(dataset1, name[i])].enum_definition : type == SDDS_PARAMETER_TYPE ?
+        dataset1->layout.parameter_definition[SDDS_GetParameterIndex(dataset1, name[i])].enum_definition :
+        dataset1->layout.array_definition[SDDS_GetArrayIndex(dataset1, name[i])].enum_definition;
+
       if (!(array1 = SDDS_GetArray(dataset1, name[i], NULL)) || !(array2 = SDDS_GetArray(dataset2, name[i], NULL))) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
         exit(EXIT_FAILURE);
@@ -902,7 +938,7 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
         diff++;
       } else {
         for (j = 0; j < array1->elements; j++) {
-          if (compare_two_data(array1->data, array2->data, j, dataType[i], first, SDDS_ARRAY_TYPE, name[i], page, tolerance, relativeTolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 0, NULL) != 0) {
+          if (compare_two_data(array1->data, array2->data, j, dataType[i], first, SDDS_ARRAY_TYPE, name[i], page, tolerance, relativeTolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 0, NULL, NULL) != 0) {
             diff++;
             if (first)
               first = 0;
@@ -956,7 +992,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
                       char *floatFormat, char *doubleFormat, char *ldoubleFormat,
                       char *stringFormat, char *longFormat, char *ulongFormat,
                       char *shortFormat, char *ushortFormat, char *charFormat,
-                      long absolute, long parameter, char *labelName) {
+                      long absolute, long parameter, char *labelName, const char *rowLabelValue) {
   char *str1, *str2;
   long double ldval1, ldval2, ldenominator, ldabs1, ldabs2, lddiff;
   double dval1, dval2, denominator, dabs1, dabs2, ddiff;
@@ -981,6 +1017,19 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
     tol = tolerance;
 
   switch (datatype) {
+  case SDDS_ENUM: {
+    int32_t a = ((int32_t *)data1)[index], b = ((int32_t *)data2)[index];
+    if (absolute) SDDS_Bomb("absolute numeric comparison is not supported for enums");
+    if (a != b) {
+      if (first) printTitle(flags, name, page, 0, labelName);
+      if (rowLabelValue)
+        fprintf(stdout, "%s %s | %s\n", rowLabelValue, SDDS_EnumCodeToLabel(comparisonEnum, a), SDDS_EnumCodeToLabel(comparisonEnum, b));
+      else
+        fprintf(stdout, "%20ld %s | %s\n", printIndex, SDDS_EnumCodeToLabel(comparisonEnum, a), SDDS_EnumCodeToLabel(comparisonEnum, b));
+      return 1;
+    }
+    return 0;
+  }
   case SDDS_STRING:
     str1 = *((char **)data1 + index);
     str2 = *((char **)data2 + index);

@@ -247,6 +247,116 @@ void legacyFacade(const std::filesystem::path &path) {
   assert(input.pageCount() == 1);
   assert(input.getParameterInDouble(parameter, 1) == 7);
   assert(input.getColumnInDouble(column, 1)[1] == 2);
+  const auto enumPath = path.parent_path() / "legacy-enum.sdds";
+  char state[] = "state", mapping[] = "0:OFF,10:ON,-1:FAULT";
+  SDDSFile enumFile(enumPath.string().c_str(), true);
+  assert(enumFile.defineEnumColumn(state, mapping) == 0);
+  int32_t codes[] = {0, 10, -1};
+  assert(enumFile.setColumn(state, 1, 0, codes, 3));
+  assert(enumFile.writeFile());
+  SDDSFile enumInput(enumPath.string().c_str());
+  assert(enumInput.readFile());
+  assert(std::string(enumInput.getColumnEnumValues(0)) == mapping);
+  assert(std::string(enumInput.getColumnInString(0, 1)[2]) == "FAULT");
+
+#if defined(__GNUC__)
+#  pragma GCC diagnostic pop
+#endif
+}
+
+/** @brief Enum definition failures are negative and preserve existing fields. */
+void legacyEnumDefinitionFailures() {
+#if defined(__GNUC__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+  SDDSFile file;
+  char first[] = "first", second[] = "second", extra[] = "extra";
+  char mapping[] = "0:OFF,10:ON,-1:FAULT", fixed[] = "10";
+  const auto checkCounts = [&](int32_t count) {
+    assert(file.getParameterCount() == count);
+    assert(file.getColumnCount() == count);
+    assert(file.getArrayCount() == count);
+  };
+  const auto rejectMappings = [&](int32_t count) {
+    file.clearErrors();
+    for (std::string invalid : {"", "0:A,1:A", "0:A,0:B", "2147483648:A"}) {
+      assert(file.defineEnumParameter(extra, invalid.data()) < 0);
+      assert(file.defineEnumColumn(extra, invalid.data()) < 0);
+      assert(file.defineEnumArray(extra, invalid.data(), 1) < 0);
+      checkCounts(count);
+    }
+    assert(file.defineEnumParameter(extra, nullptr) < 0);
+    assert(file.defineEnumColumn(extra, nullptr) < 0);
+    assert(file.defineEnumArray(extra, nullptr, 1) < 0);
+    checkCounts(count);
+    assert(file.checkForErrors() > 0);
+  };
+  const auto rejectFixedValues = [&](int32_t count) {
+    file.clearErrors();
+    for (std::string invalid : {"", "\v\f", "10x", "+10", "  +10 ", "10\fX", "1\v0", "2147483648", "-2147483649", "42"}) {
+      assert(file.defineEnumParameter(extra, mapping, invalid.data()) < 0);
+      checkCounts(count);
+    }
+    assert(file.checkForErrors() > 0);
+  };
+  rejectMappings(0);
+  rejectFixedValues(0);
+  assert(file.defineEnumParameter(first, mapping, fixed) == 0);
+  assert(file.defineEnumColumn(first, mapping) == 0);
+  assert(file.defineEnumArray(first, mapping, 1) == 0);
+  rejectMappings(1);
+  rejectFixedValues(1);
+  assert(file.defineEnumParameter(second, mapping) == 1);
+  assert(file.defineEnumColumn(second, mapping) == 1);
+  assert(file.defineEnumArray(second, mapping, 2) == 1);
+  checkCounts(2);
+  assert(std::string(file.getParameterEnumValues(0)) == mapping);
+  assert(std::string(file.getColumnEnumValues(0)) == mapping);
+  assert(std::string(file.getArrayEnumValues(0)) == mapping);
+
+  assert(file.setParameter(1, second, int32_t(10)) == 1);
+  file.clearErrors();
+  assert(file.defineEnumParameter(extra, mapping) < 0);
+  assert(file.defineEnumColumn(extra, mapping) < 0);
+  assert(file.defineEnumArray(extra, mapping, 1) < 0);
+  checkCounts(2);
+  assert(file.checkForErrors() == 3);
+  assert(std::string(file.getParameterInString(second, 1)) == "ON");
+#if defined(__GNUC__)
+#  pragma GCC diagnostic pop
+#endif
+}
+
+/** @brief Accepted legacy fixed enum text is canonicalized and remains writable. */
+void legacyEnumFixedValues(const std::filesystem::path &path) {
+#if defined(__GNUC__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+  SDDSFile file(path.string().c_str(), true);
+  char mapping[] = "-2147483648:MIN,2147483647:MAX,0:OFF,10:ON,-1:FAULT";
+  const std::vector<std::string> fixedValues = {"10", " 10 ", "\t-1\r\n", "-2147483648", "2147483647", "-0", "00010",
+                                                "10\f", "\v10", "\v10\f", " \t\f10\v \t", "\v\f-1\f\v"};
+  const std::vector<std::int32_t> expectedCodes = {10, 10, -1, INT32_MIN, INT32_MAX, 0, 10, 10, 10, 10, 10, -1};
+  for (std::size_t i = 0; i < fixedValues.size(); ++i) {
+    std::string name = "fixed" + std::to_string(i), fixed = fixedValues[i];
+    assert(file.defineEnumParameter(name.data(), mapping, fixed.data()) == static_cast<int32_t>(i));
+  }
+  char state[] = "state";
+  assert(file.defineEnumColumn(state, mapping) == 0);
+  std::int32_t code = 10;
+  assert(file.setColumn(state, 1, 0, &code, 1));
+  assert(file.writeFile());
+  auto reader = sdds::Reader::open(path);
+  const auto page = reader.next();
+  assert(page);
+  for (std::size_t i = 0; i < expectedCodes.size(); ++i) {
+    const std::string name = "fixed" + std::to_string(i);
+    assert(page->parameterAs<sdds::EnumValue>(name).code == expectedCodes[i]);
+    assert(reader.layout().parameters[i].fixedValue == std::to_string(expectedCodes[i]));
+  }
+  assert(!reader.next());
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif
@@ -279,6 +389,8 @@ int main(int argc, char **argv) {
                         "testdata/include-main.sdds";
   includesLimitsAndRecovery(directory, testData);
   legacyFacade(directory / "legacy.sdds");
+  legacyEnumDefinitionFailures();
+  legacyEnumFixedValues(directory / "legacy-enum-fixed.sdds");
   for (int argument = 2; argument < argc; ++argument) {
     auto reader = sdds::Reader::open(argv[argument]);
     auto dataset = reader.readAll();

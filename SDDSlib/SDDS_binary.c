@@ -36,7 +36,7 @@
 #  include <time.h>
 #endif
 
-#if SDDS_VERSION != 5
+#if SDDS_VERSION != 6
 #  error "SDDS_VERSION does not match the version number of this file"
 #endif
 
@@ -765,6 +765,7 @@ int32_t SDDS_GZipFlushBuffer(gzFile gzfp, SDDS_FILEBUFFER *fBuffer) {
  * @note The function sets error messages using `SDDS_SetError` if any step fails.
  */
 int32_t SDDS_WriteBinaryPage(SDDS_DATASET *SDDS_dataset) {
+  if (!SDDS_ValidateEnumPage(SDDS_dataset)) return 0;
 #if defined(zLib)
   gzFile gzfp;
 #endif
@@ -776,7 +777,10 @@ int32_t SDDS_WriteBinaryPage(SDDS_DATASET *SDDS_dataset) {
   SDDS_FILEBUFFER *fBuffer;
   char *outputEndianess = NULL;
 
-  if ((outputEndianess = getenv("SDDS_OUTPUT_ENDIANESS"))) {
+  if (SDDS_dataset->layout.version == 6 && SDDS_dataset->layout.byteOrderDeclared &&
+      ((SDDS_dataset->layout.byteOrderDeclared == SDDS_BIGENDIAN) != SDDS_IsBigEndianMachine()))
+    return SDDS_WriteNonNativeBinaryPage(SDDS_dataset);
+  if (SDDS_dataset->layout.version != 6 && (outputEndianess = getenv("SDDS_OUTPUT_ENDIANESS"))) {
     if (((strncmp(outputEndianess, "big", 3) == 0) && (SDDS_IsBigEndianMachine() == 0)) || ((strncmp(outputEndianess, "little", 6) == 0) && (SDDS_IsBigEndianMachine() == 1)))
       return SDDS_WriteNonNativeBinaryPage(SDDS_dataset);
   }
@@ -1096,13 +1100,17 @@ int32_t SDDS_WriteBinaryPage(SDDS_DATASET *SDDS_dataset) {
  * - Requires that the dataset has been properly initialized and populated with data.
  */
 int32_t SDDS_UpdateBinaryPage(SDDS_DATASET *SDDS_dataset, uint32_t mode) {
+  if (!SDDS_ValidateEnumPage(SDDS_dataset)) return 0;
   FILE *fp;
   int64_t i, rows, offset, code, fixed_rows;
   int32_t min32 = INT32_MIN, rows32;
   SDDS_FILEBUFFER *fBuffer;
   char *outputEndianess = NULL;
 
-  if ((outputEndianess = getenv("SDDS_OUTPUT_ENDIANESS"))) {
+  if (SDDS_dataset->layout.version == 6 && SDDS_dataset->layout.byteOrderDeclared &&
+      ((SDDS_dataset->layout.byteOrderDeclared == SDDS_BIGENDIAN) != SDDS_IsBigEndianMachine()))
+    return SDDS_UpdateNonNativeBinaryPage(SDDS_dataset, mode);
+  if (SDDS_dataset->layout.version != 6 && (outputEndianess = getenv("SDDS_OUTPUT_ENDIANESS"))) {
     if (((strncmp(outputEndianess, "big", 3) == 0) && (SDDS_IsBigEndianMachine() == 0)) || ((strncmp(outputEndianess, "little", 6) == 0) && (SDDS_IsBigEndianMachine() == 1)))
       return SDDS_UpdateNonNativeBinaryPage(SDDS_dataset, mode);
   }
@@ -2364,8 +2372,10 @@ int32_t SDDS_ReadBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_i
     sparse_interval = 1;
   if (sparse_offset < 0)
     sparse_offset = 0;
+  if (sparse_offset > n_rows) sparse_offset = n_rows;
 
   rows_to_store = (n_rows - sparse_offset) / sparse_interval + 2;
+  if (SDDS_dataset->layout.data_mode.column_major) rows_to_store = n_rows;
   alloc_rows = rows_to_store - SDDS_dataset->n_rows_allocated;
 
   if (!SDDS_StartPage(SDDS_dataset, 0) || !SDDS_LengthenTable(SDDS_dataset, alloc_rows)) {
@@ -2404,7 +2414,7 @@ int32_t SDDS_ReadBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_i
         SDDS_SetError("Unable to read page--column reading error (SDDS_ReadBinaryPageDetailed)");
         return (0);
       }
-      statData = (void**)malloc(SDDS_dataset->layout.n_columns * sizeof(void*));
+      statData = (void**)calloc(SDDS_dataset->layout.n_columns, sizeof(void*));
       for (i = 0; i < SDDS_dataset->layout.n_columns; i++) {
         statData[i] = NULL;
         if (SDDS_FLOATING_TYPE(SDDS_dataset->layout.column_definition[i].type))
@@ -2438,7 +2448,8 @@ int32_t SDDS_ReadBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_i
           case SDDS_USHORT:
             ((unsigned short*)SDDS_dataset->data[i])[k] = ((unsigned short*)SDDS_dataset->data[i])[j + sparse_offset];
             break;
-          case SDDS_LONG:
+    case SDDS_ENUM:
+    case SDDS_LONG:
             ((int32_t*)SDDS_dataset->data[i])[k] = ((int32_t*)SDDS_dataset->data[i])[j + sparse_offset];
             break;
           case SDDS_ULONG:
@@ -2535,7 +2546,7 @@ int32_t SDDS_ReadBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_i
     n_rows -= sparse_offset;
     if (sparse_statistics != 0) {
       // Allocate buffer space for statistical sparsing
-      statData = (void**)malloc(SDDS_dataset->layout.n_columns * sizeof(void*));
+      statData = (void**)calloc(SDDS_dataset->layout.n_columns, sizeof(void*));
       for (i = 0; i < SDDS_dataset->layout.n_columns; i++) {
         if (SDDS_FLOATING_TYPE(SDDS_dataset->layout.column_definition[i].type)) {
           // Not ideal for SDDS_LONGDOUBLE but we may never run across this error
@@ -2833,6 +2844,31 @@ char *SDDS_ReadGZipBinaryString(gzFile gzfp, SDDS_FILEBUFFER *fBuffer, int32_t s
  * @note This function may modify the dataset's data structures by allocating memory for string columns.
  *       Ensure that the dataset is properly initialized and that memory is managed appropriately.
  */
+/** @brief Read and check an enum code even when its row is discarded. */
+static int32_t readEnumCode(SDDS_DATASET *dataset, int64_t column, int64_t row, int32_t skip) {
+  SDDS_LAYOUT *layout = &dataset->layout;
+  int32_t raw, code, ok;
+#if defined(zLib)
+  if (layout->gzipFile)
+    ok = SDDS_GZipBufferedRead(&raw, sizeof(raw), layout->gzfp, &dataset->fBuffer, SDDS_ENUM, layout->byteOrderDeclared);
+  else
+#endif
+  if (layout->lzmaFile)
+    ok = SDDS_LZMABufferedRead(&raw, sizeof(raw), layout->lzmafp, &dataset->fBuffer, SDDS_ENUM, layout->byteOrderDeclared);
+  else
+    ok = SDDS_BufferedRead(&raw, sizeof(raw), layout->fp, &dataset->fBuffer, SDDS_ENUM, layout->byteOrderDeclared);
+  if (!ok) return 0;
+  code = raw;
+  if (dataset->swapByteOrder) SDDS_SwapLong(&code);
+  if (!SDDS_ValidateEnumData(layout->column_definition[column].enum_definition, &code, 1)) {
+    dataset->autoRecover = 0;
+    SDDS_SetError("Invalid enum in binary column, including discarded rows");
+    return 0;
+  }
+  if (!skip) ((int32_t *)dataset->data[column])[row] = raw;
+  return 1;
+}
+
 int32_t SDDS_ReadBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row, int32_t skip) {
   int64_t i, type, size;
   SDDS_LAYOUT *layout;
@@ -2854,7 +2890,12 @@ int32_t SDDS_ReadBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row, int32_t skip
     for (i = 0; i < layout->n_columns; i++) {
       if (layout->column_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
         continue;
-      if ((type = layout->column_definition[i].type) == SDDS_STRING) {
+      type = layout->column_definition[i].type;
+      if (type == SDDS_ENUM) {
+        if (!readEnumCode(SDDS_dataset, i, row, skip)) return 0;
+        continue;
+      }
+      if (type == SDDS_STRING) {
         if (!skip) {
           if (((char ***)SDDS_dataset->data)[i][row])
             free((((char ***)SDDS_dataset->data)[i][row]));
@@ -2883,7 +2924,12 @@ int32_t SDDS_ReadBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row, int32_t skip
       for (i = 0; i < layout->n_columns; i++) {
         if (layout->column_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
           continue;
-        if ((type = layout->column_definition[i].type) == SDDS_STRING) {
+        type = layout->column_definition[i].type;
+        if (type == SDDS_ENUM) {
+          if (!readEnumCode(SDDS_dataset, i, row, skip)) return 0;
+          continue;
+        }
+        if (type == SDDS_STRING) {
           if (!skip) {
             if (((char ***)SDDS_dataset->data)[i][row])
               free((((char ***)SDDS_dataset->data)[i][row]));
@@ -2910,7 +2956,12 @@ int32_t SDDS_ReadBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row, int32_t skip
       for (i = 0; i < layout->n_columns; i++) {
         if (layout->column_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
           continue;
-        if ((type = layout->column_definition[i].type) == SDDS_STRING) {
+        type = layout->column_definition[i].type;
+        if (type == SDDS_ENUM) {
+          if (!readEnumCode(SDDS_dataset, i, row, skip)) return 0;
+          continue;
+        }
+        if (type == SDDS_STRING) {
           if (!skip) {
             if (((char ***)SDDS_dataset->data)[i][row])
               free((((char ***)SDDS_dataset->data)[i][row]));
@@ -3073,7 +3124,6 @@ int32_t SDDS_ReadBinaryParameters(SDDS_DATASET *SDDS_dataset) {
   int32_t i;
   SDDS_LAYOUT *layout;
   /*  char *predefined_format; */
-  char buffer[SDDS_MAXLINE];
 #if defined(zLib)
   gzFile gzfp = NULL;
 #endif
@@ -3104,8 +3154,7 @@ int32_t SDDS_ReadBinaryParameters(SDDS_DATASET *SDDS_dataset) {
     if (layout->parameter_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
       continue;
     if (layout->parameter_definition[i].fixed_value) {
-      strcpy(buffer, layout->parameter_definition[i].fixed_value);
-      if (!SDDS_ScanData(buffer, layout->parameter_definition[i].type, 0, SDDS_dataset->parameter[i], 0, 1)) {
+      if (!SDDS_ScanFixedValue(layout->parameter_definition[i].fixed_value, layout->parameter_definition[i].type, SDDS_dataset->parameter[i])) {
         SDDS_SetError("Unable to read page--parameter scanning error (SDDS_ReadBinaryParameters)");
         return (0);
       }
@@ -3159,6 +3208,10 @@ int32_t SDDS_ReadBinaryParameters(SDDS_DATASET *SDDS_dataset) {
 #endif
     }
   }
+  for (i = 0; i < layout->n_parameters; i++)
+    if (layout->parameter_definition[i].type == SDDS_ENUM &&
+        !(layout->parameter_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION) &&
+        !SDDS_ValidateEnumData(layout->parameter_definition[i].enum_definition, SDDS_dataset->parameter[i], 1)) return 0;
   return (1);
 }
 
@@ -3324,6 +3377,9 @@ int32_t SDDS_ReadBinaryArrays(SDDS_DATASET *SDDS_dataset) {
 #endif
     }
   }
+  for (i = 0; i < layout->n_arrays; i++)
+    if (layout->array_definition[i].type == SDDS_ENUM &&
+        !SDDS_ValidateEnumData(layout->array_definition[i].enum_definition, SDDS_dataset->array[i].data, SDDS_dataset->array[i].elements)) return 0;
   return (1);
 }
 
@@ -3442,6 +3498,16 @@ int32_t SDDS_ReadBinaryColumns(SDDS_DATASET *SDDS_dataset, int64_t sparse_interv
     }
   }
 
+  for (i = 0; i < layout->n_columns; i++) {
+    if (layout->column_definition[i].type != SDDS_ENUM ||
+        (layout->column_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)) continue;
+    for (row = 0; row < SDDS_dataset->n_rows; row++) {
+      int32_t code = ((int32_t *)SDDS_dataset->data[i])[row];
+      if (SDDS_dataset->swapByteOrder) SDDS_SwapLong(&code);
+      if (!SDDS_ValidateEnumData(layout->column_definition[i].enum_definition, &code, 1)) return 0;
+    }
+  }
+
   if (sparse_interval == 1 && sparse_offset == 0) {
     return(1);
   }
@@ -3468,6 +3534,7 @@ int32_t SDDS_ReadBinaryColumns(SDDS_DATASET *SDDS_dataset, int64_t sparse_interv
         k++;
       }
       break; 
+    case SDDS_ENUM:
     case SDDS_LONG:
       for (row = sparse_offset; row < SDDS_dataset->n_rows; row++) {
         if (k % sparse_interval == 0) {
@@ -3682,6 +3749,16 @@ int32_t SDDS_ReadNonNativeBinaryColumns(SDDS_DATASET *SDDS_dataset) {
 #endif
     }
   }
+  for (i = 0; i < layout->n_columns; i++) {
+    if (layout->column_definition[i].type != SDDS_ENUM ||
+        (layout->column_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)) continue;
+    for (row = 0; row < SDDS_dataset->n_rows; row++) {
+      int32_t code = ((int32_t *)SDDS_dataset->data[i])[row];
+      if (SDDS_dataset->swapByteOrder) SDDS_SwapLong(&code);
+      if (!SDDS_ValidateEnumData(layout->column_definition[i].enum_definition, &code, 1)) return 0;
+    }
+  }
+
   return (1);
 }
 
@@ -3730,6 +3807,7 @@ int32_t SDDS_SwapEndsColumnData(SDDS_DATASET *SDDSin) {
       for (row = 0; row < SDDSin->n_rows; row++)
         SDDS_SwapUShort(suData + row);
       break;
+    case SDDS_ENUM:
     case SDDS_LONG:
       lData = SDDSin->data[i];
       for (row = 0; row < SDDSin->n_rows; row++)
@@ -3817,6 +3895,7 @@ int32_t SDDS_SwapEndsParameterData(SDDS_DATASET *SDDSin) {
       suData = SDDSin->parameter[i];
       SDDS_SwapUShort(suData);
       break;
+    case SDDS_ENUM:
     case SDDS_LONG:
       lData = SDDSin->parameter[i];
       SDDS_SwapLong(lData);
@@ -3896,6 +3975,7 @@ int32_t SDDS_SwapEndsArrayData(SDDS_DATASET *SDDSin) {
       for (j = 0; j < SDDSin->array[i].elements; j++)
         SDDS_SwapUShort(suData + j);
       break;
+    case SDDS_ENUM:
     case SDDS_LONG:
       lData = SDDSin->array[i].data;
       for (j = 0; j < SDDSin->array[i].elements; j++)
@@ -4218,7 +4298,7 @@ int32_t SDDS_ReadNonNativePageDetailed(SDDS_DATASET *SDDS_dataset, uint32_t mode
       return (retval);
     }
   } else if (SDDS_dataset->original_layout.data_mode.mode == SDDS_BINARY) {
-    if ((retval = SDDS_ReadNonNativeBinaryPage(SDDS_dataset, sparse_interval, sparse_offset)) < 1) {
+    if ((retval = SDDS_ReadNonNativeBinaryPageDetailed(SDDS_dataset, sparse_interval, sparse_offset, last_rows)) < 1) {
       return (retval);
     }
   } else {
@@ -4359,6 +4439,9 @@ int32_t SDDS_ReadNonNativeBinaryPageLastRows(SDDS_DATASET *SDDS_dataset, int64_t
  *       The function also updates the dataset's row count and handles auto-recovery in case of errors.
  */
 int32_t SDDS_ReadNonNativeBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_interval, int64_t sparse_offset, int64_t last_rows) {
+  int64_t requestedInterval = sparse_interval > 0 ? sparse_interval : 1;
+  int64_t requestedOffset = sparse_offset > 0 ? sparse_offset : 0;
+  int64_t requestedLast = last_rows;
   int32_t n_rows32 = 0;
   int64_t n_rows, j, k, alloc_rows, rows_to_store, mod;
   /*  int32_t page_number, i; */
@@ -4487,6 +4570,7 @@ int32_t SDDS_ReadNonNativeBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t
     sparse_interval = 1;
   if (sparse_offset < 0)
     sparse_offset = 0;
+  if (sparse_offset > n_rows) sparse_offset = n_rows;
 
   rows_to_store = (n_rows - sparse_offset) / sparse_interval + 2;
   alloc_rows = rows_to_store - SDDS_dataset->n_rows_allocated;
@@ -4513,6 +4597,14 @@ int32_t SDDS_ReadNonNativeBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t
       return (0);
     }
     SDDS_SwapEndsColumnData(SDDS_dataset);
+    if (SDDS_dataset->layout.version == 6) {
+      int64_t row, first = requestedLast > 0 ? (n_rows > requestedLast ? n_rows - requestedLast : 0) : requestedOffset;
+      if (requestedLast > 0) requestedInterval = 1;
+      for (row = 0; row < n_rows; row++)
+        SDDS_dataset->row_flag[row] = row >= first && (row - first) % requestedInterval == 0;
+      if (!SDDS_DeleteUnsetRows(SDDS_dataset)) return 0;
+    }
+
     return (SDDS_dataset->page_number);
   }
   if ((sparse_interval <= 1) && (sparse_offset == 0)) {
@@ -4593,7 +4685,6 @@ int32_t SDDS_ReadNonNativeBinaryParameters(SDDS_DATASET *SDDS_dataset) {
   int32_t i;
   SDDS_LAYOUT *layout;
   /*  char *predefined_format; */
-  char buffer[SDDS_MAXLINE];
 #if defined(zLib)
   gzFile gzfp = NULL;
 #endif
@@ -4624,8 +4715,7 @@ int32_t SDDS_ReadNonNativeBinaryParameters(SDDS_DATASET *SDDS_dataset) {
     if (layout->parameter_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
       continue;
     if (layout->parameter_definition[i].fixed_value) {
-      strcpy(buffer, layout->parameter_definition[i].fixed_value);
-      if (!SDDS_ScanData(buffer, layout->parameter_definition[i].type, 0, SDDS_dataset->parameter[i], 0, 1)) {
+      if (!SDDS_ScanFixedValue(layout->parameter_definition[i].fixed_value, layout->parameter_definition[i].type, SDDS_dataset->parameter[i])) {
         SDDS_SetError("Unable to read page--parameter scanning error (SDDS_ReadNonNativeBinaryParameters)");
         return (0);
       }
@@ -4680,6 +4770,10 @@ int32_t SDDS_ReadNonNativeBinaryParameters(SDDS_DATASET *SDDS_dataset) {
     }
   }
   SDDS_SwapEndsParameterData(SDDS_dataset);
+  for (i = 0; i < layout->n_parameters; i++)
+    if (layout->parameter_definition[i].type == SDDS_ENUM &&
+        !(layout->parameter_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION) &&
+        !SDDS_ValidateEnumData(layout->parameter_definition[i].enum_definition, SDDS_dataset->parameter[i], 1)) return 0;
   return (1);
 }
 
@@ -4851,6 +4945,9 @@ int32_t SDDS_ReadNonNativeBinaryArrays(SDDS_DATASET *SDDS_dataset) {
     }
   }
   SDDS_SwapEndsArrayData(SDDS_dataset);
+  for (i = 0; i < layout->n_arrays; i++)
+    if (layout->array_definition[i].type == SDDS_ENUM &&
+        !SDDS_ValidateEnumData(layout->array_definition[i].enum_definition, SDDS_dataset->array[i].data, SDDS_dataset->array[i].elements)) return 0;
   return (1);
 }
 
@@ -4896,7 +4993,12 @@ int32_t SDDS_ReadNonNativeBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row, int
     for (i = 0; i < layout->n_columns; i++) {
       if (layout->column_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
         continue;
-      if ((type = layout->column_definition[i].type) == SDDS_STRING) {
+      type = layout->column_definition[i].type;
+      if (type == SDDS_ENUM) {
+        if (!readEnumCode(SDDS_dataset, i, row, skip)) return 0;
+        continue;
+      }
+      if (type == SDDS_STRING) {
         if (!skip) {
           if (((char ***)SDDS_dataset->data)[i][row])
             free((((char ***)SDDS_dataset->data)[i][row]));
@@ -4925,7 +5027,12 @@ int32_t SDDS_ReadNonNativeBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row, int
       for (i = 0; i < layout->n_columns; i++) {
         if (layout->column_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
           continue;
-        if ((type = layout->column_definition[i].type) == SDDS_STRING) {
+        type = layout->column_definition[i].type;
+        if (type == SDDS_ENUM) {
+          if (!readEnumCode(SDDS_dataset, i, row, skip)) return 0;
+          continue;
+        }
+        if (type == SDDS_STRING) {
           if (!skip) {
             if (((char ***)SDDS_dataset->data)[i][row])
               free((((char ***)SDDS_dataset->data)[i][row]));
@@ -4952,7 +5059,12 @@ int32_t SDDS_ReadNonNativeBinaryRow(SDDS_DATASET *SDDS_dataset, int64_t row, int
       for (i = 0; i < layout->n_columns; i++) {
         if (layout->column_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION)
           continue;
-        if ((type = layout->column_definition[i].type) == SDDS_STRING) {
+        type = layout->column_definition[i].type;
+        if (type == SDDS_ENUM) {
+          if (!readEnumCode(SDDS_dataset, i, row, skip)) return 0;
+          continue;
+        }
+        if (type == SDDS_STRING) {
           if (!skip) {
             if (((char ***)SDDS_dataset->data)[i][row])
               free((((char ***)SDDS_dataset->data)[i][row]));
@@ -5114,6 +5226,7 @@ int32_t SDDS_WriteNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset)
  * and big-to-little endian conversion
  */
 {
+  if (!SDDS_ValidateEnumPage(SDDS_dataset)) return 0;
   FILE *fp;
   struct lzmafile *lzmafp = NULL;
   int64_t i, rows, fixed_rows;
@@ -5842,6 +5955,7 @@ int32_t SDDS_GZipWriteNonNativeBinaryString(char *string, gzFile gzfp, SDDS_FILE
  *       After updating, the dataset's state is updated to reflect the changes made to the page.
  */
 int32_t SDDS_UpdateNonNativeBinaryPage(SDDS_DATASET *SDDS_dataset, uint32_t mode) {
+  if (!SDDS_ValidateEnumPage(SDDS_dataset)) return 0;
   FILE *fp;
   int32_t code, min32 = INT32_MIN, rows32;
   int64_t i, rows, offset, fixed_rows;

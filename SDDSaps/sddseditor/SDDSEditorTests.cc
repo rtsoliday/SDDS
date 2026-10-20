@@ -97,6 +97,458 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** Verify categorical editing, dictionary replacement and exact persistence. */
+  static void enums(const QString &root) {
+    fprintf(stdout, "sddseditor_tests: SDDS6 enums\n");
+    SDDSEditor editor;
+    setup(editor);
+    const char *mapping = "0:OFF,10:ON,-1:FAULT";
+    require(SDDS_DefineEnumColumn(&editor.dataset, "State", nullptr, nullptr, nullptr, nullptr, mapping, 0) == 1, "define editor enum column");
+    require(SDDS_DefineEnumParameter(&editor.dataset, "StateParameter", nullptr, nullptr, nullptr, nullptr, mapping, nullptr) == 0, "define editor enum parameter");
+    require(SDDS_DefineEnumParameter(&editor.dataset, "FixedState", nullptr, nullptr, nullptr, nullptr, mapping, const_cast<char *>("-1")) == 1, "define fixed enum parameter");
+    require(SDDS_DefineEnumArray(&editor.dataset, "StateArray", nullptr, nullptr, nullptr, nullptr, mapping, 0, 1, nullptr) == 1, "define editor enum array");
+    require(SDDS_SaveLayout(&editor.dataset), "save enum layout");
+    editor.pages[0].columns.append({"OFF", "ON", "FAULT"});
+    editor.pages[0].parameters = {"ON", "FAULT"};
+    editor.pages[0].arrays.append({{"OFF", "FAULT", "ON"}, {3}});
+    editor.populateModels();
+    const QModelIndex cell = editor.columnModel->index(1, 1);
+    require(cell.data(Qt::EditRole).toString() == "ON" && cell.data(Qt::DisplayRole).toString() == "ON (10)", "enum display includes code without changing raw label");
+    require(!editor.columnModel->setData(cell, "unknown") && editor.pages[0].columns[1][1] == "ON", "reject unmapped enum edit");
+    SDDSItemDelegate delegate([](const QModelIndex &) { return SDDS_ENUM; }, editor.undoStack);
+    QWidget parent;
+    QWidget *widget = delegate.createEditor(&parent, QStyleOptionViewItem(), cell);
+    QComboBox *combo = qobject_cast<QComboBox *>(widget);
+    require(combo && combo->count() == 3, "enum editor offers only declared states");
+    delegate.setEditorData(combo, cell);
+    require(combo->currentData().toString() == "ON", "enum editor selects existing label");
+    combo->setCurrentIndex(combo->findData("FAULT"));
+    delegate.setModelData(combo, editor.columnModel, cell);
+    require(editor.pages[0].columns[1][1] == "FAULT", "enum selection updates model");
+    editor.undoStack->undo();
+    require(editor.pages[0].columns[1][1] == "ON", "enum selection supports undo");
+    delete widget;
+    for (bool ascii : {false, true}) {
+      editor.asciiSave = ascii;
+      const QString path = root + (ascii ? "/enum-ascii.sdds" : "/enum-binary.sdds");
+      require(editor.writeFile(path), "save all enum element kinds");
+      SDDSEditor loaded;
+      require(loaded.loadFile(path), "reopen enum document");
+      require(loaded.pages[0].columns[1] == editor.pages[0].columns[1] && loaded.pages[0].parameters[0] == "ON" && loaded.pages[0].parameters[1] == "FAULT", "enum labels survive save/reopen");
+      require(SDDS_EnumDefinitionsEqual(loaded.dataset.layout.column_definition[1].enum_definition, editor.dataset.layout.column_definition[1].enum_definition), "enum mapping survives save/reopen");
+    }
+    require(editor.replaceEnumMapping(0, 1, "7:OFF,8:ON,9:FAULT"), "replace mapping through a new layout");
+    require(editor.pages[0].columns[1][1] == "ON" && cell.data(Qt::DisplayRole).toString() == "ON (8)", "dictionary replacement retains label meaning");
+    require(!editor.replaceEnumMapping(0, 1, "7:OFF,9:FAULT"), "reject mapping that removes used labels");
+    require(editor.writeFile(root + "/enum-remapped.sdds"), "save remapped document");
+    SDDSEditor loaded;
+    require(loaded.loadFile(root + "/enum-remapped.sdds") && SDDS_EnumCodeToLabel(loaded.dataset.layout.column_definition[1].enum_definition, 8), "reopen remapped enum codes");
+
+    // Definitions in undo snapshots own independent dictionaries. Deleting an
+    // enum must release the document's dictionary without invalidating either
+    // its surviving fields or the snapshots restored by Undo/Redo.
+    loaded.deleteParameterRows({0});
+    require(loaded.dataset.layout.n_parameters == 1 &&
+                QString::fromUtf8(SDDS_EnumCodeToLabel(loaded.dataset.layout.parameter_definition[0].enum_definition, -1)) == "FAULT",
+            "deleting an enum parameter preserves the shifted fixed enum");
+    loaded.undoStack->undo();
+    require(loaded.dataset.layout.n_parameters == 2 && loaded.pages[0].parameters[0] == "ON" &&
+                SDDS_EnumDefinitionsEqual(loaded.dataset.layout.parameter_definition[0].enum_definition,
+                                           editor.dataset.layout.parameter_definition[0].enum_definition),
+            "undo restores an independent enum parameter dictionary");
+    loaded.undoStack->redo();
+    require(loaded.dataset.layout.n_parameters == 1, "redo deletes the enum parameter");
+    loaded.undoStack->undo();
+
+    loaded.deleteColumnIndexes({1});
+    require(loaded.dataset.layout.n_columns == 1 && loaded.pages[0].columns[0] == editor.pages[0].columns[0],
+            "deleting an enum column preserves primitive columns");
+    loaded.undoStack->undo();
+    require(loaded.dataset.layout.n_columns == 2 && loaded.pages[0].columns[1][1] == "ON" &&
+                QString::fromUtf8(SDDS_EnumCodeToLabel(loaded.dataset.layout.column_definition[1].enum_definition, 8)) == "ON",
+            "undo restores the remapped enum column dictionary");
+    loaded.undoStack->redo();
+    require(loaded.dataset.layout.n_columns == 1, "redo deletes the enum column");
+    loaded.undoStack->undo();
+
+    loaded.deleteArrayIndexes({1});
+    require(loaded.dataset.layout.n_arrays == 1 && loaded.pages[0].arrays[0].values == editor.pages[0].arrays[0].values,
+            "deleting an enum array preserves primitive arrays");
+    loaded.undoStack->undo();
+    require(loaded.dataset.layout.n_arrays == 2 && loaded.pages[0].arrays[1].values[1] == "FAULT" &&
+                SDDS_EnumDefinitionsEqual(loaded.dataset.layout.array_definition[1].enum_definition,
+                                           editor.dataset.layout.array_definition[1].enum_definition),
+            "undo restores an independent enum array dictionary");
+    loaded.undoStack->redo();
+    require(loaded.dataset.layout.n_arrays == 1, "redo deletes the enum array");
+    loaded.deleteColumnIndexes({1});
+    loaded.deleteParameterRows({0, 1});
+    require(loaded.dataset.layout.n_parameters == 0, "delete the last enum parameter definitions");
+    loaded.undoStack->clear();
+    require(loaded.writeFile(root + "/enum-deleted.sdds"), "save after deleting enums and releasing undo snapshots");
+    SDDSEditor primitive;
+    require(primitive.loadFile(root + "/enum-deleted.sdds") && primitive.dataset.layout.n_parameters == 0 &&
+                primitive.dataset.layout.n_columns == 1 && primitive.dataset.layout.n_arrays == 1,
+            "reopen the surviving primitive fields after enum deletion");
+  }
+  /** Copy raw categorical labels even when another label matches their display text. */
+  static void enumClipboard() {
+    fprintf(stdout, "sddseditor_tests: enum clipboard labels\n");
+    for (int kind = 0; kind < 3; ++kind) {
+      SDDSEditor editor;
+      setup(editor);
+      const char *mapping = "0:OFF,10:ON,20:ON (10)";
+      require(SDDS_DefineEnumColumn(&editor.dataset, "State", nullptr, nullptr, nullptr, nullptr, mapping, 0) == 1,
+              "define clipboard enum column");
+      require(SDDS_DefineEnumParameter(&editor.dataset, "SourceState", nullptr, nullptr, nullptr, nullptr, mapping, nullptr) == 0 &&
+                  SDDS_DefineEnumParameter(&editor.dataset, "TargetState", nullptr, nullptr, nullptr, nullptr, mapping, nullptr) == 1,
+              "define clipboard enum parameters");
+      require(SDDS_DefineEnumArray(&editor.dataset, "StateArray", nullptr, nullptr, nullptr, nullptr, mapping, 0, 1, nullptr) == 1,
+              "define clipboard enum array");
+      require(SDDS_SaveLayout(&editor.dataset), "save clipboard enum layout");
+      editor.pages[0].columns.append({"ON", "OFF", "ON (10)"});
+      editor.pages[0].parameters = {"ON", "OFF"};
+      editor.pages[0].arrays.append({{"ON", "OFF", "ON (10)"}, {3}});
+      editor.populateModels();
+      editor.show();
+      QCoreApplication::processEvents();
+
+      QTableView *view = kind == 0 ? editor.columnView : kind == 1 ? editor.paramView : editor.arrayView;
+      const QModelIndex source = kind == 0 ? editor.columnModel->index(0, 1) :
+          kind == 1 ? editor.parameterValueCell(0) : editor.arrayModel->index(0, 1);
+      const QModelIndex target = kind == 0 ? editor.columnModel->index(1, 1) :
+          kind == 1 ? editor.parameterValueCell(1) : editor.arrayModel->index(1, 1);
+      auto selectCell = [&](const QModelIndex &index) {
+        editor.activateWindow();
+        QCoreApplication::processEvents();
+        view->setCurrentIndex(index);
+        view->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect);
+        view->setFocus();
+        QCoreApplication::processEvents();
+        require(editor.focusedTable() == view, "enum clipboard targets the selected main table");
+      };
+      for (const QString &label : {QStringLiteral("ON"), QStringLiteral("ON (10)")}) {
+        view->model()->setData(source, label);
+        view->model()->setData(target, "OFF");
+        editor.undoStack->clear();
+        selectCell(source);
+        editor.copy();
+        const QMimeData *mime = QApplication::clipboard()->mimeData();
+        require(mime && mime->text() == label && mime->hasFormat(editorCellsMime),
+                "enum copy uses the raw label in the text clipboard");
+        const QJsonArray copied = QJsonDocument::fromJson(mime->data(editorCellsMime)).array();
+        require(copied.size() == 1 && copied[0].toArray().size() == 1 && copied[0].toArray()[0].toString() == label,
+                "enum copy uses the raw label in the private clipboard");
+        selectCell(target);
+        editor.paste();
+        require(target.data(Qt::EditRole).toString() == label,
+                "enum private clipboard paste preserves the original state");
+        editor.undoStack->undo();
+        require(target.data(Qt::EditRole).toString() == "OFF", "enum clipboard paste undoes as one edit");
+        editor.undoStack->redo();
+        require(target.data(Qt::EditRole).toString() == label, "enum clipboard paste redoes the original state");
+
+        editor.undoStack->undo();
+        QApplication::clipboard()->setText(label);
+        editor.paste();
+        require(target.data(Qt::EditRole).toString() == label,
+                "enum plain-text clipboard paste preserves the original state");
+      }
+    }
+  }
+
+  /** Rejected categorical edits preserve the saved state and an existing Redo. */
+  static void enumRejectedEdits() {
+    fprintf(stdout, "sddseditor_tests: rejected enum edits preserve history\n");
+    for (int kind = 0; kind < 3; ++kind) {
+      SDDSEditor editor;
+      setup(editor);
+      const char *mapping = "0:OFF,10:ON,-1:FAULT,20:OFFX";
+      require(SDDS_DefineEnumColumn(&editor.dataset, "State", nullptr, nullptr, nullptr, nullptr, mapping, 0) == 1,
+              "define rejected-edit enum column");
+      require(SDDS_DefineEnumParameter(&editor.dataset, "StateParameter", nullptr, nullptr, nullptr, nullptr, mapping, nullptr) == 0,
+              "define rejected-edit enum parameter");
+      require(SDDS_DefineEnumArray(&editor.dataset, "StateArray", nullptr, nullptr, nullptr, nullptr, mapping, 0, 1, nullptr) == 1,
+              "define rejected-edit enum array");
+      require(SDDS_SaveLayout(&editor.dataset), "save rejected-edit enum layout");
+      editor.pages[0].columns.append({"OFF", "ON", "FAULT"});
+      editor.pages[0].parameters = {"OFF"};
+      editor.pages[0].arrays.append({{"OFF", "ON", "FAULT"}, {3}});
+      editor.populateModels();
+      editor.show();
+      QCoreApplication::processEvents();
+      QTableView *view = kind == 0 ? editor.columnView : kind == 1 ? editor.paramView : editor.arrayView;
+      const QModelIndex index = kind == 0 ? editor.columnModel->index(0, 1) :
+          kind == 1 ? editor.parameterValueCell(0) : editor.arrayModel->index(0, 1);
+      QAbstractItemModel *model = view->model();
+      auto selectCell = [&]() {
+        editor.activateWindow();
+        QCoreApplication::processEvents();
+        view->setCurrentIndex(index);
+        view->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect);
+        view->setFocus();
+        QCoreApplication::processEvents();
+        require(editor.focusedTable() == view, "enum edit operation targets the selected main table");
+      };
+      require(applyCellEditWithUndo(editor.undoStack, model, index, "ON"), "create a valid enum edit");
+      editor.undoStack->undo();
+      editor.dirty = false;
+      const int count = editor.undoStack->count();
+      auto unchanged = [&]() {
+        require(index.data(Qt::EditRole).toString() == "OFF" &&
+                    editor.undoStack->count() == count && editor.undoStack->index() == 0 &&
+                    editor.undoStack->canRedo() && !editor.dirty,
+                "rejected enum edit leaves data, history, Redo and saved state unchanged");
+      };
+      require(!applyCellEditWithUndo(editor.undoStack, model, index, "UNKNOWN"),
+              "shared undo helper rejects undeclared enum labels through every model");
+      unchanged();
+      selectCell();
+      QApplication::clipboard()->setText("UNKNOWN");
+      editor.paste();
+      unchanged();
+      selectCell();
+      editor.deleteCells();
+      unchanged();
+      struct Pending { QModelIndex idx; QString value; };
+      const QVector<Pending> rejected = {{index, "UNKNOWN"}};
+      require(!applyCellEditsWithUndo(editor.undoStack, model, rejected, "Rejected enum edit"),
+              "bulk undo helper rejects enum edits before opening its macro");
+      unchanged();
+
+      // OFFX is valid, but ONX is not. Validate the complete formula before
+      // applying even the first cell in a selected enum column or array.
+      selectCell();
+      if (kind != 1)
+        view->selectionModel()->select(model->index(1, 1), QItemSelectionModel::Select);
+      acceptDialog("Apply Text Formula", [kind](QDialog *dialog) {
+        dialog->findChild<QLineEdit *>()->setText(kind == 1 ? "UNKNOWN" : "${x}X");
+      });
+      editor.applyTextFormula(view);
+      unchanged();
+
+      if (kind == 0) {
+        editor.searchColumn(1);
+        QDialog *dialog = editor.searchColumnDialog;
+        const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+        require(fields.size() == 2, "enum search exposes query and replacement fields");
+        fields[0]->setText("OFF");
+        fields[1]->setText("UNKNOWN");
+        for (const QString &action : {QString("Replace"), QString("Replace All"), QString("Replace Selected")}) {
+          view->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect);
+          bool clicked = false;
+          for (QPushButton *button : dialog->findChildren<QPushButton *>())
+            if (button->text() == action) {
+              button->click();
+              clicked = true;
+              break;
+            }
+          require(clicked, "enum search replacement action exists");
+          unchanged();
+        }
+        dialog->close();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      } else if (kind == 2) {
+        editor.openArrayViewer(1);
+        auto *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+        viewer->table()->setCurrentIndex(viewer->sliceModel()->index(0, 0));
+        require(!viewer->pasteText("UNKNOWN"), "array viewer preflights invalid enum paste");
+        unchanged();
+        require(!viewer->pasteText("OFFX\nUNKNOWN"), "array viewer rejects a mixed enum paste atomically");
+        unchanged();
+        viewer->close();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      }
+      selectCell();
+      QApplication::clipboard()->setText("ON");
+      editor.paste();
+      require(index.data(Qt::EditRole).toString() == "ON" && editor.dirty && editor.undoStack->canUndo(),
+              "valid enum paste remains editable and undoable");
+      editor.undoStack->undo();
+      require(index.data(Qt::EditRole).toString() == "OFF", "Undo restores the enum label after a valid paste");
+    }
+  }
+
+  /** Match the toolkit's exact UTF-8 enum order while retaining complete rows. */
+  static void enumSorting(const QString &root) {
+    fprintf(stdout, "sddseditor_tests: enum label sorting\n");
+    SDDSEditor editor;
+    setup(editor);
+    const QString bmp = QString::fromUtf8("\xee\x80\x80"); // U+E000
+    const QString astral = QString::fromUtf8("\xf0\x9f\x98\x80"); // U+1F600
+    const QByteArray mapping = QByteArray("-5:") + bmp.toUtf8() + ",42:" + astral.toUtf8() +
+        ",100:state2,0:state10";
+    require(SDDS_DefineEnumColumn(&editor.dataset, "State", nullptr, nullptr, nullptr, nullptr,
+                                  mapping.constData(), 0) == 1, "define enum sorting column");
+    require(SDDS_SaveLayout(&editor.dataset), "save enum sorting layout");
+    const QVector<QString> labels = {astral, "state2", bmp, "state10", "state2"};
+    const QVector<QString> rowIds = {"1", "2", "3", "4", "5"};
+    editor.pages[0].columns = {rowIds, labels};
+    editor.populateModels();
+    editor.sortColumn(1, Qt::AscendingOrder);
+    require(editor.pages[0].columns[1] == QVector<QString>({"state10", "state2", "state2", bmp, astral}) &&
+                editor.pages[0].columns[0] == QVector<QString>({"4", "2", "5", "3", "1"}),
+            "ascending enum sort uses UTF-8 bytes instead of UTF-16 or natural digit order");
+    editor.undoStack->undo();
+    require(editor.pages[0].columns[1] == labels && editor.pages[0].columns[0] == rowIds,
+            "undo restores all rows after enum sorting");
+    editor.sortColumn(1, Qt::DescendingOrder);
+    const QVector<QString> descending = {astral, bmp, "state2", "state2", "state10"};
+    const QVector<QString> descendingIds = {"1", "3", "2", "5", "4"};
+    require(editor.pages[0].columns[1] == descending && editor.pages[0].columns[0] == descendingIds,
+            "descending enum sort reverses UTF-8 order and preserves equal-label row order");
+    const QString path = root + "/enum-sorted.sdds";
+    require(editor.writeFile(path), "save enum-sorted rows");
+    SDDSEditor loaded;
+    require(loaded.loadFile(path) && loaded.pages[0].columns[1] == descending &&
+                loaded.pages[0].columns[0] == descendingIds,
+            "enum sorting preserves label meanings and complete rows on save/reopen");
+  }
+
+  /** Row filters compare complete categorical labels without numeric coercion. */
+  static void enumFiltering(const QString &root) {
+    fprintf(stdout, "sddseditor_tests: enum label filtering\n");
+    SDDSEditor source;
+    setup(source);
+    const QString bmp = QString::fromUtf8("\xee\x80\x80"); // U+E000
+    const QString astral = QString::fromUtf8("\xf0\x9f\x98\x80"); // U+1F600
+    const QByteArray mapping = QByteArray("0:01,1:1,2:1.0,3:1e0,4: 1,5:1 ,6:ON,7:on,8:") +
+        bmp.toUtf8() + ",9:" + astral.toUtf8();
+    for (const char *name : {"State", "OtherState"})
+      require(SDDS_DefineEnumColumn(&source.dataset, name, nullptr, nullptr, nullptr, nullptr,
+                                    mapping.constData(), 0) >= 0, "define enum filtering column");
+    require(SDDS_DefineColumn(&source.dataset, "Text", nullptr, nullptr, nullptr, nullptr,
+                              SDDS_STRING, 0) >= 0, "define primitive filtering column");
+    require(SDDS_SaveLayout(&source.dataset), "save enum filtering layout");
+    const QVector<QString> labels = {"01", "1", "1.0", "1e0", " 1", "1 ", "ON", "on", bmp, astral};
+    const QVector<QString> ones(labels.size(), QStringLiteral("1"));
+    source.pages[0].columns = {ones, labels, ones, ones};
+    source.populateModels();
+    const QString path = root + "/enum-filter.sdds";
+    require(source.writeFile(path), "save enum filtering document");
+    SDDSEditor editor;
+    require(editor.loadFile(path) && editor.pages[0].columns[1] == labels,
+            "load exact enum filtering labels from the native dictionary");
+
+    auto checkFilter = [&](const QString &expression, const QVector<int> &expected) {
+      editor.rowFilterExpression = expression;
+      editor.rowFilterActive = true;
+      int visible = -1;
+      QString error;
+      require(editor.applyColumnRowFilter(&error, &visible),
+              qPrintable(QStringLiteral("evaluate enum row filter: %1 (%2)").arg(expression, error)));
+      require(visible == expected.size(), qPrintable(QStringLiteral("enum row count: %1").arg(expression)));
+      for (int row = 0; row < labels.size(); ++row)
+        require(editor.columnView->isRowHidden(row) == !expected.contains(row),
+                qPrintable(QStringLiteral("enum row identity: %1, row %2").arg(expression).arg(row)));
+    };
+    checkFilter("State == \"1\"", {1});
+    checkFilter("\"1\" == State", {1});
+    checkFilter("State != \"1\"", {0, 2, 3, 4, 5, 6, 7, 8, 9});
+    checkFilter("State == 1", {1});
+    checkFilter("State == 01", {0});
+    checkFilter("[State] == \"01\"", {0});
+    checkFilter("state == \"01\"", {0});
+    checkFilter("State == \"1.0\"", {2});
+    checkFilter("State == \"1e0\"", {3});
+    checkFilter("State == \" 1\"", {4});
+    checkFilter("State == \"1 \"", {5});
+    checkFilter("State == \"ON\"", {6});
+    checkFilter("State == \"on\"", {7});
+    checkFilter("State == OtherState", {1});
+    checkFilter("Text == State", {1});
+    checkFilter("X == State", {1});
+    checkFilter("(State == \"01\" || State == \"1\") && X == 1", {0, 1});
+    checkFilter("State < \"1\"", {0, 4});
+    checkFilter(QStringLiteral("State < \"%1\"").arg(astral), {0, 1, 2, 3, 4, 5, 6, 7, 8});
+    // Primitive string and numeric filters retain their established numeric comparisons.
+    checkFilter("Text == \"01\"", {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
+    checkFilter("X == \"01\"", {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
+  }
+
+  /** Save, page changes and Undo must consume active categorical delegate editors. */
+  static void enumPendingEdits(const QString &root) {
+    fprintf(stdout, "sddseditor_tests: pending enum edits\n");
+    auto setupEnums = [](SDDSEditor &editor) {
+      setup(editor);
+      const char *mapping = "0:OFF,10:ON,-1:FAULT";
+      require(SDDS_DefineEnumColumn(&editor.dataset, "State", nullptr, nullptr, nullptr, nullptr, mapping, 0) == 1,
+              "define pending enum column");
+      require(SDDS_DefineEnumParameter(&editor.dataset, "StateParameter", nullptr, nullptr, nullptr, nullptr, mapping, nullptr) == 0,
+              "define pending enum parameter");
+      require(SDDS_DefineEnumArray(&editor.dataset, "StateArray", nullptr, nullptr, nullptr, nullptr, mapping, 0, 1, nullptr) == 1,
+              "define pending enum array");
+      editor.pages[0].columns.append({"OFF", "ON", "FAULT"});
+      editor.pages[0].parameters = {"OFF"};
+      editor.pages[0].arrays.append({{"OFF", "ON", "FAULT"}, {3}});
+      editor.pages.append(editor.pages[0]);
+      editor.populateModels();
+      editor.show();
+      QCoreApplication::processEvents();
+    };
+    auto selectNextState = [](QTableView *view, const QModelIndex &index) {
+      view->setCurrentIndex(index);
+      view->edit(index);
+      QCoreApplication::processEvents();
+      QComboBox *combo = view->viewport()->findChild<QComboBox *>();
+      require(combo && !combo->isHidden() && combo->currentData().toString() == "OFF",
+              "open an active enum delegate editor");
+      QKeyEvent down(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier);
+      QApplication::sendEvent(combo, &down);
+      QCoreApplication::processEvents();
+      require(combo->currentData().toString() == "ON" && index.data(Qt::EditRole).toString() == "OFF",
+              "keyboard enum selection remains pending before the action");
+    };
+
+    // Each main table uses a different model/proxy path to the shared delegate.
+    for (int kind = 0; kind < 3; ++kind) {
+      SDDSEditor editor;
+      setupEnums(editor);
+      QTableView *view = kind == 0 ? editor.columnView : kind == 1 ? editor.paramView : editor.arrayView;
+      const QModelIndex index = kind == 0 ? editor.columnModel->index(0, 1) :
+          kind == 1 ? editor.parameterValueCell(0) : editor.arrayModel->index(0, 1);
+      selectNextState(view, index);
+      const QString path = root + QString("/pending-enum-%1.sdds").arg(kind);
+      require(editor.writeFile(path), "save with a pending main-table enum selection");
+      SDDSEditor loaded;
+      require(loaded.loadFile(path), "reload the pending enum selection");
+      const QString stored = kind == 0 ? loaded.pages[0].columns[1][0] :
+          kind == 1 ? loaded.pages[0].parameters[0] : loaded.pages[0].arrays[1].values[0];
+      require(stored == "ON", "Save commits the pending enum selection in every main table");
+    }
+    {
+      SDDSEditor editor;
+      setupEnums(editor);
+      selectNextState(editor.columnView, editor.columnModel->index(0, 1));
+      editor.pageChanged(1);
+      require(editor.currentPage == 1 && editor.pages[0].columns[1][0] == "ON" &&
+                  editor.pages[1].columns[1][0] == "OFF" && !editor.undoStack->canUndo(),
+              "page changes commit enum selections to the old page before clearing Undo");
+    }
+    {
+      SDDSEditor editor;
+      setupEnums(editor);
+      editor.openArrayViewer(1);
+      auto *viewer = static_cast<ArrayViewer *>(editor.arrayViewers.last().data());
+      selectNextState(viewer->table(), viewer->sliceModel()->index(0, 0));
+      const QString path = root + "/pending-enum-viewer.sdds";
+      require(editor.writeFile(path), "save with a pending array-viewer enum selection");
+      SDDSEditor loaded;
+      require(loaded.loadFile(path) && loaded.pages[0].arrays[1].values[0] == "ON",
+              "Save commits enum selections from the array viewer");
+
+      // Keep an older edit in the history so Undo is enabled before the pending edit is committed.
+      selectNextState(editor.columnView, editor.columnModel->index(0, 1));
+      QAction *undo = viewer->findChild<QAction *>("arrayViewerUndo");
+      require(undo && undo->isEnabled(), "shared enum Undo action is available");
+      undo->trigger();
+      require(editor.pages[0].columns[1][0] == "OFF" && editor.pages[0].arrays[1].values[0] == "ON",
+              "Undo commits the latest enum selection before undoing it");
+      viewer->findChild<QAction *>("arrayViewerRedo")->trigger();
+      require(editor.pages[0].columns[1][0] == "ON", "Redo restores the committed enum selection");
+    }
+  }
+
   /** Exercise Time-only menus, rendered dates and lossless numeric persistence. */
   static void timeDisplay(const QString &root) {
     fprintf(stdout, "sddseditor_tests: column time display\n");
@@ -756,7 +1208,7 @@ public:
              {"\"nan\" == \"nan\"", false}, {"\"inf\" > 1e30", true}}) {
       bool pass = false;
       QString error;
-      RowFilterParser parser(test.first, [](const QString &, bool, QString *) { return false; });
+      RowFilterParser parser(test.first, [](const QString &, bool, RowFilterValue *) { return false; });
       require(parser.parse(&pass, &error) && pass == test.second,
               "signed, fractional, exponent and nonfinite filter comparisons");
     }
@@ -777,7 +1229,7 @@ public:
             "excessively nested exact integer expressions are rejected safely");
     bool pass = false;
     QString error;
-    RowFilterParser filter(nested, [](const QString &, bool, QString *) { return false; });
+    RowFilterParser filter(nested, [](const QString &, bool, RowFilterValue *) { return false; });
     require(!filter.parse(&pass, &error) && !error.isEmpty(),
             "excessively nested row filters report an error safely");
     require(evaluateExpressionText("-2^2 + abs(-3)", context, &number) && number == -1,
@@ -792,7 +1244,7 @@ public:
     require(!ExactIntegerExpressionParser(QString(1000, QLatin1Char('-')) + "1", integerContext).parse(&integer),
             "exact integer unary signs respect the nesting limit");
     RowFilterParser negations(QString(1000, QLatin1Char('!')) + "true",
-                              [](const QString &, bool, QString *) { return false; });
+                              [](const QString &, bool, RowFilterValue *) { return false; });
     require(!negations.parse(&pass, &error), "filter negations respect the nesting limit");
     fprintf(stdout, "PASS bounded expression and filter nesting\n");
   }
@@ -1229,8 +1681,8 @@ public:
     }
     {
       auto parses = [](const QString &expression) {
-        RowFilterParser parser(expression, [](const QString &, bool, QString *value) {
-          *value = "5";
+        RowFilterParser parser(expression, [](const QString &, bool, RowFilterValue *value) {
+          value->text = "5";
           return true;
         });
         bool pass = false;
@@ -4847,6 +5299,12 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::enums(artifacts.path());
+  SDDSEditorTests::enumClipboard();
+  SDDSEditorTests::enumRejectedEdits();
+  SDDSEditorTests::enumSorting(artifacts.path());
+  SDDSEditorTests::enumFiltering(artifacts.path());
+  SDDSEditorTests::enumPendingEdits(artifacts.path());
   SDDSEditorTests::timeDisplay(artifacts.path());
   SDDSEditorTests::timeDisplayLifetime();
   SDDSEditorTests::newFiles(artifacts.path());

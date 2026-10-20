@@ -5,6 +5,8 @@ INC = SDDS.h \
       SDDS3.h \
       SDDS3Legacy.h \
       SDDStypes.h \
+      SDDSFortran.h \
+      SDDSenum.f90 \
       constants.h \
       contour.h \
       fftpackC.h \

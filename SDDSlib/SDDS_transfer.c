@@ -49,7 +49,7 @@ int32_t SDDS_TransferColumnDefinition(SDDS_DATASET *target, SDDS_DATASET *source
     SDDS_SetError("Unable to transfer column definition--column already present (SDDS_TransferColumnDefinition)");
     return 0;
   }
-  if (SDDS_DefineColumn(target, newName, coldef->symbol, coldef->units, coldef->description, coldef->format_string, coldef->type, coldef->field_length) < 0) {
+  if ((coldef->type == SDDS_ENUM ? SDDS_DefineEnumColumn(target, newName, coldef->symbol, coldef->units, coldef->description, coldef->format_string, coldef->enum_values, coldef->field_length) : SDDS_DefineColumn(target, newName, coldef->symbol, coldef->units, coldef->description, coldef->format_string, coldef->type, coldef->field_length)) < 0) {
     SDDS_FreeColumnDefinition(coldef);
     SDDS_SetError("Unable to transfer column definition--call to define column failed (SDDS_TransferColumnDefinition)");
     return 0;
@@ -87,7 +87,7 @@ int32_t SDDS_TransferParameterDefinition(SDDS_DATASET *target, SDDS_DATASET *sou
     SDDS_SetError("Unable to transfer parameter definition--parameter already present (SDDS_TransferParameterDefinition)");
     return 0;
   }
-  if (SDDS_DefineParameter(target, newName, pardef->symbol, pardef->units, pardef->description, pardef->format_string, pardef->type, NULL) < 0) {
+  if ((pardef->type == SDDS_ENUM ? SDDS_DefineEnumParameter(target, newName, pardef->symbol, pardef->units, pardef->description, pardef->format_string, pardef->enum_values, NULL) : SDDS_DefineParameter(target, newName, pardef->symbol, pardef->units, pardef->description, pardef->format_string, pardef->type, NULL)) < 0) {
     SDDS_FreeParameterDefinition(pardef);
     SDDS_SetError("Unable to transfer parameter definition--call to define parameter failed (SDDS_TransferParameterDefinition)");
     return 0;
@@ -125,7 +125,7 @@ int32_t SDDS_TransferArrayDefinition(SDDS_DATASET *target, SDDS_DATASET *source,
     SDDS_SetError("Unable to transfer array definition--array already present (SDDS_TransferArrayDefinition)");
     return 0;
   }
-  if (SDDS_DefineArray(target, newName, ardef->symbol, ardef->units, ardef->description, ardef->format_string, ardef->type, ardef->field_length, ardef->dimensions, ardef->group_name) < 0) {
+  if ((ardef->type == SDDS_ENUM ? SDDS_DefineEnumArray(target, newName, ardef->symbol, ardef->units, ardef->description, ardef->format_string, ardef->enum_values, ardef->field_length, ardef->dimensions, ardef->group_name) : SDDS_DefineArray(target, newName, ardef->symbol, ardef->units, ardef->description, ardef->format_string, ardef->type, ardef->field_length, ardef->dimensions, ardef->group_name)) < 0) {
     SDDS_FreeArrayDefinition(ardef);
     SDDS_SetError("Unable to transfer array definition--call to define array failed (SDDS_TransferArrayDefinition)");
     return 0;
@@ -202,7 +202,7 @@ int32_t SDDS_DefineParameterLikeColumn(SDDS_DATASET *target, SDDS_DATASET *sourc
     SDDS_SetError("Unable to define parameter--already exists (SDDS_DefineParameterLikeColumn)");
     return 0;
   }
-  if (SDDS_DefineParameter(target, newName, coldef->symbol, coldef->units, coldef->description, coldef->format_string, coldef->type, NULL) < 0) {
+  if ((coldef->type == SDDS_ENUM ? SDDS_DefineEnumParameter(target, newName, coldef->symbol, coldef->units, coldef->description, coldef->format_string, coldef->enum_values, NULL) : SDDS_DefineParameter(target, newName, coldef->symbol, coldef->units, coldef->description, coldef->format_string, coldef->type, NULL)) < 0) {
     SDDS_FreeColumnDefinition(coldef);
     SDDS_SetError("Unable to define parameter--call to define parameter failed (SDDS_DefineParameterLikeColumn)");
     return 0;
@@ -240,7 +240,7 @@ int32_t SDDS_DefineParameterLikeArray(SDDS_DATASET *target, SDDS_DATASET *source
     SDDS_SetError("Unable to define parameter--already exists (SDDS_DefineParameterLikeArray)");
     return 0;
   }
-  if (SDDS_DefineParameter(target, newName, arrayDef->symbol, arrayDef->units, arrayDef->description, arrayDef->format_string, arrayDef->type, NULL) < 0) {
+  if ((arrayDef->type == SDDS_ENUM ? SDDS_DefineEnumParameter(target, newName, arrayDef->symbol, arrayDef->units, arrayDef->description, arrayDef->format_string, arrayDef->enum_values, NULL) : SDDS_DefineParameter(target, newName, arrayDef->symbol, arrayDef->units, arrayDef->description, arrayDef->format_string, arrayDef->type, NULL)) < 0) {
     SDDS_FreeArrayDefinition(arrayDef);
     SDDS_SetError("Unable to define parameter--call to define parameter failed (SDDS_DefineParameterLikeArray)");
     return 0;
@@ -278,7 +278,7 @@ int32_t SDDS_DefineColumnLikeParameter(SDDS_DATASET *target, SDDS_DATASET *sourc
     SDDS_SetError("Unable to define column--already exists (SDDS_DefineColumnLikeParameter)");
     return 0;
   }
-  if (SDDS_DefineColumn(target, newName, pardef->symbol, pardef->units, pardef->description, pardef->format_string, pardef->type, 0) < 0) {
+  if ((pardef->type == SDDS_ENUM ? SDDS_DefineEnumColumn(target, newName, pardef->symbol, pardef->units, pardef->description, pardef->format_string, pardef->enum_values, 0) : SDDS_DefineColumn(target, newName, pardef->symbol, pardef->units, pardef->description, pardef->format_string, pardef->type, 0)) < 0) {
     SDDS_FreeParameterDefinition(pardef);
     SDDS_SetError("Unable to define column--call to define column failed (SDDS_DefineColumnLikeParameter)");
     return 0;
@@ -316,7 +316,7 @@ int32_t SDDS_DefineColumnLikeArray(SDDS_DATASET *target, SDDS_DATASET *source, c
     SDDS_SetError("Unable to define column--already exists (SDDS_DefineColumnLikeArray)");
     return 0;
   }
-  if (SDDS_DefineColumn(target, newName, arrayDef->symbol, arrayDef->units, arrayDef->description, arrayDef->format_string, arrayDef->type, 0) < 0) {
+  if ((arrayDef->type == SDDS_ENUM ? SDDS_DefineEnumColumn(target, newName, arrayDef->symbol, arrayDef->units, arrayDef->description, arrayDef->format_string, arrayDef->enum_values, 0) : SDDS_DefineColumn(target, newName, arrayDef->symbol, arrayDef->units, arrayDef->description, arrayDef->format_string, arrayDef->type, 0)) < 0) {
     SDDS_FreeArrayDefinition(arrayDef);
     SDDS_SetError("Unable to define column--call to define column failed (SDDS_DefineColumnLikeArray)");
     return 0;
@@ -355,6 +355,7 @@ int32_t SDDS_TransferAllParameterDefinitions(SDDS_DATASET *SDDS_target, SDDS_DAT
   }
   target = &SDDS_target->layout;
   source = &SDDS_source->layout;
+  if (!(mode & SDDS_TRANSFER_KEEPOLD) && !SDDS_CheckEnumCopy(SDDS_target, SDDS_source, 1)) return 0;
   SDDS_DeferSavingLayout(SDDS_target, 1);
   for (i = 0; i < source->n_parameters; i++) {
     if ((index = SDDS_GetParameterIndex(SDDS_target, source->parameter_definition[i].name)) >= 0) {
@@ -362,40 +363,40 @@ int32_t SDDS_TransferAllParameterDefinitions(SDDS_DATASET *SDDS_target, SDDS_DAT
       if (mode & SDDS_TRANSFER_KEEPOLD)
         continue;
       if (!(mode & SDDS_TRANSFER_OVERWRITE)) {
-        sprintf(messBuffer, "Unable to define parameter %s---already exists (SDDS_TransferAllParameterDefinitions)", source->parameter_definition[i].name);
+        snprintf(messBuffer, sizeof(messBuffer), "Unable to define parameter %.800s---already exists (SDDS_TransferAllParameterDefinitions)", source->parameter_definition[i].name);
         SDDS_SetError(messBuffer);
         SDDS_DeferSavingLayout(SDDS_target, 0);
         return 0;
       }
       if (!SDDS_ChangeParameterInformation(SDDS_target, "symbol",
-                                           &source->parameter_definition[i].symbol,
+                                           source->parameter_definition[i].symbol,
                                            SDDS_BY_INDEX, index) ||
           !SDDS_ChangeParameterInformation(SDDS_target, "units",
-                                           &source->parameter_definition[i].units,
+                                           source->parameter_definition[i].units,
                                            SDDS_BY_INDEX, index) ||
           !SDDS_ChangeParameterInformation(SDDS_target, "description",
-                                           &source->parameter_definition[i].description,
+                                           source->parameter_definition[i].description,
                                            SDDS_BY_INDEX, index) ||
           !SDDS_ChangeParameterInformation(SDDS_target, "format_string",
-                                           &source->parameter_definition[i].format_string,
+                                           source->parameter_definition[i].format_string,
                                            SDDS_BY_INDEX, index) ||
-          !SDDS_ChangeParameterInformation(SDDS_target, "type",
-                                           &source->parameter_definition[i].type, SDDS_BY_INDEX, index) ||
-          (source->parameter_definition[i].fixed_value != NULL && !SDDS_ChangeParameterInformation(SDDS_target, "fixed_value", &source->parameter_definition[i].fixed_value, SDDS_BY_INDEX, index))) {
+          (source->parameter_definition[i].type != SDDS_ENUM && !SDDS_ChangeParameterInformation(SDDS_target, "type",
+                                           &source->parameter_definition[i].type, SDDS_BY_INDEX, index)) ||
+          (source->parameter_definition[i].fixed_value != NULL && !SDDS_ChangeParameterInformation(SDDS_target, "fixed_value", source->parameter_definition[i].fixed_value, SDDS_BY_INDEX, index))) {
         SDDS_SetError("Unable to define parameter---problem with overwrite (SDDS_TransferAllParameterDefinitions)");
         SDDS_DeferSavingLayout(SDDS_target, 0);
         return 0;
       }
       if (source->parameter_definition[i].fixed_value == NULL)
         target->parameter_definition[index].fixed_value = NULL;
-      target->parameter_definition[index].definition_mode = source->parameter_definition[index].definition_mode;
-      if (target->parameter_definition[index].type == SDDS_STRING)
+      target->parameter_definition[index].definition_mode = source->parameter_definition[i].definition_mode;
+      if ((target->parameter_definition[index].type == SDDS_STRING || target->parameter_definition[index].type == SDDS_ENUM))
         target->parameter_definition[index].memory_number = SDDS_CreateRpnMemory(source->parameter_definition[i].name, 1);
       else
         target->parameter_definition[index].memory_number = SDDS_CreateRpnMemory(source->parameter_definition[i].name, 0);
     } else {
-      if (SDDS_DefineParameter(SDDS_target, source->parameter_definition[i].name,
-                               source->parameter_definition[i].symbol, source->parameter_definition[i].units, source->parameter_definition[i].description, source->parameter_definition[i].format_string, source->parameter_definition[i].type, source->parameter_definition[i].fixed_value) < 0) {
+      if ((source->parameter_definition[i].type == SDDS_ENUM ? SDDS_DefineEnumParameter(SDDS_target, source->parameter_definition[i].name, source->parameter_definition[i].symbol, source->parameter_definition[i].units, source->parameter_definition[i].description, source->parameter_definition[i].format_string, source->parameter_definition[i].enum_values, source->parameter_definition[i].fixed_value) : SDDS_DefineParameter(SDDS_target, source->parameter_definition[i].name,
+                               source->parameter_definition[i].symbol, source->parameter_definition[i].units, source->parameter_definition[i].description, source->parameter_definition[i].format_string, source->parameter_definition[i].type, source->parameter_definition[i].fixed_value)) < 0) {
         SDDS_SetError("Unable to define parameter (SDDS_TransferAllParameterDefinitions)");
         SDDS_DeferSavingLayout(SDDS_target, 0);
         return 0;
@@ -436,6 +437,7 @@ int32_t SDDS_TransferAllColumnDefinitions(SDDS_DATASET *SDDS_target, SDDS_DATASE
   }
   target = &SDDS_target->layout;
   source = &SDDS_source->layout;
+  if (!(mode & SDDS_TRANSFER_KEEPOLD) && !SDDS_CheckEnumCopy(SDDS_target, SDDS_source, 0)) return 0;
   SDDS_DeferSavingLayout(SDDS_target, 1);
   for (i = 0; i < source->n_columns; i++)
     if ((index = SDDS_GetColumnIndex(SDDS_target, source->column_definition[i].name)) >= 0) {
@@ -443,42 +445,42 @@ int32_t SDDS_TransferAllColumnDefinitions(SDDS_DATASET *SDDS_target, SDDS_DATASE
       if (mode & SDDS_TRANSFER_KEEPOLD)
         continue;
       if (!(mode & SDDS_TRANSFER_OVERWRITE)) {
-        sprintf(messBuffer, "Unable to define column %s---already exists (SDDS_TransferAllColumnDefinitions)", source->column_definition[i].name);
+        snprintf(messBuffer, sizeof(messBuffer), "Unable to define column %.800s---already exists (SDDS_TransferAllColumnDefinitions)", source->column_definition[i].name);
         SDDS_SetError(messBuffer);
         SDDS_DeferSavingLayout(SDDS_target, 0);
         return 0;
       }
       if (source->column_definition[i].type != target->column_definition[index].type && SDDS_target->n_rows_allocated) {
-        sprintf(messBuffer, "Unable to define column %s---type mismatch and table already allocated (SDDS_TransferAllColumnDefinitions)", source->column_definition[i].name);
+        snprintf(messBuffer, sizeof(messBuffer), "Unable to define column %.800s---type mismatch and table already allocated (SDDS_TransferAllColumnDefinitions)", source->column_definition[i].name);
         SDDS_SetError(messBuffer);
         SDDS_DeferSavingLayout(SDDS_target, 0);
         return 0;
       }
       if (!SDDS_ChangeColumnInformation(SDDS_target, "symbol",
-                                        &source->column_definition[i].symbol,
+                                        source->column_definition[i].symbol,
                                         SDDS_BY_INDEX, index) ||
           !SDDS_ChangeColumnInformation(SDDS_target, "units",
-                                        &source->column_definition[i].units,
+                                        source->column_definition[i].units,
                                         SDDS_BY_INDEX, index) ||
           !SDDS_ChangeColumnInformation(SDDS_target, "description",
-                                        &source->column_definition[i].description,
+                                        source->column_definition[i].description,
                                         SDDS_BY_INDEX, index) ||
           !SDDS_ChangeColumnInformation(SDDS_target, "format_string",
-                                        &source->column_definition[i].format_string,
+                                        source->column_definition[i].format_string,
                                         SDDS_BY_INDEX, index) ||
-          !SDDS_ChangeColumnInformation(SDDS_target, "type", &source->column_definition[i].type, SDDS_BY_INDEX, index) || !SDDS_ChangeColumnInformation(SDDS_target, "field_length", &source->column_definition[i].field_length, SDDS_BY_INDEX, index)) {
+          (source->column_definition[i].type != SDDS_ENUM && !SDDS_ChangeColumnInformation(SDDS_target, "type", &source->column_definition[i].type, SDDS_BY_INDEX, index)) || (source->column_definition[i].type != SDDS_ENUM && !SDDS_ChangeColumnInformation(SDDS_target, "field_length", &source->column_definition[i].field_length, SDDS_BY_INDEX, index))) {
         SDDS_SetError("Unable to define column---problem with overwrite (SDDS_TransferAllColumnDefinitions)");
         SDDS_DeferSavingLayout(SDDS_target, 0);
         return 0;
       }
-      target->column_definition[index].definition_mode = source->column_definition[index].definition_mode;
-      if (target->column_definition[index].type == SDDS_STRING)
+      target->column_definition[index].definition_mode = source->column_definition[i].definition_mode;
+      if ((target->column_definition[index].type == SDDS_STRING || target->column_definition[index].type == SDDS_ENUM))
         target->column_definition[index].memory_number = SDDS_CreateRpnMemory(source->column_definition[i].name, 1);
       else
         target->column_definition[index].memory_number = SDDS_CreateRpnMemory(source->column_definition[i].name, 0);
     } else {
-      if (SDDS_DefineColumn(SDDS_target, source->column_definition[i].name, source->column_definition[i].symbol,
-                            source->column_definition[i].units, source->column_definition[i].description, source->column_definition[i].format_string, source->column_definition[i].type, source->column_definition[i].field_length) < 0) {
+      if ((source->column_definition[i].type == SDDS_ENUM ? SDDS_DefineEnumColumn(SDDS_target, source->column_definition[i].name, source->column_definition[i].symbol, source->column_definition[i].units, source->column_definition[i].description, source->column_definition[i].format_string, source->column_definition[i].enum_values, source->column_definition[i].field_length) : SDDS_DefineColumn(SDDS_target, source->column_definition[i].name, source->column_definition[i].symbol,
+                            source->column_definition[i].units, source->column_definition[i].description, source->column_definition[i].format_string, source->column_definition[i].type, source->column_definition[i].field_length)) < 0) {
         SDDS_SetError("Unable to define column (SDDS_TransferAllColumnDefinitions)");
         SDDS_DeferSavingLayout(SDDS_target, 0);
         return 0;
@@ -517,11 +519,12 @@ int32_t SDDS_TransferAllArrayDefinitions(SDDS_DATASET *SDDS_target, SDDS_DATASET
     return 0;
   }
   source = &SDDS_source->layout;
+  if (!SDDS_CheckEnumCopy(SDDS_target, SDDS_source, 2)) return 0;
   SDDS_DeferSavingLayout(SDDS_target, 1);
   for (i = 0; i < source->n_arrays; i++)
-    if (SDDS_DefineArray(SDDS_target, source->array_definition[i].name, source->array_definition[i].symbol,
+    if ((source->array_definition[i].type == SDDS_ENUM ? SDDS_DefineEnumArray(SDDS_target, source->array_definition[i].name, source->array_definition[i].symbol, source->array_definition[i].units, source->array_definition[i].description, source->array_definition[i].format_string, source->array_definition[i].enum_values, source->array_definition[i].field_length, source->array_definition[i].dimensions, source->array_definition[i].group_name) : SDDS_DefineArray(SDDS_target, source->array_definition[i].name, source->array_definition[i].symbol,
                          source->array_definition[i].units, source->array_definition[i].description,
-                         source->array_definition[i].format_string, source->array_definition[i].type, source->array_definition[i].field_length, source->array_definition[i].dimensions, source->array_definition[i].group_name) < 0) {
+                         source->array_definition[i].format_string, source->array_definition[i].type, source->array_definition[i].field_length, source->array_definition[i].dimensions, source->array_definition[i].group_name)) < 0) {
       SDDS_SetError("Unable to define array (SDDS_TransferAllArrayDefinitions)");
       SDDS_DeferSavingLayout(SDDS_target, 0);
       return 0;

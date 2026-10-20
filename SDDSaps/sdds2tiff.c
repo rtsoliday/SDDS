@@ -196,6 +196,9 @@ int main(int argc, char *argv[]) {
   if (!SDDS_InitializeInput(&SDDS_dataset, input)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
+  if (!SDDS_CheckEnumExport(&SDDS_dataset))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
 
   outputName = malloc((strlen(output) + 10) * sizeof(char));
 

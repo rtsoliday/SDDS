@@ -168,6 +168,9 @@ int main(int argc, char **argv) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(1);
   }
+  if (!SDDS_CheckEnumExport(&sdds_dataset))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
 
   column = getMatchingSDDSNames(&sdds_dataset, column_match, column_matches, &columns, SDDS_MATCH_COLUMN);
   if (!columns) {

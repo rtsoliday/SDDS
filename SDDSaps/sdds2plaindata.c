@@ -314,6 +314,9 @@ int main(int argc, char **argv) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);
   }
+  if (!SDDS_CheckEnumExport(&SDDS_dataset))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
   if (columnMatches) {
     if (!(columnName = SDDS_GetColumnNames(&SDDS_dataset, &columnNames)))
       SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);

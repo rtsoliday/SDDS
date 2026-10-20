@@ -115,6 +115,9 @@ int main(int argc, char *argv[]) {
   if (!SDDS_InitializeInput(&sdds_dataset, input)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
+  if (!SDDS_CheckEnumExport(&sdds_dataset))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
   if ((SDDS_CheckColumn(&sdds_dataset, "I", NULL, SDDS_ANY_FLOATING_TYPE,
                         NULL)) != SDDS_CHECK_OKAY) {
     fprintf(stderr, "error: Floating type column named I does not exist\n");

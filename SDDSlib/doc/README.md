@@ -1,7 +1,8 @@
 # SDDS Library Documentation
 
 This directory contains documentation for the core SDDS C/C++ library.
-The materials here correspond to Version 5 of the SDDS library and file protocol.
+The library supports file protocols SDDS1–6. See [native enums](enums.md) for
+the SDDS6 contract, public APIs, compatibility requirements and verification inventory.
 
 ## Building
 

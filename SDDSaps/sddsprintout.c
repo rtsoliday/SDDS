@@ -108,6 +108,7 @@ enum option_type {
   SET_LATEXFORMAT,
   SET_HTMLFORMAT,
   SET_MARKDOWN,
+  SET_ENUM_CODES,
   N_OPTIONS
 };
 
@@ -131,8 +132,11 @@ char *option[N_OPTIONS] = {
   "bufferlines",
   "latexformat",
   "htmlformat",
-  "markdown"
+  "markdown",
+  "enumCodes"
 };
+
+static int enumCodes = 0;
 
 char *USAGE =
     "sddsprintout [<SDDSinput>] [<outputfile>]\n"
@@ -155,6 +159,7 @@ char *USAGE =
     "             [-htmlFormat[=caption=<string>][,translate=<filename>]]\n"
     "             [-markdown]\n"
     "             [-noWarnings]\n"
+    "             [-enumCodes]\n"
     // Additional explanations
     "-spreadsheet=csv is the simple way of -spreadsheet=nolabels,quote=\",delimiter=\\, -notitle \n"
     "Translation file for LaTeX mode has columns OldName and NewName, and can be used to translate symbols and units.\n\n"
@@ -324,6 +329,9 @@ int main(int argc, char **argv) {
   for (i_arg = 1; i_arg < argc; i_arg++) {
     if (s_arg[i_arg].arg_type == OPTION) {
       switch (match_string(s_arg[i_arg].list[0], option, N_OPTIONS, 0)) {
+      case SET_ENUM_CODES:
+        enumCodes = 1;
+        break;
       case SET_COLUMNS:
         if (s_arg[i_arg].n_items < 2) {
           s_arg[i_arg].n_items = 2;
@@ -727,6 +735,8 @@ int main(int argc, char **argv) {
     firstPage = 0;
   }
 
+  if (pageNumber == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDS_dataset))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   for (i = 0; i < printColumns; i++) {
@@ -790,7 +800,7 @@ long processPrintColumns(PRINT_COLUMN **printRequestPtr, long printRequests, SDD
           } else {
             if (printRequest[irequest].format) {
               if (printRequest[irequest].format[0] != '@') {
-                if (!SDDS_VerifyPrintfFormat(printRequest[irequest].format, printColumn[printColumns].type)) {
+                if (!SDDS_VerifyPrintfFormat(printRequest[irequest].format, printColumn[printColumns].type == SDDS_ENUM ? SDDS_STRING : printColumn[printColumns].type)) {
                   fprintf(stderr, "error: given format (\"%s\") for column %s is invalid\n",
                           printRequest[irequest].format, name[iname]);
                   exit(EXIT_FAILURE);
@@ -886,7 +896,7 @@ long processPrintParameters(PRINT_PARAMETER **printRequestPtr, long printRequest
             SDDS_CopyString(&printParameter[printParameters].format, csvFormat[printParameter[printParameters].type - 1]);
           } else {
             if (printRequest[irequest].format) {
-              if (!SDDS_VerifyPrintfFormat(printRequest[irequest].format, printParameter[printParameters].type)) {
+              if (!SDDS_VerifyPrintfFormat(printRequest[irequest].format, printParameter[printParameters].type == SDDS_ENUM ? SDDS_STRING : printParameter[printParameters].type)) {
                 fprintf(stderr, "error: given format (\"%s\") for parameter %s is invalid\n", printRequest[irequest].format, name[iname]);
                 exit(EXIT_FAILURE);
               }
@@ -939,8 +949,8 @@ long processPrintParameters(PRINT_PARAMETER **printRequestPtr, long printRequest
   return printParameters;
 }
 
-#if SDDS_NUM_TYPES != 11
-#  error "number of SDDS types is not 11 as expected"
+#if SDDS_NUM_TYPES != 12
+#  error "number of SDDS types is not 12 as expected"
 #endif
 
 void setDefaultFormats(void) {
@@ -956,6 +966,7 @@ void setDefaultFormats(void) {
   SDDS_CopyString(defaultFormat + SDDS_USHORT - 1, "%5hu");
   SDDS_CopyString(defaultFormat + SDDS_CHARACTER - 1, "%c");
   SDDS_CopyString(defaultFormat + SDDS_STRING - 1, "%16s");
+  SDDS_CopyString(defaultFormat + SDDS_ENUM - 1, "%16s");
   csvFormat = tmalloc(sizeof(*csvFormat) * SDDS_NUM_TYPES);
   SDDS_CopyString(csvFormat + SDDS_LONGDOUBLE - 1, "%13.6e");
   SDDS_CopyString(csvFormat + SDDS_DOUBLE - 1, "%13.6e");
@@ -968,6 +979,7 @@ void setDefaultFormats(void) {
   SDDS_CopyString(csvFormat + SDDS_USHORT - 1, "%hu");
   SDDS_CopyString(csvFormat + SDDS_CHARACTER - 1, "%c");
   SDDS_CopyString(csvFormat + SDDS_STRING - 1, "%s");
+  SDDS_CopyString(csvFormat + SDDS_ENUM - 1, "%s");
 }
 
 long changeDefaultFormats(char **argv, long argc, long noWarnings) {
@@ -985,7 +997,7 @@ long changeDefaultFormats(char **argv, long argc, long noWarnings) {
       fprintf(stderr, "-formatDefault error: unknown type \"%s\"\n", argv[i]);
       return 0;
     }
-    if (!SDDS_VerifyPrintfFormat(format, type)) {
+    if (!SDDS_VerifyPrintfFormat(format, type == SDDS_ENUM ? SDDS_STRING : type)) {
       fprintf(stderr, "-formatDefault error: invalid format string \"%s\" for type \"%s\"\n", format, argv[i]);
       return 0;
     }
@@ -1027,6 +1039,8 @@ long makeColumnHeaders(char ***header, long *fieldWidth, char *name, char *editL
     units = modifyUnitsWithFactor(units, 1. / factor, latexFormat);
 
   if (editLabel) {
+    if (strlen(name) >= sizeof(nameBuffer))
+      SDDS_Bomb("editLabel requires a label shorter than 1024 bytes; use label= to supply a shorter label");
     strcpy(nameBuffer, name);
     if (!edit_string(nameBuffer, editLabel))
       SDDS_Bomb("Problem editing column label");
@@ -1145,6 +1159,8 @@ char *makeParameterLabel(long *fieldWidth, char *name, char *editLabel, char *un
   static char buffer[1024];
 
   if (editLabel) {
+    if (strlen(name) >= sizeof(buffer))
+      SDDS_Bomb("editLabel requires a label shorter than 1024 bytes; use label= to supply a shorter label");
     strcpy(buffer, name);
     if (!edit_string(buffer, editLabel))
       SDDS_Bomb("Problem editing parameter label");
@@ -1206,7 +1222,8 @@ void doPrintParameters(SDDS_DATASET *inTable, PRINT_PARAMETER *printParameter, l
                        FILE *fpOut, unsigned long spreadsheetFlags, char *spreadsheetDelimiter,
                        char *spreadsheetQuoteMark, PAGINATION *pagination, char *title, long noLabels) {
   long parameter, outputRow, length;
-  char printBuffer[2 * SDDS_MAXLINE];
+  char *printBuffer;
+  size_t printBufferSize = 4 * (size_t)SDDS_GetEnumMappingLimit() + 2 * SDDS_MAXLINE;
   static void **dataBuffer = NULL;
   char *format;
 
@@ -1215,6 +1232,7 @@ void doPrintParameters(SDDS_DATASET *inTable, PRINT_PARAMETER *printParameter, l
   if (!dataBuffer && !(dataBuffer = malloc(sizeof(void *) * 4)))
     SDDS_Bomb("Allocation failure in doPrintParameters");
 
+  printBuffer = tmalloc(printBufferSize);
   outputRow = 0;
   for (parameter = 0; parameter < printParameters; parameter++) {
     format = NULL;
@@ -1223,9 +1241,7 @@ void doPrintParameters(SDDS_DATASET *inTable, PRINT_PARAMETER *printParameter, l
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if (!SDDS_GetParameter(inTable, printParameter[parameter].name, &dataBuffer[0]))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    if (!SDDS_SprintTypedValueFactor(dataBuffer, 0, printParameter[parameter].type,
-                                     format ? format : printParameter[parameter].format, printBuffer,
-                                     SDDS_PRINT_NOQUOTES, printParameter[parameter].factor))
+    if (!(printParameter[parameter].type == SDDS_ENUM ? SDDS_SprintEnumValue(inTable->layout.parameter_definition[printParameter[parameter].index].enum_definition, (const int32_t *)dataBuffer, 0, format ? format : printParameter[parameter].format, printBuffer, printBufferSize, SDDS_PRINT_NOQUOTES, printParameter[parameter].factor, enumCodes) : SDDS_SprintTypedValueFactor(dataBuffer, 0, printParameter[parameter].type, format ? format : printParameter[parameter].format, printBuffer, SDDS_PRINT_NOQUOTES, printParameter[parameter].factor)))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if (spreadsheetFlags & SPREADSHEET_ON) {
       if (!(spreadsheetFlags & SPREADSHEET_NOLABELS))
@@ -1261,6 +1277,7 @@ void doPrintParameters(SDDS_DATASET *inTable, PRINT_PARAMETER *printParameter, l
     checkPagination(fpOut, pagination, title);
     fputc('\n', fpOut);
   }
+  free(printBuffer);
 }
 
 char **makeListOfNames(char *string, long *names) {
@@ -1458,7 +1475,8 @@ void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long print
   void **data;
   char **groupData = NULL;
   char ***format = NULL;
-  char printBuffer[16 * SDDS_MAXLINE];
+  char *printBuffer;
+  size_t printBufferSize = 4 * (size_t)SDDS_GetEnumMappingLimit() + 16 * SDDS_MAXLINE;
   char *t;
   if (!printColumns)
     return;
@@ -1468,6 +1486,7 @@ void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long print
   else if (!rows)
     return;
 
+  printBuffer = tmalloc(printBufferSize);
   if ((latexTitle != NULL) && (latexTitle[0] == '@')) {
     latexTitle = latexTitle + 1;
     t = SDDS_GetParameterAsString(inTable, latexTitle, &t);
@@ -1490,7 +1509,10 @@ void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long print
   nGroups = 1;
   maxGroupLength = groupLength = 1;
   if (latexFormat & LATEX_GROUP) {
-    if (!(groupData = SDDS_GetColumn(inTable, latexGroupColumn))) {
+    int32_t groupType = SDDS_GetNamedColumnType(inTable, latexGroupColumn);
+    if (groupType != SDDS_STRING && groupType != SDDS_ENUM)
+      SDDS_Bomb("LaTeX group column must have string or enum type");
+    if (!(groupData = SDDS_GetColumnInString(inTable, latexGroupColumn))) {
       fprintf(stderr, "Error: unable to get data for column %s\n", latexGroupColumn);
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
@@ -1547,10 +1569,7 @@ void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long print
       if (printColumn[column].type == SDDS_STRING && SDDS_StringIsBlank(*((char **)data[column] + row))) {
         sprintf(printBuffer, format[column] ? format[column][row] : printColumn[column].format, " ");
       } else {
-        if (!SDDS_SprintTypedValueFactor(data[column], row, printColumn[column].type,
-                                         format[column] ? format[column][row] : printColumn[column].format,
-                                         printBuffer, SDDS_PRINT_NOQUOTES,
-                                         printColumn[column].factor)) {
+        if (!(printColumn[column].type == SDDS_ENUM ? SDDS_SprintEnumValue(inTable->layout.column_definition[printColumn[column].index].enum_definition, (const int32_t *)data[column], row, format[column] ? format[column][row] : printColumn[column].format, printBuffer, printBufferSize, SDDS_PRINT_NOQUOTES, printColumn[column].factor, enumCodes) : SDDS_SprintTypedValueFactor(data[column], row, printColumn[column].type, format[column] ? format[column][row] : printColumn[column].format, printBuffer, SDDS_PRINT_NOQUOTES, printColumn[column].factor))) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         }
       }
@@ -1631,6 +1650,11 @@ void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long print
   }
   free(data);
   free(format);
+  if (groupData) {
+    SDDS_FreeStringArray(groupData, rows);
+    free(groupData);
+  }
+  free(printBuffer);
 }
 
 void replaceFormatWidth(char *buffer, char *format, long width) {

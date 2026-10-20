@@ -21,6 +21,8 @@
 
 #include "SDDS.h"
 #include "SDDS_internal.h"
+#include <errno.h>
+#include <ctype.h>
 #include "mdb.h"
 #include <ctype.h>
 #include <float.h>
@@ -29,7 +31,7 @@
 
 #define COMMENT_POSITION 40
 
-#if SDDS_VERSION != 5
+#if SDDS_VERSION != 6
 #  error "SDDS_VERSION does not match the version number of this file"
 #endif
 
@@ -67,6 +69,10 @@
  * @return Returns 1 on success; 0 on error (e.g., if data or fp is NULL, or an unknown data type is specified).
  */
 int32_t SDDS_WriteTypedValue(void *data, int64_t index, int32_t type, char *format, FILE *fp) {
+  if (type == SDDS_ENUM && format) {
+    SDDS_SetError("Enum wire values require the default decimal code format"); return 0;
+  }
+
   /* Byte values must stay nonnegative for ctype and three-digit octal escapes. */
   unsigned char c;
   char *s;
@@ -87,6 +93,7 @@ int32_t SDDS_WriteTypedValue(void *data, int64_t index, int32_t type, char *form
   case SDDS_USHORT:
     fprintf(fp, format ? format : "%hu", *((unsigned short *)data + index));
     break;
+  case SDDS_ENUM:
   case SDDS_LONG:
     fprintf(fp, format ? format : "%" PRId32, *((int32_t *)data + index));
     break;
@@ -191,6 +198,10 @@ int32_t SDDS_WriteTypedValue(void *data, int64_t index, int32_t type, char *form
  *       For string and character types, special characters like '!', '\\', and '"' are escaped appropriately.
  */
 int32_t SDDS_LZMAWriteTypedValue(void *data, int64_t index, int32_t type, char *format, struct lzmafile *lzmafp) {
+  if (type == SDDS_ENUM && format) {
+    SDDS_SetError("Enum wire values require the default decimal code format"); return 0;
+  }
+
   unsigned char c;
   char *s;
   short hasWhitespace;
@@ -210,6 +221,7 @@ int32_t SDDS_LZMAWriteTypedValue(void *data, int64_t index, int32_t type, char *
   case SDDS_USHORT:
     lzma_printf(lzmafp, format ? format : "%hu", *((unsigned short *)data + index));
     break;
+  case SDDS_ENUM:
   case SDDS_LONG:
     lzma_printf(lzmafp, format ? format : "%" PRId32, *((int32_t *)data + index));
     break;
@@ -315,6 +327,10 @@ int32_t SDDS_LZMAWriteTypedValue(void *data, int64_t index, int32_t type, char *
  *       For string and character types, special characters like '!', '\\', and '"' are escaped appropriately.
  */
 int32_t SDDS_GZipWriteTypedValue(void *data, int64_t index, int32_t type, char *format, gzFile gzfp) {
+  if (type == SDDS_ENUM && format) {
+    SDDS_SetError("Enum wire values require the default decimal code format"); return 0;
+  }
+
   unsigned char c;
   char *s;
   short hasWhitespace;
@@ -334,6 +350,7 @@ int32_t SDDS_GZipWriteTypedValue(void *data, int64_t index, int32_t type, char *
   case SDDS_USHORT:
     gzprintf(gzfp, format ? format : "%hu", *((unsigned short *)data + index));
     break;
+  case SDDS_ENUM:
   case SDDS_LONG:
     gzprintf(gzfp, format ? format : "%" PRId32, *((int32_t *)data + index));
     break;
@@ -421,6 +438,7 @@ int32_t SDDS_GZipWriteTypedValue(void *data, int64_t index, int32_t type, char *
  *       such as the last row written and the number of rows written.
  */
 int32_t SDDS_WriteAsciiPage(SDDS_DATASET *SDDS_dataset) {
+  if (!SDDS_ValidateEnumPage(SDDS_dataset)) return 0;
 #if defined(zLib)
   gzFile gzfp;
 #endif
@@ -660,7 +678,7 @@ int32_t SDDS_WriteAsciiArrays(SDDS_DATASET *SDDS_dataset, FILE *fp) {
     array = &SDDS_dataset->array[j];
     for (i = 0; i < array_definition->dimensions; i++)
       fprintf(fp, "%" PRId32 " ", array->dimension[i]);
-    fprintf(fp, "          ! %" PRId32 "-dimensional array %s:\n", array_definition->dimensions, array_definition->name);
+    fprintf(fp, "          ! %" PRId32 "-dimensional array %.800s:\n", array_definition->dimensions, array_definition->name);
     for (i = 0; i < array->elements;) {
       if (!SDDS_WriteTypedValue(array->data, i, array_definition->type, NULL, fp)) {
         SDDS_SetError("Unable to write array--couldn't write ASCII data (SDDS_WriteAsciiArrays)");
@@ -705,7 +723,7 @@ int32_t SDDS_LZMAWriteAsciiArrays(SDDS_DATASET *SDDS_dataset, struct lzmafile *l
     array = &SDDS_dataset->array[j];
     for (i = 0; i < array_definition->dimensions; i++)
       lzma_printf(lzmafp, "%" PRId32 " ", array->dimension[i]);
-    lzma_printf(lzmafp, "          ! %" PRId32 "-dimensional array %s:\n", array_definition->dimensions, array_definition->name);
+    lzma_printf(lzmafp, "          ! %" PRId32 "-dimensional array %.800s:\n", array_definition->dimensions, array_definition->name);
     for (i = 0; i < array->elements;) {
       if (!SDDS_LZMAWriteTypedValue(array->data, i, array_definition->type, NULL, lzmafp)) {
         SDDS_SetError("Unable to write array--couldn't write ASCII data (SDDS_LZMAWriteAsciiArrays)");
@@ -751,7 +769,7 @@ int32_t SDDS_GZipWriteAsciiArrays(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
     array = &SDDS_dataset->array[j];
     for (i = 0; i < array_definition->dimensions; i++)
       gzprintf(gzfp, "%" PRId32 " ", array->dimension[i]);
-    gzprintf(gzfp, "          ! %" PRId32 "-dimensional array %s:\n", array_definition->dimensions, array_definition->name);
+    gzprintf(gzfp, "          ! %" PRId32 "-dimensional array %.800s:\n", array_definition->dimensions, array_definition->name);
     for (i = 0; i < array->elements;) {
       if (!SDDS_GZipWriteTypedValue(array->data, i, array_definition->type, NULL, gzfp)) {
         SDDS_SetError("Unable to write array--couldn't write ASCII data (SDDS_GZipWriteAsciiArrays)");
@@ -976,8 +994,8 @@ int32_t SDDS_ReadAsciiParameters(SDDS_DATASET *SDDS_dataset) {
         first_read = 0;
         bigBuffer[strlen(bigBuffer) - 1] = 0;
       } else
-        strcpy(bigBuffer, layout->parameter_definition[i].fixed_value);
-      if (!SDDS_ScanData(bigBuffer, layout->parameter_definition[i].type, 0, SDDS_dataset->parameter[i], 0, 1)) {
+        bigBuffer[0] = 0;
+      if (!(layout->parameter_definition[i].fixed_value ? SDDS_ScanFixedValue(layout->parameter_definition[i].fixed_value, layout->parameter_definition[i].type, SDDS_dataset->parameter[i]) : SDDS_ScanData(bigBuffer, layout->parameter_definition[i].type, 0, SDDS_dataset->parameter[i], 0, 1))) {
         SDDS_SetError("Unable to read page--parameter scanning error (SDDS_ReadAsciiParameters)");
         return (0);
       }
@@ -1003,8 +1021,8 @@ int32_t SDDS_ReadAsciiParameters(SDDS_DATASET *SDDS_dataset) {
           first_read = 0;
           bigBuffer[strlen(bigBuffer) - 1] = 0;
         } else
-          strcpy(bigBuffer, layout->parameter_definition[i].fixed_value);
-        if (!SDDS_ScanData(bigBuffer, layout->parameter_definition[i].type, 0, SDDS_dataset->parameter[i], 0, 1)) {
+          bigBuffer[0] = 0;
+        if (!(layout->parameter_definition[i].fixed_value ? SDDS_ScanFixedValue(layout->parameter_definition[i].fixed_value, layout->parameter_definition[i].type, SDDS_dataset->parameter[i]) : SDDS_ScanData(bigBuffer, layout->parameter_definition[i].type, 0, SDDS_dataset->parameter[i], 0, 1))) {
           SDDS_SetError("Unable to read page--parameter scanning error (SDDS_ReadAsciiParameters)");
           return (0);
         }
@@ -1028,8 +1046,8 @@ int32_t SDDS_ReadAsciiParameters(SDDS_DATASET *SDDS_dataset) {
           first_read = 0;
           bigBuffer[strlen(bigBuffer) - 1] = 0;
         } else
-          strcpy(bigBuffer, layout->parameter_definition[i].fixed_value);
-        if (!SDDS_ScanData(bigBuffer, layout->parameter_definition[i].type, 0, SDDS_dataset->parameter[i], 0, 1)) {
+          bigBuffer[0] = 0;
+        if (!(layout->parameter_definition[i].fixed_value ? SDDS_ScanFixedValue(layout->parameter_definition[i].fixed_value, layout->parameter_definition[i].type, SDDS_dataset->parameter[i]) : SDDS_ScanData(bigBuffer, layout->parameter_definition[i].type, 0, SDDS_dataset->parameter[i], 0, 1))) {
           SDDS_SetError("Unable to read page--parameter scanning error (SDDS_ReadAsciiParameters)");
           return (0);
         }
@@ -1040,6 +1058,10 @@ int32_t SDDS_ReadAsciiParameters(SDDS_DATASET *SDDS_dataset) {
 #endif
   if (bigBuffer)
     free(bigBuffer);
+  for (i = 0; i < layout->n_parameters; i++)
+    if (layout->parameter_definition[i].type == SDDS_ENUM &&
+        !(layout->parameter_definition[i].definition_mode & SDDS_WRITEONLY_DEFINITION) &&
+        !SDDS_ValidateEnumData(layout->parameter_definition[i].enum_definition, SDDS_dataset->parameter[i], 1)) return 0;
   return (1);
 }
 
@@ -1206,6 +1228,12 @@ int32_t SDDS_ReadAsciiArrays(SDDS_DATASET *SDDS_dataset) {
       } while (++j < array->elements && !SDDS_StringIsBlank(bigBufferCopy));
       bigBuffer[0] = 0;
     } while (j < array->elements);
+    if (array->definition->type == SDDS_ENUM &&
+        !SDDS_ValidateEnumData(array->definition->enum_definition, array->data, array->elements)) {
+      free(buffer);
+      free(bigBuffer);
+      return 0;
+    }
   }
   if (buffer)
     free(buffer);
@@ -1498,7 +1526,7 @@ int32_t SDDS_ReadAsciiPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_in
           if (sparse_statistics != 0) {
             // Allocate buffer space for statistical sparsing
             if (i == 0) {
-              statData = (void**)malloc(SDDS_dataset->layout.n_columns * sizeof(void*));
+              statData = (void**)calloc(SDDS_dataset->layout.n_columns, sizeof(void*));
             }
             if (SDDS_FLOATING_TYPE(layout->column_definition[i].type)) {
               // Not ideal for SDDS_LONGDOUBLE but we may never run across this error
@@ -1603,7 +1631,7 @@ int32_t SDDS_ReadAsciiPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_in
 #if defined(zLib)
           }
 #endif
-          if (SDDS_dataset->autoRecover) {
+          if (layout->column_definition[i].type != SDDS_ENUM && SDDS_dataset->autoRecover) {
             SDDS_dataset->autoRecovered = 1;
             SDDS_ClearErrors();
             if (bigBuffer)
@@ -1613,6 +1641,11 @@ int32_t SDDS_ReadAsciiPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t sparse_in
           SDDS_SetReadRecoveryMode(SDDS_dataset, 1);
           SDDS_SetError("Unable to read page--scanning error (SDDS_ReadAsciiPage)");
           return (0);
+        }
+        if (layout->column_definition[i].type == SDDS_ENUM &&
+            !SDDS_ValidateEnumData(layout->column_definition[i].enum_definition, (int32_t *)SDDS_dataset->data[i] + j, 1)) {
+          free(bigBuffer);
+          return 0;
         }
         if (sparse_statistics != 0) {
           switch (layout->column_definition[i].type) {
@@ -1817,6 +1850,19 @@ int32_t SDDS_ScanData(char *string, int32_t type, int32_t field_length, void *da
       return (1);
     }
     break;
+  case SDDS_ENUM: {
+    char *end;
+    intmax_t code;
+    errno = 0;
+    code = strtoimax(buffer, &end, 10);
+    while (*end && isspace((unsigned char)*end)) end++;
+    if (!errno && end != buffer && !*end && code >= INT32_MIN && code <= INT32_MAX && *buffer != '+') {
+      ((int32_t *)data)[index] = (int32_t)code;
+      free(buffer);
+      return 1;
+    }
+    break;
+  }
   case SDDS_LONG:
     if (sscanf(buffer, "%" SCNd32, ((int32_t *)data) + index) == 1) {
       if (buffer)
@@ -2025,6 +2071,19 @@ int32_t SDDS_ScanData2(char *string, char **pstring, int32_t *strlength, int32_t
       return (1);
     }
     break;
+  case SDDS_ENUM: {
+    char *end;
+    intmax_t code;
+    errno = 0;
+    code = strtoimax(buffer, &end, 10);
+    while (*end && isspace((unsigned char)*end)) end++;
+    if (!errno && end != buffer && !*end && code >= INT32_MIN && code <= INT32_MAX && *buffer != '+') {
+      ((int32_t *)data)[index] = (int32_t)code;
+      free(buffer);
+      return 1;
+    }
+    break;
+  }
   case SDDS_LONG:
     if (sscanf(buffer, "%" SCNd32, ((int32_t *)data) + index) == 1) {
       if (buffer)
@@ -2178,6 +2237,7 @@ int32_t SDDS_AsciiDataExpected(SDDS_DATASET *SDDS_dataset) {
  *       It also handles updating internal state variables such as the number of rows written and the last row written.
  */
 int32_t SDDS_UpdateAsciiPage(SDDS_DATASET *SDDS_dataset, uint32_t mode) {
+  if (!SDDS_ValidateEnumPage(SDDS_dataset)) return 0;
   FILE *fp;
   int32_t code;
   int64_t i, rows, offset;

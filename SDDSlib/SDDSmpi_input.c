@@ -24,6 +24,7 @@
 #include "SDDS.h"
 #include "SDDS_internal.h"
 #include "scan.h"
+#include <limits.h>
 
 #if defined(_WIN32)
 #  include <fcntl.h>
@@ -183,6 +184,12 @@ int32_t SDDS_MPI_BroadcastLayout(SDDS_DATASET *SDDS_dataset) {
   MPI_Aint offsets[4], int_ext, short_ext, uint_ext;
   MPI_Aint int_lb, short_lb, uint_lb;
 
+  {
+    int32_t version = layout->version;
+    MPI_Bcast(&version, 1, MPI_INT32_T, 0, MPI_dataset->comm);
+    if (version == 6) return SDDS_MPI_BroadcastLayout6(SDDS_dataset);
+  }
+
   MPI_Type_get_extent(MPI_INT, &int_lb, &int_ext);
   MPI_Type_get_extent(MPI_UNSIGNED, &uint_lb, &uint_ext);
   MPI_Type_get_extent(MPI_SHORT, &short_lb, &short_ext);
@@ -227,7 +234,7 @@ int32_t SDDS_MPI_BroadcastLayout(SDDS_DATASET *SDDS_dataset) {
     other.n_associates = layout->n_associates;
     other.n_arrays = layout->n_arrays;
     other.version = layout->version;
-    other.layout_offset = SDDS_dataset->pagecount_offset[0];
+    other.layout_offset = SDDS_dataset->pagecount_offset ? SDDS_dataset->pagecount_offset[0] : 0;
     other.layout_written = layout->layout_written;
     other.disconnected = layout->disconnected;
     other.gzipFile = layout->gzipFile;
@@ -466,7 +473,8 @@ int32_t SDDS_MPI_BroadcastLayout(SDDS_DATASET *SDDS_dataset) {
         SDDS_CopyString(&format_string, column[i].format_string);
       if (column[i].symbol_len)
         SDDS_CopyString(&symbol, column[i].symbol);
-      if (SDDS_DefineColumn(SDDS_dataset, column[i].name, symbol, units, description, format_string, column[i].type, column[i].field_length) < 0) {
+      if (column[i].type == SDDS_ENUM) SDDS_CreateRpnMemory(column[i].name, 1);
+      if (SDDS_DefineColumn(SDDS_dataset, column[i].name, symbol, units, description, format_string, (column[i].type == SDDS_ENUM ? SDDS_LONG : column[i].type), column[i].field_length) < 0) {
         SDDS_SetError("Unable to define column (SDDS_MPI_BroadcastLayout)");
         return (0);
       }
@@ -491,7 +499,8 @@ int32_t SDDS_MPI_BroadcastLayout(SDDS_DATASET *SDDS_dataset) {
         SDDS_CopyString(&symbol, parameter[i].symbol);
       if (parameter[i].fixed_value_len >= 0)
         SDDS_CopyString(&fixed_value, parameter[i].fixed_value);
-      if (SDDS_DefineParameter(SDDS_dataset, parameter[i].name, symbol, units, description, format_string, parameter[i].type, fixed_value) < 0) {
+      if (parameter[i].type == SDDS_ENUM) SDDS_CreateRpnMemory(parameter[i].name, 1);
+      if (SDDS_DefineParameter(SDDS_dataset, parameter[i].name, symbol, units, description, format_string, (parameter[i].type == SDDS_ENUM ? SDDS_LONG : parameter[i].type), fixed_value) < 0) {
         SDDS_SetError("Unable to define parameter (SDDS_MPI_BroadcastLayout)");
         return (0);
       }
@@ -507,7 +516,7 @@ int32_t SDDS_MPI_BroadcastLayout(SDDS_DATASET *SDDS_dataset) {
         free(fixed_value);
     }
     for (i = 0; i < other.n_arrays; i++) {
-      if (SDDS_DefineArray(SDDS_dataset, array[i].name, array[i].symbol, array[i].units, array[i].description, array[i].format_string, array[i].type, array[i].field_length, array[i].dimensions, array[i].group_name) < 0) {
+      if (SDDS_DefineArray(SDDS_dataset, array[i].name, (array[i].symbol_len ? array[i].symbol : NULL), (array[i].units_len ? array[i].units : NULL), (array[i].description_len ? array[i].description : NULL), (array[i].format_string_len ? array[i].format_string : NULL), (array[i].type == SDDS_ENUM ? SDDS_LONG : array[i].type), array[i].field_length, array[i].dimensions, array[i].group_name) < 0) {
         SDDS_SetError("Unable to define array (SDDS_BroadcastLayout)");
         return (0);
       }
@@ -540,6 +549,8 @@ int32_t SDDS_MPI_BroadcastLayout(SDDS_DATASET *SDDS_dataset) {
       return (0);
     }
   }
+  if (!SDDS_MPI_BroadcastEnums(SDDS_dataset)) return 0;
+  if (!SDDS_SaveLayout(SDDS_dataset)) return 0;
   if (column)
     free(column);
   if (array)
@@ -598,19 +609,17 @@ int32_t SDDS_MPI_BroadcastLayout(SDDS_DATASET *SDDS_dataset) {
  *     SDDS_GZipReadLayout, SDDS_LZMAReadLayout, SDDS_SaveLayout,
  *     SDDS_MPI_BroadcastLayout, SDDS_MPI_File_Open, SDDS_MPI_Get_Column_Size
  */
-int32_t SDDS_MPI_InitializeInput(SDDS_DATASET *SDDS_dataset, char *filename) {
-  /*  startTime = MPI_Wtime(); */
-  MPI_DATASET *MPI_dataset = SDDS_dataset->MPI_dataset;
-
-#if defined(MASTER_READTITLE_ONLY)
-  if (MPI_dataset->myid == 0)
-#endif
-  {
+/** Read the serial header before any rank enters a layout broadcast. */
+static int32_t readMPIInputHeader(SDDS_DATASET *SDDS_dataset, char *filename) {
     /*  char *ptr, *datafile, *headerfile; */
     char s[SDDS_MAXLINE];
 #if defined(zLib)
     char *extension;
 #endif
+    const char *suffix = filename ? strrchr(filename, '.') : NULL;
+    if (suffix && (!strcmp(suffix, ".gz") || !strcmp(suffix, ".xz") || !strcmp(suffix, ".lzma"))) {
+      SDDS_SetError("MPI input requires an uncompressed binary file; decompress using serial SDDS first"); return 0;
+    }
     if (sizeof(gzFile) != sizeof(void *)) {
       SDDS_SetError("gzFile is not the same size as void *, possible corruption of the SDDS_LAYOUT structure");
       return (0);
@@ -714,7 +723,19 @@ int32_t SDDS_MPI_InitializeInput(SDDS_DATASET *SDDS_dataset, char *filename) {
     if (SDDS_dataset->layout.fp)
       fclose(SDDS_dataset->layout.fp);
     /*    SDDS_dataset->MPI_dataset = MPI_dataset; */
-  }
+  SDDS_dataset->layout.fp = NULL;
+  return 1;
+}
+
+int32_t SDDS_MPI_InitializeInput(SDDS_DATASET *SDDS_dataset, char *filename) {
+  MPI_DATASET *MPI_dataset = SDDS_dataset->MPI_dataset;
+  int local = 1, all;
+#if defined(MASTER_READTITLE_ONLY)
+  if (MPI_dataset->myid == 0)
+#endif
+    local = readMPIInputHeader(SDDS_dataset, filename);
+  MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, MPI_dataset->comm);
+  if (!all) { SDDS_SetError("MPI input header failed on one or more ranks"); return 0; }
 
 #if defined(MASTER_READTITLE_ONLY)
   if (!SDDS_MPI_BroadcastLayout(SDDS_dataset))
@@ -815,21 +836,22 @@ int32_t SDDS_MPI_InitializeInputFromSearchPath(SDDS_DATASET *SDDS_dataset, char 
  */
 int32_t SDDS_Master_InitializeInputFromSearchPath(SDDS_DATASET *SDDS_dataset, MPI_DATASET *MPI_dataset, char *file) {
   char *filename;
+  int local = 1, all;
 
   if (MPI_dataset->myid == 0) {
     if (!(filename = findFileInSearchPath(file))) {
       SDDS_SetError("file does not exist in searchpath (InitializeInputFromSearchPath)");
-      return 0;
-    }
-    if (!SDDS_InitializeInput(SDDS_dataset, filename)) {
+      local = 0;
+    } else {
+      local = SDDS_InitializeInput(SDDS_dataset, filename);
       free(filename);
-      return 0;
     }
-    free(filename);
   } else {
     if (!SDDS_ZeroMemory((void *)SDDS_dataset, sizeof(SDDS_DATASET)))
-      SDDS_Bomb("Unable to zero memory for SDDS dataset(SDDS_MPI_Setup)");
+      local = 0;
   }
+  MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, MPI_dataset->comm);
+  if (!all) { SDDS_SetError("MPI master input header failed"); return 0; }
   SDDS_dataset->parallel_io = 0;
   SDDS_dataset->MPI_dataset = MPI_dataset;
   if (!SDDS_MPI_BroadcastLayout(SDDS_dataset))
@@ -875,13 +897,15 @@ int32_t SDDS_Master_InitializeInputFromSearchPath(SDDS_DATASET *SDDS_dataset, MP
  * @sa SDDS_MPI_BroadcastLayout, SDDS_InitializeInput, SDDS_ZeroMemory
  */
 int32_t SDDS_Master_InitializeInput(SDDS_DATASET *SDDS_dataset, MPI_DATASET *MPI_dataset, char *file) {
+  int local = 1, all;
   if (MPI_dataset->myid == 0) {
-    if (!SDDS_InitializeInput(SDDS_dataset, file))
-      return 0;
+    local = SDDS_InitializeInput(SDDS_dataset, file);
   } else {
     if (!SDDS_ZeroMemory((void *)SDDS_dataset, sizeof(SDDS_DATASET)))
-      SDDS_Bomb("Unable to zero memory for SDDS dataset(SDDS_MPI_Setup)");
+      local = 0;
   }
+  MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, MPI_dataset->comm);
+  if (!all) { SDDS_SetError("MPI master input header failed"); return 0; }
   SDDS_dataset->parallel_io = 0;
   SDDS_dataset->MPI_dataset = MPI_dataset;
   if (!SDDS_MPI_BroadcastLayout(SDDS_dataset))
@@ -890,7 +914,6 @@ int32_t SDDS_Master_InitializeInput(SDDS_DATASET *SDDS_dataset, MPI_DATASET *MPI
   return 1;
 }
 
-/*master read the file, and broadcast the contents to other processors, assuming only one page data */
 /**
  * @brief Reads a single page of data from an SDDS dataset on the master MPI process and broadcasts it.
  *
@@ -903,9 +926,7 @@ int32_t SDDS_Master_InitializeInput(SDDS_DATASET *SDDS_dataset, MPI_DATASET *MPI
  *        Pointer to the `SDDS_DATASET` structure from which the page will be read and
  *        into which the data will be stored.
  *
- * @return 
- *        - The number of rows read on success.
- *        - A negative value if an error occurs during reading or broadcasting.
+ * @return The positive page number on success, zero on error, or -1 at EOF.
  *
  * @details
  * The function performs the following steps:
@@ -919,7 +940,7 @@ int32_t SDDS_Master_InitializeInput(SDDS_DATASET *SDDS_dataset, MPI_DATASET *MPI
  * - Allocates and populates string data where necessary.
  *
  * @note
- * - The function assumes that only one page of data is present in the input file.
+ * - All ranks must call this function for each page, including the EOF read.
  * - String data requires special handling to allocate appropriate memory on non-master processes.
  *
  * @sa SDDS_ReadPage, SDDS_CountRowsOfInterest, SDDS_StartPage, SDDS_DefineColumn,
@@ -927,169 +948,62 @@ int32_t SDDS_Master_InitializeInput(SDDS_DATASET *SDDS_dataset, MPI_DATASET *MPI
  */
 int32_t SDDS_Master_ReadPage(SDDS_DATASET *SDDS_dataset) {
   MPI_DATASET *MPI_dataset = SDDS_dataset->MPI_dataset;
-  int32_t rows = 0, i, j, len, retrival = 0;
-  STRING_DEF *str_val = NULL;
+  int32_t i, retrieval = 0, local = 1, all;
+  int64_t rows = 0, row;
 
-  /*master read file */
-  if (MPI_dataset->myid == 0) {
-    if ((retrival = SDDS_ReadPage(SDDS_dataset)) <= 0) {
-      SDDS_SetError("SDDS_MPI_ReadParameterFile2: Error in reading input file");
-      return (retrival);
-    }
-    rows = SDDS_CountRowsOfInterest(SDDS_dataset);
+  if (!MPI_dataset->myid) {
+    retrieval = SDDS_ReadPage(SDDS_dataset);
+    if (retrieval > 0) rows = SDDS_dataset->n_rows;
   }
-  MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_dataset->comm);
-  MPI_Bcast(&retrival, 1, MPI_INT, 0, MPI_dataset->comm);
-  if (MPI_dataset->myid != 0) {
-    /*allocate memory for other processors */
-    if (!SDDS_StartPage(SDDS_dataset, rows))
-      return 0;
+  /* EOF and invalid enum data must reach every rank before any page broadcast. */
+  MPI_Bcast(&retrieval, 1, MPI_INT32_T, 0, MPI_dataset->comm);
+  if (retrieval <= 0) return retrieval;
+  MPI_Bcast(&rows, 1, MPI_INT64_T, 0, MPI_dataset->comm);
+  if (rows < 0 || rows > INT_MAX) {
+    SDDS_SetError("Master page broadcast exceeds the MPI row count limit");
+    return 0;
   }
-  /*broadcast the parameters to other processors */
-  for (i = 0; i < SDDS_dataset->layout.n_parameters; i++) {
-    switch (SDDS_dataset->layout.parameter_definition[i].type) {
-    case SDDS_LONGDOUBLE:
-      MPI_Bcast(SDDS_dataset->parameter[i], 1, MPI_LONG_DOUBLE, 0, MPI_dataset->comm);
-      break;
-    case SDDS_DOUBLE:
-      MPI_Bcast(SDDS_dataset->parameter[i], 1, MPI_DOUBLE, 0, MPI_dataset->comm);
-      break;
-    case SDDS_FLOAT:
-      MPI_Bcast(SDDS_dataset->parameter[i], 1, MPI_FLOAT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_LONG64:
-      MPI_Bcast(SDDS_dataset->parameter[i], 1, MPI_INT64_T, 0, MPI_dataset->comm);
-      break;
-    case SDDS_ULONG64:
-      MPI_Bcast(SDDS_dataset->parameter[i], 1, MPI_UINT64_T, 0, MPI_dataset->comm);
-      break;
-    case SDDS_LONG:
-      MPI_Bcast(SDDS_dataset->parameter[i], 1, MPI_INT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_ULONG:
-      MPI_Bcast(SDDS_dataset->parameter[i], 1, MPI_UNSIGNED, 0, MPI_dataset->comm);
-      break;
-    case SDDS_SHORT:
-      MPI_Bcast(SDDS_dataset->parameter[i], 1, MPI_SHORT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_USHORT:
-      MPI_Bcast(SDDS_dataset->parameter[i], 1, MPI_UNSIGNED_SHORT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_STRING:
-      if (MPI_dataset->myid == 0)
-        len = strlen(*(char **)SDDS_dataset->parameter[i]);
-      MPI_Bcast(&len, 1, MPI_INT, 0, MPI_dataset->comm);
-      if (MPI_dataset->myid != 0)
-        SDDS_dataset->parameter[i] = (char *)malloc(sizeof(char) * len);
-      MPI_Bcast(SDDS_dataset->parameter[i], len, MPI_BYTE, 0, MPI_dataset->comm);
-      break;
-    case SDDS_CHARACTER:
-      MPI_Bcast(SDDS_dataset->parameter[i], 1, MPI_CHAR, 0, MPI_dataset->comm);
-      break;
-    }
+  if (MPI_dataset->myid) local = SDDS_StartPage(SDDS_dataset, rows);
+  MPI_Allreduce(&local, &all, 1, MPI_INT32_T, MPI_MIN, MPI_dataset->comm);
+  if (!all) {
+    SDDS_SetError("Unable to allocate a master-reader page on an MPI rank");
+    return 0;
   }
-  /* broadcast arrays to other processros */
-  for (i = 0; i < SDDS_dataset->layout.n_arrays; i++) {
-    MPI_Bcast(&(SDDS_dataset->layout.array_definition[i].dimensions), 1, MPI_INT, 0, MPI_dataset->comm);
-    switch (SDDS_dataset->layout.array_definition[i].type) {
-    case SDDS_LONGDOUBLE:
-      MPI_Bcast(SDDS_dataset->array[i].data, SDDS_dataset->layout.array_definition[i].dimensions, MPI_LONG_DOUBLE, 0, MPI_dataset->comm);
-      break;
-    case SDDS_DOUBLE:
-      MPI_Bcast(SDDS_dataset->array[i].data, SDDS_dataset->layout.array_definition[i].dimensions, MPI_DOUBLE, 0, MPI_dataset->comm);
-      break;
-    case SDDS_FLOAT:
-      MPI_Bcast(SDDS_dataset->array[i].data, SDDS_dataset->layout.array_definition[i].dimensions, MPI_FLOAT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_LONG64:
-      MPI_Bcast(SDDS_dataset->array[i].data, SDDS_dataset->layout.array_definition[i].dimensions, MPI_INT64_T, 0, MPI_dataset->comm);
-      break;
-    case SDDS_ULONG64:
-      MPI_Bcast(SDDS_dataset->array[i].data, SDDS_dataset->layout.array_definition[i].dimensions, MPI_UINT64_T, 0, MPI_dataset->comm);
-      break;
-    case SDDS_LONG:
-      MPI_Bcast(SDDS_dataset->array[i].data, SDDS_dataset->layout.array_definition[i].dimensions, MPI_INT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_ULONG:
-      MPI_Bcast(SDDS_dataset->array[i].data, SDDS_dataset->layout.array_definition[i].dimensions, MPI_UNSIGNED, 0, MPI_dataset->comm);
-      break;
-    case SDDS_SHORT:
-      MPI_Bcast(SDDS_dataset->array[i].data, SDDS_dataset->layout.array_definition[i].dimensions, MPI_SHORT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_USHORT:
-      MPI_Bcast(SDDS_dataset->array[i].data, SDDS_dataset->layout.array_definition[i].dimensions, MPI_UNSIGNED_SHORT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_STRING:
-      str_val = malloc(sizeof(*str_val) * SDDS_dataset->layout.array_definition[i].dimensions);
-      if (MPI_dataset->myid == 0) {
-        for (j = 0; j < SDDS_dataset->layout.array_definition[i].dimensions; j++)
-          sprintf(str_val[j].str_value, "%s", ((char **)(SDDS_dataset->array[i].data))[j]);
-      }
-      MPI_Bcast(str_val, SDDS_dataset->layout.array_definition[i].dimensions * 256, MPI_BYTE, 0, MPI_dataset->comm);
-      if (MPI_dataset->myid) {
-        for (j = 0; j < SDDS_dataset->layout.array_definition[i].dimensions; j++)
-          SDDS_CopyString(&(((char **)(SDDS_dataset->array[i].data))[j]), str_val[j].str_value);
-      }
-      free(str_val);
-      str_val = NULL;
-      break;
-    case SDDS_CHARACTER:
-      MPI_Bcast(SDDS_dataset->array[i].data, SDDS_dataset->layout.array_definition[i].dimensions, MPI_CHAR, 0, MPI_dataset->comm);
-      break;
-    }
-  }
+  MPI_dataset->total_rows = rows;
+  if (!SDDS_MPI_BroadcastTitleData(SDDS_dataset)) return 0;
 
-  /* broadcast columns to other processors */
-  SDDS_dataset->n_rows = SDDS_dataset->n_rows_allocated = rows;
-  MPI_Bcast(SDDS_dataset->row_flag, rows, MPI_INT, 0, MPI_dataset->comm);
+  MPI_Bcast(SDDS_dataset->row_flag, (int)rows, MPI_INT32_T, 0, MPI_dataset->comm);
   for (i = 0; i < SDDS_dataset->layout.n_columns; i++) {
-    switch (SDDS_dataset->layout.column_definition[i].type) {
-    case SDDS_LONGDOUBLE:
-      MPI_Bcast(SDDS_dataset->data[i], rows, MPI_LONG_DOUBLE, 0, MPI_dataset->comm);
-      break;
-    case SDDS_DOUBLE:
-      MPI_Bcast(SDDS_dataset->data[i], rows, MPI_DOUBLE, 0, MPI_dataset->comm);
-      break;
-    case SDDS_FLOAT:
-      MPI_Bcast(SDDS_dataset->data[i], rows, MPI_FLOAT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_LONG64:
-      MPI_Bcast(SDDS_dataset->data[i], rows, MPI_INT64_T, 0, MPI_dataset->comm);
-      break;
-    case SDDS_ULONG64:
-      MPI_Bcast(SDDS_dataset->data[i], rows, MPI_UINT64_T, 0, MPI_dataset->comm);
-      break;
-    case SDDS_LONG:
-      MPI_Bcast(SDDS_dataset->data[i], rows, MPI_INT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_ULONG:
-      MPI_Bcast(SDDS_dataset->data[i], rows, MPI_UNSIGNED, 0, MPI_dataset->comm);
-      break;
-    case SDDS_SHORT:
-      MPI_Bcast(SDDS_dataset->data[i], rows, MPI_SHORT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_USHORT:
-      MPI_Bcast(SDDS_dataset->data[i], rows, MPI_UNSIGNED_SHORT, 0, MPI_dataset->comm);
-      break;
-    case SDDS_STRING:
-      if (!str_val)
-        str_val = malloc(sizeof(*str_val) * rows);
-      if (MPI_dataset->myid == 0) {
-        for (j = 0; j < rows; j++)
-          sprintf(str_val[j].str_value, "%s", ((char **)SDDS_dataset->data[i])[j]);
+    int32_t type = SDDS_dataset->layout.column_definition[i].type;
+    if (type == SDDS_STRING) {
+      char **strings = SDDS_dataset->data[i];
+      for (row = 0; row < rows; row++) {
+        uint64_t length = 0;
+        char *value = NULL;
+        if (!MPI_dataset->myid) {
+          value = strings[row] ? strings[row] : "";
+          length = strlen(value);
+        }
+        MPI_Bcast(&length, 1, MPI_UINT64_T, 0, MPI_dataset->comm);
+        local = length < INT_MAX;
+        if (MPI_dataset->myid && local) {
+          free(strings[row]);
+          value = strings[row] = malloc((size_t)length + 1);
+          local = value != NULL;
+        }
+        MPI_Allreduce(&local, &all, 1, MPI_INT32_T, MPI_MIN, MPI_dataset->comm);
+        if (!all) {
+          SDDS_SetError("MPI master-reader string exceeds the size limit or allocation failed");
+          return 0;
+        }
+        MPI_Bcast(value, (int)length + 1, MPI_CHAR, 0, MPI_dataset->comm);
       }
-      MPI_Bcast(str_val, rows * STRING_COL_LENGTH, MPI_BYTE, 0, MPI_dataset->comm);
-      if (MPI_dataset->myid) {
-        for (j = 0; j < rows; j++)
-          SDDS_CopyString(&(((char **)SDDS_dataset->data[i])[j]), str_val[j].str_value);
-      }
-      break;
-    case SDDS_CHARACTER:
-      MPI_Bcast(SDDS_dataset->data[i], rows, MPI_CHAR, 0, MPI_dataset->comm);
-      break;
+    } else {
+      MPI_Bcast(SDDS_dataset->data[i], (int)rows, Convert_SDDStype_To_MPItype(type), 0, MPI_dataset->comm);
     }
   }
-  if (str_val)
-    free(str_val);
-  return retrival;
+  SDDS_dataset->n_rows = rows;
+  SDDS_dataset->page_number = retrieval;
+  if (!SDDS_MPI_ValidateEnumReadPage(SDDS_dataset)) return 0;
+  return retrieval;
 }

@@ -75,7 +75,7 @@ extern "C" {
 
 #define _SDDS_ 1
 
-#define SDDS_VERSION 5
+#define SDDS_VERSION 6
 
 #ifndef SVN_VERSION
 #define SVN_VERSION "unknown"
@@ -168,28 +168,36 @@ extern "C" {
     char *name, *text; 
   } SDDS_DEFINITION;
 
+  typedef struct SDDS_ENUM_DEFINITION SDDS_ENUM_DEFINITION;
+
   typedef struct {
     char *name, *symbol, *units, *description, *format_string;
     int32_t type;
     char *fixed_value;
     /* these are used internally and are not set by the user: */
     int32_t definition_mode, memory_number;
+    char *enum_values;
+    SDDS_ENUM_DEFINITION *enum_definition;
   } PARAMETER_DEFINITION;
-#define SDDS_PARAMETER_FIELDS 7
+#define SDDS_PARAMETER_FIELDS 8
 
   typedef struct {
     char *name, *symbol, *units, *description, *format_string;
     int32_t type, field_length;
     /* these are used internally and are not set by the user: */
     int32_t definition_mode, memory_number, pointer_number;
+    char *enum_values;
+    SDDS_ENUM_DEFINITION *enum_definition;
   } COLUMN_DEFINITION;
-#define SDDS_COLUMN_FIELDS 7
+#define SDDS_COLUMN_FIELDS 8
 
   typedef struct {
     char *name, *symbol, *units, *description, *format_string, *group_name;
     int32_t type, field_length, dimensions;
+    char *enum_values;
+    SDDS_ENUM_DEFINITION *enum_definition;
   } ARRAY_DEFINITION;
-#define SDDS_ARRAY_FIELDS 9
+#define SDDS_ARRAY_FIELDS 10
 
   typedef struct {
     char *name, *filename, *path, *description, *contents;
@@ -280,7 +288,8 @@ extern "C" {
     uint32_t byteOrderDeclared;
 
     /*SDDS_ReadLayout*/
-    char s[SDDS_MAXLINE];
+    char *s;
+    int32_t s_capacity;
     int32_t depth;
     int32_t data_command_seen;
 
@@ -360,6 +369,31 @@ extern "C" {
   } SDDS_DATASET;
 
   typedef SDDS_DATASET SDDS_TABLE;
+
+  /** @brief Immutable enum dictionary APIs. Returned labels/text are borrowed. */
+  epicsShareFuncSDDS extern SDDS_ENUM_DEFINITION *SDDS_CreateEnumDefinition(const char *values);
+  epicsShareFuncSDDS extern void SDDS_FreeEnumDefinition(SDDS_ENUM_DEFINITION *definition);
+  epicsShareFuncSDDS extern const char *SDDS_EnumValues(const SDDS_ENUM_DEFINITION *definition);
+  epicsShareFuncSDDS extern const char *SDDS_EnumCodeToLabel(const SDDS_ENUM_DEFINITION *definition, int32_t code);
+  epicsShareFuncSDDS extern int32_t SDDS_EnumLabelToCode(const SDDS_ENUM_DEFINITION *definition, const char *label, int32_t *code);
+  epicsShareFuncSDDS extern int32_t SDDS_EnumDefinitionsEqual(const SDDS_ENUM_DEFINITION *a, const SDDS_ENUM_DEFINITION *b);
+  epicsShareFuncSDDS extern int32_t SDDS_ValidateEnumData(const SDDS_ENUM_DEFINITION *definition, const int32_t *codes, int64_t count);
+  epicsShareFuncSDDS extern int32_t SDDS_RemapEnumValues(const SDDS_ENUM_DEFINITION *source, const SDDS_ENUM_DEFINITION *target, const int32_t *input, int32_t *output, int64_t count);
+  epicsShareFuncSDDS extern int32_t SDDS_SetEnumReaderLimits(uint64_t layoutBytes, uint64_t mappingBytes);
+  epicsShareFuncSDDS extern uint64_t SDDS_GetEnumLayoutLimit(void);
+  epicsShareFuncSDDS extern uint64_t SDDS_GetEnumMappingLimit(void);
+  epicsShareFuncSDDS extern int32_t SDDS_ValidateEnumPage(SDDS_DATASET *dataset);
+  epicsShareFuncSDDS extern int32_t SDDS_CheckEnumCopy(SDDS_DATASET *target, SDDS_DATASET *source, int32_t kind);
+  epicsShareFuncSDDS extern int32_t SDDS_ConfigureEnumConversion(SDDS_DATASET *target, int32_t kind, int32_t index, int32_t targetType, const char *mapping);
+  epicsShareFuncSDDS extern int32_t SDDS_CopyPageWithEnumConversions(SDDS_DATASET *target, SDDS_DATASET *source);
+  epicsShareFuncSDDS extern int32_t SDDS_SprintEnumValue(const SDDS_ENUM_DEFINITION *definition, const int32_t *codes, int64_t index, const char *format, char *buffer, size_t bufferSize, uint32_t mode, double factor, int32_t showCodes);
+  epicsShareFuncSDDS extern int32_t SDDS_EnumCount(const SDDS_ENUM_DEFINITION *definition);
+  epicsShareFuncSDDS extern int32_t SDDS_EnumEntry(const SDDS_ENUM_DEFINITION *definition, int32_t index, int32_t *code, const char **label);
+  epicsShareFuncSDDS int32_t SDDS_CheckEnumFieldCompatibility(SDDS_DATASET *target, SDDS_DATASET *source, int32_t kind, int32_t targetIndex, int32_t sourceIndex);
+  epicsShareFuncSDDS int32_t SDDS_CheckEnumExport(SDDS_DATASET *dataset);
+  epicsShareFuncSDDS extern int32_t SDDS_DefineEnumColumn(SDDS_DATASET *dataset, const char *name, const char *symbol, const char *units, const char *description, const char *format, const char *values, int32_t fieldLength);
+  epicsShareFuncSDDS extern int32_t SDDS_DefineEnumParameter(SDDS_DATASET *dataset, const char *name, const char *symbol, const char *units, const char *description, const char *format, const char *values, char *fixedValue);
+  epicsShareFuncSDDS extern int32_t SDDS_DefineEnumArray(SDDS_DATASET *dataset, const char *name, const char *symbol, const char *units, const char *description, const char *format, const char *values, int32_t fieldLength, int32_t dimensions, const char *groupName);
 
   /* prototypes for routines to prepare and write SDDS files */
   epicsShareFuncSDDS extern int32_t SDDS_InitializeOutput(SDDS_DATASET *SDDS_dataset, int32_t data_mode,

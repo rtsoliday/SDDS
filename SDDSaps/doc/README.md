@@ -4,6 +4,9 @@ This directory contains the source files for the SDDS Toolkit documentation.
 
 For answers to common questions, see the [FAQ](FAQ.md).
 
+See [native SDDS6 enums](../../SDDSlib/doc/enums.md) for creation, query,
+label display, remapping, explicit downgrade, editor behavior and rebuild requirements.
+
 ## sddsplot character charts
 
 The [character chart reference](sddsplot-character-charts/README.md) covers all

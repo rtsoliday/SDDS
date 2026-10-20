@@ -1,280 +1,446 @@
-# Detect OS and Architecture
-OS := $(shell uname -s)
-ARCH := $(shell uname -m)
-ifeq ($(findstring CYGWIN, $(OS)),CYGWIN)
-    OS := Windows
+#==============================================================================
+# Makefile.rules - shared build configuration
+#
+# This file is identical in the SDDS, SDDS-EPICS, medm, qtalh and StripTool
+# repositories.  Change it in one repository, then copy it to the other four.
+# Component makefiles include it first and Makefile.build last.
+#
+#    1. Host platform            OS, ARCH, PKG_CONFIG, CUSTOM_GCC_PATH
+#    2. Repository profile       RULES_PROFILE, BUILD_FILES
+#    3. Build directories        OBJ_DIR, BIN_DIR, LIB_DIR
+#    4. EPICS install layout     EPICS_HOST, EPICS_ARCH, EPICS_*_DIR
+#    5. Third-party libraries    LIB_DIRS, find_lib, *_LIB
+#    6. Motif and X11            MOTIF_INC, X11_INC, HAVE_MOTIF
+#    7. Classic toolchain        SDDS, SDDS-EPICS and MEDM
+#    8. Standalone toolchain     QtALH and StripTool
+#    9. MEDM                     Qt detection
+#   10. StripTool                EPICS Base and Qt
+#   11. QtALH                    Motif, EPICS Base and Qt
+#==============================================================================
+
+
+#==============================================================================
+# 1. Host platform
+#==============================================================================
+# Native Windows make sees OS=Windows_NT; Cygwin, MinGW and MSYS identify
+# themselves through uname.
+ifneq ($(filter Windows Windows_NT,$(OS)),)
+  OS := Windows
+  ARCH := $(if $(filter AMD64 amd64,$(PROCESSOR_ARCHITECTURE)),x86_64,$(PROCESSOR_ARCHITECTURE))
+else
+  OS := $(shell uname -s)
+  ARCH := $(shell uname -m)
+endif
+ifneq ($(filter CYGWIN% MINGW% MSYS% Windows_NT,$(OS)),)
+  OS := Windows
 endif
 
-# Conda's pkg-config wrapper searches its own Qt installation first. Prefer
+# Conda's pkg-config wrapper searches its own Qt installation first.  Prefer
 # the distribution tool on Linux, including inside the RHEL 8 build shell.
 # Set PKG_CONFIG explicitly to select another installation.
 ifeq ($(OS),Linux)
-PKG_CONFIG ?= $(firstword $(wildcard /usr/bin/pkg-config) pkg-config)
+  PKG_CONFIG ?= $(firstword $(wildcard /usr/bin/pkg-config) pkg-config)
 else
-PKG_CONFIG ?= pkg-config
+  PKG_CONFIG ?= pkg-config
 endif
 
-# Apple Clang does not ship an OpenMP runtime.  Enable OpenMP on macOS when
-# a MacPorts or Homebrew libomp installation is available, and otherwise
-# leave the existing serial fallback in place.
-DARWIN_OPENMP_INCLUDE := $(firstword $(wildcard \
-    /opt/local/include/libomp \
-    /opt/homebrew/opt/libomp/include \
-    /usr/local/opt/libomp/include))
-DARWIN_OPENMP_LIBRARY := $(firstword $(wildcard \
-    /opt/local/lib/libomp/libomp.dylib \
-    /opt/homebrew/opt/libomp/lib/libomp.dylib \
-    /usr/local/opt/libomp/lib/libomp.dylib))
-ifneq ($(DARWIN_OPENMP_INCLUDE),)
-ifneq ($(DARWIN_OPENMP_LIBRARY),)
-  DARWIN_OPENMP_LIBDIR := $(patsubst %/,%,$(dir $(DARWIN_OPENMP_LIBRARY)))
-  DARWIN_OPENMP_CFLAGS := -Xpreprocessor -fopenmp -I$(DARWIN_OPENMP_INCLUDE)
-  DARWIN_OPENMP_LDFLAGS := -L$(DARWIN_OPENMP_LIBDIR) -Wl,-rpath,$(DARWIN_OPENMP_LIBDIR) -lomp
-endif
+# Linux builds use the APS GCC 11.3 toolchain when it is installed.  From the
+# RHEL 8 build shell this matches the GCC major version of the installed EPICS
+# libraries while keeping the shell's RHEL 8 glibc baseline.  The toolchains
+# below link the C++ runtime statically, so the results run on hosts without
+# this private compiler.
+ifeq ($(OS),Linux)
+  CUSTOM_GCC_PATH ?= /usr/local/oag/3rdParty/gcc-11.3.0
+  HAVE_CUSTOM_GCC := $(if $(and $(strip $(CUSTOM_GCC_PATH)),$(wildcard $(CUSTOM_GCC_PATH)/bin/gcc),$(wildcard $(CUSTOM_GCC_PATH)/bin/g++)),1)
 endif
 
-OBJ_DIR = O.$(OS)-$(ARCH)
-BIN_DIR = $(DD)../bin/$(OS)-$(ARCH)
-LIB_DIR = $(DD)../lib/$(OS)-$(ARCH)
 
+#==============================================================================
+# 2. Repository profile
+#==============================================================================
+# RULES_PROFILE names the repository that includes this file, identified by a
+# directory found only in that repository.  It selects the few settings that
+# still differ between repositories:
+#
+#   profile     repository  toolchain   EPICS install layout  objects depend on
+#   sdds        SDDS        classic     Subversion checkout   sources
+#   sdds-epics  SDDS-EPICS  classic     Subversion checkout   sources
+#   medm        medm        classic     extensions/configure  sources, build files
+#   qtalh       qtalh       standalone  extensions/configure  sources, build files
+#   striptool   StripTool   standalone  extensions/configure  sources, build files
+RULES_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+RULES_PROFILE := $(firstword \
+  $(if $(wildcard $(RULES_DIR)SDDSlib/Makefile),sdds) \
+  $(if $(wildcard $(RULES_DIR)SDDSepics/Makefile),sdds-epics) \
+  $(if $(wildcard $(RULES_DIR)qtedm/Makefile),medm) \
+  $(if $(wildcard $(RULES_DIR)alh/Makefile),qtalh) \
+  $(if $(wildcard $(RULES_DIR)qtstriptool/Makefile),striptool))
+ifeq ($(RULES_PROFILE),)
+  $(error Makefile.rules supports the SDDS, SDDS-EPICS, medm, qtalh and StripTool repositories only)
+endif
+
+# Objects in the GUI repositories also depend on these build files, so edits
+# to compiler settings rebuild them.  SDDS and SDDS-EPICS objects depend only
+# on their sources, which avoids rebuilding the large SDDS libraries.
+ifeq ($(filter sdds sdds-epics,$(RULES_PROFILE)),)
+  BUILD_FILES = Makefile $(RULES_DIR)Makefile.rules $(RULES_DIR)Makefile.build
+endif
+
+
+#==============================================================================
+# 3. Build directories
+#==============================================================================
+ifeq ($(RULES_PROFILE),striptool)
+  # GNU Make reads the colon in an absolute Windows drive path as rule
+  # syntax.  StripTool's component makefiles are one directory below this
+  # file, so Windows keeps relative paths and other hosts use absolute ones.
+  OBJ_DIR ?= O.$(OS)-$(ARCH)
+  ifeq ($(OS),Windows)
+    BIN_DIR ?= ../bin/$(OS)-$(ARCH)
+    LIB_DIR ?= ../lib/$(OS)-$(ARCH)
+  else
+    BIN_DIR ?= $(RULES_DIR)bin/$(OS)-$(ARCH)
+    LIB_DIR ?= $(RULES_DIR)lib/$(OS)-$(ARCH)
+  endif
+else
+  # DEV_BUILD=1 compiles faster, lightly optimized objects into a separate
+  # directory, and USE_CCACHE=1 compiles through ccache (classic toolchain).
+  DEV_BUILD ?= 0
+  USE_CCACHE ?= 0
+  CCACHE ?= ccache
+  BASE_OBJ_DIR = O.$(OS)-$(ARCH)
+  DEV_OBJ_DIR = O.$(OS)-$(ARCH)-dev
+  OBJ_DIR = $(if $(filter 1,$(DEV_BUILD)),$(DEV_OBJ_DIR),$(BASE_OBJ_DIR))
+  BIN_DIR = $(DD)../bin/$(OS)-$(ARCH)
+  LIB_DIR = $(DD)../lib/$(OS)-$(ARCH)
+endif
+
+
+#==============================================================================
+# 4. EPICS install layout
+#==============================================================================
+# EPICS_HOST-EPICS_ARCH approximates the EPICS host architecture name.
 EPICS_HOST := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 EPICS_ARCH = $(ARCH)
 ifeq ($(findstring cygwin, $(EPICS_HOST)),cygwin)
- EPICS_HOST := windows
- EPICS_ARCH := x64
+  EPICS_HOST := windows
+  EPICS_ARCH := x64
 endif
 ifeq ($(ARCH),arm64)
- EPICS_ARCH := aarch64
+  EPICS_ARCH := aarch64
 endif
 ifeq ($(EPICS_HOST)-$(EPICS_ARCH),darwin-x86_64)
- EPICS_ARCH := x86
+  EPICS_ARCH := x86
 endif
 
-ifneq ($(wildcard $(DD)../.svn $(DD)../../../../.svn),)
- USE_EPICS_DIRS = 1
- EPICS_LIB_DIR = $(DD)../../../lib/$(EPICS_HOST)-$(EPICS_ARCH)
- EPICS_BIN_DIR = $(DD)../../../bin/$(EPICS_HOST)-$(EPICS_ARCH)
- EPICS_INC_DIR = $(DD)../../../include
- EPICS_EXTENSIONS_LIB_DIR = ../../../../../epics/extensions/lib/$(EPICS_HOST)-$(EPICS_ARCH)
- GSL_INC_LOCAL = -I$(DD)../gsl/
- EPICS_EXTENSIONS_GSL_INC_LOCAL = -I../../../../../epics/extensions/src/SDDS/gsl/
+# $(call find_epics_host_arch,BASE) returns the EpicsHostArch.pl of a Base.
+EPICS_HOST_ARCH_PATHS = lib/perl/EpicsHostArch.pl src/tools/EpicsHostArch.pl startup/EpicsHostArch.pl
+find_epics_host_arch = $(firstword $(wildcard $(addprefix $(1)/,$(EPICS_HOST_ARCH_PATHS))))
+
+# A checkout inside an EPICS extensions tree also installs its programs,
+# libraries and headers into that tree's bin, lib and include directories.
+ifneq ($(filter sdds sdds-epics,$(RULES_PROFILE)),)
+  # APS Subversion checkout in <epics>/extensions/src/<package>.
+  ifneq ($(wildcard $(DD)../.svn $(DD)../../../../.svn),)
+    USE_EPICS_DIRS = 1
+    EPICS_LIB_DIR = $(DD)../../../lib/$(EPICS_HOST)-$(EPICS_ARCH)
+    EPICS_BIN_DIR = $(DD)../../../bin/$(EPICS_HOST)-$(EPICS_ARCH)
+    EPICS_INC_DIR = $(DD)../../../include
+    EPICS_EXTENSIONS_LIB_DIR = ../../../../../epics/extensions/lib/$(EPICS_HOST)-$(EPICS_ARCH)
+    GSL_INC_LOCAL = -I$(DD)../gsl/
+    EPICS_EXTENSIONS_GSL_INC_LOCAL = -I../../../../../epics/extensions/src/SDDS/gsl/
+  endif
+else
+  # Checkout in <top>/src/<package>, where <top>/configure describes the tree.
+  EXTENSIONS_TOP := $(abspath $(RULES_DIR)../..)
+  ifeq ($(notdir $(abspath $(RULES_DIR)..)),src)
+  ifeq ($(words $(wildcard $(EXTENSIONS_TOP)/configure/CONFIG $(EXTENSIONS_TOP)/configure/RELEASE)),2)
+    TOP := $(EXTENSIONS_TOP)
+    # Preserve explicit Base choices, including environment settings.
+    EXPLICIT_EPICS_BASE := $(EPICS_BASE)
+    include $(TOP)/configure/RELEASE
+    ifneq ($(EXPLICIT_EPICS_BASE),)
+      EPICS_BASE := $(EXPLICIT_EPICS_BASE)
+    endif
+    ifeq ($(origin EPICS_HOST_ARCH),undefined)
+      EPICS_HOST_ARCH_SCRIPT := $(call find_epics_host_arch,$(EPICS_BASE))
+      ifneq ($(EPICS_HOST_ARCH_SCRIPT),)
+        EPICS_HOST_ARCH := $(shell perl "$(EPICS_HOST_ARCH_SCRIPT)")
+      endif
+    endif
+    T_A ?= $(EPICS_HOST_ARCH)
+    # Match the host build's RELEASE override order in extensions/configure/CONFIG.
+    -include $(TOP)/configure/RELEASE.$(EPICS_HOST_ARCH)
+    -include $(TOP)/configure/RELEASE.Common.$(EPICS_HOST_ARCH)
+    -include $(TOP)/configure/RELEASE.$(EPICS_HOST_ARCH).Common
+    -include $(TOP)/configure/RELEASE.$(EPICS_HOST_ARCH).$(EPICS_HOST_ARCH)
+    ifneq ($(EXPLICIT_EPICS_BASE),)
+      EPICS_BASE := $(EXPLICIT_EPICS_BASE)
+    endif
+    INSTALL_LOCATION = $(TOP)
+    -include $(TOP)/configure/CONFIG_SITE
+    -include $(TOP)/configure/os/CONFIG_SITE.$(EPICS_HOST_ARCH).Common
+    -include $(TOP)/configure/os/CONFIG_SITE.Common.$(EPICS_HOST_ARCH)
+    -include $(TOP)/configure/os/CONFIG_SITE.$(EPICS_HOST_ARCH).$(EPICS_HOST_ARCH)
+    USE_EPICS_DIRS = 1
+    EPICS_INSTALL_DIR = $(abspath $(or $(INSTALL_LOCATION_EXTENSIONS),$(INSTALL_LOCATION)))
+    EPICS_BIN_DIR = $(EPICS_INSTALL_DIR)/bin/$(EPICS_HOST_ARCH)
+    EPICS_LIB_DIR = $(EPICS_INSTALL_DIR)/lib/$(EPICS_HOST_ARCH)
+    EPICS_INC_DIR = $(EPICS_INSTALL_DIR)/include
+  endif
+  endif
 endif
 
-# Common library search paths
-LIB_DIRS := $(EPICS_LIB_DIR) $(EPICS_EXTENSIONS_LIB_DIR) /usr/lib64 /usr/lib/x86_64-linux-gnu /lib64 /usr/lib /lib /usr/X11/lib /opt/local/lib /sw/lib /usr/sfw/lib $(DD)../../lib
 
-FFTW3_LIB = $(firstword $(wildcard \
-           $(addsuffix /libfftw3.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libfftw3.so, $(LIB_DIRS)) \
-           $(addsuffix /libfftw3.a, $(LIB_DIRS))))
-Z_LIB = $(firstword $(wildcard \
-           $(addsuffix /libz.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libz.so, $(LIB_DIRS)) \
-           $(addsuffix /libz.a, $(LIB_DIRS)) \
-           $(addsuffix /z.lib, $(LIB_DIR))))
-ZSTD_LIB = $(firstword $(wildcard \
-           $(addsuffix /libzstd.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libzstd.so, $(LIB_DIRS)) \
-           $(addsuffix /libzstd.a, $(LIB_DIRS))))
-LZMA_LIB = $(firstword $(wildcard \
-           $(addsuffix /liblzma.dylib, $(LIB_DIRS)) \
-           $(addsuffix /liblzma.so, $(LIB_DIRS)) \
-           $(addsuffix /liblzma.a, $(LIB_DIRS)) \
-           $(addsuffix /lzma.lib, $(LIB_DIR))))
-#Note that on Ubuntu 25.04 we cannot link to the serial version of hdf5
-HDF5_LIB = $(firstword $(wildcard \
-           $(addsuffix /libhdf5.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libhdf5.a, $(LIB_DIRS)) \
-           $(addsuffix /libhdf5_serial.a, $(LIB_DIRS)) \
-           $(addsuffix /libhdf5.so, $(LIB_DIRS)) \
-           $(addsuffix /libhdf5_serial.so, $(LIB_DIRS))))
-SZ_LIB = $(firstword $(wildcard \
-           $(addsuffix /libsz.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libsz.so, $(LIB_DIRS)) \
-           $(addsuffix /libsz.a, $(LIB_DIRS))))
-GSL_LIB = $(firstword $(wildcard \
-           $(addsuffix /libgsl.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libgsl.a, $(LIB_DIRS)) \
-           $(addsuffix /libgsl.so, $(LIB_DIRS))))
-GSLCBLAS_LIB = $(firstword $(wildcard \
-              $(addsuffix /libgslcblas.dylib, $(LIB_DIRS)) \
-              $(addsuffix /libgslcblas.a, $(LIB_DIRS)) \
-              $(addsuffix /libgslcblas.so, $(LIB_DIRS))))
-PNG_LIB = $(firstword $(wildcard \
-           $(addsuffix /libpng.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libpng.so, $(LIB_DIRS)) \
-           $(addsuffix /libpng.a, $(LIB_DIRS)) \
-           $(addsuffix /png.lib, $(LIB_DIR))))
-GD_LIB = $(firstword $(wildcard \
-           $(addsuffix /libgd.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libgd.so, $(LIB_DIRS)) \
-           $(addsuffix /libgd.a, $(LIB_DIRS)) \
-           $(addsuffix /gd.lib, $(LIB_DIR))))
-JPEG_LIB = $(firstword $(wildcard \
-           $(addsuffix /libjpeg.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libjpeg.so, $(LIB_DIRS)) \
-           $(addsuffix /libjpeg.a, $(LIB_DIRS))))
-LERC_LIB = $(firstword $(wildcard \
-           $(addsuffix /libLerc.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libLerc.so, $(LIB_DIRS)) \
-           $(addsuffix /libLerc.a, $(LIB_DIRS))))
-DEFLATE_LIB = $(firstword $(wildcard \
-           $(addsuffix /libdeflate.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libdeflate.so, $(LIB_DIRS)) \
-           $(addsuffix /libdeflate.a, $(LIB_DIRS))))
-TIFF_LIB = $(firstword $(wildcard \
-           $(addsuffix /libtiff.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libtiff.so, $(LIB_DIRS)) \
-           $(addsuffix /libtiff.a, $(LIB_DIRS)) \
-           $(addsuffix /tiff.lib, $(LIB_DIR))))
-CURL_LIB = $(firstword $(wildcard \
-           $(addsuffix /libcurl.dylib, $(LIB_DIRS)) \
-           $(addsuffix /libcurl.so, $(LIB_DIRS)) \
-           $(addsuffix /libcurl.a, $(LIB_DIRS))))
-SSL_LIB = $(firstword $(wildcard \
-          $(addsuffix /libssl.dylib, $(LIB_DIRS)) \
-          $(addsuffix /libssl.so, $(LIB_DIRS)) \
-          $(addsuffix /libssl.a, $(LIB_DIRS))))
-CRYPTO_LIB = $(firstword $(wildcard \
-             $(addsuffix /libcrypto.dylib, $(LIB_DIRS)) \
-             $(addsuffix /libcrypto.so, $(LIB_DIRS)) \
-             $(addsuffix /libcrypto.a, $(LIB_DIRS))))
-# Preserve the OpenSSL 1.1 runtime used by RHEL8 builds when they run on RHEL9.
+#==============================================================================
+# 5. Third-party libraries
+#==============================================================================
+# Library search path, in priority order.  The lists differ only to keep the
+# libraries each repository has always selected.
+ifneq ($(filter sdds sdds-epics,$(RULES_PROFILE)),)
+  LIB_DIRS := $(EPICS_LIB_DIR) $(EPICS_EXTENSIONS_LIB_DIR) \
+              /usr/lib64 /usr/lib/x86_64-linux-gnu /lib64 /usr/lib /lib \
+              /usr/X11/lib /opt/local/lib /sw/lib /usr/sfw/lib $(DD)../../lib
+else ifeq ($(RULES_PROFILE),striptool)
+  LIB_DIRS := $(MOTIF_LIB) $(EPICS_LIB_DIR) $(EPICS_EXTENSIONS_LIB_DIR) \
+              $(HOME)/epics/extensions/lib/$(EPICS_HOST)-$(EPICS_ARCH) \
+              /usr/lib64 /usr/lib/$(ARCH)-linux-gnu /usr/lib/x86_64-linux-gnu \
+              /lib64 /usr/lib /lib /usr/local/lib /usr/X11/lib /opt/local/lib \
+              /opt/X11/lib /sw/lib /usr/sfw/lib /opt/homebrew/lib
+else
+  LIB_DIRS := $(EPICS_LIB_DIR) $(EPICS_EXTENSIONS_LIB_DIR) \
+              $(HOME)/epics/extensions/lib/$(EPICS_HOST)-$(EPICS_ARCH) \
+              /usr/lib64 /usr/lib/x86_64-linux-gnu /lib64 /usr/lib /lib \
+              /usr/X11/lib /opt/local/lib /sw/lib /usr/sfw/lib $(DD)../../lib
+endif
+
+# $(call find_lib,NAME[,EXTENSIONS[,DIRECTORIES]]) returns the first
+# libNAME.EXT found.  Each extension (default: dylib so a) is tried in every
+# directory (default: LIB_DIRS) before the next extension.
+find_lib = $(firstword $(wildcard $(foreach ext,$(or $(2),dylib so a),$(addsuffix /lib$(1).$(ext),$(or $(3),$(LIB_DIRS))))))
+
+# The SDDS Windows build keeps the MSVC libraries it builds in LIB_DIR.
+FFTW3_LIB = $(call find_lib,fftw3)
+Z_LIB = $(firstword $(call find_lib,z) $(wildcard $(LIB_DIR)/z.lib))
+ZSTD_LIB = $(call find_lib,zstd)
+LZMA_LIB = $(firstword $(call find_lib,lzma) $(wildcard $(LIB_DIR)/lzma.lib))
+# Note that on Ubuntu 25.04 we cannot link to the serial version of HDF5.
+HDF5_LIB = $(firstword $(call find_lib,hdf5,dylib a) $(call find_lib,hdf5_serial,a) \
+                       $(call find_lib,hdf5,so) $(call find_lib,hdf5_serial,so))
+SZ_LIB = $(call find_lib,sz)
+GSL_LIB = $(call find_lib,gsl,dylib a so)
+GSLCBLAS_LIB = $(call find_lib,gslcblas,dylib a so)
+PNG_LIB = $(firstword $(call find_lib,png) $(wildcard $(LIB_DIR)/png.lib))
+GD_LIB = $(firstword $(call find_lib,gd) $(wildcard $(LIB_DIR)/gd.lib))
+JPEG_LIB = $(call find_lib,jpeg)
+LERC_LIB = $(call find_lib,Lerc)
+DEFLATE_LIB = $(call find_lib,deflate)
+TIFF_LIB = $(firstword $(call find_lib,tiff) $(wildcard $(LIB_DIR)/tiff.lib))
+CURL_LIB = $(call find_lib,curl)
+SSL_LIB = $(call find_lib,ssl)
+CRYPTO_LIB = $(call find_lib,crypto)
+FONTCONFIG_LIB = $(call find_lib,fontconfig)
+ICONV_LIB = $(call find_lib,iconv)
+GLFW_LIB = $(call find_lib,glfw)
+GL_LIB = $(call find_lib,GL)
+GLU_LIB = $(call find_lib,GLU)
+GLUT_LIB = $(call find_lib,glut)
+
+# RHEL 8 builds that also run on RHEL 9 keep using the RHEL 8 OpenSSL and GSL
+# runtimes when APS provides compatibility copies of them.
 OPENSSL_COMPAT_LIB_DIR = /usr/local/oag/apps/lib/linux-x86_64
-ifneq ($(wildcard $(OPENSSL_COMPAT_LIB_DIR)/libcrypto.so.1.1),)
-ifneq ($(wildcard $(OPENSSL_COMPAT_LIB_DIR)/libssl.so.1.1),)
+ifneq ($(and $(wildcard $(OPENSSL_COMPAT_LIB_DIR)/libcrypto.so.1.1),$(wildcard $(OPENSSL_COMPAT_LIB_DIR)/libssl.so.1.1)),)
   OPENSSL_COMPAT_RPATH = -Wl,-rpath=$(OPENSSL_COMPAT_LIB_DIR)
 endif
-endif
-XM_LIB = $(firstword $(wildcard \
-         $(addsuffix /libXm.dylib, $(LIB_DIRS)) \
-         $(addsuffix /libXm.so, $(LIB_DIRS)) \
-         $(addsuffix /libXm.a, $(LIB_DIRS))))
-XMU_LIB = $(firstword $(wildcard \
-          $(addsuffix /libXmu.dylib, $(LIB_DIRS)) \
-          $(addsuffix /libXmu.so, $(LIB_DIRS)) \
-          $(addsuffix /libXmu.a, $(LIB_DIRS))))
-XT_LIB = $(firstword $(wildcard \
-         $(addsuffix /libXt.so, $(LIB_DIRS)) \
-         $(addsuffix /libXt.a, $(LIB_DIRS))))
-ICE_LIB = $(firstword $(wildcard \
-         $(addsuffix /libICE.so, $(LIB_DIRS)) \
-         $(addsuffix /libICE.a, $(LIB_DIRS))))
-SM_LIB = $(firstword $(wildcard \
-         $(addsuffix /libSM.so, $(LIB_DIRS)) \
-         $(addsuffix /libSM.a, $(LIB_DIRS))))
-X11_LIB = $(firstword $(wildcard \
-          $(addsuffix /libX11.dylib, $(LIB_DIRS)) \
-          $(addsuffix /libX11.so, $(LIB_DIRS)) \
-          $(addsuffix /libX11.a, $(LIB_DIRS))))
-XP_LIB = $(firstword $(wildcard \
-         $(addsuffix /libXp.dylib, $(LIB_DIRS)) \
-         $(addsuffix /libXp.so, $(LIB_DIRS)) \
-         $(addsuffix /libXp.a, $(LIB_DIRS))))
-XAU_LIB = $(firstword $(wildcard \
-         $(addsuffix /libXau.dylib, $(LIB_DIRS)) \
-         $(addsuffix /libXau.so, $(LIB_DIRS)) \
-         $(addsuffix /libXau.a, $(LIB_DIRS))))
-XFT_LIB = $(firstword $(wildcard \
-         $(addsuffix /libXft.dylib, $(LIB_DIRS)) \
-         $(addsuffix /libXft.so, $(LIB_DIRS)) \
-         $(addsuffix /libXft.a, $(LIB_DIRS))))
-XEXT_LIB = $(firstword $(wildcard \
-         $(addsuffix /libXext.dylib, $(LIB_DIRS)) \
-         $(addsuffix /libXext.so, $(LIB_DIRS)) \
-         $(addsuffix /libXext.a, $(LIB_DIRS))))
-FONTCONFIG_LIB = $(firstword $(wildcard \
-          $(addsuffix /libfontconfig.dylib, $(LIB_DIRS)) \
-          $(addsuffix /libfontconfig.so, $(LIB_DIRS)) \
-          $(addsuffix /libfontconfig.a, $(LIB_DIRS))))
-ICONV_LIB = $(firstword $(wildcard \
-          $(addsuffix /libiconv.dylib, $(LIB_DIRS)) \
-          $(addsuffix /libiconv.so, $(LIB_DIRS)) \
-          $(addsuffix /libiconv.a, $(LIB_DIRS))))
-GLFW_LIB = $(firstword $(wildcard \
-          $(addsuffix /libglfw.dylib, $(LIB_DIRS)) \
-          $(addsuffix /libglfw.so, $(LIB_DIRS)) \
-          $(addsuffix /libglfw.a, $(LIB_DIRS))))
-GL_LIB = $(firstword $(wildcard \
-          $(addsuffix /libGL.dylib, $(LIB_DIRS)) \
-          $(addsuffix /libGL.so, $(LIB_DIRS)) \
-          $(addsuffix /libGL.a, $(LIB_DIRS))))
-GLU_LIB = $(firstword $(wildcard \
-          $(addsuffix /libGLU.dylib, $(LIB_DIRS)) \
-          $(addsuffix /libGLU.so, $(LIB_DIRS)) \
-          $(addsuffix /libGLU.a, $(LIB_DIRS))))
-GLUT_LIB = $(firstword $(wildcard \
-          $(addsuffix /libglut.dylib, $(LIB_DIRS)) \
-          $(addsuffix /libglut.so, $(LIB_DIRS)) \
-          $(addsuffix /libglut.a, $(LIB_DIRS))))
 
+# GSL_LINK_LIBS links GSL; Makefile.build adds it for programs in GSL_PROD.
+ifeq ($(OS), Windows)
+  GSL_LINK_LIBS = gsl.lib gslcblas.lib
+else
+  GSL_COMPAT_LIB_DIR ?= /usr/local/oag/apps/lib/linux-x86_64
+  GSL_COMPAT_LIB ?= $(GSL_COMPAT_LIB_DIR)/libgsl.so.23
+  ifeq ($(OS), Linux)
+    ifneq ($(wildcard $(GSL_COMPAT_LIB)),)
+      GSL_RPATH = -Wl,-rpath=$(GSL_COMPAT_LIB_DIR)
+    endif
+  endif
+  GSL_LINK_LIBS = $(GSL_RPATH) $(GSL_LIB) $(GSLCBLAS_LIB)
+endif
+
+# Argonne LCRC Improv and Swing clusters: use the Spack-built libraries.
 IOMP5_LIB = -liomp5
 ifneq ($(findstring improv,$(BASH_ENV)),)
-  IMPROV_BUILD=1
-  LZMA_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/xz-5.4.6-3zhah5p/lib/liblzma.so
-  HDF5_LIB = -Wl,-rpath,/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/hdf5-1.14.3-o6prqns/lib
-  HDF5_LIB += /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/hdf5-1.14.3-o6prqns/lib/libhdf5.so
-  TIFF_LIB = -Wl,-rpath,/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libtiff-4.5.1-hmstscv/lib64
-  TIFF_LIB += /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libtiff-4.5.1-hmstscv/lib64/libtiff.so
-  GD_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libgd-2.3.3-enxppnl/lib/libgd.so
-  JPEG_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libjpeg-turbo-3.0.0-v7a5c5g/lib64/libjpeg.so
-  FFTW3_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/fftw-3.3.10-x5237xr/lib/libfftw3.so
-  IOMP5_LIB_DIR = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/intel-oneapi-mkl-2024.2.2-ueuijm5/compiler/2024.2/lib
-  IOMP5_LIB = -Wl,-rpath,$(IOMP5_LIB_DIR) $(IOMP5_LIB_DIR)/libiomp5.so
-  MPI_BIN = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0/openmpi-5.0.1-jk5bu46/bin
+  IMPROV_BUILD = 1
 endif
 ifneq ($(findstring swing,$(BASH_ENV)),)
-  SWING_BUILD=1
-  LZMA_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/xz-5.4.6-3zhah5p/lib/liblzma.so
-  HDF5_LIB = -Wl,-rpath,/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/hdf5-1.14.3-o6prqns/lib
-  HDF5_LIB += /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/hdf5-1.14.3-o6prqns/lib/libhdf5.so
-  TIFF_LIB = -Wl,-rpath,/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libtiff-4.5.1-hmstscv/lib64
-  TIFF_LIB += /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libtiff-4.5.1-hmstscv/lib64/libtiff.so
-  GD_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libgd-2.3.3-enxppnl/lib/libgd.so
-  JPEG_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libjpeg-turbo-3.0.0-v7a5c5g/lib64/libjpeg.so
-  PNG_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libpng-1.6.39-hsjzalf/lib64/libpng.so
-  FFTW3_LIB = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/fftw-3.3.10-x5237xr/lib/libfftw3.so
-  IOMP5_LIB_DIR = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-13.2.0/intel-oneapi-mkl-2024.2.2-ueuijm5/compiler/2024.2/lib
+  SWING_BUILD = 1
+endif
+LCRC_SPACK = /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3
+ifneq ($(IMPROV_BUILD)$(SWING_BUILD),)
+  LZMA_LIB = $(LCRC_SPACK)/gcc-13.2.0/xz-5.4.6-3zhah5p/lib/liblzma.so
+  HDF5_LIB = -Wl,-rpath,$(LCRC_SPACK)/gcc-13.2.0/hdf5-1.14.3-o6prqns/lib \
+             $(LCRC_SPACK)/gcc-13.2.0/hdf5-1.14.3-o6prqns/lib/libhdf5.so
+  TIFF_LIB = -Wl,-rpath,$(LCRC_SPACK)/gcc-12.3.0/libtiff-4.5.1-hmstscv/lib64 \
+             $(LCRC_SPACK)/gcc-12.3.0/libtiff-4.5.1-hmstscv/lib64/libtiff.so
+  GD_LIB = $(LCRC_SPACK)/gcc-12.3.0/libgd-2.3.3-enxppnl/lib/libgd.so
+  JPEG_LIB = $(LCRC_SPACK)/gcc-12.3.0/libjpeg-turbo-3.0.0-v7a5c5g/lib64/libjpeg.so
+  FFTW3_LIB = $(LCRC_SPACK)/gcc-13.2.0/fftw-3.3.10-x5237xr/lib/libfftw3.so
+endif
+ifeq ($(IMPROV_BUILD),1)
+  IOMP5_LIB_DIR = $(LCRC_SPACK)/gcc-13.2.0/intel-oneapi-mkl-2024.2.2-ueuijm5/compiler/2024.2/lib
   IOMP5_LIB = -Wl,-rpath,$(IOMP5_LIB_DIR) $(IOMP5_LIB_DIR)/libiomp5.so
+  MPI_BIN = $(LCRC_SPACK)/aocc-4.1.0/openmpi-5.0.1-jk5bu46/bin
+endif
+ifeq ($(SWING_BUILD),1)
+  # Linking Intel's OpenMP runtime on Swing loads two OpenMP libraries.
+  PNG_LIB = $(LCRC_SPACK)/gcc-12.3.0/libpng-1.6.39-hsjzalf/lib64/libpng.so
   IOMP5_LIB_DIR =
   IOMP5_LIB =
   MPI_BIN = /soft/openmpi/4.1.1/swing/bin
 endif
 
-
-ifeq ($(words $(wildcard /usr/local/oag/3rdParty/intel/oneapi/mkl/latest)),1)
- MKLROOT = /usr/local/oag/3rdParty/intel/oneapi/mkl/latest
+# Linear algebra: Intel MKL when available, otherwise LAPACK and BLAS.
+ifneq ($(wildcard /usr/local/oag/3rdParty/intel/oneapi/mkl/latest),)
+  MKLROOT = /usr/local/oag/3rdParty/intel/oneapi/mkl/latest
 endif
 ifneq ($(MKLROOT),)
- MKL_CFLAG = -DMKL
- MKL_INCLUDE = -I"$(MKLROOT)/include/"
-ifeq ($(OS), Windows)
-MKL_LIB = mkl_intel_lp64.lib mkl_intel_thread.lib mkl_core.lib libiomp5md.lib
+  MKL_CFLAG = -DMKL
+  MKL_INCLUDE = -I"$(MKLROOT)/include/"
+  ifeq ($(OS), Windows)
+    MKL_LIB = mkl_intel_lp64.lib mkl_intel_thread.lib mkl_core.lib libiomp5md.lib
+  else
+    MKL_LIB = -Wl,--start-group \
+              $(MKLROOT)/lib/intel64/libmkl_intel_lp64.a \
+              $(MKLROOT)/lib/intel64/libmkl_core.a \
+              $(MKLROOT)/lib/intel64/libmkl_gnu_thread.a \
+              -Wl,--end-group \
+              -Wl,-rpath,$(MKLROOT)/lib/intel64/../../../compiler/lib/intel64 \
+              -Wl,-rpath,$(MKLROOT)/lib/intel64/../../../../compiler/latest/linux/compiler/lib/intel64_lin \
+              -L$(MKLROOT)/lib/intel64/../../../compiler/lib/intel64 \
+              -L$(MKLROOT)/lib/intel64/../../../../compiler/latest/linux/compiler/lib/intel64_lin \
+              $(IOMP5_LIB) -ldl
+  endif
 else
- MKL_LIB = -Wl,--start-group \
-           $(MKLROOT)/lib/intel64/libmkl_intel_lp64.a \
-           $(MKLROOT)/lib/intel64/libmkl_core.a \
-           $(MKLROOT)/lib/intel64/libmkl_gnu_thread.a \
-           -Wl,--end-group \
-           -Wl,-rpath,$(MKLROOT)/lib/intel64/../../../compiler/lib/intel64 \
-           -Wl,-rpath,$(MKLROOT)/lib/intel64/../../../../compiler/latest/linux/compiler/lib/intel64_lin \
-           -L$(MKLROOT)/lib/intel64/../../../compiler/lib/intel64 \
-           -L$(MKLROOT)/lib/intel64/../../../../compiler/latest/linux/compiler/lib/intel64_lin \
-           $(IOMP5_LIB) -ldl
-endif
-else
- LAPACK_CFLAG = -DLAPACK
- LAPACK_INCLUDE = -I/usr/include/lapacke
- LAPACK_LIB = -llapack -lblas
- ifeq ($(IMPROV_BUILD),1)
-  LAPACK_LIB = -Wl,-rpath,/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/nvhpc-24.3-ksebg4i/Linux_x86_64/24.3/compilers/lib
-  LAPACK_LIB += /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/nvhpc-24.3-ksebg4i/Linux_x86_64/24.3/compilers/lib/liblapack.so
-  LAPACK_LIB += /gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/nvhpc-24.3-ksebg4i/Linux_x86_64/24.3/compilers/lib/libblas.so
- endif
+  LAPACK_CFLAG = -DLAPACK
+  LAPACK_INCLUDE = -I/usr/include/lapacke
+  LAPACK_LIB = -llapack -lblas
+  ifeq ($(IMPROV_BUILD),1)
+    LAPACK_LIB = -Wl,-rpath,$(LCRC_SPACK)/gcc-12.3.0/nvhpc-24.3-ksebg4i/Linux_x86_64/24.3/compilers/lib \
+                 $(LCRC_SPACK)/gcc-12.3.0/nvhpc-24.3-ksebg4i/Linux_x86_64/24.3/compilers/lib/liblapack.so \
+                 $(LCRC_SPACK)/gcc-12.3.0/nvhpc-24.3-ksebg4i/Linux_x86_64/24.3/compilers/lib/libblas.so
+  endif
 endif
 
+
+#==============================================================================
+# 6. Motif and X11
+#==============================================================================
+# Windows builds do not use Motif.  QtALH finds Motif and X11 in section 11,
+# where MOTIF_LIB and X11_LIB name directories instead of library files.
+ifneq ($(RULES_PROFILE),qtalh)
+ifneq ($(OS),Windows)
+  XM_LIB = $(call find_lib,Xm)
+  XMU_LIB = $(call find_lib,Xmu)
+  XPM_LIB = $(call find_lib,Xpm)
+  XT_LIB = $(call find_lib,Xt)
+  ICE_LIB = $(call find_lib,ICE)
+  SM_LIB = $(call find_lib,SM)
+  X11_LIB = $(call find_lib,X11)
+  XP_LIB = $(call find_lib,Xp)
+  XAU_LIB = $(call find_lib,Xau)
+  XFT_LIB = $(call find_lib,Xft)
+  XEXT_LIB = $(call find_lib,Xext)
+
+  # A shared Motif library records its X11 dependencies, but a static archive
+  # does not.  Prefer dependencies from the directory containing libXm so a
+  # MacPorts archive is paired with MacPorts libraries instead of XQuartz ones.
+  find_motif_dependency = $(call find_lib,$(1),,$(MOTIF_DEP_LIB_DIRS))
+  MOTIF_STATIC_DEP_LIBS =
+  MOTIF_STATIC_EXTRA_LIBS =
+  ifneq ($(filter %.a,$(XM_LIB)),)
+    MOTIF_LIB_DIR := $(patsubst %/,%,$(dir $(XM_LIB)))
+    MOTIF_DEP_LIB_DIRS := $(MOTIF_LIB_DIR) $(filter-out $(MOTIF_LIB_DIR),$(LIB_DIRS))
+    MOTIF_STATIC_DEP_LIBS := $(foreach lib,Xrandr Xrender Xcursor Xpm,$(call find_motif_dependency,$(lib)))
+    # OpenMotif's MacPorts archive also carries font and image dependencies.
+    MOTIF_STATIC_EXTRA_LIBS := $(foreach lib,Xft fontconfig jpeg png iconv z,$(call find_motif_dependency,$(lib)))
+  endif
+
+  X_INC_SEARCH = /usr/include /usr/X11R6/include /usr/local/include /opt/local/include \
+                 /usr/X11/include /opt/X11/include /opt/homebrew/include
+  MOTIF_INC ?= $(firstword $(foreach dir,$(X_INC_SEARCH),$(if $(wildcard $(dir)/Xm/Xm.h),$(dir))))
+  X11_INC ?= $(firstword $(foreach dir,$(X_INC_SEARCH),$(if $(wildcard $(dir)/X11/Xlib.h),$(dir))))
+
+  # Motif builds need the Motif and X11 headers and libraries.
+  ifneq ($(and $(XM_LIB),$(MOTIF_INC),$(X11_INC),$(X11_LIB)),)
+    HAVE_MOTIF = 1
+  endif
+endif
+endif
+
+
+#==============================================================================
+# 7. Classic toolchain: SDDS, SDDS-EPICS and MEDM
+#==============================================================================
+# CC/CCC compile with CFLAGS/CCFLAGS and the product rules in Makefile.build.
+ifneq ($(filter sdds sdds-epics medm,$(RULES_PROFILE)),)
+
+# CFLAGS and CCFLAGS carry every preprocessor option; ignore CPPFLAGS from
+# the environment, such as a Conda compiler activation.
+CPPFLAGS =
+
+# Settings that still differ between these repositories.  MEDM compiles C++17
+# and avoids host-specific CPU tuning so macOS binaries stay portable.
+ifeq ($(RULES_PROFILE),medm)
+  CXX_STD_FLAGS = -std=c++17
+  DARWIN_ARCH_FLAGS = $(if $(filter x86_64,$(ARCH)),-m64)
+  ARM64_CPU_FLAGS = $(if $(filter Darwin,$(OS)),,-mcpu=native)
+else
+  CXX_STD_FLAGS = $(if $(filter Darwin,$(OS)),-std=c++11)
+  DARWIN_ARCH_FLAGS = -m64
+  ARM64_CPU_FLAGS = -mcpu=native
+endif
+
+# Apple Clang does not ship an OpenMP runtime, so SDDS and SDDS-EPICS use a
+# MacPorts or Homebrew libomp when one is installed and otherwise build the
+# serial fallback.  SDDS-EPICS copies libomp into its lib directory so its
+# programs do not depend on the package manager's copy at run time.
+ifeq ($(OS),Darwin)
+ifneq ($(filter sdds sdds-epics,$(RULES_PROFILE)),)
+  DARWIN_OPENMP_INCLUDE := $(firstword $(wildcard \
+      /opt/local/include/libomp \
+      /opt/homebrew/opt/libomp/include \
+      /usr/local/opt/libomp/include))
+  DARWIN_OPENMP_LIBRARY := $(firstword $(wildcard \
+      /opt/local/lib/libomp/libomp.dylib \
+      /opt/homebrew/opt/libomp/lib/libomp.dylib \
+      /usr/local/opt/libomp/lib/libomp.dylib))
+  ifneq ($(and $(DARWIN_OPENMP_INCLUDE),$(DARWIN_OPENMP_LIBRARY)),)
+    DARWIN_OPENMP_CFLAGS := -Xpreprocessor -fopenmp -I$(DARWIN_OPENMP_INCLUDE)
+  endif
+  ifeq ($(RULES_PROFILE),sdds-epics)
+    ifneq ($(DARWIN_OPENMP_LIBRARY),)
+      DARWIN_OPENMP_LICENSE := $(firstword $(wildcard \
+          /opt/local/share/doc/libomp/LICENSE.TXT \
+          /opt/homebrew/opt/libomp/share/doc/libomp/LICENSE.TXT \
+          /usr/local/opt/libomp/share/doc/libomp/LICENSE.TXT))
+      DARWIN_OPENMP_BUNDLE := $(LIB_DIR)/libomp.dylib
+      BUNDLED_RUNTIME_LIBS += $(DARWIN_OPENMP_BUNDLE)
+      BUNDLED_RUNTIME_FILES += $(DARWIN_OPENMP_BUNDLE)
+      DARWIN_OPENMP_LDFLAGS = -Wl,-rpath,@loader_path/../../lib/$(OS)-$(ARCH) -L$(LIB_DIR) -lomp
+      ifneq ($(DARWIN_OPENMP_LICENSE),)
+        DARWIN_OPENMP_BUNDLE_LICENSE := $(LIB_DIR)/LICENSE.libomp.txt
+        BUNDLED_RUNTIME_FILES += $(DARWIN_OPENMP_BUNDLE_LICENSE)
+      endif
+    endif
+  else ifneq ($(DARWIN_OPENMP_CFLAGS),)
+    DARWIN_OPENMP_LIBDIR := $(patsubst %/,%,$(dir $(DARWIN_OPENMP_LIBRARY)))
+    DARWIN_OPENMP_LDFLAGS := -L$(DARWIN_OPENMP_LIBDIR) -Wl,-rpath,$(DARWIN_OPENMP_LIBDIR) -lomp
+  endif
+endif
+endif
+
+# Header directories that accompany the libraries found above.
 ifeq ($(OS), Windows)
-  EXTRA_INC_DIRS = -I$(DD)../tiff -I$(DD)../gd -I$(DD)../png -I$(DD)../zlib -I$(DD)../lzma -I$(DD)../../gsl
   EXTRA_INC_DIRS =
 else
   EXTRA_INC_DIRS = $(sort $(dir $(filter-out ,$(Z_LIB) $(LZMA_LIB) $(HDF5_LIB) $(FFTW3_LIB) $(SZ_LIB) $(GSL_LIB) $(GSLCBLAS_LIB))))
@@ -283,28 +449,30 @@ else
   EXTRA_INC_DIRS := $(patsubst %/lib/,%/include, $(EXTRA_INC_DIRS))
   EXTRA_INC_DIRS := $(patsubst %/$(OBJ_DIR)/,%, $(EXTRA_INC_DIRS))
   EXTRA_INC_DIRS := $(patsubst %,-I%, $(EXTRA_INC_DIRS))
-
-  ifeq ($(IMPROV_BUILD),1)
-    EXTRA_INC_DIRS += -I/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0/xz-5.4.1-gju4bpk/include
-    EXTRA_INC_DIRS += -I/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-11.4.0/libtiff-4.5.1-bzputfw/include
-    EXTRA_INC_DIRS += -I/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libgd-2.3.3-enxppnl/include
+  ifneq ($(IMPROV_BUILD)$(SWING_BUILD),)
+    EXTRA_INC_DIRS += -I$(LCRC_SPACK)/aocc-4.1.0/xz-5.4.1-gju4bpk/include
+    EXTRA_INC_DIRS += -I$(LCRC_SPACK)/gcc-11.4.0/libtiff-4.5.1-bzputfw/include
+    EXTRA_INC_DIRS += -I$(LCRC_SPACK)/gcc-12.3.0/libgd-2.3.3-enxppnl/include
   endif
   ifeq ($(SWING_BUILD),1)
-    EXTRA_INC_DIRS += -I/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/aocc-4.1.0/xz-5.4.1-gju4bpk/include
-    EXTRA_INC_DIRS += -I/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-11.4.0/libtiff-4.5.1-bzputfw/include
-    EXTRA_INC_DIRS += -I/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libgd-2.3.3-enxppnl/include
-    EXTRA_INC_DIRS += -I/gpfs/fs1/soft/improv/software/spack-built/linux-rhel8-zen3/gcc-12.3.0/libpng-1.6.39-hsjzalf/include
+    EXTRA_INC_DIRS += -I$(LCRC_SPACK)/gcc-12.3.0/libpng-1.6.39-hsjzalf/include
   endif
-
 endif
 
+# Libraries built by this repository.  Windows also links the external GSL
+# checkout (GSL_REPO, or ../../gsl relative to the component directory).
 ifeq ($(OS), Windows)
-  LIB_LINK_DIRS = -LIBPATH:$(DD)../lib/$(OS)-$(ARCH) -LIBPATH:$(DD)../../gsl/lib
+  ifneq ($(strip $(GSL_REPO)),)
+    WINDOWS_GSL_LIB_DIR = $(GSL_REPO)/lib
+  else
+    WINDOWS_GSL_LIB_DIR = $(DD)../../gsl/lib
+  endif
+  LIB_LINK_DIRS = -LIBPATH:$(DD)../lib/$(OS)-$(ARCH) -LIBPATH:$(WINDOWS_GSL_LIB_DIR)
 else
   LIB_LINK_DIRS = -L$(DD)../lib/$(OS)-$(ARCH)
 endif
 
-# Try to locate MPI compiler
+# MPI compilers, for the parallel SDDS libraries.
 MPI_CC = $(firstword $(wildcard \
            /usr/bin/mpicc \
            /usr/local/bin/mpicc \
@@ -317,7 +485,7 @@ MPI_CC = $(firstword $(wildcard \
            /opt/local/bin/mpicc \
            /opt/homebrew/bin/mpicc \
            /lustre/3rdPartySoftware/mpich-4.1.1/bin/mpicc \
-           $(MPI_BIN)/mpicc ))
+           $(MPI_BIN)/mpicc))
 MPI_CCC = $(firstword $(wildcard \
            /usr/bin/mpic++ \
            /usr/bin/mpicxx \
@@ -336,31 +504,30 @@ MPI_CCC = $(firstword $(wildcard \
            /opt/homebrew/bin/mpic++ \
            /opt/homebrew/bin/mpicxx \
            /lustre/3rdPartySoftware/mpich-4.1.1/bin/mpicxx \
-           $(MPI_BIN)/mpicxx ))
+           $(MPI_BIN)/mpicxx))
 WIN_MPI = $(firstword $(wildcard \
            C:/Program\ Files/Microsoft\ MPI \
            C:/Program\ Files\ (x86)/Microsoft\ SDKs/MPI \
-           C:/MicrosoftMPI ))
-
+           C:/MicrosoftMPI))
 ifneq ($(WIN_MPI),)
   WIN_MPI_INC = -I$(WIN_MPI)/Include
   WIN_MPI_LIB = $(WIN_MPI)/Lib/x64/msmpi.lib
   MPI_CC = FOUND
 endif
 
+# Python, for the SDDS Python module.
 ifeq ($(OS), Windows)
-ifeq ($(PY),)
-  PY = 12
+  ifeq ($(PY),)
+    PY = 12
+  endif
 endif
-endif
-ifeq (1, $(words $(wildcard /usr/local/oag/apps/bin/linux-x86_64/oagpython3)))
+ifneq ($(wildcard /usr/local/oag/apps/bin/linux-x86_64/oagpython3),)
   PYTHON = oagpython3
-else ifeq (1, $(words $(wildcard C:/Python3$(PY)/python.exe)))
+else ifneq ($(wildcard C:/Python3$(PY)/python.exe),)
   PYTHON = C:/Python3$(PY)/python.exe
 else
   PYTHON = python3
 endif
-
 PYTHON_PREFIX = $(shell $(PYTHON) -c 'import sys; print(sys.prefix)')
 PYTHON_EXEC_PREFIX = $(shell $(PYTHON) -c 'import sys; print(sys.exec_prefix)')
 PYTHON_VERSION = $(shell $(PYTHON) -c 'import sys; print("{}.{}".format(*sys.version_info[:2]))')
@@ -369,13 +536,17 @@ PYTHON_INCLUDE_DIRS = -I$(PYTHON_PREFIX)/include/python$(PYTHON_VERSION) \
                       -I$(PYTHON_EXEC_PREFIX)/include/python$(PYTHON_VERSION) \
                       -I$(PYTHON_EXEC_PREFIX)/include/python$(PYTHON_VERSION)m
 
+# Linux: GCC, or the APS GCC 11.3 toolchain (see section 1).
 ifeq ($(OS), Linux)
   CC = gcc
   CCC = g++
   AR = ar rcs
   RANLIB = ranlib
   CFLAGS = -m64 -O3 -g -Wall -fPIC $(EXTRA_INC_DIRS)
-  CCFLAGS = -m64 -O3 -g -Wall -fPIC $(EXTRA_INC_DIRS)
+  CCFLAGS = -m64 -O3 -g -Wall -fPIC $(CXX_STD_FLAGS) $(EXTRA_INC_DIRS)
+  # For memory checking with valgrind, use these instead:
+  #CFLAGS = -m64 -g -O0 -Wall -fno-inline -fno-omit-frame-pointer -fPIC $(EXTRA_INC_DIRS)
+  #CCFLAGS = -m64 -g -O0 -Wall -fno-inline -fno-omit-frame-pointer -fPIC $(EXTRA_INC_DIRS)
   LDFLAGS += -rdynamic -m64
   LIBRARY_SYS_LIBS = -lpthread -lm -lrt -ldl -lgcc
   PROD_SYS_LIBS = -lpthread -lm -lrt -ldl -lgcc
@@ -387,7 +558,6 @@ ifeq ($(OS), Linux)
   LIBEXT = a
   LIBPRE = lib
   LINKEXE = $(CCC)
-
   F77 = gfortran -m64 -ffixed-line-length-132
 
   #-m64         Generates code for a 64-bit environment.
@@ -396,22 +566,17 @@ ifeq ($(OS), Linux)
   #-Wall        Enables a broad set of warning messages to help identify potential issues.
   #-fPIC        Generates position-independent code, which is essential for creating shared libraries.
 
-  CUSTOM_GCC_PATH = /usr/local/oag/3rdParty/gcc-11.3.0
-  ifneq ($(wildcard $(CUSTOM_GCC_PATH)),)
+  ifeq ($(HAVE_CUSTOM_GCC),1)
     CC = $(CUSTOM_GCC_PATH)/bin/gcc
     CCC = $(CUSTOM_GCC_PATH)/bin/g++
-    ifeq ($(MPI_CC),/usr/lib64/mpich-3.2/bin/mpicc)
-      MPI_CC :=MPICH_CC=$(CUSTOM_GCC_PATH)/bin/gcc $(MPI_CC)
-      MPI_CCC :=MPICH_CXX=$(CUSTOM_GCC_PATH)/bin/g++ $(MPI_CCC)
-    endif
-    ifeq ($(MPI_CC),/usr/local/oag/3rdParty/mpich-4.3.0/bin/mpicc)
-      MPI_CC :=MPICH_CC=$(CUSTOM_GCC_PATH)/bin/gcc $(MPI_CC)
-      MPI_CCC :=MPICH_CXX=$(CUSTOM_GCC_PATH)/bin/g++ $(MPI_CCC)
+    ifneq ($(filter /usr/lib64/mpich-3.2/bin/mpicc /usr/local/oag/3rdParty/mpich-4.3.0/bin/mpicc,$(MPI_CC)),)
+      MPI_CC := MPICH_CC=$(CUSTOM_GCC_PATH)/bin/gcc $(MPI_CC)
+      MPI_CCC := MPICH_CXX=$(CUSTOM_GCC_PATH)/bin/g++ $(MPI_CCC)
     endif
     AR = $(CUSTOM_GCC_PATH)/bin/gcc-ar -rc
     RANLIB = $(CUSTOM_GCC_PATH)/bin/gcc-ranlib
     F77 = $(CUSTOM_GCC_PATH)/bin/gfortran -m64 -ffixed-line-length-132
-    RPATH = -Wl,-rpath,/usr/local/oag/3rdParty/gcc-11.3.0/lib64
+    RPATH = -Wl,-rpath,$(CUSTOM_GCC_PATH)/lib64
     LDFLAGS += -static-libstdc++
   endif
 
@@ -424,15 +589,16 @@ ifeq ($(OS), Linux)
   endif
 endif
 
+# macOS: Apple Clang.
 ifeq ($(OS), Darwin)
   CC = clang
   CCC = clang++
   AR = libtool -static -o
   RANLIB = ranlib
   #MAC_VERSION = -mmacosx-version-min=10.13
-  CFLAGS = -Wno-deprecated-non-prototype -m64 -O3 -g -Wall -fPIC -fno-common $(DARWIN_OPENMP_CFLAGS) $(MAC_VERSION) $(EXTRA_INC_DIRS)
-  CCFLAGS = -Wno-deprecated-non-prototype -m64 -O3 -g -Wall -fPIC -fno-common -std=c++11 $(DARWIN_OPENMP_CFLAGS) $(MAC_VERSION) $(EXTRA_INC_DIRS)
-  LDFLAGS = $(MAC_VERSION) -std=c++11
+  CFLAGS = -Wno-deprecated-non-prototype $(DARWIN_ARCH_FLAGS) -O3 -g -Wall -fPIC -fno-common $(DARWIN_OPENMP_CFLAGS) $(MAC_VERSION) $(EXTRA_INC_DIRS)
+  CCFLAGS = -Wno-deprecated-non-prototype $(DARWIN_ARCH_FLAGS) -O3 -g -Wall -fPIC -fno-common $(CXX_STD_FLAGS) $(DARWIN_OPENMP_CFLAGS) $(MAC_VERSION) $(EXTRA_INC_DIRS)
+  LDFLAGS = $(MAC_VERSION) $(CXX_STD_FLAGS)
   LIBRARY_SYS_LIBS = $(DARWIN_OPENMP_LDFLAGS) -lm
   PROD_SYS_LIBS = $(DARWIN_OPENMP_LDFLAGS) -lm
   OBJEXT = o
@@ -440,7 +606,6 @@ ifeq ($(OS), Darwin)
   LIBPRE = lib
   EXEEXT =
   LINKEXE = $(CCC)
-
   F77 = gfortran-mp-14 -m64 -ffixed-line-length-132
 
   #-Wno-deprecated-non-prototype  Suppresses warnings about deprecated non-prototype function declarations.
@@ -450,21 +615,19 @@ ifeq ($(OS), Darwin)
   #-Wall        Enables a broad set of warning messages to help identify potential issues.
   #-fPIC        Generates position-independent code, which is essential for creating shared libraries.
   #-fno-common  Treats uninitialized global variables as separate entities, preventing potential linker conflicts.
-  #-std=c++11   Specifies that the code should be compiled using the C++11 standard.
-
+  #-std=c++NN   Selects the C++ standard (CXX_STD_FLAGS).
 endif
 
 ifeq ($(ARCH), x86_64)
-    CFLAGS += -mtune=generic
-    CCFLAGS += -mtune=generic
+  CFLAGS += -mtune=generic
+  CCFLAGS += -mtune=generic
 endif
-
 ifeq ($(ARCH), arm64)
-    CFLAGS += -mcpu=native
-    CCFLAGS += -mcpu=native
+  CFLAGS += $(ARM64_CPU_FLAGS)
+  CCFLAGS += $(ARM64_CPU_FLAGS)
 endif
 
-# Adjust for Windows in a cygwin terminal
+# Windows: MSVC driven from a Cygwin shell.
 ifeq ($(OS), Windows)
   HDF_DIR = $(DD)../../hdf5/HDF5-1.14.6-win64
   CC = cl
@@ -474,18 +637,14 @@ ifeq ($(OS), Windows)
   LINKEXE = link -nologo -LTCG -incremental:no -opt:ref -release -MACHINE:X64
   LINKDLL = link -nologo -LTCG -incremental:no -opt:ref -release -MACHINE:X64 -subsystem:windows -dll
   LINKLIB = lib -nologo
-  #PROD_SYS_LIBS = netapi32.lib
   OBJEXT = obj
   LIBEXT = lib
   LIBPRE =
   EXEEXT = .exe
-  #LIB_LINK_DIRS =
   PYTHON_PREFIX := $(subst \,/,$(PYTHON_PREFIX))
   PYTHON_EXEC_PREFIX := $(subst \,/,$(PYTHON_EXEC_PREFIX))
   PYTHON_VERSION := $(subst \,/,$(PYTHON_VERSION))
   PYTHON_INCLUDE_DIRS = -I$(PYTHON_PREFIX)/include
-
-
 
   #-nologo       Suppresses the display of the startup banner and version information.
   #-FC           Displays the full path of source code files in diagnostic messages.
@@ -506,13 +665,418 @@ ifeq ($(OS), Windows)
   #-MACHINE:X64  Specifies the target platform as x64, indicating that the output is intended for 64-bit systems.
   #-subsystem:windows  Specifies that the application is a Windows GUI application, which affects the entry point and subsystem settings.
   #-dll          Instructs the linker to create a dynamic-link library (DLL) instead of an executable.
+endif
 
+# DEV_BUILD=1: lightly optimized objects with minimal debug information.
+ifeq ($(DEV_BUILD),1)
+  ifeq ($(OS), Windows)
+    CFLAGS := $(filter-out -Ox -GL,$(CFLAGS)) -Od -Zi
+    CCFLAGS := $(filter-out -Ox -GL,$(CCFLAGS)) -Od -Zi
+    LINKEXE := $(filter-out -LTCG -opt:ref -release,$(LINKEXE)) /debug
+    LINKDLL := $(filter-out -LTCG -opt:ref -release,$(LINKDLL)) /debug
+  else
+    CFLAGS := $(filter-out -O3 -g,$(CFLAGS)) -Og -g1
+    CCFLAGS := $(filter-out -O3 -g,$(CCFLAGS)) -Og -g1
+    ifeq ($(OS), Linux)
+      CFLAGS += -fno-var-tracking-assignments
+      CCFLAGS += -fno-var-tracking-assignments
+    endif
+  endif
+endif
+
+# USE_CCACHE=1: compile through ccache (Linux and macOS).
+ifeq ($(USE_CCACHE),1)
+  ifeq ($(OS), Windows)
+    $(warning USE_CCACHE=1 is not supported by this Windows make profile; continuing without ccache)
+  else
+    CCACHE_AVAILABLE := $(shell command -v $(firstword $(CCACHE)) >/dev/null 2>&1 && echo 1)
+    ifeq ($(CCACHE_AVAILABLE),1)
+      CC := $(CCACHE) $(CC)
+      CCC := $(CCACHE) $(CCC)
+    else
+      $(warning USE_CCACHE=1 requested but '$(CCACHE)' was not found; continuing without ccache)
+    endif
+  endif
 endif
 
 ifeq ($(OS),Windows)
-OUTPUT = /Fo$@
-OUTPUTEXE = -out:$@
+  OUTPUT = /Fo$@
+  OUTPUTEXE = -out:$@
 else
-OUTPUT = -o $@
-OUTPUTEXE = -o $@
+  OUTPUT = -o $@
+  OUTPUTEXE = -o $@
 endif
+
+endif # classic toolchain
+
+
+#==============================================================================
+# 8. Standalone toolchain: QtALH and StripTool
+#==============================================================================
+# Make's default CC and CXX with CFLAGS/CXXFLAGS; the component makefiles set
+# the C++ flags.  CCC and the output syntax serve the Makefile.build rules.
+ifneq ($(filter qtalh striptool,$(RULES_PROFILE)),)
+
+PYTHON ?= $(if $(filter Windows,$(OS)),python,python3)
+
+ifeq ($(HAVE_CUSTOM_GCC),1)
+  CC = $(CUSTOM_GCC_PATH)/bin/gcc
+  CXX = $(CUSTOM_GCC_PATH)/bin/g++
+  AR = $(CUSTOM_GCC_PATH)/bin/gcc-ar -rc
+  RANLIB = $(CUSTOM_GCC_PATH)/bin/gcc-ranlib
+  LDFLAGS += -static-libstdc++
+endif
+
+CFLAGS ?= -O2 -g -Wall -std=gnu99
+CCC = $(CXX)
+ifeq ($(OS),Windows)
+  OBJEXT = obj
+  EXEEXT = .exe
+  OUTPUT = /Fo$@
+  OUTPUTEXE = -out:$@
+else
+  OBJEXT = o
+  EXEEXT =
+  OUTPUT = -o $@
+  OUTPUTEXE = -o $@
+endif
+
+# Where QtALH and StripTool look for EPICS Base when EPICS_BASE is not set.
+EPICS_SEARCH_PATHS = /usr/local/oag/base $(RULES_DIR)epics-base \
+                     $(RULES_DIR)../epics-base $(RULES_DIR)../../../base \
+                     $(HOME)/epics/base $(HOME)/epics/base-7.0
+
+endif # standalone toolchain
+
+
+#==============================================================================
+# 9. MEDM: Qt detection
+#==============================================================================
+# qtedm/Makefile configures Qt itself; this only reports whether Qt 5 or 6
+# Widgets is installed.  The Windows build always expects Qt.
+ifeq ($(RULES_PROFILE),medm)
+ifeq ($(OS), Windows)
+  HAVE_QT = 1
+else
+  QT6_CFLAGS := $(shell $(PKG_CONFIG) --cflags Qt6Widgets 2>/dev/null)
+  QT6_LIBS := $(shell $(PKG_CONFIG) --libs Qt6Widgets 2>/dev/null)
+  ifneq ($(and $(QT6_CFLAGS),$(QT6_LIBS)),)
+    HAVE_QT = 1
+  endif
+  ifneq ($(HAVE_QT), 1)
+    QT5_CFLAGS := $(shell $(PKG_CONFIG) --cflags Qt5Widgets 2>/dev/null)
+    QT5_LIBS := $(shell $(PKG_CONFIG) --libs Qt5Widgets 2>/dev/null)
+    ifneq ($(and $(QT5_CFLAGS),$(QT5_LIBS)),)
+      HAVE_QT = 1
+    endif
+  endif
+endif
+endif
+
+
+#==============================================================================
+# 10. StripTool: EPICS Base and Qt
+#==============================================================================
+ifeq ($(RULES_PROFILE),striptool)
+
+EPICS_BASE ?= $(firstword $(foreach base,$(EPICS_SEARCH_PATHS),\
+               $(if $(wildcard $(base)/include/cadef.h),$(base))))
+ifneq ($(strip $(EPICS_BASE)),)
+  EPICS_BASE := $(abspath $(EPICS_BASE))
+  HAVE_EPICS := 1
+  ifeq ($(OS),Windows)
+    EPICS_HOST_ARCH ?= windows-x64
+  endif
+  ifeq ($(origin EPICS_HOST_ARCH),undefined)
+    EPICS_HOST_ARCH_SCRIPT := $(call find_epics_host_arch,$(EPICS_BASE))
+    ifneq ($(EPICS_HOST_ARCH_SCRIPT),)
+      EPICS_HOST_ARCH := $(shell perl "$(EPICS_HOST_ARCH_SCRIPT)")
+    endif
+  endif
+endif
+
+ifneq ($(strip $(EPICS_INSTALL_DIR)),)
+  EPICS_BIN_DIR := $(EPICS_INSTALL_DIR)/bin/$(EPICS_HOST_ARCH)
+endif
+
+# The Motif StripTool needs both EPICS Base and Motif.
+HAVE_LEGACY := $(if $(and $(HAVE_EPICS),$(HAVE_MOTIF)),1)
+
+ifeq ($(OS),Windows)
+QT_VERSION ?= 6
+QT_DIR ?= C:/Qt/6.11.2/msvc2022_64
+QT_DIR := $(subst \,/,$(QT_DIR))
+HAVE_QT := $(if $(wildcard $(QT_DIR)/include/QtWidgets/QtWidgets),1)
+QT_CFLAGS = /DQT_NO_DEBUG /DQT_CORE_LIB /DQT_GUI_LIB /DQT_WIDGETS_LIB /DQT_NETWORK_LIB /DQT_PRINTSUPPORT_LIB \
+            /I"$(QT_DIR)/include" /I"$(QT_DIR)/include/QtCore" \
+            /I"$(QT_DIR)/include/QtGui" /I"$(QT_DIR)/include/QtWidgets" \
+            /I"$(QT_DIR)/include/QtNetwork" \
+            /I"$(QT_DIR)/include/QtPrintSupport"
+QT_LIBS = "$(QT_DIR)/lib/Qt$(QT_VERSION)Widgets.lib" \
+          "$(QT_DIR)/lib/Qt$(QT_VERSION)Gui.lib" \
+          "$(QT_DIR)/lib/Qt$(QT_VERSION)Network.lib" \
+          "$(QT_DIR)/lib/Qt$(QT_VERSION)PrintSupport.lib" \
+          "$(QT_DIR)/lib/Qt$(QT_VERSION)Core.lib"
+QT_TEST_CFLAGS = /DQT_TESTLIB_LIB /I"$(QT_DIR)/include/QtTest"
+QT_TEST_LIBS = "$(QT_DIR)/lib/Qt$(QT_VERSION)Test.lib"
+MOC_QT_CFLAGS = -DQT_NO_DEBUG -DQT_CORE_LIB -DQT_GUI_LIB \
+                -DQT_WIDGETS_LIB -DQT_NETWORK_LIB -DQT_PRINTSUPPORT_LIB -DQT_TESTLIB_LIB \
+                -I"$(QT_DIR)/include" -I"$(QT_DIR)/include/QtCore" \
+                -I"$(QT_DIR)/include/QtGui" -I"$(QT_DIR)/include/QtWidgets" \
+                -I"$(QT_DIR)/include/QtNetwork" \
+                -I"$(QT_DIR)/include/QtPrintSupport" \
+                -I"$(QT_DIR)/include/QtTest"
+MOC = "$(QT_DIR)/bin/moc.exe"
+RCC = "$(QT_DIR)/bin/rcc.exe"
+else
+QT6_AVAILABLE := $(shell $(PKG_CONFIG) --exists Qt6Widgets Qt6Network 2>/dev/null && echo 1)
+QT5_AVAILABLE := $(shell $(PKG_CONFIG) --atleast-version=5.15 Qt5Widgets Qt5Network 2>/dev/null && echo 1)
+QMAKE6 ?= qmake6
+ifeq ($(QT6_AVAILABLE),)
+QT6_QMAKE_VERSION := $(shell $(QMAKE6) -query QT_VERSION 2>/dev/null)
+ifneq ($(filter 6.%,$(QT6_QMAKE_VERSION)),)
+QT6_HEADERS := $(shell $(QMAKE6) -query QT_INSTALL_HEADERS 2>/dev/null)
+QT6_LIB_DIR := $(shell $(QMAKE6) -query QT_INSTALL_LIBS 2>/dev/null)
+QT6_TOOL_DIRS := $(shell $(QMAKE6) -query QT_HOST_LIBEXECS 2>/dev/null) \
+                 $(shell $(QMAKE6) -query QT_HOST_BINS 2>/dev/null)
+ifneq ($(and $(wildcard $(QT6_HEADERS)/QtWidgets/QtWidgets),$(wildcard $(QT6_HEADERS)/QtNetwork/QtNetwork)),)
+QT6_QMAKE_AVAILABLE := 1
+endif
+endif
+endif
+QT_VERSION ?= $(if $(or $(QT6_AVAILABLE),$(QT6_QMAKE_AVAILABLE)),6,5)
+HAVE_QT := $(if $(filter 6,$(QT_VERSION)),$(or $(QT6_AVAILABLE),$(QT6_QMAKE_AVAILABLE)),$(QT5_AVAILABLE))
+ifeq ($(QT_VERSION)-$(QT6_QMAKE_AVAILABLE),6-1)
+qt_modules = $(sort $(1) Core $(if $(filter Widgets,$(1)),Gui))
+qt_cflags = -I$(QT6_HEADERS) $(foreach mod,$(call qt_modules,$(1)),-I$(QT6_HEADERS)/Qt$(mod) -DQT_$(shell echo $(mod) | tr '[:lower:]' '[:upper:]')_LIB)
+qt_libs = -L$(QT6_LIB_DIR) -Wl,-rpath,$(QT6_LIB_DIR) $(foreach mod,$(call qt_modules,$(1)),-lQt6$(mod))
+QT_TOOL_DIRS = $(QT6_TOOL_DIRS)
+else
+qt_cflags = $(shell $(PKG_CONFIG) --cflags $(addprefix Qt$(QT_VERSION),$(1)))
+qt_libs = $(shell $(PKG_CONFIG) --libs $(addprefix Qt$(QT_VERSION),$(1)))
+QT_CORE_PACKAGE = Qt$(QT_VERSION)Core
+QT_TOOL_DIRS = $(shell $(PKG_CONFIG) --variable=host_bins $(QT_CORE_PACKAGE)) \
+               $(shell $(PKG_CONFIG) --variable=libexecdir $(QT_CORE_PACKAGE)) \
+               $(shell $(PKG_CONFIG) --variable=bindir $(QT_CORE_PACKAGE))
+endif
+QT_CFLAGS = $(call qt_cflags,Widgets Network PrintSupport)
+QT_LIBS = $(call qt_libs,Widgets Network PrintSupport)
+QT_TEST_CFLAGS = $(call qt_cflags,Test)
+QT_TEST_LIBS = $(call qt_libs,Test)
+MOC_QT_CFLAGS = $(QT_CFLAGS) $(QT_TEST_CFLAGS)
+MOC = $(firstword $(wildcard $(addsuffix /moc,$(QT_TOOL_DIRS))))
+RCC = $(firstword $(wildcard $(addsuffix /rcc,$(QT_TOOL_DIRS))))
+endif
+
+endif # StripTool
+
+
+#==============================================================================
+# 11. QtALH: Motif, EPICS Base and Qt
+#==============================================================================
+ifeq ($(RULES_PROFILE),qtalh)
+
+ALH_HELP_URL ?= https://epics.anl.gov/EpicsDocumentation/ExtensionsManuals/AlarmHandler/current/ALHUserGuide.html
+
+# Cleaning does not require installed dependencies.
+ifneq ($(filter-out clean distclean,$(or $(MAKECMDGOALS),all)),)
+ifeq ($(filter $(OS),Linux Darwin Windows),)
+  $(error The standalone build supports Linux, macOS and Windows)
+endif
+# GUI discovery is also used by the top-level dependency notices.
+EPICS_SHARED_EXT = $(if $(filter Darwin,$(OS)),dylib,so)
+ifneq ($(OS),Windows)
+X_INCLUDE_DIRS = /usr/include /usr/local/include /opt/local/include /opt/X11/include /usr/X11/include /opt/homebrew/include
+MOTIF_INC ?= $(firstword $(foreach dir,$(X_INCLUDE_DIRS),$(if $(wildcard $(dir)/Xm/Xm.h),$(dir))))
+X11_INC ?= $(firstword $(foreach dir,$(X_INCLUDE_DIRS),$(if $(wildcard $(dir)/X11/Xlib.h),$(dir))))
+X_LIBRARY_DIRS = $(MOTIF_LIB) $(X11_LIB) $(patsubst %/include,%/lib,$(MOTIF_INC) $(X11_INC)) /usr/lib64 /usr/lib/$(ARCH)-linux-gnu /usr/lib /usr/local/lib /opt/local/lib /opt/X11/lib /usr/X11/lib /opt/homebrew/lib
+find_x_library = $(firstword $(foreach dir,$(X_LIBRARY_DIRS),$(wildcard $(dir)/lib$(1).$(EPICS_SHARED_EXT) $(dir)/lib$(1).a)))
+XM_LIB = $(call find_x_library,Xm)
+# Static Motif does not record its X11 dependencies (notably on MacPorts).
+MOTIF_STATIC_DEP_LIBS =
+ifneq ($(filter %.a,$(XM_LIB)),)
+  MOTIF_STATIC_DEP_LIBS = $(foreach lib,Xrandr Xrender Xcursor Xpm Xext Xft fontconfig jpeg png iconv,$(call find_x_library,$(lib))) -lz
+endif
+X_LIBS ?= $(foreach dir,$(MOTIF_LIB) $(X11_LIB),-L$(dir) -Wl,-rpath,$(dir)) $(foreach lib,Xm Xmu Xt X11,$(or $(call find_x_library,$(lib)),-l$(lib))) $(MOTIF_STATIC_DEP_LIBS)
+endif
+
+# The top-level make only dispatches builds. Check EPICS in each application
+# so missing GUI dependency notices are printed before a recursive make fails.
+ifneq ($(QTALH_TOP_LEVEL),1)
+EPICS_BASE ?= $(firstword $(foreach base,$(EPICS_SEARCH_PATHS),$(if $(or $(wildcard $(base)/include/cadef.h),$(call find_epics_host_arch,$(base))),$(base))))
+ifeq ($(strip $(EPICS_BASE)),)
+  $(error EPICS Base not found. Run 'git clone --recursive -b 7.0 https://github.com/epics-base/epics-base.git' next to the qtalh repository, then run 'make -C ../epics-base' from the qtalh repository root; or set EPICS_BASE=/path/to/built/base)
+endif
+EPICS_BASE := $(abspath $(EPICS_BASE))
+ifeq ($(wildcard $(EPICS_BASE)/include/cadef.h),)
+  $(error EPICS Base headers not found in $(EPICS_BASE)/include. Build Base first with 'make -C $(EPICS_BASE)')
+endif
+ifeq ($(OS),Windows)
+EPICS_HOST_ARCH ?= windows-x64
+EPICS_COMPILER ?= msvc
+EPICS_BASE_LIB_DIR ?= $(EPICS_BASE)/lib/$(EPICS_HOST_ARCH)
+EPICS_LIBS = $(EPICS_BASE_LIB_DIR)/ca.lib $(EPICS_BASE_LIB_DIR)/Com.lib
+ifneq ($(words $(wildcard $(EPICS_LIBS))),2)
+  $(error EPICS import libraries not found in $(EPICS_BASE_LIB_DIR). Build Base first with 'make -C $(EPICS_BASE)' in a configured MSVC shell, or set EPICS_HOST_ARCH)
+endif
+EPICS_SYS_LIBS = ws2_32.lib
+# QtALH also connects "pva://" channels through the pvAccess client.
+ifeq ($(QTALH_GUI),1)
+PVA_LIBS = $(EPICS_BASE_LIB_DIR)/pvAccess.lib $(EPICS_BASE_LIB_DIR)/pvData.lib
+ifneq ($(words $(wildcard $(PVA_LIBS))),2)
+  $(error EPICS pvAccess import libraries not found in $(EPICS_BASE_LIB_DIR). QtALH requires EPICS 7 Base with pvAccess and pvData)
+endif
+EPICS_LIBS := $(PVA_LIBS) $(EPICS_LIBS)
+endif
+else
+ifeq ($(origin EPICS_HOST_ARCH),undefined)
+EPICS_HOST_ARCH_SCRIPT := $(call find_epics_host_arch,$(EPICS_BASE))
+ifeq ($(EPICS_HOST_ARCH_SCRIPT),)
+  $(error EPICS host architecture script not found in $(EPICS_BASE). Set EPICS_HOST_ARCH to the architecture used to build Base)
+endif
+# Cache the result: library/header expansion must not rerun the script.
+EPICS_HOST_ARCH := $(shell perl "$(EPICS_HOST_ARCH_SCRIPT)")
+endif
+ifeq ($(strip $(EPICS_HOST_ARCH)),)
+  $(error EPICS host architecture is empty. Set EPICS_HOST_ARCH to the architecture used to build Base)
+endif
+EPICS_BASE_LIB_DIR ?= $(EPICS_BASE)/lib/$(EPICS_HOST_ARCH)
+EPICS_COMPILER ?= $(if $(filter Darwin,$(OS)),clang,gcc)
+# Prefer static EPICS libraries, as MEDM does; shared-only Base also works.
+EPICS_LIBS = $(foreach lib,ca Com,$(firstword $(wildcard $(EPICS_BASE_LIB_DIR)/lib$(lib).a $(EPICS_BASE_LIB_DIR)/lib$(lib).$(EPICS_SHARED_EXT))))
+ifneq ($(words $(EPICS_LIBS)),2)
+  $(error EPICS libraries not found in $(EPICS_BASE_LIB_DIR). Build Base first with 'make -C $(EPICS_BASE)', or set EPICS_HOST_ARCH)
+endif
+# QtALH also connects "pva://" channels through the pvAccess client.
+ifeq ($(QTALH_GUI),1)
+PVA_LIBS = $(foreach lib,pvAccess pvData,$(firstword $(wildcard $(EPICS_BASE_LIB_DIR)/lib$(lib).a $(EPICS_BASE_LIB_DIR)/lib$(lib).$(EPICS_SHARED_EXT))))
+ifneq ($(words $(PVA_LIBS)),2)
+  $(error EPICS pvAccess libraries not found in $(EPICS_BASE_LIB_DIR). QtALH requires EPICS 7 Base with pvAccess and pvData)
+endif
+EPICS_LIBS := $(PVA_LIBS) $(EPICS_LIBS)
+endif
+EPICS_LDFLAGS = -Wl,-rpath,$(EPICS_BASE_LIB_DIR)
+EPICS_SYS_LIBS = -lpthread -ldl -lrt -lm
+ifeq ($(OS),Darwin)
+  EPICS_SYS_LIBS = -lpthread -lm
+endif
+ifneq ($(shell nm -u $(EPICS_BASE_LIB_DIR)/libCom.a 2>/dev/null | sed -n '/ U _\{0,1\}readline$$/p'),)
+  EPICS_SYS_LIBS += -lreadline
+endif
+
+ifeq ($(OS),Darwin)
+# macOS supplies Sun RPC in the SDK and libSystem; TI-RPC is used on Linux.
+RPC_CFLAGS ?=
+RPC_LIBS ?=
+else
+RPC_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags libtirpc 2>/dev/null)
+RPC_LIBS ?= $(shell $(PKG_CONFIG) --libs libtirpc 2>/dev/null)
+endif
+
+ALH_CPPFLAGS = -D_DEFAULT_SOURCE -I. -Ios/$(OS) -Ios/default -I$(EPICS_BASE)/include -I$(EPICS_BASE)/include/compiler/$(EPICS_COMPILER) -I$(EPICS_BASE)/include/os/$(OS) $(addprefix -I,$(MOTIF_INC) $(X11_INC)) $(RPC_CFLAGS)
+vpath %.c os/$(OS) os/default
+endif
+endif
+endif
+
+# Qt configuration is shared by the dispatcher and Qt application.
+ifneq ($(filter 1,$(QTALH_TOP_LEVEL) $(QTALH_GUI)),)
+ifeq ($(OS),Windows)
+HAVE_QT := 1
+ifeq ($(QTALH_GUI),1)
+# Native MSVC/Qt build driven by GNU Make and a POSIX shell, as in QtEDM.
+QT_VERSION ?= 6
+QT_DIR ?= C:/Qt/6.11.2/msvc2022_64
+QT_DIR := $(subst \,/,$(QT_DIR))
+QT_MULTIMEDIA_DIR ?= $(QT_DIR)
+QT_MULTIMEDIA_DIR := $(subst \,/,$(QT_MULTIMEDIA_DIR))
+# The offscreen plugin does not discover the native Windows font directory.
+QT_QPA_FONTDIR ?= $(subst \,/,$(SystemRoot))/Fonts
+OBJ_DIR = O.$(OS)-$(ARCH)-qt$(QT_VERSION)
+EXEEXT = .exe
+CXX = cl
+# Qt 6.11 moc helpers need MSVC's conforming lambda implementation in C++17.
+CXXFLAGS ?= /nologo /O2 /W3 /MD /EHsc /permissive- /Zc:lambda /Zc:__cplusplus /utf-8 /std:c++17
+CPPFLAGS += -DNOMINMAX -D_CRT_SECURE_NO_WARNINGS
+LINKEXE = link /nologo
+QT_MODULES = Core Gui Widgets Network PrintSupport
+QT_CFLAGS = -DQT_NO_DEBUG -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_NETWORK_LIB -DQT_PRINTSUPPORT_LIB -DQT_MULTIMEDIA_LIB -I"$(QT_DIR)/include" $(foreach mod,$(QT_MODULES),-I"$(QT_DIR)/include/Qt$(mod)") -I"$(QT_MULTIMEDIA_DIR)/include" -I"$(QT_MULTIMEDIA_DIR)/include/QtMultimedia"
+QT_LIBS = $(foreach mod,$(QT_MODULES),"$(QT_DIR)/lib/Qt$(QT_VERSION)$(mod).lib") "$(QT_MULTIMEDIA_DIR)/lib/Qt$(QT_VERSION)Multimedia.lib"
+QT_TEST_CFLAGS = -I"$(QT_DIR)/include/QtTest"
+QT_TEST_LIBS = "$(QT_DIR)/lib/Qt$(QT_VERSION)Test.lib"
+MOC = "$(QT_DIR)/bin/moc.exe"
+RCC = "$(QT_DIR)/bin/rcc.exe"
+INCLUDES = -I. -I$(OBJ_DIR) -I$(EPICS_BASE)/include -I$(EPICS_BASE)/include/compiler/$(EPICS_COMPILER) -I$(EPICS_BASE)/include/os/WIN32
+
+ifneq ($(filter-out clean distclean,$(or $(MAKECMDGOALS),all)),)
+ifeq ($(filter $(QT_VERSION),5 6),)
+$(error QT_VERSION must be 5 or 6)
+endif
+ifeq ($(wildcard $(QT_MULTIMEDIA_DIR)/lib/Qt$(QT_VERSION)Multimedia.lib),)
+$(error Qt Multimedia is required; install the module matching QT_DIR or set QT_MULTIMEDIA_DIR)
+endif
+endif
+
+endif
+else
+# Shared Qt discovery for the dispatcher and the standalone Unix build.
+QT6_PACKAGES = Qt6Widgets Qt6Network Qt6PrintSupport Qt6Multimedia
+QT6_PKG_AVAILABLE := $(shell $(PKG_CONFIG) --exists $(QT6_PACKAGES) 2>/dev/null && echo 1)
+
+# Ubuntu 22.04's Qt 6.2 development packages provide qmake metadata but no
+# pkg-config files. Query that installation instead of reporting Qt missing.
+# This fallback targets shared Linux Qt; other platforms retain pkg-config.
+QMAKE6 ?= qmake6
+ifeq ($(OS),Linux)
+ifeq ($(QT6_PKG_AVAILABLE),)
+QT6_QMAKE_VERSION := $(shell $(QMAKE6) -query QT_VERSION 2>/dev/null)
+ifneq ($(filter 6.%,$(QT6_QMAKE_VERSION)),)
+QT6_HEADERS := $(shell $(QMAKE6) -query QT_INSTALL_HEADERS 2>/dev/null)
+QT6_LIB_DIR := $(shell $(QMAKE6) -query QT_INSTALL_LIBS 2>/dev/null)
+QT6_TOOL_DIRS := $(shell $(QMAKE6) -query QT_HOST_LIBEXECS 2>/dev/null) $(shell $(QMAKE6) -query QT_HOST_BINS 2>/dev/null)
+QT6_MODULES = Core Gui Widgets Network PrintSupport Multimedia
+QT6_MISSING_MODULES := $(foreach mod,$(QT6_MODULES),$(if $(and $(wildcard $(QT6_HEADERS)/Qt$(mod)/Qt$(mod)),$(wildcard $(QT6_LIB_DIR)/libQt6$(mod).so)),,$(mod)))
+ifeq ($(strip $(QT6_MISSING_MODULES)),)
+QT6_QMAKE_AVAILABLE := 1
+endif
+endif
+endif
+endif
+
+QT_VERSION ?= $(if $(or $(QT6_PKG_AVAILABLE),$(QT6_QMAKE_AVAILABLE)),6,5)
+QT_PACKAGES = Qt$(QT_VERSION)Widgets Qt$(QT_VERSION)Network Qt$(QT_VERSION)PrintSupport Qt$(QT_VERSION)Multimedia
+QT_USE_QMAKE := $(if $(filter 6,$(QT_VERSION)),$(if $(QT6_PKG_AVAILABLE),,$(QT6_QMAKE_AVAILABLE)))
+
+ifeq ($(QT_USE_QMAKE),1)
+HAVE_QT := 1
+# Include the public dependencies needed by each requested module.
+qt_modules = $(sort $(1) Core $(if $(filter Widgets PrintSupport Multimedia,$(1)),Gui) $(if $(filter PrintSupport,$(1)),Widgets) $(if $(filter Multimedia,$(1)),Network))
+QT_DEFINE_Core = QT_CORE_LIB
+QT_DEFINE_Gui = QT_GUI_LIB
+QT_DEFINE_Widgets = QT_WIDGETS_LIB
+QT_DEFINE_Network = QT_NETWORK_LIB
+QT_DEFINE_PrintSupport = QT_PRINTSUPPORT_LIB
+QT_DEFINE_Multimedia = QT_MULTIMEDIA_LIB
+QT_DEFINE_Test = QT_TESTLIB_LIB
+qt_cflags = -I$(QT6_HEADERS) $(foreach mod,$(call qt_modules,$(1)),-I$(QT6_HEADERS)/Qt$(mod) -D$(QT_DEFINE_$(mod)))
+qt_libs = -L$(QT6_LIB_DIR) -Wl,-rpath,$(QT6_LIB_DIR) $(foreach mod,$(call qt_modules,$(1)),-lQt6$(mod))
+QT_TOOL_DIRS = $(QT6_TOOL_DIRS)
+else
+HAVE_QT := $(shell $(PKG_CONFIG) --exists $(QT_PACKAGES) 2>/dev/null && echo 1)
+ifeq ($(QT_VERSION),5)
+HAVE_QT := $(if $(HAVE_QT),$(shell $(PKG_CONFIG) --atleast-version=5.15 Qt5Core 2>/dev/null && echo 1))
+endif
+qt_cflags = $(shell $(PKG_CONFIG) --cflags $(addprefix Qt$(QT_VERSION),$(1)))
+qt_libs = $(shell $(PKG_CONFIG) --libs $(addprefix Qt$(QT_VERSION),$(1)))
+QT_CORE = Qt$(QT_VERSION)Core
+QT_TOOL_DIRS = $(shell $(PKG_CONFIG) --variable=host_bins $(QT_CORE)) $(shell $(PKG_CONFIG) --variable=libexecdir $(QT_CORE)) $(shell $(PKG_CONFIG) --variable=bindir $(QT_CORE))
+endif
+
+QT_CFLAGS = $(call qt_cflags,Widgets Network PrintSupport Multimedia)
+QT_LIBS = $(call qt_libs,Widgets Network PrintSupport Multimedia)
+MOC = $(firstword $(wildcard $(addsuffix /moc,$(QT_TOOL_DIRS))))
+RCC = $(firstword $(wildcard $(addsuffix /rcc,$(QT_TOOL_DIRS))))
+endif
+endif
+
+endif # QtALH

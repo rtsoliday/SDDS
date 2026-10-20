@@ -1,0 +1,23 @@
+SDDS6
+&description text="Native SDDS6 enum example: parameters, columns, and an array", contents="Synthetic device states for the SDDS editor" &end
+&parameter name=RunMode, type=enum, enum_values="0:STANDBY,10:RUN,20:MAINTENANCE", description="Operating mode for this page" &end
+&parameter name=ExpectedState, type=enum, enum_values="0:OFF,10:ON,-1:FAULT", fixed_value="10", description="Fixed enum parameter" &end
+&array name=ChannelState, type=enum, enum_values="0:OFF,10:ON,-1:FAULT", dimensions=1, description="State of four example channels" &end
+&column name=Device, type=string &end
+&column name=State, type=enum, enum_values="0:OFF,10:ON,-1:FAULT", description="Sparse and negative enum codes" &end
+&column name=Quality, type=enum, enum_values="0:GOOD,2:CHECK,-7:UNKNOWN", description="An independent enum dictionary" &end
+&column name=Current, type=double, units=mA, description="Synthetic measurement" &end
+&data mode=ascii &end
+! RunMode parameter: RUN
+10
+! ChannelState array: four elements
+4
+10 0 -1 10
+! Six table rows
+6
+"Pump-A" 10 0 12.5
+"Pump-B" 0 0 0
+"Valve-A" -1 2 0
+"Valve-B" 10 0 4.2
+"Sensor-A" 10 2 1.8
+"Sensor-B" 0 -7 0

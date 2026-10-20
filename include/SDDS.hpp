@@ -51,7 +51,7 @@ namespace sdds {
 /** @brief Human-readable library name. */
 inline constexpr std::string_view libraryName = "SDDS++";
 /** @brief Source-level API generation implemented by this header. */
-inline constexpr std::uint32_t cppApiVersion = 2;
+inline constexpr std::uint32_t cppApiVersion = 3;
 
 /** @brief SDDS scalar data types and their protocol identifiers. */
 enum class Type : std::int32_t {
@@ -65,8 +65,33 @@ enum class Type : std::int32_t {
   Int16 = 8,
   UInt16 = 9,
   String = 10,
-  Character = 11
+  Character = 11,
+  Enum = 12
 };
+
+/** @brief An enum code, deliberately distinct from ordinary numeric values. */
+struct EnumValue {
+  std::int32_t code = 0;
+  friend bool operator==(EnumValue a, EnumValue b) noexcept { return a.code == b.code; }
+  friend bool operator!=(EnumValue a, EnumValue b) noexcept { return !(a == b); }
+};
+
+/** @brief Immutable, indexed code/label mapping, preserving declaration order. */
+class SDDSPP_API EnumDefinition {
+ public:
+  explicit EnumDefinition(std::string_view mapping, std::uint64_t maxBytes = 1024U * 1024U);
+  std::string_view values() const noexcept;
+  std::string_view label(std::int32_t code) const;
+  std::int32_t code(std::string_view label) const;
+  bool operator==(const EnumDefinition &other) const noexcept;
+  bool operator!=(const EnumDefinition &other) const noexcept { return !(*this == other); }
+ private:
+  struct Impl;
+  std::shared_ptr<const Impl> impl_;
+};
+
+/** @brief Explicit dictionary-aware conversion, including label-based remapping. */
+SDDSPP_API EnumValue remapEnum(EnumValue value, const EnumDefinition &source, const EnumDefinition &target);
 
 /** @brief Physical encoding used for page data. */
 enum class DataMode { Binary, Ascii };
@@ -100,13 +125,20 @@ enum class LoadMode { All, None };
 /** @brief Variant containing one value of any supported SDDS scalar type. */
 using Scalar = std::variant<long double, double, float, std::int64_t, std::uint64_t,
                             std::int32_t, std::uint32_t, std::int16_t, std::uint16_t,
-                            std::string, char>;
+                            std::string, char, EnumValue>;
 /** @brief Variant containing a homogeneous vector of any supported SDDS type. */
 using Values = std::variant<std::vector<long double>, std::vector<double>, std::vector<float>,
                             std::vector<std::int64_t>, std::vector<std::uint64_t>,
                             std::vector<std::int32_t>, std::vector<std::uint32_t>,
                             std::vector<std::int16_t>, std::vector<std::uint16_t>,
-                            std::vector<std::string>, std::vector<char>>;
+                            std::vector<std::string>, std::vector<char>, std::vector<EnumValue>>;
+
+/** @brief Explicit enum/Int32/String conversion; enum targets require a dictionary. */
+SDDSPP_API Scalar convertEnumScalar(const Scalar &value, Type target,
+    const EnumDefinition *sourceDictionary, const EnumDefinition *targetDictionary = nullptr);
+/** @brief Checked bulk conversion or label-based remapping. */
+SDDSPP_API Values convertEnumValues(const Values &values, Type target,
+    const EnumDefinition *sourceDictionary, const EnumDefinition *targetDictionary = nullptr);
 
 /**
  * @brief Returns the SDDS type stored in a scalar variant.
@@ -155,6 +187,7 @@ struct FieldMetadata {
   std::optional<std::string> description; /**< Human-readable description. */
   std::optional<std::string> format;      /**< Suggested printf-style format. */
   Type type = Type::Double;               /**< Field data type. */
+  std::shared_ptr<const EnumDefinition> enumDefinition; /**< Required only for Type::Enum. */
 };
 
 /** @brief Definition of one page-level scalar parameter. */
@@ -628,6 +661,7 @@ class SDDSPP_API Page {
 
 /** @brief Per-reader resource limits for untrusted or very large input. */
 struct ReaderLimits {
+  std::uint64_t maxEnumDefinitionBytes = 1024U * 1024U; /**< Maximum decoded enum mapping bytes. */
   std::int64_t maxRows = INT64_MAX; /**< Maximum source rows in one page. */
   std::uint64_t maxElements = static_cast<std::uint64_t>(SIZE_MAX); /**< Maximum values in one field. */
   std::uint64_t maxStringBytes = INT32_MAX; /**< Maximum bytes in one string. */
@@ -968,6 +1002,7 @@ template <> struct TypeFor<std::int16_t> { static constexpr Type value = Type::I
 template <> struct TypeFor<std::uint16_t> { static constexpr Type value = Type::UInt16; };
 template <> struct TypeFor<std::string> { static constexpr Type value = Type::String; };
 template <> struct TypeFor<char> { static constexpr Type value = Type::Character; };
+template <> struct TypeFor<EnumValue> { static constexpr Type value = Type::Enum; };
 
 template <class T>
 constexpr Type typeFor = TypeFor<T>::value;

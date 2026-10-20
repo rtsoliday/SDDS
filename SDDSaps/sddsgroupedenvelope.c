@@ -1680,7 +1680,34 @@ static int setup_output_file(SDDS_DATASET *output, const char *outputFile, SDDS_
   return 1;
 }
 
-static int read_input_file(const char *filename, const OPTIONS *opts, GROUP_LIST *groups) {
+/** @brief Keep grouping values and copied codes compatible with the output's template definitions. */
+static int check_input_enum_definitions(SDDS_DATASET *input, SDDS_DATASET *templateInput, const OPTIONS *opts, const char *filename) {
+  int32_t inputIndex, templateIndex;
+  long iStat;
+
+  inputIndex = SDDS_GetParameterIndex(input, opts->groupBy);
+  templateIndex = SDDS_GetParameterIndex(templateInput, opts->groupBy);
+  if (inputIndex < 0 || !SDDS_CheckEnumFieldCompatibility(templateInput, input, 1, templateIndex, inputIndex)) {
+    fprintf(stderr, "error: incompatible grouping parameter %s in %s\n", opts->groupBy, filename);
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return 0;
+  }
+  for (iStat = 0; iStat < opts->stats; iStat++) {
+    STAT_DEFINITION *stat = opts->stat + iStat;
+    if (stat->code != STAT_COPY)
+      continue;
+    inputIndex = SDDS_GetColumnIndex(input, stat->sourceColumn);
+    templateIndex = SDDS_GetColumnIndex(templateInput, stat->sourceColumn);
+    if (inputIndex < 0 || !SDDS_CheckEnumFieldCompatibility(templateInput, input, 0, templateIndex, inputIndex)) {
+      fprintf(stderr, "error: incompatible copy column %s in %s\n", stat->sourceColumn, filename);
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static int read_input_file(const char *filename, const OPTIONS *opts, GROUP_LIST *groups, SDDS_DATASET *templateInput) {
   SDDS_DATASET input;
   int pageCode;
   STRING_LIST seen;
@@ -1690,6 +1717,11 @@ static int read_input_file(const char *filename, const OPTIONS *opts, GROUP_LIST
     fprintf(stderr, "Reading %s\n", filename);
   if (!SDDS_InitializeInput(&input, (char *)filename)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    string_list_clear(&seen);
+    return 0;
+  }
+  if (!check_input_enum_definitions(&input, templateInput, opts, filename)) {
+    SDDS_Terminate(&input);
     string_list_clear(&seen);
     return 0;
   }
@@ -1774,17 +1806,17 @@ static int read_input_file(const char *filename, const OPTIONS *opts, GROUP_LIST
   return 1;
 }
 
-static int read_input_files_serial(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups) {
+static int read_input_files_serial(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups, SDDS_DATASET *templateInput) {
   long iFile;
 
   for (iFile = 0; iFile < files->items; iFile++) {
-    if (!read_input_file(files->item[iFile], opts, groups))
+    if (!read_input_file(files->item[iFile], opts, groups, templateInput))
       return 0;
   }
   return 1;
 }
 
-static int read_input_files_threaded(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups) {
+static int read_input_files_threaded(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups, SDDS_DATASET *templateInput) {
 #if SDDSGROUPEDENVELOPE_USE_OPENMP
   FILE_READ_RESULT *result;
   long batchStart, iBatch, batchSize;
@@ -1794,7 +1826,7 @@ static int read_input_files_threaded(const STRING_LIST *files, const OPTIONS *op
   if (threads > files->items)
     threads = (int)files->items;
   if (threads <= 1)
-    return read_input_files_serial(files, opts, groups);
+    return read_input_files_serial(files, opts, groups, templateInput);
 
   result = xcalloc((size_t)threads, sizeof(*result));
   omp_set_num_threads(threads);
@@ -1806,7 +1838,7 @@ static int read_input_files_threaded(const STRING_LIST *files, const OPTIONS *op
 
 #pragma omp parallel for schedule(dynamic)
     for (iBatch = 0; iBatch < batchSize; iBatch++)
-      result[iBatch].ok = read_input_file(files->item[batchStart + iBatch], opts, &result[iBatch].groups);
+      result[iBatch].ok = read_input_file(files->item[batchStart + iBatch], opts, &result[iBatch].groups, templateInput);
 
     for (iBatch = 0; iBatch < batchSize; iBatch++) {
       if (!result[iBatch].ok)
@@ -1824,14 +1856,14 @@ static int read_input_files_threaded(const STRING_LIST *files, const OPTIONS *op
   free(result);
   return ok;
 #else
-  return read_input_files_serial(files, opts, groups);
+  return read_input_files_serial(files, opts, groups, templateInput);
 #endif
 }
 
-static int read_input_files(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups) {
+static int read_input_files(const STRING_LIST *files, const OPTIONS *opts, GROUP_LIST *groups, SDDS_DATASET *templateInput) {
   if (opts->threads <= 1)
-    return read_input_files_serial(files, opts, groups);
-  return read_input_files_threaded(files, opts, groups);
+    return read_input_files_serial(files, opts, groups, templateInput);
+  return read_input_files_threaded(files, opts, groups, templateInput);
 }
 
 static void warn_zero_weight(const OPTIONS *opts, const STAT_DEFINITION *stat, int64_t row) {
@@ -2104,7 +2136,7 @@ static int process_directory(const char *workDir, OPTIONS *opts, int requireInpu
   if (!compile_stat_definitions(opts, &templateInput))
     goto finish;
 
-  if (!read_input_files(&files, opts, &groups))
+  if (!read_input_files(&files, opts, &groups, &templateInput))
     goto finish;
   warn_for_missing_requested_group_values(opts, &groups);
   if (groups.groups == 0) {

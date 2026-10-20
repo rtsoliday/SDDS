@@ -1080,15 +1080,26 @@ COLUMN_DEFINITION *SDDS_CopyColumnDefinition(COLUMN_DEFINITION **target, COLUMN_
     return NULL;
   if (!source)
     return (*target = NULL);
-  if (!(*target = (COLUMN_DEFINITION *)SDDS_Malloc(sizeof(**target))) ||
+  if (!(*target = (COLUMN_DEFINITION *)calloc(1, sizeof(**target))) ||
       !SDDS_CopyString(&(*target)->name, source->name) ||
       !SDDS_CopyString(&(*target)->symbol, source->symbol) || !SDDS_CopyString(&(*target)->units, source->units) || !SDDS_CopyString(&(*target)->description, source->description) || !SDDS_CopyString(&(*target)->format_string, source->format_string))
-    return (NULL);
+    goto fail;
+  if (source->type == SDDS_ENUM) {
+    if (!((*target)->enum_definition = SDDS_CreateEnumDefinition(source->enum_values))) goto fail;
+    (*target)->enum_values = (char *)SDDS_EnumValues((*target)->enum_definition);
+  }
   (*target)->type = source->type;
   (*target)->field_length = source->field_length;
   (*target)->definition_mode = source->definition_mode;
   (*target)->memory_number = source->memory_number;
   return (*target);
+fail:
+  if (*target) {
+    if (!(*target)->name) { free(*target); *target = NULL; return NULL; }
+    SDDS_FreeColumnDefinition(*target);
+    *target = NULL;
+  }
+  return NULL;
 }
 
 /**
@@ -1117,6 +1128,7 @@ int32_t SDDS_FreeColumnDefinition(COLUMN_DEFINITION *source) {
     free(source->description);
   if (source->format_string)
     free(source->format_string);
+  SDDS_FreeEnumDefinition(source->enum_definition);
   SDDS_ZeroMemory(source, sizeof(*source));
   free(source);
   return (1);
@@ -1177,15 +1189,26 @@ PARAMETER_DEFINITION *SDDS_CopyParameterDefinition(PARAMETER_DEFINITION **target
     return NULL;
   if (!source)
     return (*target = NULL);
-  if (!(*target = (PARAMETER_DEFINITION *)SDDS_Malloc(sizeof(**target))) ||
+  if (!(*target = (PARAMETER_DEFINITION *)calloc(1, sizeof(**target))) ||
       !SDDS_CopyString(&(*target)->name, source->name) ||
       !SDDS_CopyString(&(*target)->symbol, source->symbol) ||
       !SDDS_CopyString(&(*target)->units, source->units) || !SDDS_CopyString(&(*target)->description, source->description) || !SDDS_CopyString(&(*target)->format_string, source->format_string) || !SDDS_CopyString(&(*target)->fixed_value, source->fixed_value))
-    return (NULL);
+    goto fail;
+  if (source->type == SDDS_ENUM) {
+    if (!((*target)->enum_definition = SDDS_CreateEnumDefinition(source->enum_values))) goto fail;
+    (*target)->enum_values = (char *)SDDS_EnumValues((*target)->enum_definition);
+  }
   (*target)->type = source->type;
   (*target)->definition_mode = source->definition_mode;
   (*target)->memory_number = source->memory_number;
   return (*target);
+fail:
+  if (*target) {
+    if (!(*target)->name) { free(*target); *target = NULL; return NULL; }
+    SDDS_FreeParameterDefinition(*target);
+    *target = NULL;
+  }
+  return NULL;
 }
 
 /**
@@ -1216,6 +1239,7 @@ int32_t SDDS_FreeParameterDefinition(PARAMETER_DEFINITION *source) {
     free(source->format_string);
   if (source->fixed_value)
     free(source->fixed_value);
+  SDDS_FreeEnumDefinition(source->enum_definition);
   SDDS_ZeroMemory(source, sizeof(*source));
   free(source);
   return (1);
@@ -1276,15 +1300,26 @@ ARRAY_DEFINITION *SDDS_CopyArrayDefinition(ARRAY_DEFINITION **target, ARRAY_DEFI
     return NULL;
   if (!source)
     return (*target = NULL);
-  if (!(*target = (ARRAY_DEFINITION *)SDDS_Malloc(sizeof(**target))) ||
+  if (!(*target = (ARRAY_DEFINITION *)calloc(1, sizeof(**target))) ||
       !SDDS_CopyString(&(*target)->name, source->name) ||
       !SDDS_CopyString(&(*target)->symbol, source->symbol) ||
       !SDDS_CopyString(&(*target)->units, source->units) || !SDDS_CopyString(&(*target)->description, source->description) || !SDDS_CopyString(&(*target)->format_string, source->format_string) || !SDDS_CopyString(&(*target)->group_name, source->group_name))
-    return (NULL);
+    goto fail;
+  if (source->type == SDDS_ENUM) {
+    if (!((*target)->enum_definition = SDDS_CreateEnumDefinition(source->enum_values))) goto fail;
+    (*target)->enum_values = (char *)SDDS_EnumValues((*target)->enum_definition);
+  }
   (*target)->type = source->type;
   (*target)->field_length = source->field_length;
   (*target)->dimensions = source->dimensions;
   return (*target);
+fail:
+  if (*target) {
+    if (!(*target)->name) { free(*target); *target = NULL; return NULL; }
+    SDDS_FreeArrayDefinition(*target);
+    *target = NULL;
+  }
+  return NULL;
 }
 
 /**
@@ -1316,6 +1351,7 @@ int32_t SDDS_FreeArrayDefinition(ARRAY_DEFINITION *source) {
     free(source->format_string);
   if (source->group_name)
     free(source->group_name);
+  SDDS_FreeEnumDefinition(source->enum_definition);
   SDDS_ZeroMemory(source, sizeof(*source));
   free(source);
   source = NULL;
@@ -2694,7 +2730,7 @@ char **SDDS_GetAssociateNames(SDDS_DATASET *SDDS_dataset, int32_t *number) {
 void *SDDS_CastValue(void *data, int64_t index, int32_t data_type, int32_t desired_type, void *memory) {
   long long integer_value;
   long double fp_value;
-  if (!data || !memory || data_type == SDDS_STRING || desired_type == SDDS_STRING)
+  if (!data || !memory || data_type == SDDS_STRING || desired_type == SDDS_STRING || data_type == SDDS_ENUM || desired_type == SDDS_ENUM)
     return (NULL);
   if (data_type == desired_type) {
     memcpy(memory, (char *)data + SDDS_type_size[data_type - 1] * index, SDDS_type_size[data_type - 1]);
