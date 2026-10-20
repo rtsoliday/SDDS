@@ -546,8 +546,8 @@ int SDDS_CompareData(SDDS_DATASET *SDDS_dataset, short type, short absolute, voi
     case SDDS_LONG64:
       long64_1 = *(int64_t *)data1;
       long64_2 = *(int64_t *)data2;
-      magnitude1 = long64_1 < 0 ? -(uint64_t)long64_1 : (uint64_t)long64_1;
-      magnitude2 = long64_2 < 0 ? -(uint64_t)long64_2 : (uint64_t)long64_2;
+      magnitude1 = long64_1 < 0 ? UINT64_C(0) - (uint64_t)long64_1 : (uint64_t)long64_1;
+      magnitude2 = long64_2 < 0 ? UINT64_C(0) - (uint64_t)long64_2 : (uint64_t)long64_2;
       return magnitude1 > magnitude2 ? 1 : (magnitude1 < magnitude2 ? -1 : 0);
     case SDDS_LONG:
       long1 = *(int32_t *)data1;

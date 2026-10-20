@@ -33,8 +33,9 @@ include ../Makefile.build
 
 ENUM_TEST = $(OBJ_DIR)/test_sdds_enum$(EXEEXT)
 ifeq ($(OS), Windows)
-ENUM_TEST_LIBS = $(LIB_DIR)/SDDS1.lib $(LIB_DIR)/rpnlib.lib $(LIB_DIR)/mdbmth.lib $(LIB_DIR)/mdblib.lib $(LIBRARY_LIBS)
-ENUM_TEST_OUTPUT = /Fe$@
+# The enum regression also exercises private routines absent from the DLL API.
+ENUM_TEST_LIBS = $(LIBRARY_OBJS) $(addprefix $(LIB_DIR)/,$(LIBRARY_LIBS))
+ENUM_TEST_OUTPUT = /Fo$@.obj /Fe$@
 else
 ENUM_TEST_LIBS = -L$(LIB_DIR) -lSDDS1 -lrpnlib -lmdbmth -lmdblib $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm
 ENUM_TEST_OUTPUT = -o $@

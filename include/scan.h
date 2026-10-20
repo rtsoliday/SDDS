@@ -45,6 +45,8 @@ typedef struct {
 #define A_LIST 		2
 
 epicsShareFuncMDBCOMMON extern int scanargs(SCANNED_ARG **scanned, int argc, char **argv);
+/* Expand argument files before inspecting raw options; caller owns the strings. */
+epicsShareFuncMDBCOMMON extern long add_file_arguments(int argc, char **argv, char ***argvNew);
   /*
 epicsShareFuncMDBCOMMON extern void free_scanargs(SCANNED_ARG *scanned, int argc);
   */

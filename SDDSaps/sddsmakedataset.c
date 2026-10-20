@@ -208,6 +208,8 @@ int main(int argc, char **argv) {
   SDDS_ARRAY *sdds_array = NULL;
   ENUM_INPUT *enumInputs = NULL;
   long enumInputCount = 0, writeArg = 1;
+  char **expandedArgs = NULL;
+  int scannedCount;
 
   description = contents = NULL;
   parameter = NULL;
@@ -222,6 +224,8 @@ int main(int argc, char **argv) {
   SDDS_RegisterProgramName(argv[0]);
   SDDS_CheckDatasetStructureSize(sizeof(SDDS_DATASET));
 
+  argc = add_file_arguments(argc, argv, &expandedArgs);
+  argv = expandedArgs;
   for (i = 1; i < argc; i++) {
     if (!strncmp(argv[i], "-enumValues=", 12)) {
       char *text = NULL, *first, *second;
@@ -232,10 +236,14 @@ int main(int argc, char **argv) {
       *first++ = 0; *second++ = 0;
       enumInputs = SDDS_Realloc(enumInputs, sizeof(*enumInputs) * (enumInputCount + 1));
       enumInputs[enumInputCount++] = (ENUM_INPUT){text, first, second, text};
+      free(argv[i]);
     } else argv[writeArg++] = argv[i];
   }
   argc = writeArg;
-  argc = scanargs(&s_arg, argc, argv);
+  scannedCount = scanargs(&s_arg, argc, argv);
+  for (i = 0; i < writeArg; i++) free(argv[i]);
+  free(expandedArgs);
+  argc = scannedCount;
   if (argc < 3) {
     fprintf(stderr, "Error: Insufficient arguments provided.\n\n%s", USAGE);
     exit(EXIT_FAILURE);

@@ -265,6 +265,12 @@ INSTALL_PROGRAM = $(if $(filter Darwin,$(OS)),install -m 755,cp -f)
 install_program = $(if $(filter Darwin,$(OS)),$(INSTALL_PROGRAM) $(1) $(2).new && mv -f $(2).new $(2),$(INSTALL_PROGRAM) $(1) $(2))
 copy_if_changed = if ! cmp -s $(1) $(2); then cp -f $(1) $(2); fi
 
+# Keep each program in its own shell command, below Windows command limits.
+define install_program_if_changed
+@if ! cmp -s $(1) $(2); then $(call install_program,$(1),$(2)); fi
+
+endef
+
 $(BIN_DIR)/%: %
 	cp -f $< $@
 	$(if $(EPICS_BIN_DIR),cp -f $@ $(EPICS_BIN_DIR)/)
@@ -279,8 +285,8 @@ install: all
 install-program: install-programs
 INSTALL_PROGRAMS ?= $(FULLPROD)
 install-programs: $(INSTALL_PROGRAMS) $(BUNDLED_RUNTIME_FILES) | $(BIN_DIR) $(EPICS_BIN_DIR)
-	$(if $(INSTALL_PROGRAMS),@set -e; $(foreach program,$(INSTALL_PROGRAMS),if ! cmp -s $(program) $(BIN_DIR)/$(notdir $(program)); then $(call install_program,$(program),$(BIN_DIR)/$(notdir $(program))); fi;))
-	$(if $(and $(EPICS_BIN_DIR),$(INSTALL_PROGRAMS)),@set -e; $(foreach program,$(INSTALL_PROGRAMS),if ! cmp -s $(program) $(EPICS_BIN_DIR)/$(notdir $(program)); then $(call install_program,$(program),$(EPICS_BIN_DIR)/$(notdir $(program))); fi;))
+	$(foreach program,$(INSTALL_PROGRAMS),$(call install_program_if_changed,$(program),$(BIN_DIR)/$(notdir $(program))))
+	$(if $(EPICS_BIN_DIR),$(foreach program,$(INSTALL_PROGRAMS),$(call install_program_if_changed,$(program),$(EPICS_BIN_DIR)/$(notdir $(program)))))
 # Installed archives are real targets so dependent programs wait for the copy.
 INSTALLED_LIBRARIES = $(addprefix $(LIB_DIR)/,$(notdir $(LIBRARY) $(PYTHON_SHARED_LIBRARY)))
 install-libraries: $(INSTALLED_LIBRARIES) $(BUNDLED_RUNTIME_FILES)

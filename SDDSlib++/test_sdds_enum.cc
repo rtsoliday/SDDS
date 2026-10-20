@@ -538,7 +538,7 @@ static void testEnumBulkConversions() {
 }
 
 /** @brief Run enum round trips in both directions using the C regression fixtures. */
-int main(int argc, char **argv) {
+int main(int argc, char **argv) try {
   using namespace sdds;
   assert(argc == 3);
   const std::filesystem::path inputDirectory(argv[1]), outputDirectory(argv[2]);
@@ -621,6 +621,8 @@ int main(int argc, char **argv) {
     auto page = projectedReader.next(request);
     assert(page && page->columnAs<EnumValue>("state").size() == 2);
     assert(page->columnAs<EnumValue>("state")[1].code == -1);
+    // Windows cannot replace the compressed output while this reader is open.
+    projectedReader.close();
     {
       auto updater = Writer::appendToLastPage(output, 1);
       updater.setColumn("state", std::vector<EnumValue>{{0}}, 4);
@@ -678,4 +680,7 @@ int main(int argc, char **argv) {
     assert(SDDS_Terminate(&dataset));
   }
   std::cout << "SDDS6 C/C++ differential tests passed\n";
+} catch (const std::exception &error) {
+  std::cerr << "SDDS6 C/C++ differential tests failed: " << error.what() << '\n';
+  return 1;
 }

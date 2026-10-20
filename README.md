@@ -45,7 +45,7 @@ sudo port install zlib zstd xz hdf5 libaec gsl libpng gd2 lerc libdeflate tiff q
   `C:\cygwin64\bin\make.exe` and `C:\Strawberry\c\bin\make.exe`.
 - Install [Microsoft MPI](https://learn.microsoft.com/en-us/message-passing-interface/microsoft-mpi)
   if MPI support is needed.
-- Install Qt 6.8.2 for MSVC 2022 in `C:\Qt\6.8.2\msvc2022_64`.
+- Install Qt 6.12.0 LTS for MSVC 2022 in `C:\Qt\6.12.0\msvc2022_64`.
 - Install and build GNU Scientific Library:
 
 ```bash
@@ -83,7 +83,8 @@ build-windows.bat
 ```
 
 The launcher discovers Visual Studio, initializes the x64 MSVC environment,
-adds Qt and the POSIX tools to the child process's `PATH`, and runs the build
+adds this checkout's runtime libraries, Qt and the POSIX tools to the child
+process's `PATH`, and runs the build
 from the repository root. It supports these commands:
 
 ```bat
@@ -96,10 +97,15 @@ build-windows.bat build 8
 
 The default is an incremental parallel build using the machine's logical
 processor count. The optional second argument sets the job count. Set
-`SDDS_CYGWIN_ROOT` or `SDDS_MAKE_EXE` before invoking the
-launcher to override the default tool locations. Cygwin remains a build-tool
+`QT_DIR`, `SDDS_CYGWIN_ROOT` or `SDDS_MAKE_EXE` before invoking the
+launcher to override the default tool locations. The selected Qt SDK supplies
+both the build tools and runtime libraries. Cygwin remains a build-tool
 dependency because the existing make recipes use POSIX shell commands, but it
 is no longer necessary to enter a configured Cygwin terminal.
+
+The Windows data-processing tools accept UTF-8 enum labels on the command line.
+Long option lists can use SDDS argument files (`@@options.txt`), with one
+argument per line, to stay within Windows' command-line length limit.
 
 ## Repository Structure
 ```

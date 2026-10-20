@@ -1,6 +1,8 @@
 """Native SDDS6 enums: format failures, toolkit semantics and legacy rejection."""
 import json
+import platform
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -13,8 +15,20 @@ MAPPING = "0:OFF,10:ON,-1:FAULT"
 
 
 def run(tool, *args, check=True):
-  result = subprocess.run([str(BIN_DIR / tool), *map(str, args)],
-                          capture_output=True, text=True)
+  command = [str(BIN_DIR / tool), *map(str, args)]
+  if platform.system() == "Windows" and len(subprocess.list2cmdline(command)) > 30000:
+    # SDDS's existing argument-file syntax avoids CreateProcess's length limit.
+    artifacts = ROOT_DIR / "tests/artifacts"
+    artifacts.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="enum-arguments-", dir=artifacts) as directory:
+      arguments = Path(directory) / "arguments.txt"
+      values = [value.replace("\\", "/") if ":\\" in value else value
+                for value in command[1:]]
+      arguments.write_text("\n".join(values) + "\n", encoding="utf8")
+      result = subprocess.run([command[0], f"@@{arguments.as_posix()}"],
+                              capture_output=True, text=True, encoding="utf8")
+  else:
+    result = subprocess.run(command, capture_output=True, text=True, encoding="utf8")
   if check:
     assert result.returncode == 0, result.stderr
   return result
@@ -26,6 +40,21 @@ def make_enum(path, mapping=MAPPING, values="0,10,-1", append=None):
   if append:
     args.append(append)
   return run("sddsmakedataset", *args)
+
+
+def test_enum_options_in_argument_files(tmp_path):
+  source, remapped = tmp_path / "source.sdds", tmp_path / "remapped.sdds"
+  options = tmp_path / "options.txt"
+  options.write_text(f"{source.as_posix()}\n-column=state,type=enum\n-data=0,10,-1\n"
+                     f"-enumValues=column,state,{MAPPING}\n", encoding="utf8")
+  run("sddsmakedataset", f"@@{options.as_posix()}")
+  assert labels(source) == ["OFF", "ON", "FAULT"]
+  options.write_text(f"{source.as_posix()}\n{remapped.as_posix()}\n"
+                     "-cast=column,state,enum,enum\n"
+                     "-enumValues=column,state,7:OFF,8:ON,9:FAULT\n", encoding="utf8")
+  run("sddscast", f"@@{options.as_posix()}")
+  assert labels(remapped) == ["OFF", "ON", "FAULT"]
+  assert labels(remapped, True) == ["7", "8", "9"]
 
 
 def labels(path, codes=False):

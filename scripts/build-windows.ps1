@@ -90,8 +90,8 @@ if ($env:SDDS_MAKE_EXE) {
 }
 $makeBin = Split-Path -Parent $make
 
-$qtRoot = "C:\Qt\6.8.2\msvc2022_64"
-$qtRoot = Require-Directory $qtRoot "Qt 6.8.2 for MSVC 2022"
+$qtRoot = if ($env:QT_DIR) { $env:QT_DIR } else { "C:\Qt\6.12.0\msvc2022_64" }
+$qtRoot = Require-Directory $qtRoot "Qt for MSVC 2022"
 $qtBin = Require-Directory (Join-Path $qtRoot "bin") "Qt bin directory"
 $null = Require-File (Join-Path $qtBin "moc.exe") "Qt moc.exe"
 
@@ -111,7 +111,7 @@ if ($Target -ne "clean") {
 }
 
 $shellForMake = $shell.Replace("\", "/")
-$commonArguments = "OS=Windows ARCH=x86_64 SHELL=$shellForMake"
+$commonArguments = 'OS=Windows ARCH=x86_64 SHELL="{0}" QT_DIR="{1}"' -f $shellForMake, $qtRoot.Replace("\", "/")
 $quotedMake = '"{0}"' -f $make
 $quotedRoot = '"{0}"' -f $repositoryRoot
 $makeBuild = "$quotedMake -C $quotedRoot -j$Jobs $commonArguments"
@@ -124,7 +124,8 @@ switch ($Target) {
   "test" { $makeCommands = @("$makeBuild test") }
 }
 
-$pathCommand = 'set "PATH={0};{1};{2};%PATH%"' -f $qtBin, $cygwinBin, $makeBin
+$runtimeBin = Join-Path $repositoryRoot "bin\Windows-x86_64"
+$pathCommand = 'set "PATH={0};{1};{2};{3};%PATH%"' -f $runtimeBin, $qtBin, $cygwinBin, $makeBin
 $command = @(
   $pathCommand,
   ('call "{0}"' -f $vcvars64),

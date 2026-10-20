@@ -101,7 +101,7 @@ def test_diff_reports_enum_page_read_errors(tmp_path, invalid_inputs, valid_pref
 
   result = run("sddsdiff", *paths, check=False)
   assert result.returncode > 0
-  assert str(paths[invalid_inputs.index(True)]) in result.stderr
+  assert paths[invalid_inputs.index(True)].as_posix() in result.stderr.replace("\\", "/")
   assert "enum" in result.stderr.lower()
   assert "identical" not in result.stdout
   assert "fewer pages" not in result.stderr

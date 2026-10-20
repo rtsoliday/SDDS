@@ -22,7 +22,6 @@
 #endif
 
 int parseList(char ***list, char *string);
-long add_file_arguments(int argc, char **argv, char ***argvNew);
 int parse_string(char ***list, char *string);
 
 /**

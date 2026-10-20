@@ -198,6 +198,8 @@ int main(int argc, char **argv) {
   long enumTargetCount = 0, writeArg = 1;
   int enumConversions = 0;
   int32_t readResult;
+  char **expandedArgs = NULL;
+  int scannedCount;
 
   column_cast.n = parameter_cast.n = array_cast.n = 0;
   column_cast.name = column_cast.new_type = NULL;
@@ -208,6 +210,8 @@ int main(int argc, char **argv) {
   col_requests = par_requests = array_requests = rows = 0;
 
   SDDS_RegisterProgramName(argv[0]);
+  argc = add_file_arguments(argc, argv, &expandedArgs);
+  argv = expandedArgs;
   /* Consume exactly two structural commas; leave the logical mapping untouched. */
   for (i = 1; i < argc; i++) {
     if (!strncmp(argv[i], "-enumValues=", 12)) {
@@ -222,10 +226,14 @@ int main(int argc, char **argv) {
       if (kind < 0 || !*first) SDDS_Bomb("invalid -enumValues element kind/name");
       enumTargets = SDDS_Realloc(enumTargets, sizeof(*enumTargets) * (enumTargetCount + 1));
       enumTargets[enumTargetCount++] = (ENUM_TARGET){kind, first, second, text, 0};
+      free(argv[i]);
     } else argv[writeArg++] = argv[i];
   }
   argc = writeArg;
-  argc = scanargs(&s_arg, argc, argv);
+  scannedCount = scanargs(&s_arg, argc, argv);
+  for (i = 0; i < writeArg; i++) free(argv[i]);
+  free(expandedArgs);
+  argc = scannedCount;
   if (argc < 3)
     bomb(NULL, USAGE);
 

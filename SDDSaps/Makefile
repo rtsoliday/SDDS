@@ -187,6 +187,8 @@ ifeq ($(OS), Darwin)
 endif
 
 ifeq ($(OS), Windows)
+  LINKEXE += /MANIFEST:EMBED /MANIFESTINPUT:windows-utf8.manifest
+  PROD_SYS_DEPS += windows-utf8.manifest
   CFLAGS += -I../tiff -I../lzma -I../zlib -I../../gsl -openmp -wd4018 -wd4244 -wd4267 -wd4305 -wd4311 -wd4312
   override CXXFLAGS += -I../tiff -I../lzma -I../zlib -I../../gsl -openmp -wd4018 -wd4244 -wd4267 -wd4305 -wd4311 -wd4312
   PROD_LIBS = csa.lib nnetwork.lib mdbcommon.lib matlib.lib fftpack.lib SDDS1.lib rpnlib.lib $(GSL_LINK_LIBS) mdbmth.lib mdblib.lib lzma.lib z.lib xls.lib

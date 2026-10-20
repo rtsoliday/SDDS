@@ -20,14 +20,14 @@ INTERNAL_OBJECTS = {
     (
       "array.obj", "conditional.obj", "execute.obj", "get_token_rpn.obj",
       "infixtopostfix.obj", "logical.obj", "math.obj", "memory.obj", "pcode.obj",
-      "pop_push.obj", "prompt.obj", "rpn_lock.obj", "rpn_csh.obj", "rpn_data.obj",
+      "pop_push.obj", "prompt.obj", "rpn_readline.obj", "rpn_lock.obj", "rpn_csh.obj", "rpn_data.obj",
       "rpn_draw.obj", "rpn_error.obj", "rpn_io.obj", "rpn_sub.obj", "stack.obj", "udf.obj",
     ),
   ),
   "SDDS1": (
     "SDDSlib",
     (
-      "SDDS_ascii.obj", "SDDS_binary.obj", "SDDS_copy.obj", "SDDS_data.obj",
+      "SDDS_ascii.obj", "SDDS_enum.obj", "SDDS_binary.obj", "SDDS_copy.obj", "SDDS_data.obj",
       "SDDS_dataprep.obj", "SDDS_extract.obj", "SDDS_info.obj", "SDDS_input.obj",
       "SDDS_lzma.obj", "SDDS_mplsupport.obj", "SDDS_output.obj", "SDDS_process.obj",
       "SDDS_rpn.obj", "SDDS_transfer.obj", "SDDS_utils.obj", "SDDS_write.obj",
@@ -36,12 +36,12 @@ INTERNAL_OBJECTS = {
   "SDDS1mpi": (
     "SDDSlib",
     (
-      "SDDS_ascii.mpi.obj", "SDDS_binary.mpi.obj", "SDDS_copy.mpi.obj",
+      "SDDS_ascii.mpi.obj", "SDDS_enum.mpi.obj", "SDDS_binary.mpi.obj", "SDDS_copy.mpi.obj",
       "SDDS_data.mpi.obj", "SDDS_dataprep.mpi.obj", "SDDS_extract.mpi.obj",
       "SDDS_info.mpi.obj", "SDDS_input.mpi.obj", "SDDS_lzma.mpi.obj",
       "SDDS_mplsupport.mpi.obj", "SDDS_output.mpi.obj", "SDDS_process.mpi.obj",
       "SDDS_rpn.mpi.obj", "SDDS_transfer.mpi.obj", "SDDS_utils.mpi.obj",
-      "SDDS_write.mpi.obj", "SDDS_MPI_binary.obj", "SDDSmpi_input.obj", "SDDSmpi_output.obj",
+      "SDDS_write.mpi.obj", "SDDS_MPI_binary.obj", "SDDSmpi_input.obj", "SDDSmpi_enum.obj", "SDDSmpi_output.obj",
     ),
   ),
   "xls": ("xlslib", ("assert_assist.obj",)),

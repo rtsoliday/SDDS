@@ -30,6 +30,8 @@ override CXXFLAGS += $(if $(filter Windows,$(OS)),/Zc:__cplusplus /permissive- /
 LDFLAGS += $(QT_LIBS)
 ifeq ($(OS),Windows)
 CPPFLAGS += -I../../lzma -I$(HDF_DIR)/include
+# Keep project warnings enabled while treating the installed Qt SDK as external.
+override CXXFLAGS += /external:I"$(QT_DIR)/include" /external:W0
 PROD_LIBS = SDDS1.lib rpnlib.lib mdbmth.lib mdblib.lib z.lib
 PROD_SYS_LIBS = $(HDF_DIR)/lib/libhdf5.lib $(HDF_DIR)/lib/libszaec.lib $(HDF_DIR)/lib/libaec.lib $(LZMA_LIB) shlwapi.lib advapi32.lib
 else
