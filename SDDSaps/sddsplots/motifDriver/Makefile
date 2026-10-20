@@ -1,4 +1,6 @@
 DD  = ../../
+ENABLE_OPENMP := 1
+BUNDLE_OPENMP := 1
 include ../../../Makefile.rules
 
 ifneq ($(OS), Windows)
@@ -9,15 +11,13 @@ ifneq ($(OS), Windows)
   CFLAGS += -I../../../include -I$(MOTIF_INC) -I$(X11_INC) -DXREL5 -DzLib
 
   PROD_LIBS = -lmdbplt -lSDDS1 -lrpnlib -lmdbmth -lmdblib
-  PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(XM_LIB) $(JPEG_LIB) $(XMU_LIB) $(XT_LIB) $(ICE_LIB) $(SM_LIB) $(XP_LIB) $(XAU_LIB) $(XFT_LIB) $(XEXT_LIB) $(X11_LIB) $(FONTCONFIG_LIB) $(ICONV_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) -lm
+  PROD_SYS_LIBS = $(LZMA_LIB) $(GSL_LINK_LIBS) $(XM_LIB) $(JPEG_LIB) $(XMU_LIB) $(XT_LIB) $(ICE_LIB) $(SM_LIB) $(XP_LIB) $(XAU_LIB) $(XFT_LIB) $(XEXT_LIB) $(X11_LIB) $(FONTCONFIG_LIB) $(ICONV_LIB) $(Z_LIB) $(GD_LIB) $(PNG_LIB) $(DARWIN_OPENMP_LDFLAGS) -lm
+CUSTOM_LINK_PRODUCTS += mpl_motif
 
   include ../../../Makefile.build
 
 $(OBJ_DIR)/mpl_motif$(EXEEXT): $(mpl_motif_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(mpl_motif_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
-	cp -f $@ $(BIN_DIR)/
-	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
-	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 
 else

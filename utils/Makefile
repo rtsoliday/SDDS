@@ -1,3 +1,5 @@
+ENABLE_OPENMP := 1
+BUNDLE_OPENMP := 1
 include ../Makefile.rules
 
 PROD = editstring replaceText isFileLocked hdf2sdds sdds2hdf
@@ -20,18 +22,18 @@ ifeq ($(OS), Linux)
       CFLAGS := -I$(HDF5_INCLUDE_DIR)/H5FDsubfiling $(CFLAGS)
     endif
   endif
-  PROD_SYS_LIBS := $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(CURL_LIB) $(OPENSSL_COMPAT_RPATH) $(SSL_LIB) $(CRYPTO_LIB) $(PROD_SYS_LIBS)
+  PROD_SYS_LIBS := $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LINK_LIBS) $(Z_LIB) $(CURL_LIB) $(OPENSSL_LINK_LIBS) $(PROD_SYS_LIBS)
   PROD_LIBS = -lmdbcommon -lSDDS1 -lrpnlib -lmdbmth -lmdblib
 endif
 
 ifeq ($(OS), Darwin)
-  PROD_SYS_LIBS := $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+  PROD_SYS_LIBS := $(HDF5_LIB) $(SZ_LIB) $(LZMA_LIB) $(GSL_LINK_LIBS) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lmdbcommon -lSDDS1 -lrpnlib -lmdbmth -lmdblib
 endif
 
 ifeq ($(OS), Windows)
   CFLAGS += -I../lzma -I$(HDF_DIR)/include -DEXPORT_MDBCOMMON -wd4267
-  PROD_LIBS = mdbcommon.lib SDDS1.lib gsl.lib gslcblas.lib mdbmth.lib mdblib.lib z.lib 
+  PROD_LIBS = mdbcommon.lib SDDS1.lib $(GSL_LINK_LIBS) mdbmth.lib mdblib.lib z.lib
   PROD_SYS_LIBS := $(HDF_DIR)/lib/libhdf5.lib $(HDF_DIR)/lib/libszaec.lib $(HDF_DIR)/lib/libaec.lib shlwapi.lib $(PROD_SYS_LIBS)
 endif
 

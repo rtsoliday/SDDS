@@ -1,3 +1,5 @@
+ENABLE_OPENMP := 1
+BUNDLE_OPENMP := 1
 include ../Makefile.rules
 
 LIBRARY = SDDSpp
@@ -9,15 +11,15 @@ LIBRARY_SRC = SDDSModern.cc \
               SDDSLegacy.cc
 
 ifeq ($(OS), Windows)
-CCFLAGS += /std:c++17 /wd4251 /wd4275 /wd4996 -I../include -I../zlib -I../lzma
-LIBRARY_CCFLAGS += -DEXPORT_SDDSPP
+override CXXFLAGS += /wd4251 /wd4275 /wd4996 -I../include -I../zlib -I../lzma
+LIBRARY_CXXFLAGS += -DEXPORT_SDDSPP
 COMPRESSION_LIBS = $(LIB_DIR)/z.lib $(LIB_DIR)/lzma.lib
 TEST_OBJECT_OUTPUT = /Fo$(OBJ_DIR)/$(@F).obj
 TEST_EXECUTABLE_OUTPUT = /Fe$@
 LIBRARY_LIBS = lzma.lib z.lib
 else
-CCFLAGS += -std=c++17 -I../include
-LIBRARY_CCFLAGS += -DEXPORT_SDDSPP
+override CXXFLAGS += -I../include
+LIBRARY_CXXFLAGS += -DEXPORT_SDDSPP
 COMPRESSION_LIBS = $(Z_LIB) $(LZMA_LIB)
 TEST_EXECUTABLE_OUTPUT = -o $@
 endif
@@ -36,7 +38,7 @@ BENCHMARK_PROGRAM = $(OBJ_DIR)/benchmark_sddspp$(EXEEXT)
 TEST_ARTIFACTS = $(OBJ_DIR)/test-artifacts
 ENUM_TEST_PROGRAM = $(OBJ_DIR)/test_sddspp_enum$(EXEEXT)
 FUZZ_CXX ?= clang++
-SANITIZER_CXX ?= $(CCC)
+SANITIZER_CXX ?= $(CXX)
 ifeq ($(OS), Linux)
 ifneq ($(findstring g++,$(SANITIZER_CXX)),)
 SANITIZER_RUNTIME_FLAGS = -static-libasan -static-libubsan
@@ -49,7 +51,7 @@ DIFFERENTIAL_LIBS = $(LIB_DIR)/SDDS1.lib $(LIB_DIR)/rpnlib.lib \
 else
 DIFFERENTIAL_LIBS = $(LIB_DIR)/libSDDS1.a $(LIB_DIR)/librpnlib.a \
                     $(LIB_DIR)/libmdbmth.a $(LIB_DIR)/libmdblib.a \
-                    $(COMPRESSION_LIBS) $(GSL_LIB) $(GSLCBLAS_LIB) -lm
+                    $(COMPRESSION_LIBS) $(GSL_LINK_LIBS) -lm
 endif
 
 $(LIBRARY) $(LIBRARY_OBJS): | $(OBJ_DIR)
@@ -57,19 +59,19 @@ $(TEST_PROGRAM) $(ADVANCED_TEST_PROGRAM) $(DIFFERENTIAL_TEST_PROGRAM) \
   $(FUZZ_SMOKE_PROGRAM) $(FUZZ_PROGRAM) $(SANITIZER_TEST_PROGRAM) \
   $(BENCHMARK_PROGRAM): | $(OBJ_DIR)
 $(TEST_PROGRAM): test_sdds3.cc $(LIBRARY)
-	$(CCC) $(CCFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds3.cc $(LIBRARY) $(COMPRESSION_LIBS) $(TEST_SYS_LIBS)
+	$(CXX) $(CXXFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds3.cc $(LIBRARY) $(COMPRESSION_LIBS) $(TEST_SYS_LIBS)
 
 $(ADVANCED_TEST_PROGRAM): test_sdds3_advanced.cc $(LIBRARY)
-	$(CCC) $(CCFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds3_advanced.cc $(LIBRARY) $(COMPRESSION_LIBS) $(TEST_SYS_LIBS)
+	$(CXX) $(CXXFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds3_advanced.cc $(LIBRARY) $(COMPRESSION_LIBS) $(TEST_SYS_LIBS)
 
 $(DIFFERENTIAL_TEST_PROGRAM): test_sdds3_differential.cc $(LIBRARY)
-	$(CCC) $(CCFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds3_differential.cc $(LIBRARY) $(DIFFERENTIAL_LIBS) $(TEST_SYS_LIBS)
+	$(CXX) $(CXXFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds3_differential.cc $(LIBRARY) $(DIFFERENTIAL_LIBS) $(TEST_SYS_LIBS)
 
 $(BENCHMARK_PROGRAM): benchmark_sdds3.cc $(LIBRARY)
-	$(CCC) $(CCFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) benchmark_sdds3.cc $(LIBRARY) $(DIFFERENTIAL_LIBS) $(if $(filter Windows,$(OS)),psapi.lib,) $(TEST_SYS_LIBS)
+	$(CXX) $(CXXFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) benchmark_sdds3.cc $(LIBRARY) $(DIFFERENTIAL_LIBS) $(if $(filter Windows,$(OS)),psapi.lib,) $(TEST_SYS_LIBS)
 
 $(FUZZ_SMOKE_PROGRAM): fuzz_sdds3.cc $(LIBRARY)
-	$(CCC) $(CCFLAGS) -DSDDSPP_FUZZ_STANDALONE -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) fuzz_sdds3.cc $(LIBRARY) $(COMPRESSION_LIBS) $(TEST_SYS_LIBS)
+	$(CXX) $(CXXFLAGS) -DSDDSPP_FUZZ_STANDALONE -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) fuzz_sdds3.cc $(LIBRARY) $(COMPRESSION_LIBS) $(TEST_SYS_LIBS)
 
 .PHONY: test differential-test
 test: $(TEST_PROGRAM) $(ADVANCED_TEST_PROGRAM) differential-test
@@ -78,7 +80,7 @@ test: $(TEST_PROGRAM) $(ADVANCED_TEST_PROGRAM) differential-test
 	$(ADVANCED_TEST_PROGRAM) $(TEST_ARTIFACTS)/advanced
 
 $(ENUM_TEST_PROGRAM): test_sdds_enum.cc $(LIBRARY) $(if $(filter Windows,$(OS)),$(LIB_DIR)/SDDS1.lib,$(LIB_DIR)/libSDDS1.a)
-	$(CCC) $(CCFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds_enum.cc $(LIBRARY) $(DIFFERENTIAL_LIBS) $(TEST_SYS_LIBS)
+	$(CXX) $(CXXFLAGS) -I../include $(TEST_OBJECT_OUTPUT) $(TEST_EXECUTABLE_OUTPUT) test_sdds_enum.cc $(LIBRARY) $(DIFFERENTIAL_LIBS) $(TEST_SYS_LIBS)
 
 .PHONY: enum-test
 enum-test:
@@ -135,8 +137,8 @@ fuzz:
 	@echo "the libFuzzer target is supported on Unix-like builds"
 else
 $(SANITIZER_TEST_PROGRAM): test_sdds3_advanced.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc SDDSTransform.cc
-	$(SANITIZER_CXX) $(CCFLAGS) $(SANITIZER_RUNTIME_FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined \
-		-std=c++17 -I../include -o $@ test_sdds3_advanced.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc \
+	$(SANITIZER_CXX) $(CXXFLAGS) $(SANITIZER_RUNTIME_FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined \
+		-I../include -o $@ test_sdds3_advanced.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc \
 		SDDSTransform.cc -lz -llzma
 
 .PHONY: sanitizer-test
@@ -146,11 +148,11 @@ sanitizer-test: $(SANITIZER_TEST_PROGRAM) $(OBJ_DIR)/test_sddspp_enum_sanitized
 	ASAN_OPTIONS=detect_leaks=0 $(OBJ_DIR)/test_sddspp_enum_sanitized ../SDDSlib/$(OBJ_DIR)/test-artifacts/enum $(TEST_ARTIFACTS)/enum-sanitized
 
 $(OBJ_DIR)/test_sddspp_enum_sanitized: test_sdds_enum.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc SDDSTransform.cc | $(OBJ_DIR)
-	$(SANITIZER_CXX) $(CCFLAGS) $(SANITIZER_RUNTIME_FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined -std=c++17 -I../include -o $@ test_sdds_enum.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc SDDSTransform.cc $(DIFFERENTIAL_LIBS) $(TEST_SYS_LIBS)
+	$(SANITIZER_CXX) $(CXXFLAGS) $(SANITIZER_RUNTIME_FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined -std=c++17 -I../include -o $@ test_sdds_enum.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc SDDSTransform.cc $(DIFFERENTIAL_LIBS) $(TEST_SYS_LIBS)
 
 $(FUZZ_PROGRAM): fuzz_sdds3.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc SDDSTransform.cc
 	$(FUZZ_CXX) -O1 -g -fno-omit-frame-pointer -fsanitize=fuzzer,address,undefined \
-		-std=c++17 -I../include -o $@ fuzz_sdds3.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc \
+		$(CXX_STD_FLAGS) -I../include -o $@ fuzz_sdds3.cc SDDSModern.cc SDDSLayout.cc SDDSIO.cc \
 		SDDSTransform.cc -lz -llzma
 
 .PHONY: fuzz

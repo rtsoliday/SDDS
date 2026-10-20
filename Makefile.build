@@ -1,50 +1,73 @@
 #==============================================================================
-# Makefile.build - shared build recipes
+# Shared build recipes. Keep identical in all six repositories.
+# Include after final component settings and product declarations.
 #
-# This file is identical in the SDDS, SDDS-EPICS, medm, qtalh and StripTool
-# repositories.  Change it in one repository, then copy it to the other four.
-# Component makefiles include it last, after Makefile.rules and their own
-# settings:
-#
-#   PROD                  programs; each one is built from <prog>_SRC
-#   LIBRARY               a library built from LIBRARY_SRC
-#   PYTHON_SHARED_LIBRARY a Python extension built from LIBRARY_SRC
-#   SCRIPTS, INC          files installed into BIN_DIR and EPICS_INC_DIR
-#   PROD_LIBS, PROD_LIBS_SDDS, PROD_SYS_LIBS           program libraries
-#   LIBRARY_LIBS, LIBRARY_LIBS_SDDS, LIBRARY_SYS_LIBS  library libraries
-#   GSL_PROD              programs that also link GSL_LINK_LIBS
-#
-#   1. Products
-#   2. Link dependencies
-#   3. Goals and output directories
-#   4. Link rules
-#   5. Compile rules
-#   6. Installation and cleanup
-#   7. StripTool, whose component makefiles provide their own rules
+# PROD: program names; <name>_SRC, <name>_OBJS, <name>_LIBS and <name>_DEPS
+#       optionally override sources, objects, ordered libraries and dependencies.
+# INSTALL_PROGRAMS: optional subset of output paths to install.
+# CUSTOM_LINK_PRODUCTS: programs whose recipes are supplied by the component.
+# CUSTOM_COMPILE_RULES / CUSTOM_CLEAN: retain component recipes when set to 1.
+# BUILD_OBJECTS / BUILD_GENERATED / BUILD_CONFIG_VARIABLES: extend rebuild
+#       tracking explicitly, including test objects and generated Qt sources.
+# LIBRARY/LIBRARY_SRC, PYTHON_SHARED_LIBRARY, INC and SCRIPTS retain their API.
 #==============================================================================
-ifneq ($(RULES_PROFILE),striptool)
-
-CLEAN_DIRS ?= $(OBJ_DIR)
-
-
-#------------------------------------------------------------------------------
-# 1. Products
-#------------------------------------------------------------------------------
-define make_prod_objs
-$(1)_OBJS = $(patsubst %.cpp, $(OBJ_DIR)/%.$(OBJEXT), $(patsubst %.cc, $(OBJ_DIR)/%.$(OBJEXT), $(patsubst %.c, $(OBJ_DIR)/%.$(OBJEXT), $($(1)_SRC))))
-endef
-
-ifneq ($(PROD),)
-  $(foreach prod, $(PROD), $(eval $(call make_prod_objs,$(prod))))
-  FULLPROD = $(patsubst %,$(OBJ_DIR)/%$(EXEEXT), $(PROD))
-  PROD_OBJECTS = $(patsubst %$(EXEEXT),%.$(OBJEXT),$(FULLPROD))
-  .SECONDARY: $(PROD_OBJECTS)
+ifeq ($(.DEFAULT_GOAL),)
+.DEFAULT_GOAL := all
 endif
 
+# Final compiler options and Qt validation.
+# Apply developer options after the component has selected its final compiler.
+ifeq ($(DEV_BUILD),1)
+override CFLAGS := $(call dev_flags,$(CFLAGS))
+override CXXFLAGS := $(call dev_flags,$(CXXFLAGS))
+ifeq ($(OS),Windows)
+override LINKEXE := $(filter-out -LTCG -opt:ref -release,$(LINKEXE)) /debug
+override LINKDLL := $(filter-out -LTCG -opt:ref -release,$(LINKDLL)) /debug
+override LDFLAGS += /debug
+endif
+endif
+ifeq ($(and $(filter 1,$(USE_CCACHE)),$(filter 1,$(CCACHE_AVAILABLE))),1)
+override CC := $(CCACHE) $(CC)
+override CXX := $(CCACHE) $(CXX)
+endif
+PROD_SYS_LIBS += $(LDLIBS)
+
+ifeq ($(OS),Windows)
+DEPFLAGS =
+else
+DEPFLAGS = -MMD -MP -MF $(@:.$(OBJEXT)=.d)
+endif
+
+ifneq ($(and $(QT_BUILD_GOALS),$(and $(filter 1,$(QT_REQUIRED)),$(PROD))),)
+  BUILD_MOC_MAJOR := $(shell $(MOC) -v 2>&1 | sed -n 's/.* \([56]\)\..*/\1/p')
+  ifneq ($(BUILD_MOC_MAJOR),$(QT_VERSION))
+    $(error MOC=$(MOC) must be from Qt $(QT_VERSION))
+  endif
+  ifneq ($(OS),Windows)
+    ifneq ($(QT_USE_QMAKE),1)
+      BUILD_QT_PREFIXES := $(sort $(foreach pkg,$(QT_PACKAGES),$(shell $(PKG_CONFIG) --variable=prefix $(pkg) 2>/dev/null)))
+      ifneq ($(words $(BUILD_QT_PREFIXES)),1)
+        $(error Qt modules come from different installations: $(BUILD_QT_PREFIXES). Fix PKG_CONFIG_PATH or set PKG_CONFIG)
+      endif
+    endif
+  endif
+endif
+
+# Product paths and source/object lists.
+source_objects = $(addprefix $(OBJ_DIR)/,$(addsuffix .$(OBJEXT),$(basename $(1))))
+define product_defaults
+$(1)_SRC ?= $(firstword $(wildcard $(1).c $(1).cc $(1).cpp))
+$(1)_OBJS ?= $$(call source_objects,$$($(1)_SRC)) $$($(1)_EXTRA_OBJS)
+$(1)_LIBS ?= $$(PROD_LIBS) $$(PROD_LIBS_SDDS) $$(GSL_LIBS) $$(PROD_SYS_LIBS)
+endef
+$(foreach product,$(PROD),$(eval $(call product_defaults,$(product))))
+FULLPROD = $(addprefix $(OBJ_DIR)/,$(addsuffix $(EXEEXT),$(PROD)))
+PROD_OBJECTS = $(foreach product,$(PROD),$($(product)_OBJS))
+.SECONDARY: $(PROD_OBJECTS)
 ifneq ($(LIBRARY),)
   ifeq ($(OS), Windows)
-    DLL = $(LIBRARY:.lib=.dll)
-    EXP = $(LIBRARY:.lib=.exp)
+    DLL := $(LIBRARY).dll
+    EXP := $(LIBRARY).exp
     LIBRARY := $(LIBRARY:=.lib)
     DLL := $(patsubst %,$(OBJ_DIR)/%, $(DLL))
     EXP := $(patsubst %,$(OBJ_DIR)/%, $(EXP))
@@ -69,7 +92,7 @@ ifneq ($(PYTHON_SHARED_LIBRARY),)
 endif
 
 ifneq ($(LIBRARY)$(PYTHON_SHARED_LIBRARY),)
-  LIBRARY_OBJS := $(patsubst %,$(OBJ_DIR)/%,$(patsubst %.cpp,%.$(OBJEXT),$(patsubst %.cc,%.$(OBJEXT),$(patsubst %.c,%.$(OBJEXT),$(LIBRARY_SRC)))))
+  LIBRARY_OBJS := $(call source_objects,$(LIBRARY_SRC))
 endif
 
 ifneq ($(SCRIPTS),)
@@ -82,10 +105,9 @@ ifneq ($(INC),)
 endif
 endif
 
-
-#------------------------------------------------------------------------------
-# 2. Link dependencies
-#------------------------------------------------------------------------------
+# Library dependencies and configuration tracking.
+BUILD_CONFIG = $(OBJ_DIR)/.build-config-$(notdir $(firstword $(MAKEFILE_LIST)))
+BUILD_FILES += $(BUILD_CONFIG)
 # Relink when a library from this repository, SDDS or the system changes.
 ifeq ($(OS), Windows)
   ifneq ($(PROD_LIBS),)
@@ -115,18 +137,15 @@ else
   endif
 endif
 
+# Custom link recipes must also relink when their library files change.
+PROD_DEPS += $(wildcard $(filter-out -%,$(PROD_SYS_LIBS) $(PROD_SYS_DEPS)))
+LIBRARY_DEPS += $(wildcard $(filter-out -%,$(LIBRARY_SYS_LIBS) $(LIBRARY_SYS_DEPS)))
 
-#------------------------------------------------------------------------------
-# 3. Goals and output directories
-#------------------------------------------------------------------------------
-all: $(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(EPICS_BIN_DIR) $(EPICS_LIB_DIR) $(EPICS_INC_DIR) $(BUNDLED_RUNTIME_FILES) $(LIBRARY) $(PYTHON_SHARED_LIBRARY) $(FULLPROD) $(SCRIPTS) $(INC)
-
-$(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(EPICS_BIN_DIR) $(EPICS_LIB_DIR) $(EPICS_INC_DIR):
-	mkdir -p $@
-
-# Parallel clean builds must create the object directory before any compiler,
-# archiver or linker writes into it; an `all` prerequisite does not order them.
-$(PROD_OBJECTS) $(LIBRARY_OBJS) $(FULLPROD) $(LIBRARY) $(PYTHON_SHARED_LIBRARY): | $(OBJ_DIR)
+# Dependency edges are shared even when a product uses a custom link recipe.
+define product_dependencies
+$(OBJ_DIR)/$(1)$(EXEEXT): $$($(1)_OBJS) $$(PROD_DEPS) $$($(1)_DEPS) $$(wildcard $$(filter-out -%,$$($(1)_LIBS))) | $(OBJ_DIR)
+endef
+$(foreach product,$(PROD),$(eval $(call product_dependencies,$(product))))
 
 # Programs listed in GSL_PROD also link GSL.
 ifneq ($(GSL_PROD),)
@@ -134,7 +153,97 @@ ifneq ($(GSL_PROD),)
   $(GSL_FULLPROD): GSL_LIBS = $(GSL_LINK_LIBS)
 endif
 
-# Runtime libraries copied into LIB_DIR (SDDS-EPICS on macOS: libomp).
+$(PROD_DEPS):
+$(LIBRARY_DEPS):
+
+# Track only declared artifacts; components register their generated/test files.
+build_quote = '$(subst ','"'"',$(1))'
+BUILD_CONFIG_VARIABLES += CC CXX MPI_CC MPI_CXX MPICH_CC MPICH_CXX AR RANLIB LINKEXE LINKDLL LINKLIB \
+  CPPFLAGS CFLAGS CXXFLAGS EXTRA_CFLAGS EXTRA_CXXFLAGS LIBRARY_CFLAGS LIBRARY_CXXFLAGS \
+  LDFLAGS LDLIBS LIBS LIB_LINK_DIRS PROD_LIBS PROD_LIBS_SDDS PROD_SYS_LIBS \
+  LIBRARY_LIBS LIBRARY_LIBS_SDDS LIBRARY_SYS_LIBS GSL_LINK_LIBS \
+  OPENSSL_LINK_LIBS OPENSSL_CRYPTO_LINK_LIBS \
+  EPICS_BASE EPICS_HOST_ARCH EPICS_REQUIRED_LIBS EPICS_OPTIONAL_LIBS QT_VERSION QT_DIR QT_CFLAGS QT_LIBS \
+  QT_TEST_CFLAGS MOC RCC HAVE_PVA DEV_BUILD USE_CCACHE \
+  $(foreach product,$(PROD),$(product)_OBJS $(product)_LIBS $(product)_DEPS)
+BUILD_CONFIG_VALUES := $(foreach variable,$(sort $(BUILD_CONFIG_VARIABLES)),$(call build_quote,$(variable)=$($(variable))))
+BUILD_OBJECTS += $(PROD_OBJECTS) $(LIBRARY_OBJS)
+BUILD_CONFIG_OBJECTS := $(sort $(BUILD_OBJECTS))
+BUILD_CONFIG_GENERATED := $(sort $(BUILD_GENERATED))
+.PHONY: force-build-config
+$(BUILD_CONFIG): force-build-config | $(OBJ_DIR)
+ifeq ($(OS),Windows)
+# Write directly from make to avoid Windows shell command limits. Recipe
+# functions also expand during dry runs, when OBJ_DIR may not exist.
+	$(if $(findstring n,$(firstword -$(MAKEFLAGS))),,$(file >$@.new,$(BUILD_CONFIG_VALUES)))
+else
+	@printf '%s\n' $(BUILD_CONFIG_VALUES) > $@.new
+endif
+	@if cmp -s $@.new $@; then rm -f $@.new; else mv -f $@.new $@; fi
+# Shared prerequisites cover custom recipes as well as pattern rules.
+$(BUILD_CONFIG_OBJECTS) $(BUILD_CONFIG_GENERATED): $(BUILD_FILES)
+
+# Output directories and aggregate targets.
+all: $(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(EPICS_BIN_DIR) $(EPICS_LIB_DIR) $(EPICS_INC_DIR) $(BUNDLED_RUNTIME_FILES) $(LIBRARY) $(PYTHON_SHARED_LIBRARY) $(FULLPROD) $(SCRIPTS) $(INC) install-programs install-libraries
+$(sort $(OBJ_DIR) $(BIN_DIR) $(LIB_DIR) $(EPICS_BIN_DIR) $(EPICS_LIB_DIR) $(EPICS_INC_DIR)):
+	mkdir -p $@
+$(PROD_OBJECTS) $(LIBRARY_OBJS) $(FULLPROD) $(LIBRARY) $(PYTHON_SHARED_LIBRARY): | $(OBJ_DIR)
+$(SCRIPTS): | $(BIN_DIR) $(EPICS_BIN_DIR)
+$(INC): | $(EPICS_INC_DIR)
+.PHONY: prepare-output
+prepare-output: $(OBJ_DIR) $(BIN_DIR)
+
+# Compilation, archive and link recipes.
+ifneq ($(CUSTOM_COMPILE_RULES),1)
+# Sources in LIBRARY_SRC also get LIBRARY_CFLAGS or LIBRARY_CXXFLAGS.
+$(OBJ_DIR)/%.$(OBJEXT): %.c | $(OBJ_DIR)
+	@mkdir -p $(dir $@)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(EXTRA_CFLAGS) $(DEPFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)
+$(OBJ_DIR)/%.$(OBJEXT): %.cc $(EXTRA_CXX_OBJ_DEPS) | $(OBJ_DIR)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(EXTRA_CXXFLAGS) $(DEPFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CXXFLAGS)) -c $< $(OUTPUT)
+$(OBJ_DIR)/%.$(OBJEXT): %.cpp $(EXTRA_CXX_OBJ_DEPS) | $(OBJ_DIR)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(EXTRA_CXXFLAGS) $(DEPFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CXXFLAGS)) -c $< $(OUTPUT)
+endif
+
+ifeq ($(OS),Windows)
+# NO_DLL=1 builds a static library instead of a DLL and import library.
+ifeq ($(NO_DLL), 1)
+$(LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
+	$(LINKLIB) -out:$(LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_LIBS_SDDS) $(LIBRARY_SYS_LIBS)
+else
+$(LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
+	$(LINKDLL) -out:$(DLL) -implib:$(LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_LIBS_SDDS) $(LIBRARY_SYS_LIBS) $(LDLIBS)
+endif
+
+$(PYTHON_SHARED_LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
+	$(LINKDLL) -out:$(DLL) -implib:$(PYTHON_SHARED_LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_LIBS_SDDS) $(LIBRARY_SYS_LIBS) $(LDLIBS)
+else
+$(LIBRARY): $(LIBRARY_OBJS)
+	$(AR) $(LIBRARY) $(LIBRARY_OBJS)
+	$(RANLIB) $(LIBRARY)
+
+ifeq ($(OS), Linux)
+$(PYTHON_SHARED_LIBRARY): $(LIBRARY_OBJS)
+	$(CXX) -o $@ -shared -fPIC -Wl,-h$@ $(LDFLAGS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS) $(LDLIBS)
+endif
+ifeq ($(OS), Darwin)
+$(PYTHON_SHARED_LIBRARY): $(LIBRARY_OBJS)
+	$(CXX) -fPIC -dynamiclib -flat_namespace -o $@ $(LDFLAGS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS) $(LDLIBS)
+endif
+endif
+
+# Default links support both single-source utilities and multi-object programs.
+link_product = $(LINKEXE) $(OUTPUTEXE) $($(1)_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $($(1)_LIBS)
+define product_recipe
+$(OBJ_DIR)/$(1)$(EXEEXT):
+	$$(call link_product,$(1))
+endef
+$(foreach product,$(filter-out $(CUSTOM_LINK_PRODUCTS),$(PROD)),$(eval $(call product_recipe,$(product))))
+
+# Runtime bundling.
+# Runtime libraries selected by the component for bundling into LIB_DIR.
 ifneq ($(BUNDLED_RUNTIME_LIBS),)
   $(FULLPROD): $(BUNDLED_RUNTIME_LIBS)
   $(PYTHON_SHARED_LIBRARY): $(BUNDLED_RUNTIME_LIBS)
@@ -150,92 +259,12 @@ $(DARWIN_OPENMP_BUNDLE_LICENSE): $(DARWIN_OPENMP_LICENSE) | $(LIB_DIR)
 	cp -f $< $@
 endif
 
+# Installation.
+INSTALL_PROGRAM = $(if $(filter Darwin,$(OS)),install -m 755,cp -f)
+# A fresh inode avoids stale Darwin code-signature caches after rebuilding.
+install_program = $(if $(filter Darwin,$(OS)),$(INSTALL_PROGRAM) $(1) $(2).new && mv -f $(2).new $(2),$(INSTALL_PROGRAM) $(1) $(2))
+copy_if_changed = if ! cmp -s $(1) $(2); then cp -f $(1) $(2); fi
 
-#------------------------------------------------------------------------------
-# 4. Link rules
-#------------------------------------------------------------------------------
-# Each product is also copied into BIN_DIR or LIB_DIR, and into the EPICS
-# extensions tree when there is one.
-ifeq ($(OS), Windows)
-
-%$(EXEEXT): %.$(OBJEXT) $(PROD_DEPS)
-	$(LINKEXE) -out:$@ $(@:.exe=.obj) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_LIBS_SDDS) $(GSL_LIBS) $(PROD_SYS_LIBS)
-	cp -f $@ $(BIN_DIR)/
-	$(if $(EPICS_BIN_DIR),cp -f $@ $(EPICS_BIN_DIR)/)
-
-# NO_DLL=1 builds a static library instead of a DLL and import library.
-ifeq ($(NO_DLL), 1)
-$(LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
-	$(LINKLIB) -out:$(LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_LIBS_SDDS) $(LIBRARY_SYS_LIBS)
-	cp -f $@ $(LIB_DIR)/
-	$(if $(EPICS_LIB_DIR),cp -f $@ $(EPICS_LIB_DIR)/)
-else
-$(LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
-	$(LINKDLL) -out:$(DLL) -implib:$(LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_LIBS_SDDS) $(LIBRARY_SYS_LIBS)
-	cp -f $(DLL) $(BIN_DIR)/
-	cp -f $@ $(LIB_DIR)/
-	$(if $(EPICS_BIN_DIR),cp -f $(DLL) $(EPICS_BIN_DIR)/)
-	$(if $(EPICS_LIB_DIR),cp -f $@ $(EPICS_LIB_DIR)/)
-endif
-
-$(PYTHON_SHARED_LIBRARY): $(LIBRARY_OBJS) $(LIBRARY_DEPS)
-	$(LINKDLL) -out:$(DLL) -implib:$(PYTHON_SHARED_LIBRARY) $(LIB_LINK_DIRS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_LIBS_SDDS) $(LIBRARY_SYS_LIBS)
-	cp -f $(DLL) $(BIN_DIR)/
-	cp -f $@ $(LIB_DIR)/
-	$(if $(EPICS_BIN_DIR),cp -f $(DLL) $(EPICS_BIN_DIR)/)
-	$(if $(EPICS_LIB_DIR),cp -f $@ $(EPICS_LIB_DIR)/)
-
-DEPFLAGS =
-
-else
-
-%$(EXEEXT): %.$(OBJEXT) $(PROD_DEPS)
-	$(CCC) -o $@ $@.o $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_LIBS_SDDS) $(GSL_LIBS) $(PROD_SYS_LIBS)
-	cp -f $@ $(BIN_DIR)/
-	$(if $(EPICS_BIN_DIR),cp -f $@ $(EPICS_BIN_DIR)/)
-
-$(LIBRARY): $(LIBRARY_OBJS)
-	$(AR) $(LIBRARY) $(LIBRARY_OBJS)
-	$(RANLIB) $(LIBRARY)
-	cp -f $@ $(LIB_DIR)/
-	$(if $(EPICS_LIB_DIR),cp -f $@ $(EPICS_LIB_DIR)/)
-
-ifeq ($(OS), Linux)
-$(PYTHON_SHARED_LIBRARY): $(LIBRARY_OBJS)
-	$(CCC) -o $@ -shared -fPIC -Wl,-h$@ $(LDFLAGS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS)
-	cp -f $@ $(LIB_DIR)/
-	$(if $(EPICS_LIB_DIR),cp -f $@ $(EPICS_LIB_DIR)/)
-endif
-ifeq ($(OS), Darwin)
-$(PYTHON_SHARED_LIBRARY): $(LIBRARY_OBJS)
-	$(CCC) -fPIC -dynamiclib -flat_namespace -o $@ $(LDFLAGS) $(LIBRARY_OBJS) $(LIBRARY_LIBS) $(LIBRARY_SYS_LIBS)
-	cp -f $@ $(LIB_DIR)/
-	$(if $(EPICS_LIB_DIR),cp -f $@ $(EPICS_LIB_DIR)/)
-endif
-
-DEPFLAGS = -MMD -MP -MF $(@:.$(OBJEXT)=.d)
-
-endif
-
-
-#------------------------------------------------------------------------------
-# 5. Compile rules
-#------------------------------------------------------------------------------
-# Sources in LIBRARY_SRC also get LIBRARY_CFLAGS or LIBRARY_CCFLAGS.
-$(OBJ_DIR)/%.$(OBJEXT): %.c $(BUILD_FILES) | $(OBJ_DIR)
-	@mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(EXTRA_CFLAGS) $(DEPFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)
-$(OBJ_DIR)/%.$(OBJEXT): %.cc $(BUILD_FILES) $(EXTRA_CXX_OBJ_DEPS) | $(OBJ_DIR)
-	@mkdir -p $(dir $@)
-	$(CCC) $(CPPFLAGS) $(CCFLAGS) $(DEPFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CCFLAGS)) -c $< $(OUTPUT)
-$(OBJ_DIR)/%.$(OBJEXT): %.cpp $(BUILD_FILES) $(EXTRA_CXX_OBJ_DEPS) | $(OBJ_DIR)
-	@mkdir -p $(dir $@)
-	$(CCC) $(CPPFLAGS) $(CCFLAGS) $(DEPFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CCFLAGS)) -c $< $(OUTPUT)
-
-
-#------------------------------------------------------------------------------
-# 6. Installation and cleanup
-#------------------------------------------------------------------------------
 $(BIN_DIR)/%: %
 	cp -f $< $@
 	$(if $(EPICS_BIN_DIR),cp -f $@ $(EPICS_BIN_DIR)/)
@@ -244,61 +273,52 @@ $(EPICS_INC_DIR)/%: %
 	cp -f $< $@
 endif
 
+# Installation has one owner and also restores deleted installed outputs.
+.PHONY: all install install-program install-programs install-libraries clean distclean
+install: all
+install-program: install-programs
+INSTALL_PROGRAMS ?= $(FULLPROD)
+install-programs: $(INSTALL_PROGRAMS) $(BUNDLED_RUNTIME_FILES) | $(BIN_DIR) $(EPICS_BIN_DIR)
+	$(if $(INSTALL_PROGRAMS),@set -e; $(foreach program,$(INSTALL_PROGRAMS),if ! cmp -s $(program) $(BIN_DIR)/$(notdir $(program)); then $(call install_program,$(program),$(BIN_DIR)/$(notdir $(program))); fi;))
+	$(if $(and $(EPICS_BIN_DIR),$(INSTALL_PROGRAMS)),@set -e; $(foreach program,$(INSTALL_PROGRAMS),if ! cmp -s $(program) $(EPICS_BIN_DIR)/$(notdir $(program)); then $(call install_program,$(program),$(EPICS_BIN_DIR)/$(notdir $(program))); fi;))
+# Installed archives are real targets so dependent programs wait for the copy.
+INSTALLED_LIBRARIES = $(addprefix $(LIB_DIR)/,$(notdir $(LIBRARY) $(PYTHON_SHARED_LIBRARY)))
+install-libraries: $(INSTALLED_LIBRARIES) $(BUNDLED_RUNTIME_FILES)
+.PHONY: force-install-libraries
+# Bundled runtimes and their licenses follow libraries into extensions installs,
+# including components that build only programs.
+ifneq ($(and $(EPICS_LIB_DIR),$(BUNDLED_RUNTIME_FILES)),)
+EPICS_BUNDLED_RUNTIME_FILES = $(addprefix $(EPICS_LIB_DIR)/,$(notdir $(BUNDLED_RUNTIME_FILES)))
+install-programs install-libraries: $(EPICS_BUNDLED_RUNTIME_FILES)
+$(EPICS_BUNDLED_RUNTIME_FILES): $(BUNDLED_RUNTIME_FILES) force-install-libraries | $(EPICS_LIB_DIR)
+	@$(call copy_if_changed,$(filter %/$(@F),$(BUNDLED_RUNTIME_FILES)),$@)
+endif
+ifneq ($(strip $(LIBRARY) $(PYTHON_SHARED_LIBRARY)),)
+$(INSTALLED_LIBRARIES): $(LIBRARY) $(PYTHON_SHARED_LIBRARY) force-install-libraries | $(LIB_DIR)
+	@$(call copy_if_changed,$(filter %/$(@F),$(LIBRARY) $(PYTHON_SHARED_LIBRARY)),$@)
+ifneq ($(EPICS_LIB_DIR),)
+EPICS_INSTALLED_LIBRARIES = $(addprefix $(EPICS_LIB_DIR)/,$(notdir $(LIBRARY) $(PYTHON_SHARED_LIBRARY)))
+install-libraries: $(EPICS_INSTALLED_LIBRARIES)
+$(EPICS_INSTALLED_LIBRARIES): $(LIBRARY) $(PYTHON_SHARED_LIBRARY) force-install-libraries | $(EPICS_LIB_DIR)
+	@$(call copy_if_changed,$(filter %/$(@F),$(LIBRARY) $(PYTHON_SHARED_LIBRARY)),$@)
+endif
+ifeq ($(OS),Windows)
+ifneq ($(NO_DLL),1)
+install-libraries: | $(BIN_DIR) $(EPICS_BIN_DIR)
+	$(if $(DLL),cp -f $(DLL) $(BIN_DIR)/)
+	$(if $(and $(DLL),$(EPICS_BIN_DIR)),cp -f $(DLL) $(EPICS_BIN_DIR)/)
+endif
+endif
+endif
+
+# Cleaning.
+CLEAN_DIRS ?= $(OBJ_DIR)
+ifneq ($(CUSTOM_CLEAN),1)
 clean:
 	rm -rf $(CLEAN_DIRS)
-
-$(PROD_DEPS):
-
-$(LIBRARY_DEPS):
-
--include $(wildcard $(OBJ_DIR)/*.d $(OBJ_DIR)/*/*.d)
-
-.PHONY: all clean
-
-# MEDM and QtALH copy every program into BIN_DIR and the EPICS extensions
-# tree on each build, even when it is already up to date.  QtALH relies on
-# this step because its own link rules do not copy.
-ifneq ($(filter medm qtalh,$(RULES_PROFILE)),)
-# Replacing a signed Mach-O in place can leave Darwin's code-signature cache
-# associated with the previous executable.  install writes a new file and
-# renames it, so newly built programs always receive a fresh inode.
-INSTALL_PROGRAM = cp -f
-ifeq ($(OS),Darwin)
-  INSTALL_PROGRAM = install -m 755
-endif
-
-.PHONY: install-programs install distclean
-all: install-programs
-install-programs: $(FULLPROD) | $(BIN_DIR) $(EPICS_BIN_DIR)
-	$(if $(FULLPROD),set -e; $(foreach program,$(FULLPROD),$(INSTALL_PROGRAM) $(program) $(BIN_DIR)/;))
-	$(if $(and $(EPICS_BIN_DIR),$(FULLPROD)),set -e; $(foreach program,$(FULLPROD),$(INSTALL_PROGRAM) $(program) $(EPICS_BIN_DIR)/;))
-
-install: all
 distclean: clean
-	rm -f $(addprefix $(BIN_DIR)/,$(notdir $(FULLPROD)))
+	$(if $(FULLPROD),rm -f $(addprefix $(BIN_DIR)/,$(notdir $(FULLPROD))))
 endif
 
-else
-#------------------------------------------------------------------------------
-# 7. StripTool
-#------------------------------------------------------------------------------
-# StripTool's component makefiles compile and link with their own rules and
-# use only these output directories and installation steps.
-.PHONY: prepare-output install-program
-
-$(BIN_DIR):
-	mkdir -p $(BIN_DIR)
-
-$(OBJ_DIR):
-	mkdir -p $(OBJ_DIR)
-
-prepare-output: $(OBJ_DIR) $(BIN_DIR)
-
-install-program: $(PROGRAM) | prepare-output
-	cp -f $(PROGRAM) $(BIN_DIR)/
-	$(if $(EPICS_BIN_DIR),mkdir -p $(EPICS_BIN_DIR) && cp -f $(PROGRAM) $(EPICS_BIN_DIR)/)
-
-$(BIN_DIR)/%: % | $(BIN_DIR)
-	cp -f $< $@
-	$(if $(EPICS_BIN_DIR),mkdir -p $(EPICS_BIN_DIR) && cp -f $@ $(EPICS_BIN_DIR)/)
-endif
+# Generated dependency files.
+-include $(patsubst %.$(OBJEXT),%.d,$(filter %.$(OBJEXT),$(BUILD_CONFIG_OBJECTS)))

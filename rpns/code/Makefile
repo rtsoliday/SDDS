@@ -1,4 +1,6 @@
 DD = ../
+ENABLE_OPENMP := 1
+BUNDLE_OPENMP := 1
 include ../../Makefile.rules
 
 PROD = rpn rpnl if2pf
@@ -27,25 +29,25 @@ LIBRARY_SRC = array.c \
         stack.c \
         udf.c
 
-CFLAGS += -I../../include -DUSE_GSL $(GSL_INC_LOCAL)
-CCFLAGS += -I../../include -DUSE_GSL $(GSL_INC_LOCAL)
+CFLAGS += -I../../include -DUSE_GSL
+override CXXFLAGS += -I../../include -DUSE_GSL
 
 ifeq ($(OS), Linux)
   CFLAGS += -fopenmp
-  CCFLAGS += -fopenmp
-  PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+  override CXXFLAGS += -fopenmp
+  PROD_SYS_LIBS := $(GSL_LINK_LIBS) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lrpnlib -lmdbmth -lmdblib 
 endif
 
 ifeq ($(OS), Darwin)
-  PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+  PROD_SYS_LIBS := $(GSL_LINK_LIBS) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lrpnlib -lmdbmth -lmdblib 
 endif
 
 ifeq ($(OS), Windows)
   CFLAGS += /wd4244 /wd4267 -I../../../gsl
   LIBRARY_CFLAGS = -DEXPORT_RPNLIB
-  LIBRARY_LIBS = gsl.lib gslcblas.lib mdbmth.lib mdblib.lib
+  LIBRARY_LIBS = $(GSL_LINK_LIBS) mdbmth.lib mdblib.lib
   PROD_LIBS = rpnlib.lib mdbmth.lib mdblib.lib
 endif
 

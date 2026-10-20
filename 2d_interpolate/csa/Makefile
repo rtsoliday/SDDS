@@ -1,4 +1,6 @@
 DD = ../
+ENABLE_OPENMP := 1
+BUNDLE_OPENMP := 1
 include ../../Makefile.rules
 
 LIBRARY = csa

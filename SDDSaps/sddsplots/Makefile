@@ -1,4 +1,6 @@
 DD  = ../
+ENABLE_OPENMP := 1
+BUNDLE_OPENMP := 1
 include ../../Makefile.rules
 
 PROD = sddsplot
@@ -29,23 +31,24 @@ CFLAGS += -DUSE_GD_LIBRARY -DzLib -I../../include
 
 ifeq ($(OS), Linux)
   CFLAGS += -fopenmp
-  CCFLAGS += -fopenmp
+  override CXXFLAGS += -fopenmp
   LDFLAGS += -fopenmp
-  PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+  PROD_SYS_LIBS := $(GSL_LINK_LIBS) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lmdbplt -lmdbcommon -lSDDS1 -lrpnlib -lmdbmth -lmdblib
 endif
 
 ifeq ($(OS), Darwin)
-  PROD_SYS_LIBS := $(GSL_LIB) $(GSLCBLAS_LIB) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
+  PROD_SYS_LIBS := $(GSL_LINK_LIBS) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lmdbplt -lmdbcommon -lSDDS1 -lrpnlib -lmdbmth -lmdblib
 endif
 
 ifeq ($(OS), Windows)
   CFLAGS += -I../../png -I../../gd -I../../lzma -I../../zlib -DMOTIF_DEVICE=1 -wd4018 -wd4244 -wd4267 -wd4305
-  PROD_LIBS = mdbplt.lib gd.lib png.lib mdbcommon.lib SDDS1.lib rpnlib.lib gsl.lib gslcblas.lib mdbmth.lib mdblib.lib lzma.lib z.lib
+  PROD_LIBS = mdbplt.lib gd.lib png.lib mdbcommon.lib SDDS1.lib rpnlib.lib $(GSL_LINK_LIBS) mdbmth.lib mdblib.lib lzma.lib z.lib
   PROD_SYS_LIBS = advapi32.lib
   NO_DLL = 1
 endif
+CUSTOM_LINK_PRODUCTS += sddsplot
 
 include ../../Makefile.build
 
@@ -57,8 +60,5 @@ endif
 
 $(OBJ_DIR)/sddsplot$(EXEEXT): $(sddsplot_OBJS) $(LIBRARY) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsplot_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
-	cp -f $@ $(BIN_DIR)/
-	@if [ -n "$(EPICS_BIN_DIR)" ]; then echo cp -f $@ $(EPICS_BIN_DIR)/; fi
-	@if [ -n "$(EPICS_BIN_DIR)" ]; then cp -f $@ $(EPICS_BIN_DIR)/; fi
 
 .NOTPARALLEL: $(LIBRARY)

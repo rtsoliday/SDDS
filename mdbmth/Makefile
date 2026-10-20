@@ -1,3 +1,7 @@
+# Retain the compiler-default C++ mode for legacy Windows builds.
+WINDOWS_CXX_STD_FLAGS :=
+ENABLE_OPENMP := 1
+BUNDLE_OPENMP := 1
 include ../Makefile.rules
 
 LIBRARY = mdbmth
@@ -53,16 +57,16 @@ LIBRARY_SRC = betai.c \
           pointInsideContour.c
 
 CFLAGS += -I../include
-CCFLAGS += -I../include
+override CXXFLAGS += -I../include
 
 ifeq ($(OS), Linux)
   CFLAGS += -fopenmp
-  CCFLAGS += -fopenmp
+  override CXXFLAGS += -fopenmp
 endif
 
 ifeq ($(OS), Windows)
   CFLAGS += -DEXPORT_MDBMTH -openmp /wd4244
-  CCFLAGS += -DEXPORT_MDBMTH -openmp /wd4244
+  override CXXFLAGS += -DEXPORT_MDBMTH -openmp /wd4244
   LIBRARY_LIBS = mdblib.lib
 endif
 

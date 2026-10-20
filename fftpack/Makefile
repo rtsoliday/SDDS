@@ -1,3 +1,7 @@
+# Retain the compiler-default C++ mode for legacy Windows builds.
+WINDOWS_CXX_STD_FLAGS :=
+ENABLE_OPENMP := 1
+BUNDLE_OPENMP := 1
 include ../Makefile.rules
 
 LIBRARY = fftpack
@@ -22,16 +26,16 @@ LIBRARY_SRC = cfftb.c cfftb1.c cfftf.c \
 		sinti.c
 
 CFLAGS += -I../include
-CCFLAGS += -I../include
+override CXXFLAGS += -I../include
 
 ifeq ($(OS), Linux)
   CFLAGS += -fopenmp
-  CCFLAGS += -fopenmp
+  override CXXFLAGS += -fopenmp
 endif
 
 ifeq ($(OS), Windows)
   CFLAGS += -openmp -DEXPORT_FFTPACK /wd4244
-  CCFLAGS += -openmp -DEXPORT_FFTPACK /wd4244
+  override CXXFLAGS += -openmp -DEXPORT_FFTPACK /wd4244
   LIBRARY_LIBS = mdbmth.lib mdblib.lib
 endif
 

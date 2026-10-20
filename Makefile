@@ -23,6 +23,8 @@ ifeq ($(OS), Windows)
   endif
 endif
 
+ENABLE_OPENMP := 1
+BUNDLE_OPENMP := 1
 include Makefile.rules
 
 # Command to invoke pytest. Additional options can be supplied by setting PYTEST.
