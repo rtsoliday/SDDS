@@ -109,3 +109,21 @@ def test_matrix_multiplication_checks_later_page_dimensions(tmp_path):
   result = run("sddsmatrixmult", left, right, output, check=False)
   assert result.returncode != 0
   assert "Dimension mismatch" in result.stderr
+
+
+@pytest.mark.parametrize("value_type,values,expected", [
+  ("long", ("2", "5"), ["2", "5", "-3"]),
+  ("long", ("-2147483648", "2147483647"), ["-2147483648", "2147483647", "1"]),
+  ("ulong", ("2", "5"), ["2", "5", "-3"]),
+  ("long64", ("-9000000000", "1"), ["-9000000000", "1", "-9000000001"]),
+  ("ulong64", ("18446744073709551615", "1"), ["18446744073709551615", "1", "-2"]),
+])
+@pytest.mark.parametrize("rowlabel", [False, True])
+def test_diff_prints_integer_values_and_differences(tmp_path, value_type, values, expected, rowlabel):
+  paths = [tmp_path / "one.sdds", tmp_path / "two.sdds"]
+  for path, value in zip(paths, values):
+    run("sddsmakedataset", path, "-column=row,type=string", "-data=r0", f"-column=x,type={value_type}", f"-data={value}")
+  options = ["-columns=x"] + (["-rowlabel=row"] if rowlabel else [])
+  result = run("sddsdiff", *paths, *options)
+  row = [line.split() for line in result.stdout.splitlines() if line.split()[:1] == (["r0"] if rowlabel else ["1"])]
+  assert row and row[0][1:] == expected, result.stdout

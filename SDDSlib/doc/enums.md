@@ -27,9 +27,13 @@ ASCII data and fixed values contain decimal **codes**. Binary data contains exac
 four bytes per code in the declared byte order. Array dimensions and page row counts
 keep their existing encodings. Both binary major orders and plain, gzip, XZ and
 LZMA streams are supported. SDDS1–5 headers cannot declare `enum` or `enum_values`.
-Writers choose SDDS6 whenever any enum exists. Enum-free layouts use the minimum
-legacy version when their metadata can be represented losslessly; metadata requiring
-SDDS6 escaping or longer header commands also selects SDDS6. Pre-change readers reject SDDS6.
+Writers choose SDDS6 whenever any enum exists; enum-free layouts retain the existing
+minimum-version selection, so they stay readable by pre-change readers, which reject
+SDDS6. Legacy headers quote values containing `!` or `&end` so those survive a round
+trip. Some metadata still has no exact legacy form: a `"` is read back as `\"`, line
+breaks become spaces, a quoted value cannot end in a backslash, and a header command
+longer than the legacy 1024-byte line cannot be read. The C++ writer can still emit
+SDDS6 for such layouts when `WriterOptions::minimumVersion` is 6.
 
 Each enum has exactly one nonempty `enum_values` attribute. Its logical value is a
 comma-separated list of `code:label` pairs. Codes and labels must each be unique;

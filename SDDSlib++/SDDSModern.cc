@@ -1536,75 +1536,6 @@ std::optional<Namelist> readNamelist(BufferedStream &stream, const ReaderOptions
   }
 }
 
-std::string fieldTags(const FieldMetadata &field);
-
-/** @brief Whether a decoded SDDS6 layout can be emitted losslessly by the legacy writer. */
-bool requiresSdds6Grammar(const Layout &layout) {
-  auto textNeedsEscapes = [](std::string_view text) {
-    return std::any_of(text.begin(), text.end(), [](unsigned char c) {
-      return c < 32 || c == 127 || c == '\\' || c == '"' || c == '!';
-    });
-  };
-  auto optionalNeedsEscapes = [&](const std::optional<std::string> &text) {
-    return text && textNeedsEscapes(*text);
-  };
-  auto fieldNeedsEscapes = [&](const FieldMetadata &field) {
-    return field.type == Type::Enum || textNeedsEscapes(field.name) ||
-        optionalNeedsEscapes(field.symbol) || optionalNeedsEscapes(field.units) ||
-        optionalNeedsEscapes(field.description) || optionalNeedsEscapes(field.format);
-  };
-  auto fieldBytes = [](std::string_view name, const std::optional<std::string> &text) {
-    return text ? name.size() + 3 + quote(text).size() : std::size_t{0};
-  };
-  // The C legacy header reader has a 1024-byte command buffer.
-  constexpr std::size_t legacyCommandBytes = 1024;
-  if (optionalNeedsEscapes(layout.description) || optionalNeedsEscapes(layout.contents) ||
-      std::string_view("&description &end\n").size() + fieldBytes("text", layout.description) +
-          fieldBytes("contents", layout.contents) >= legacyCommandBytes)
-    return true;
-  for (const auto &field : layout.parameters) {
-    if (fieldNeedsEscapes(field)) return true;
-    if (field.fixedValue) {
-      const auto &fixed = *field.fixedValue;
-      if (field.type == Type::String || field.type == Type::Character) {
-        const auto quoted = quoteRequired(fixed);
-        const auto legacyFixed = quoted.substr(1, quoted.size() - 2);
-        if ((!legacyFixed.empty() && legacyFixed.back() == '\\') ||
-            scanFixedText(legacyFixed, field.type) != fixed)
-          return true;
-      } else if (textNeedsEscapes(fixed)) {
-        return true;
-      }
-    }
-    if (std::string_view("&parameter &end\n").size() + fieldTags(field).size() +
-        fieldBytes("fixed_value", field.fixedValue) >= legacyCommandBytes)
-      return true;
-  }
-  for (const auto &field : layout.columns) {
-    if (fieldNeedsEscapes(field)) return true;
-    const auto length = field.fieldLength ? std::string_view("field_length=, ").size() + std::to_string(field.fieldLength).size() : 0;
-    if (std::string_view("&column &end\n").size() + fieldTags(field).size() + length >= legacyCommandBytes) return true;
-  }
-  for (const auto &field : layout.arrays) {
-    if (fieldNeedsEscapes(field) || optionalNeedsEscapes(field.groupName)) return true;
-    const auto length = field.fieldLength ? std::string_view("field_length=, ").size() + std::to_string(field.fieldLength).size() : 0;
-    if (std::string_view("&array &end\n").size() + fieldTags(field).size() + fieldBytes("group_name", field.groupName) + length +
-        std::string_view("dimensions=, ").size() + std::to_string(field.dimensions).size() >= legacyCommandBytes)
-      return true;
-  }
-  for (const auto &field : layout.associates) {
-    if (textNeedsEscapes(field.name) || optionalNeedsEscapes(field.filename) ||
-        optionalNeedsEscapes(field.path) || optionalNeedsEscapes(field.description) ||
-        optionalNeedsEscapes(field.contents))
-      return true;
-    if (std::string_view("&associate sdds=1, &end\n").size() + fieldBytes("name", field.name) + fieldBytes("filename", field.filename) +
-        fieldBytes("path", field.path) + fieldBytes("description", field.description) +
-        fieldBytes("contents", field.contents) >= legacyCommandBytes)
-      return true;
-  }
-  return false;
-}
-
 void validateLayout(Layout &layout) {
   std::unordered_set<std::string> names;
   auto validateFields = [&](auto &definitions, const char *kind) {
@@ -1645,9 +1576,7 @@ void validateLayout(Layout &layout) {
     if (definition.type == Type::Enum && definition.fieldLength) throwFormat("enum field_length must be zero");
   for (const auto &definition : layout.arrays)
     if (definition.type == Type::Enum && definition.fieldLength) throwFormat("enum field_length must be zero");
-  // Keep SDDS6 only when decoded metadata cannot survive legacy serialization.
-  // Safe enum-to-primitive conversions still select the minimum legacy version.
-  std::int32_t version = layout.version == 6 && requiresSdds6Grammar(layout) ? 6 : 1;
+  std::int32_t version = 1;
   auto consider = [&](Type type) {
     if (type == Type::UInt16 || type == Type::UInt32) version = std::max(version, 2);
     if (type == Type::LongDouble) version = std::max(version, 4);
@@ -2514,9 +2443,18 @@ void writeLayout(BufferedStream &stream, Layout &layout, const WriterOptions &op
   for (const auto &definition : layout.parameters) {
     std::string command = "&parameter " + fieldTags(definition);
     if (definition.fixedValue) {
-      const auto fixed = layout.version == 6 && (definition.type == Type::String || definition.type == Type::Character)
-          ? encodeFixedString(*definition.fixedValue) : *definition.fixedValue;
-      command += "fixed_value=" + quoteRequired(fixed) + ", ";
+      const auto &value = *definition.fixedValue;
+      if (layout.version == 6 && (definition.type == Type::String || definition.type == Type::Character)) {
+        command += "fixed_value=" + quoteRequired(encodeFixedString(value)) + ", ";
+      } else if (definition.type == Type::Character && !value.empty() &&
+                 std::isspace(static_cast<unsigned char>(value.front()))) {
+        // Legacy readers skip a blank token, but decode the octal escape after tokenizing.
+        char octal[8];
+        std::snprintf(octal, sizeof(octal), "\"\\%03o\"", static_cast<unsigned char>(value.front()));
+        command += std::string("fixed_value=") + octal + ", ";
+      } else {
+        command += "fixed_value=" + quoteRequired(value) + ", ";
+      }
     }
     stream.write(command + "&end\n");
   }

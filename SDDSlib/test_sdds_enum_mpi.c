@@ -638,34 +638,40 @@ static void testStringRows(const char *directory, int rank, int ranks) {
   }
 }
 
-/** @brief Primitive layouts still need SDDS6 when their metadata exceeds legacy escaping/buffers. */
+/** @brief Enum-free MPI layouts keep legacy headers, including long metadata, without overflowing. */
 static void testPrimitiveMetadata(const char *directory, int rank, int ranks) {
-  int major;
+  int major, longText;
   char path[2048], description[4097];
-  memset(description, 'x', sizeof(description) - 1);
-  memcpy(description, "line one\nstate! ", 16);
-  description[sizeof(description) - 1] = 0;
-  for (major = 0; major < 2; major++) {
-    SDDS_DATASET writer = {0}, reader = {0};
-    int32_t value = rank;
-    snprintf(path, sizeof(path), "%s/primitive-metadata-%d.sdds", directory, major);
-    SDDS_MPI_Setup(&writer, 1, ranks, rank, MPI_COMM_WORLD, 0);
-    CHECK(SDDS_MPI_InitializeOutput(&writer, NULL, NULL, path, SDDS_MPI_WRITE_ONLY, (short)major));
-    CHECK(MPI_File_set_size(writer.MPI_dataset->MPI_file, 0) == MPI_SUCCESS);
-    CHECK(SDDS_DefineColumn(&writer, "value", NULL, NULL, description, NULL, SDDS_LONG, 0) == 0);
-    CHECK(SDDS_MPI_WriteLayout(&writer) && writer.layout.version == 6);
-    CHECK(SDDS_StartPage(&writer, 1));
-    CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_INDEX, &value, 1, 0));
-    CHECK(SDDS_WritePage(&writer));
-    CHECK(SDDS_Terminate(&writer));
-    MPI_Barrier(MPI_COMM_WORLD);
-    SDDS_MPI_Setup(&reader, 1, ranks, rank, MPI_COMM_WORLD, 1);
-    CHECK(SDDS_MPI_InitializeInput(&reader, path));
-    CHECK(reader.layout.version == 6 && !strcmp(reader.layout.column_definition[0].description, description));
-    CHECK(SDDS_ReadPage(&reader) == 1 && reader.n_rows == 1);
-    CHECK(((int32_t *)reader.data[0])[0] == rank);
-    CHECK(SDDS_ReadPage(&reader) == -1);
-    CHECK(SDDS_Terminate(&reader));
+  for (longText = 0; longText < 2; longText++) {
+    if (longText) {
+      memset(description, 'x', sizeof(description) - 1);
+      description[sizeof(description) - 1] = 0;
+    } else
+      snprintf(description, sizeof(description), "state! and x&end");
+    for (major = 0; major < 2; major++) {
+      SDDS_DATASET writer = {0}, reader = {0};
+      int32_t value = rank;
+      snprintf(path, sizeof(path), "%s/primitive-metadata-%d-%d.sdds", directory, longText, major);
+      SDDS_MPI_Setup(&writer, 1, ranks, rank, MPI_COMM_WORLD, 0);
+      CHECK(SDDS_MPI_InitializeOutput(&writer, NULL, NULL, path, SDDS_MPI_WRITE_ONLY, (short)major));
+      CHECK(MPI_File_set_size(writer.MPI_dataset->MPI_file, 0) == MPI_SUCCESS);
+      CHECK(SDDS_DefineColumn(&writer, "value", NULL, NULL, description, NULL, SDDS_LONG, 0) == 0);
+      CHECK(SDDS_MPI_WriteLayout(&writer) && writer.layout.version < 6);
+      CHECK(SDDS_StartPage(&writer, 1));
+      CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_INDEX, &value, 1, 0));
+      CHECK(SDDS_WritePage(&writer));
+      CHECK(SDDS_Terminate(&writer));
+      MPI_Barrier(MPI_COMM_WORLD);
+      if (longText)
+        continue; /* Legacy readers cannot read a header command this long. */
+      SDDS_MPI_Setup(&reader, 1, ranks, rank, MPI_COMM_WORLD, 1);
+      CHECK(SDDS_MPI_InitializeInput(&reader, path));
+      CHECK(reader.layout.version < 6 && !strcmp(reader.layout.column_definition[0].description, description));
+      CHECK(SDDS_ReadPage(&reader) == 1 && reader.n_rows == 1);
+      CHECK(((int32_t *)reader.data[0])[0] == rank);
+      CHECK(SDDS_ReadPage(&reader) == -1);
+      CHECK(SDDS_Terminate(&reader));
+    }
   }
 }
 

@@ -570,12 +570,13 @@ static bool cppReadsFirstPage(const std::filesystem::path &path) {
   }
 }
 
-/** @brief Both libraries read the expected SDDS6 fixed string/character values. */
+/** @brief Both libraries read the expected fixed string/character values from a file of the given version. */
 static void checkFixedTextValues(const std::filesystem::path &path,
-                                 const std::vector<std::pair<sdds::Type, std::string>> &expected) {
+                                 const std::vector<std::pair<sdds::Type, std::string>> &expected,
+                                 std::int32_t version = 6) {
   SDDS_DATASET dataset{};
   auto filename = path.string();
-  assert(SDDS_InitializeInput(&dataset, filename.data()) && dataset.layout.version == 6);
+  assert(SDDS_InitializeInput(&dataset, filename.data()) && dataset.layout.version == version);
   assert(SDDS_ReadPage(&dataset) > 0);
   auto reader = sdds::Reader::open(path);
   const auto page = reader.next();
@@ -742,7 +743,7 @@ static void testSdds6DefinitionGrammar(const std::filesystem::path &outputDirect
   assert(matched);
 }
 
-/** @brief Rewriting an SDDS6 layout with primitive fields preserves decoded fixed text. */
+/** @brief Rewriting an SDDS6 layout with primitive fields writes a legacy header that preserves fixed text. */
 static void testSdds6PrimitiveRewrite(const std::filesystem::path &outputDirectory) {
   const auto directory = outputDirectory / "primitive-rewrite";
   std::filesystem::create_directories(directory);
@@ -768,13 +769,14 @@ static void testSdds6PrimitiveRewrite(const std::filesystem::path &outputDirecto
     auto writer = sdds::Writer::create(output, layout);
     writer.write(*page);
     writer.close();
-    // Check the actual value before checking the output grammar version.
+    // An enum-free rewrite uses a legacy header that the C reader decodes exactly.
     SDDS_DATASET dataset{};
     auto filename = output.string();
-    assert(SDDS_InitializeInput(&dataset, filename.data()) && SDDS_ReadPage(&dataset) > 0);
+    assert(SDDS_InitializeInput(&dataset, filename.data()) && dataset.layout.version == 1);
+    assert(SDDS_ReadPage(&dataset) > 0);
     assert(*static_cast<char **>(dataset.parameter[0]) == expected[0].second);
     assert(SDDS_Terminate(&dataset));
-    checkFixedTextValues(output, expected);
+    checkFixedTextValues(output, expected, 1);
   }
 }
 
@@ -817,13 +819,15 @@ static void testEnumPrimitiveDowngrade(const std::filesystem::path &outputDirect
       assert(SDDS_Terminate(&dataset));
     }
   }
-  // A decoded SDDS6 description still needs its escaping and command-size support.
+  // Enum-free layouts never select SDDS6 on their own; callers can still request it explicitly.
   for (const auto &description : {std::string("first\nsecond"), std::string(1200, 'x')}) {
     primitive.version = 6;
     primitive.description = description;
-    assert(LayoutBuilder(primitive).build().version == 6);
+    assert(LayoutBuilder(primitive).build().version == 1);
     const auto output = outputDirectory / (description.size() > 1000 ? "primitive-long-description.sdds" : "primitive-newline-description.sdds");
-    auto writer = Writer::create(output, primitive);
+    WriterOptions options;
+    options.minimumVersion = 6;
+    auto writer = Writer::create(output, primitive, options);
     writer.beginPage(2);
     writer.setColumn("state", converted);
     writer.commitPage();

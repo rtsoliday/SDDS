@@ -108,6 +108,19 @@ int32_t SDDS_GZipWriteVersion(int32_t version_number, gzFile gzfp) {
 /**************************************************************/
 
 /**
+ * @brief Reports whether a legacy (SDDS1-5) namelist value must be written in quotes.
+ *
+ * Separators need quotes, and so do '!' and "&end": legacy readers treat an unquoted
+ * '!' as the start of a comment and an unquoted "&end" as the end of the command.
+ *
+ * @param value The field value.
+ * @return Returns 1 if the value must be quoted, otherwise 0.
+ */
+int32_t SDDS_LegacyFieldNeedsQuotes(const char *value) {
+  return strpbrk(value, " ,*$\t\n\b!") || strstr(value, "&end");
+}
+
+/**
  * @brief Writes a namelist field to a standard file.
  *
  * This function formats and writes a single namelist field to the specified
@@ -129,7 +142,7 @@ int32_t SDDS_PrintNamelistField(FILE *fp, char *name, char *value) {
     fprintf(fp, "%s=\"\", ", name);
   else {
     if (strchr(value, '"')) {
-      if (!(buffer = SDDS_Malloc(sizeof(*buffer) * 2 * strlen(value))))
+      if (!(buffer = SDDS_Malloc(sizeof(*buffer) * (2 * strlen(value) + 1))))
         return 0;
       vPtr = value;
       bPtr = buffer;
@@ -141,7 +154,7 @@ int32_t SDDS_PrintNamelistField(FILE *fp, char *name, char *value) {
       *bPtr = 0;
       value = buffer;
     }
-    if (strpbrk(value, " ,*$\t\n\b"))
+    if (SDDS_LegacyFieldNeedsQuotes(value))
       fprintf(fp, "%s=\"%s\", ", name, value);
     else
       fprintf(fp, "%s=%s, ", name, value);
@@ -173,7 +186,7 @@ int32_t SDDS_LZMAPrintNamelistField(struct lzmafile *lzmafp, char *name, char *v
     lzma_printf(lzmafp, "%s=\"\", ", name);
   else {
     if (strchr(value, '"')) {
-      if (!(buffer = SDDS_Malloc(sizeof(*buffer) * 2 * strlen(value))))
+      if (!(buffer = SDDS_Malloc(sizeof(*buffer) * (2 * strlen(value) + 1))))
         return 0;
       vPtr = value;
       bPtr = buffer;
@@ -185,7 +198,7 @@ int32_t SDDS_LZMAPrintNamelistField(struct lzmafile *lzmafp, char *name, char *v
       *bPtr = 0;
       value = buffer;
     }
-    if (strpbrk(value, " ,*$\t\n\b"))
+    if (SDDS_LegacyFieldNeedsQuotes(value))
       lzma_printf(lzmafp, "%s=\"%s\", ", name, value);
     else
       lzma_printf(lzmafp, "%s=%s, ", name, value);
@@ -218,7 +231,7 @@ int32_t SDDS_GZipPrintNamelistField(gzFile gzfp, char *name, char *value) {
     gzprintf(gzfp, "%s=\"\", ", name);
   else {
     if (strchr(value, '"')) {
-      if (!(buffer = SDDS_Malloc(sizeof(*buffer) * 2 * strlen(value))))
+      if (!(buffer = SDDS_Malloc(sizeof(*buffer) * (2 * strlen(value) + 1))))
         return 0;
       vPtr = value;
       bPtr = buffer;
@@ -230,7 +243,7 @@ int32_t SDDS_GZipPrintNamelistField(gzFile gzfp, char *name, char *value) {
       *bPtr = 0;
       value = buffer;
     }
-    if (strpbrk(value, " ,*$\t\n\b"))
+    if (SDDS_LegacyFieldNeedsQuotes(value))
       gzprintf(gzfp, "%s=\"%s\", ", name, value);
     else
       gzprintf(gzfp, "%s=%s, ", name, value);

@@ -70,29 +70,40 @@ def test_complete_nested_include_still_accepts_eof(tmp_path, version, compressio
     assert result.stdout.split() == ["value"]
 
 
+def column_description(path, tmp_path):
+    summary = tmp_path / "summary.sdds"
+    run("sddsquery", path, "-sddsOutput=" + str(summary), "-column")
+    return run("sdds2stream", summary, "-column=Description", "-noquotes")
+
+
 @pytest.mark.parametrize("compression,suffix", [("plain", ".sdds"), ("gzip", ".sdds.gz"),
                                                  ("xz", ".sdds.xz"), ("lzma", ".sdds.lzma")])
 @pytest.mark.parametrize("mode", ["-ascii", "-binary"])
-@pytest.mark.parametrize("description", ["state!", "a&endb", "line1\nline2", 'a"quoted"value',
-                                         "path ending in a backslash\\", "x" * 4096])
-def test_primitive_copy_preserves_sdds6_metadata(tmp_path, compression, suffix, mode, description):
+@pytest.mark.parametrize("description", ["state!", "a&endb", "1/m!x", "x&end", r"C:\temp\new ! &end",
+                                         "plain text"])
+def test_primitive_copy_uses_legacy_header_and_keeps_metadata(tmp_path, compression, suffix, mode, description):
     source, output = tmp_path / ("input" + suffix), tmp_path / ("copy" + suffix)
     write_header(source, 'SDDS6\n&column name=value,type=long,description="' + outer_string(description) +
                  '" &end\n&data mode=ascii &end\n1\n5\n', compression)
     run("sddsconvert", source, output, mode)
-    summary = tmp_path / "summary.sdds"
-    run("sddsquery", output, "-sddsOutput=" + str(summary), "-column")
-    assert run("sdds2stream", summary, "-column=Description", "-noquotes") == description + "\n"
+    with (gzip.open if compression == "gzip" else lzma.open if compression in ("xz", "lzma") else open)(output, "rb") as stream:
+        assert stream.readline() == b"SDDS1\n"
+    assert column_description(output, tmp_path) == description + "\n"
     assert run("sdds2stream", output, "-column=value").strip() == "5"
 
 
-def test_safe_primitive_sdds6_metadata_still_uses_legacy_output(tmp_path):
+@pytest.mark.parametrize("description", ['a"quoted"value', "line1\nline2", "path ending in a backslash\\",
+                                         "x" * 4096, " "])
+def test_enum_free_output_never_selects_sdds6(tmp_path, description):
     source, output = tmp_path / "input.sdds", tmp_path / "copy.sdds"
-    description = r"C:\temp\new ! &end"
-    write_header(source, 'SDDS6\n&column name=value,type=long,symbol="y\\\\_1",description="' +
-                 outer_string(description) + '" &end\n&data mode=ascii &end\n1\n5\n', "plain")
+    write_header(source, 'SDDS6\n&column name=value,type=long,description="' + outer_string(description) +
+                 '" &end\n&data mode=ascii &end\n1\n5\n', "plain")
     run("sddsconvert", source, output, "-ascii")
     assert output.read_bytes().startswith(b"SDDS1\n")
-    summary = tmp_path / "summary.sdds"
-    run("sddsquery", output, "-sddsOutput=" + str(summary), "-column")
-    assert run("sdds2stream", summary, "-column=Description", "-noquotes") == description + "\n"
+
+
+@pytest.mark.parametrize("units", ['in"', "1/m!", "a&endb"])
+def test_new_enum_free_files_stay_legacy(tmp_path, units):
+    output = tmp_path / "made.sdds"
+    run("sddsmakedataset", output, f"-column=x,type=double,units={units}", "-data=1,2")
+    assert output.read_bytes().startswith(b"SDDS1\n")

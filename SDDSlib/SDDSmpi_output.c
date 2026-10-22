@@ -162,22 +162,20 @@ int32_t SDDS_MPI_File_Open(MPI_DATASET *MPI_dataset, char *filename, unsigned lo
  * @return A newly allocated string containing the namelist field, or `NULL` if the name is `NULL` or empty.
  */
 char *SDDS_CreateNamelistField(char *name, char *value) {
-  char *contents;
-  char *buffer = NULL, *bPtr, *vPtr, buf2[2048];
+  char *contents, *buffer = NULL, *bPtr, *vPtr;
+  const char *format;
+  int length;
 
-  contents = NULL;
   if (!name)
     return NULL;
   if (!value || !strlen(name))
     return NULL;
-  contents = (char *)malloc(sizeof(char) * 2048);
-  contents[0] = 0;
   if (!strlen(value))
-    sprintf(contents, "%s=\"\", ", name);
+    format = "%s=\"%s\", ";
   else {
     if (strchr(value, '"')) {
-      if (!(buffer = SDDS_Malloc(sizeof(*buffer) * 2 * strlen(value))))
-        return 0;
+      if (!(buffer = SDDS_Malloc(sizeof(*buffer) * (2 * strlen(value) + 1))))
+        return NULL;
       vPtr = value;
       bPtr = buffer;
       while (*vPtr) {
@@ -188,19 +186,61 @@ char *SDDS_CreateNamelistField(char *name, char *value) {
       *bPtr = 0;
       value = buffer;
     }
-    if (strpbrk(value, " ,*$\t\n\b")) {
-      //sprintf(contents, "%s%s=\"%s\", ", contents, name, value);
-      sprintf(buf2, "%s=\"%s\", ", name, value);
-      contents = strcat(contents, buf2);
-    } else {
-      ///sprintf(contents, "%s%s=%s, ", contents, name, value);
-      sprintf(buf2, "%s=%s, ", name, value);
-      contents = strcat(contents, buf2);
-    }
-    if (buffer)
-      free(buffer);
+    format = SDDS_LegacyFieldNeedsQuotes(value) ? "%s=\"%s\", " : "%s=%s, ";
   }
+  /* Size the field exactly: legacy metadata has no fixed length limit here. */
+  length = snprintf(NULL, 0, format, name, value);
+  if (length < 0 || !(contents = (char *)malloc((size_t)length + 1))) {
+    free(buffer);
+    return NULL;
+  }
+  snprintf(contents, (size_t)length + 1, format, name, value);
+  free(buffer);
   return contents;
+}
+
+/**
+ * @brief Appends text to a heap string, growing it as needed.
+ *
+ * @param dest The heap string to extend, or NULL on an earlier failure.
+ * @param text The text to append; a NULL text marks a failed field and frees @p dest.
+ * @param owned Nonzero when @p text is heap-allocated and must be freed here.
+ * @return The extended string, or NULL (with @p dest freed) on failure.
+ */
+static char *appendLayoutText(char *dest, char *text, int owned) {
+  size_t used, extra;
+  char *grown;
+  if (!dest || !text) {
+    free(dest);
+    if (owned)
+      free(text);
+    return NULL;
+  }
+  used = strlen(dest);
+  extra = strlen(text);
+  if (!(grown = (char *)realloc(dest, used + extra + 1))) {
+    free(dest);
+    if (owned)
+      free(text);
+    return NULL;
+  }
+  memcpy(grown + used, text, extra + 1);
+  if (owned)
+    free(text);
+  return grown;
+}
+
+/** @brief Appends one legacy namelist field, as SDDS_CreateNamelistField() formats it. */
+static char *appendLayoutField(char *dest, char *name, char *value) {
+  return appendLayoutText(dest, SDDS_CreateNamelistField(name, value), 1);
+}
+
+/** @brief Starts a heap string holding @p text. */
+static char *startLayoutText(const char *text) {
+  char *start = (char *)malloc(strlen(text) + 1);
+  if (start)
+    strcpy(start, text);
+  return start;
 }
 
 /**
@@ -213,19 +253,15 @@ char *SDDS_CreateNamelistField(char *name, char *value) {
  * @return A newly allocated string containing the description block, or `NULL` if both `text` and `contents` are `NULL`.
  */
 char *SDDS_CreateDescription(char *text, char *contents) {
-  char *desc = NULL;
+  char *desc;
   if (!text && !contents)
     return NULL;
-  desc = (char *)malloc(sizeof(char) * 2048);
-  desc[0] = 0;
-  sprintf(desc, "&description ");
+  desc = startLayoutText("&description ");
   if (text)
-    strcat(desc, SDDS_CreateNamelistField("text", text));
+    desc = appendLayoutField(desc, "text", text);
   if (contents)
-    strcat(desc, SDDS_CreateNamelistField("contents", contents));
-  //sprintf(desc, "%s&end\n", desc);
-  desc = strcat(desc, "&end\n");
-  return desc;
+    desc = appendLayoutField(desc, "contents", contents);
+  return appendLayoutText(desc, "&end\n", 0);
 }
 
 /**
@@ -240,25 +276,20 @@ char *SDDS_CreateParameterDefinition(PARAMETER_DEFINITION *parameter_definition)
   if (parameter_definition->type == SDDS_ENUM)
     return SDDS6_CreateNamelist("parameter", parameter_definition, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS);
   char *par, *tmpstr;
-  par = (char *)malloc(sizeof(char) * 2048);
-  par[0] = 0;
-  sprintf(par, "&parameter ");
-  strcat(par, SDDS_CreateNamelistField("name", parameter_definition->name));
+  par = startLayoutText("&parameter ");
+  par = appendLayoutField(par, "name", parameter_definition->name);
   if ((tmpstr = BlankToNull(parameter_definition->symbol)))
-    strcat(par, SDDS_CreateNamelistField("symbol", tmpstr));
+    par = appendLayoutField(par, "symbol", tmpstr);
   if ((tmpstr = BlankToNull(parameter_definition->units)))
-    strcat(par, SDDS_CreateNamelistField("units", tmpstr));
+    par = appendLayoutField(par, "units", tmpstr);
   if ((tmpstr = BlankToNull(parameter_definition->description)))
-    strcat(par, SDDS_CreateNamelistField("description", tmpstr));
+    par = appendLayoutField(par, "description", tmpstr);
   if ((tmpstr = BlankToNull(parameter_definition->format_string)))
-    strcat(par, SDDS_CreateNamelistField("format_string", tmpstr));
-  strcat(par, SDDS_CreateNamelistField("type", SDDS_type_name[parameter_definition->type - 1]));
-  /*if ((tmpstr=BlankToNull(parameter_definition->fixed_value)))
-    strcat(par, SDDS_CreateNamelistField("fixed_value", tmpstr)); */
+    par = appendLayoutField(par, "format_string", tmpstr);
+  par = appendLayoutField(par, "type", SDDS_type_name[parameter_definition->type - 1]);
   if (parameter_definition->fixed_value)
-    strcat(par, SDDS_CreateNamelistField("fixed_value", parameter_definition->fixed_value));
-  strcat(par, "&end\n");
-  return par;
+    par = appendLayoutField(par, "fixed_value", parameter_definition->fixed_value);
+  return appendLayoutText(par, "&end\n", 0);
 }
 
 /**
@@ -272,22 +303,19 @@ char *SDDS_CreateParameterDefinition(PARAMETER_DEFINITION *parameter_definition)
 char *SDDS_CreateColumnDefinition(COLUMN_DEFINITION *column_definition) {
   if (column_definition->type == SDDS_ENUM)
     return SDDS6_CreateNamelist("column", column_definition, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS);
-  char *col = NULL, *tmpStr;
-  col = (char *)malloc(sizeof(char) * 2048);
-  col[0] = 0;
-  sprintf(col, "&column ");
-  strcat(col, SDDS_CreateNamelistField("name", column_definition->name));
+  char *col, *tmpStr;
+  col = startLayoutText("&column ");
+  col = appendLayoutField(col, "name", column_definition->name);
   if ((tmpStr = BlankToNull(column_definition->symbol)))
-    strcat(col, SDDS_CreateNamelistField("symbol", tmpStr));
+    col = appendLayoutField(col, "symbol", tmpStr);
   if ((tmpStr = BlankToNull(column_definition->units)))
-    strcat(col, SDDS_CreateNamelistField("units", tmpStr));
+    col = appendLayoutField(col, "units", tmpStr);
   if ((tmpStr = BlankToNull(column_definition->description)))
-    strcat(col, SDDS_CreateNamelistField("description", tmpStr));
+    col = appendLayoutField(col, "description", tmpStr);
   if ((tmpStr = BlankToNull(column_definition->format_string)))
-    strcat(col, SDDS_CreateNamelistField("format_string", tmpStr));
-  strcat(col, SDDS_CreateNamelistField("type", SDDS_type_name[column_definition->type - 1]));
-  strcat(col, " &end\n");
-  return col;
+    col = appendLayoutField(col, "format_string", tmpStr);
+  col = appendLayoutField(col, "type", SDDS_type_name[column_definition->type - 1]);
+  return appendLayoutText(col, " &end\n", 0);
 }
 
 /**
@@ -301,31 +329,26 @@ char *SDDS_CreateColumnDefinition(COLUMN_DEFINITION *column_definition) {
 char *SDDS_CreateArrayDefinition(ARRAY_DEFINITION *array_definition) {
   if (array_definition->type == SDDS_ENUM)
     return SDDS6_CreateNamelist("array", array_definition, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS);
-  char *array = NULL, *tmpstr;
+  char *array, *tmpstr;
   char buf[40];
-  array = (char *)malloc(sizeof(char) * 2048);
-  array[0] = 0;
-  sprintf(array, "&array ");
-  strcat(array, SDDS_CreateNamelistField("name", array_definition->name));
+  array = startLayoutText("&array ");
+  array = appendLayoutField(array, "name", array_definition->name);
   if ((tmpstr = BlankToNull(array_definition->symbol)))
-    strcat(array, SDDS_CreateNamelistField("symbol", tmpstr));
+    array = appendLayoutField(array, "symbol", tmpstr);
   if ((tmpstr = BlankToNull(array_definition->units)))
-    strcat(array, SDDS_CreateNamelistField("units", tmpstr));
+    array = appendLayoutField(array, "units", tmpstr);
   if ((tmpstr = BlankToNull(array_definition->description)))
-    strcat(array, SDDS_CreateNamelistField("description", tmpstr));
+    array = appendLayoutField(array, "description", tmpstr);
   if ((tmpstr = BlankToNull(array_definition->format_string)))
-    strcat(array, SDDS_CreateNamelistField("format_string", tmpstr));
+    array = appendLayoutField(array, "format_string", tmpstr);
   if ((tmpstr = BlankToNull(array_definition->group_name)))
-    strcat(array, SDDS_CreateNamelistField("group_name", tmpstr));
-  strcat(array, SDDS_CreateNamelistField("type", SDDS_type_name[array_definition->type - 1]));
-  if (array_definition->dimensions != 1) /* 1 is default */
-  {
-    //sprintf(array, "%sdimensions=%" PRId32 ", ", array, array_definition->dimensions);
-    sprintf(buf, "dimensions=%" PRId32 ", ", array_definition->dimensions);
-    strcat(array, buf);
+    array = appendLayoutField(array, "group_name", tmpstr);
+  array = appendLayoutField(array, "type", SDDS_type_name[array_definition->type - 1]);
+  if (array_definition->dimensions != 1) { /* 1 is default */
+    snprintf(buf, sizeof(buf), "dimensions=%" PRId32 ", ", array_definition->dimensions);
+    array = appendLayoutText(array, buf, 0);
   }
-  strcat(array, " &end\n");
-  return array;
+  return appendLayoutText(array, " &end\n", 0);
 }
 
 /**
@@ -337,26 +360,20 @@ char *SDDS_CreateArrayDefinition(ARRAY_DEFINITION *array_definition) {
  * @return A newly allocated string containing the associate definition block.
  */
 char *SDDS_CreateAssociateDefinition(ASSOCIATE_DEFINITION *associate_definition) {
-  char *associate = NULL, *tmpstr;
+  char *associate, *tmpstr;
   char buf[40];
-  associate = (char *)malloc(sizeof(char) * 2048);
-  associate[0] = 0;
-  sprintf(associate, "&associate ");
-  strcat(associate, SDDS_CreateNamelistField("name", associate_definition->name));
+  associate = startLayoutText("&associate ");
+  associate = appendLayoutField(associate, "name", associate_definition->name);
   if ((tmpstr = BlankToNull(associate_definition->filename)))
-    strcat(associate, SDDS_CreateNamelistField("filename", tmpstr));
+    associate = appendLayoutField(associate, "filename", tmpstr);
   if ((tmpstr = BlankToNull(associate_definition->contents)))
-    strcat(associate, SDDS_CreateNamelistField("contents", tmpstr));
+    associate = appendLayoutField(associate, "contents", tmpstr);
   if ((tmpstr = BlankToNull(associate_definition->path)))
-    strcat(associate, SDDS_CreateNamelistField("path", tmpstr));
+    associate = appendLayoutField(associate, "path", tmpstr);
   if ((tmpstr = BlankToNull(associate_definition->description)))
-    strcat(associate, SDDS_CreateNamelistField("description", tmpstr));
-  //sprintf(associate, "%ssdds=%" PRId32, associate, associate_definition->sdds);
-  sprintf(buf, "sdds=%" PRId32 " &end\n", associate_definition->sdds);
-  strcat(associate, buf);
-  //strcat(associate, " &end\n");
-  return associate;
-  ;
+    associate = appendLayoutField(associate, "description", tmpstr);
+  snprintf(buf, sizeof(buf), "sdds=%" PRId32 " &end\n", associate_definition->sdds);
+  return appendLayoutText(associate, buf, 0);
 }
 
 /**
@@ -368,28 +385,21 @@ char *SDDS_CreateAssociateDefinition(ASSOCIATE_DEFINITION *associate_definition)
  * @return A newly allocated string containing the data mode block, or `NULL` if the mode is invalid.
  */
 char *SDDS_CreateDataMode(DATA_MODE *data_mode) {
-  char *mode = NULL;
+  char *mode;
   char buf[40];
   if (data_mode->mode > SDDS_NUM_DATA_MODES)
     return NULL;
-  mode = (char *)malloc(sizeof(char) * 2048);
-  mode[0] = 0;
-  sprintf(mode, "&data ");
-  strcat(mode, SDDS_CreateNamelistField("mode", SDDS_data_mode[data_mode->mode - 1]));
+  mode = startLayoutText("&data ");
+  mode = appendLayoutField(mode, "mode", SDDS_data_mode[data_mode->mode - 1]);
   if (data_mode->lines_per_row > 1) {
-    //sprintf(mode, "%slines_per_row=%" PRId32 ", ", mode, data_mode->lines_per_row);
-    sprintf(buf, "lines_per_row=%" PRId32 ", ", data_mode->lines_per_row);
-    strcat(mode, buf);
+    snprintf(buf, sizeof(buf), "lines_per_row=%" PRId32 ", ", data_mode->lines_per_row);
+    mode = appendLayoutText(mode, buf, 0);
   }
-  if (data_mode->no_row_counts) {
-    //sprintf(mode, "%sno_row_counts=1, ", mode);
-    strcat(mode, "no_row_counts=1, ");
-  }
-  if (data_mode->column_major) {
-    strcat(mode, "column_major_order=1, ");
-  }
-  strcat(mode, "&end\n");
-  return mode;
+  if (data_mode->no_row_counts)
+    mode = appendLayoutText(mode, "no_row_counts=1, ", 0);
+  if (data_mode->column_major)
+    mode = appendLayoutText(mode, "column_major_order=1, ", 0);
+  return appendLayoutText(mode, "&end\n", 0);
 }
 
 /**
@@ -478,7 +488,7 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
   MPI_DATASET *MPI_dataset;
   SDDS_LAYOUT *layout;
   char buf[2048], *field = NULL;
-  int32_t i, data_mode, preserveSDDS6;
+  int32_t i, data_mode;
   char *outputEndianess = NULL;
   SDDS_FILEBUFFER *fBuffer = NULL;
 
@@ -526,9 +536,6 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
       fBuffer->data[0] = 0;
     }
   }
-  preserveSDDS6 = SDDS_RequiresSDDS6Layout(layout);
-  /* All ranks must select the same serializer and header collective sequence. */
-  MPI_Allreduce(MPI_IN_PLACE, &preserveSDDS6, 1, MPI_INT32_T, MPI_MAX, MPI_dataset->comm);
   layout->version = 1;
   for (i = 0; i < layout->n_parameters; i++) {
     if ((layout->parameter_definition[i].type == SDDS_ULONG) || (layout->parameter_definition[i].type == SDDS_USHORT)) {
@@ -598,7 +605,6 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
   for (i = 0; i < layout->n_arrays; i++)
     if (layout->array_definition[i].type == SDDS_ENUM) layout->version = 6;
 
-  if (preserveSDDS6) layout->version = 6;
   if (layout->version == 6) layout->data_mode.endian = (int32_t)layout->byteOrderDeclared;
 
   // force layout version 5 because the row and column indexes are now 64bit long integers

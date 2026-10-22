@@ -655,68 +655,7 @@ static size_t legacyNamelistFieldLength(const char *name, const char *value) {
   if (!*value) return strlen(name) + 5;
   for (s = value; *s; s++) if (*s == '"') quotes++;
   length = strlen(name) + 1 + strlen(value) + quotes + 2;
-  return strpbrk(value, " ,*$\t\n\b") ? length + 2 : length;
-}
-
-/** @brief Whether one SDDS6 command needs escaping or space absent from legacy headers. */
-static int32_t commandNeedsSDDS6(const char *command, const void *data, SDDS_FIELD_INFORMATION *fields, int32_t count) {
-  int description = !strcmp(command, "description");
-  size_t length = strlen(command) + ((!strcmp(command, "parameter") || description) ? 7 : 8);
-  int32_t i;
-  for (i = 0; i < count; i++) {
-    if (fields[i].type == SDDS_STRING) {
-      const char *value = *(char *const *)((const char *)data + fields[i].offset), *p;
-      if (!value) continue;
-      int quoted = strpbrk(value, " ,*$\t\n\b") != NULL;
-      /* Legacy output quotes only this set of separators. A comment or end
-       * marker outside those quotes changes the parsed command, while raw
-       * line breaks are flattened by the legacy line reader. Ordinary literal
-       * backslashes remain valid; a quoted trailing one hides the closing quote. */
-      for (p = value; *p; p++)
-        if (*p == '\n' || *p == '\r' || *p == '"' || (!quoted && (*p == '!' || !strncmp(p, "&end", 4))))
-          return 1;
-      if (quoted && *value && value[strlen(value) - 1] == '\\') return 1;
-      if (!description && strcmp(fields[i].name, "name") && strcmp(fields[i].name, "fixed_value") &&
-          SDDS_StringIsBlank((char *)value)) {
-        if (*value) return 1;
-        continue;
-      }
-      length += legacyNamelistFieldLength(fields[i].name, value);
-    } else {
-      int32_t code = *(const int32_t *)((const char *)data + fields[i].offset);
-      const char *value = NULL;
-      char number[32];
-      if (!strcmp(fields[i].name, "field_length")) continue; /* Omitted by legacy writers. */
-      if (!strcmp(fields[i].name, "dimensions") && code == 1) continue;
-      if (fields[i].enumPair) {
-        SDDS_ENUM_PAIR *pair = fields[i].enumPair;
-        while (pair->name && pair->value != code) pair++;
-        value = pair->name;
-      } else {
-        snprintf(number, sizeof(number), "%" PRId32, code);
-        value = number;
-      }
-      if (value) length += legacyNamelistFieldLength(fields[i].name, value);
-      if (!strcmp(fields[i].name, "sdds")) length -= 2; /* No comma after this last field. */
-    }
-    if (length > SDDS_MAXLINE) return 1;
-  }
-  return 0;
-}
-
-/** @brief Keep copied SDDS6 metadata on a header grammar that can represent it losslessly. */
-int32_t SDDS_RequiresSDDS6Layout(const SDDS_LAYOUT *layout) {
-  int32_t i;
-  if (commandNeedsSDDS6("description", layout, SDDS_DescriptionFieldInformation, SDDS_DESCRIPTION_FIELDS)) return 1;
-  for (i = 0; i < layout->n_columns; i++)
-    if (commandNeedsSDDS6("column", layout->column_definition + i, SDDS_ColumnFieldInformation, SDDS_COLUMN_FIELDS)) return 1;
-  for (i = 0; i < layout->n_parameters; i++)
-    if (commandNeedsSDDS6("parameter", layout->parameter_definition + i, SDDS_ParameterFieldInformation, SDDS_PARAMETER_FIELDS)) return 1;
-  for (i = 0; i < layout->n_arrays; i++)
-    if (commandNeedsSDDS6("array", layout->array_definition + i, SDDS_ArrayFieldInformation, SDDS_ARRAY_FIELDS)) return 1;
-  for (i = 0; i < layout->n_associates; i++)
-    if (commandNeedsSDDS6("associate", layout->associate_definition + i, SDDS_AssociateFieldInformation, SDDS_ASSOCIATE_FIELDS)) return 1;
-  return 0;
+  return SDDS_LegacyFieldNeedsQuotes(value) ? length + 2 : length;
 }
 
 /** @brief Whether a legacy (SDDS1-5) reader can read this string parameter definition. */

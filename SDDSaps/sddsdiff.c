@@ -813,8 +813,8 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
     snprintf(dFormat, sizeof(dFormat), "%%20ld%s%s%s\n", doubleFormat, doubleFormat, doubleFormat);
     snprintf(ldFormat, sizeof(ldFormat), "%%20ld%s%s%s\n", ldoubleFormat, ldoubleFormat, ldoubleFormat);
     snprintf(strFormat, sizeof(strFormat), "%%20ld%s%s%%25ld\n", stringFormat, stringFormat);
-    snprintf(lFormat, sizeof(lFormat), "%s", "%20ld%25ld%25ld\n");
-    snprintf(ulFormat, sizeof(ulFormat), "%s", "%20ld%25lu%25lu%25ld\n");
+    snprintf(lFormat, sizeof(lFormat), "%s", "%20ld%25lld%25lld%25lld\n");
+    snprintf(ulFormat, sizeof(ulFormat), "%s", "%20ld%25llu%25llu%25lld\n");
     snprintf(shortFormat, sizeof(shortFormat), "%s", "%20ld%25hd%25hd%25hd\n");
     snprintf(ushortFormat, sizeof(ushortFormat), "%s", "%20ld%25hu%25hu%25hd\n");
     snprintf(cFormat, sizeof(cFormat), "%s", "%20ld%25c%25c%25d\n");
@@ -882,8 +882,8 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
           snprintf(dFormat, sizeof(dFormat), "%%s%s%s%s\n", doubleFormat, doubleFormat, doubleFormat);
           snprintf(ldFormat, sizeof(ldFormat), "%%s%s%s%s\n", ldoubleFormat, ldoubleFormat, ldoubleFormat);
           snprintf(strFormat, sizeof(strFormat), "%%s%s%s%%25ld\n", stringFormat, stringFormat);
-          snprintf(lFormat, sizeof(lFormat), "%%s%%25ld%%25ld%%25ld\n");
-          snprintf(ulFormat, sizeof(ulFormat), "%%s%%25lu%%25lu%%25ld\n");
+          snprintf(lFormat, sizeof(lFormat), "%%s%%25lld%%25lld%%25lld\n");
+          snprintf(ulFormat, sizeof(ulFormat), "%%s%%25llu%%25llu%%25lld\n");
           snprintf(shortFormat, sizeof(shortFormat), "%%s%%25hd%%25hd%%25hd\n");
           snprintf(ushortFormat, sizeof(ushortFormat), "%%s%%25hu%%25hu%%25hd\n");
           snprintf(cFormat, sizeof(cFormat), "%%s%%25c%%25c%%25d\n");
@@ -1191,9 +1191,9 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, ulongFormat, rowLabelValue, ullval1, ullval2, ulldiff);
+        fprintf(stdout, ulongFormat, rowLabelValue, (unsigned long long)ullval1, (unsigned long long)ullval2, (long long)ulldiff);
       else
-        fprintf(stdout, ulongFormat, printIndex, ullval1, ullval2, ulldiff);
+        fprintf(stdout, ulongFormat, printIndex, (unsigned long long)ullval1, (unsigned long long)ullval2, (long long)ulldiff);
     }
     break;
   case SDDS_LONG64:
@@ -1213,9 +1213,9 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, longFormat, rowLabelValue, llval1, llval2, lldiff);
+        fprintf(stdout, longFormat, rowLabelValue, (long long)llval1, (long long)llval2, (long long)lldiff);
       else
-        fprintf(stdout, longFormat, printIndex, llval1, llval2, lldiff);
+        fprintf(stdout, longFormat, printIndex, (long long)llval1, (long long)llval2, (long long)lldiff);
     }
     break;
   case SDDS_ULONG:
@@ -1228,9 +1228,9 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, ulongFormat, rowLabelValue, ulval1, ulval2, uldiff);
+        fprintf(stdout, ulongFormat, rowLabelValue, (unsigned long long)ulval1, (unsigned long long)ulval2, (long long)uldiff);
       else
-        fprintf(stdout, ulongFormat, printIndex, ulval1, ulval2, uldiff);
+        fprintf(stdout, ulongFormat, printIndex, (unsigned long long)ulval1, (unsigned long long)ulval2, (long long)uldiff);
     }
     break;
   case SDDS_LONG:
@@ -1250,9 +1250,9 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, longFormat, rowLabelValue, lval1, lval2, ldiff);
+        fprintf(stdout, longFormat, rowLabelValue, (long long)lval1, (long long)lval2, (long long)ldiff);
       else
-        fprintf(stdout, longFormat, printIndex, lval1, lval2, ldiff);
+        fprintf(stdout, longFormat, printIndex, (long long)lval1, (long long)lval2, (long long)ldiff);
     }
     break;
   case SDDS_SHORT:
