@@ -194,7 +194,8 @@ oldColumnNames\n\
                the input file column names.\n\
 multiplyMatrix if invert is not provided,  then the output matrix is the inverse of the input\n\
                matrix multiplying by this matrix; otherwise, the output matrix is the product of \n\
-               multiply matrix and the inverse of the input matrix.\n\
+               multiply matrix and the inverse of the input matrix. Input pages pair\n\
+               with multiply pages; a single multiply page is used for every page.\n\
 majorOrder     specity output file in row or column major order.\n";
 static char *USAGE3 = "root           use the string specified to generate column names.\n\
                Default for column names is the first string column in\n\
@@ -248,6 +249,7 @@ int32_t InitializeInputAndGetColumnNames(SDDS_DATASET *SDDS_dataset, char *filen
                                          char ***numericalColumnName, int32_t *numericalColumns,
                                          char **stringColumName, char **inputDescription, char **inputContents);
 static char **getNameColumn(SDDS_DATASET *dataset, char *name);
+static char **makeIndexNames(const char *root, int64_t count, long digits);
 
 int main(int argc, char **argv) {
   SCANNED_ARG *s_arg;
@@ -272,14 +274,13 @@ int main(int argc, char **argv) {
 #if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
   int64_t multiplyRows = 0;
   MAT *Multi = NULL;
-  long mpage = 0;
+  long mpage = 0, lastMultiplyPage = 0;
   short lapackMethod = 1;
 #else
   int k;
 #endif
   int32_t dim_ptr[1] = {1};
   long removeDCVectors, includeWeights, verbose, includeCorrWeights;
-  char format[80];
   char *Symbol, *Root;
   VEC *w = NULL, *SValue, *SValueUsed, *InvSValue, *corrW = NULL;
   MAT *R, *RInvt, *RInvR, *Rnewt, *U, *Ut, *V, *Vt, *Product = NULL;
@@ -640,17 +641,12 @@ int main(int argc, char **argv) {
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       } else {
         /* use command line options to produce column names in the output file */
-        outputColumnName = (char **)malloc(rows * sizeof(char *));
         digits = MAX(digits, log10(rows) + 1);
         if (!Root) {
           Root = (char *)malloc(sizeof(char) * (strlen("Column") + 1));
           strcpy(Root, "Column");
         }
-        for (i = 0; i < rows; i++) {
-          outputColumnName[i] = (char *)malloc(sizeof(char) * (strlen(Root) + digits + 1));
-          sprintf(format, "%s%%0%ldld", Root, digits);
-          sprintf(outputColumnName[i], format, i);
-        }
+        outputColumnName = makeIndexNames(Root, rows, digits);
       }
       outputColumns = rows;
     } else {
@@ -671,7 +667,15 @@ int main(int argc, char **argv) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
         return EXIT_FAILURE;
       }
+      if (mpage < 0) {
+        /* A single multiply page applies to every input page; otherwise pages must pair up. */
+        if (lastMultiplyPage == 0)
+          SDDS_Bomb("The multiply matrix file has no data pages.");
+        if (lastMultiplyPage > 1)
+          SDDS_Bomb("The multiply matrix file has fewer pages than the input file.");
+      }
       if (mpage > 0) {
+        lastMultiplyPage = mpage;
         multiplyRows = SDDS_CountRowsOfInterest(&multiplyPage);
         if (!SDDS_SetColumnFlags(&multiplyPage, 0))
           SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
@@ -689,12 +693,7 @@ int main(int argc, char **argv) {
               outputColumnName = multiplyColumnName;
             else {
               freeMultiCol = 1;
-              outputColumnName = (char **)malloc(outputColumns * sizeof(char *));
-              for (i = 0; i < outputColumns; i++) {
-                outputColumnName[i] = (char *)malloc(sizeof(char) * (strlen(Root) + digits + 1));
-                sprintf(format, "%s%%0%ldld", Root, digits);
-                sprintf(outputColumnName[i], format, i);
-              }
+              outputColumnName = makeIndexNames(Root, outputColumns, digits);
             }
           } else {
             /*get the actutaor name from multiply matrix */
@@ -709,12 +708,7 @@ int main(int argc, char **argv) {
             if (Root) {
               SDDS_FreeStringArray(outputColumnName, outputColumns);
               free(outputColumnName);
-              outputColumnName = (char **)malloc(outputColumns * sizeof(char *));
-              for (i = 0; i < outputColumns; i++) {
-                outputColumnName[i] = (char *)malloc(sizeof(char) * (strlen(Root) + digits + 1));
-                sprintf(format, "%s%%0%ldld", Root, digits);
-                sprintf(outputColumnName[i], format, i);
-              }
+              outputColumnName = makeIndexNames(Root, outputColumns, digits);
             }
           }
         }
@@ -724,6 +718,10 @@ int main(int argc, char **argv) {
             mem_bytes(TYPE_MAT, 0, sizeof(MAT));
             mem_numvar(TYPE_MAT, 1);
           }
+        } else {
+          /* Replace the previous multiply page, which was kept for reuse. */
+          free(Multi->me);
+          free(Multi->base);
         }
         Multi->m = Multi->max_m = multiplyRows;
         Multi->n = Multi->max_n = multiplyColumns;
@@ -1599,8 +1597,7 @@ int main(int argc, char **argv) {
 #endif
 #      endif
 #    endif
-      t_free(Multi);
-      Multi = (MAT *)NULL;
+      /* Multi is kept so a multiply file with fewer pages reuses its last page. */
       m_free(RInvt);
       RInvt = (MAT *)NULL;
     }
@@ -1736,12 +1733,7 @@ int main(int argc, char **argv) {
           mem_info_file(stderr, 0);
       }
       if (uFile || vFile || (sFile && sFileAsMatrix)) {
-        orthoColumnName = (char **)malloc(MAX(rows, numericalColumns) * sizeof(char *));
-        for (i = 0; i < MAX(rows, numericalColumns); i++) {
-          orthoColumnName[i] = (char *)malloc(sizeof(char) * (strlen("SV") + digits + 1));
-          sprintf(format, "SV%%0%ldld", digits);
-          sprintf(orthoColumnName[i], format, i);
-        }
+        orthoColumnName = makeIndexNames("SV", MAX(rows, numericalColumns), digits);
       }
 
       if (uFile) {
@@ -2182,6 +2174,8 @@ int main(int argc, char **argv) {
     SDDS_FreeStringArray(multiplyColumnName, multiplyColumns);
     free(multiplyColumnName);
   }
+  if (Multi)
+    t_free(Multi);
   if (multiStringCol)
     free(multiStringCol);
   if (inputDescription)
@@ -2393,3 +2387,24 @@ void *SDDS_GetCastMatrixOfRows_SunPerf(SDDS_DATASET *SDDS_dataset, int64_t *n_ro
   return (data);
 }
 #endif
+
+/** @brief Allocate legacy root%0<digits>ld index names, sizing each buffer from its formatted length. */
+static char **makeIndexNames(const char *root, int64_t count, long digits) {
+  char **names;
+  int64_t i;
+  int length;
+
+  if (count <= 0 || digits > INT_MAX || digits < -INT_MAX || !(names = calloc(count, sizeof(*names)))) {
+    SDDS_Bomb("Unable to allocate generated column names");
+    return NULL;
+  }
+  for (i = 0; i < count; i++) {
+    if ((length = snprintf(NULL, 0, "%s%0*" PRId64, root, (int)digits, i)) < 0 ||
+        !(names[i] = malloc((size_t)length + 1))) {
+      SDDS_Bomb("Unable to allocate generated column names");
+      return NULL;
+    }
+    snprintf(names[i], (size_t)length + 1, "%s%0*" PRId64, root, (int)digits, i);
+  }
+  return names;
+}

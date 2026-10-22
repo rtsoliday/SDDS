@@ -157,23 +157,25 @@ sdds2tiff_SRC = sdds2tiff.c
 tiff2sdds_SRC = tiff2sdds.c
 
 ifneq ($(wildcard $(DD)../.svn),)
-  SVN_VERSION=$(shell svnversion .)
+  SVN_VERSION := $(shell svnversion .)
   ifeq ($(SVN_VERSION),)
-    SVN_VERSION=unknown
+    SVN_VERSION := unknown
   endif
   ifeq ($(SVN_VERSION),Unversioned directory)
-    SVN_VERSION=unknown
+    SVN_VERSION := unknown
   endif
 else
-  SVN_VERSION=GIT_$(shell git log --oneline | wc -l | sed 's/^[[:space:]]*//')
+  SVN_VERSION := GIT_$(shell git log --oneline | wc -l | sed 's/^[[:space:]]*//')
 endif
 
-CFLAGS += -DRPN_SUPPORT -DzLib -DSVN_VERSION=\"$(SVN_VERSION)\" -I../include -I../2d_interpolate/nn -I../2d_interpolate/csa -I../xlslib -DUSE_XLS
-override CXXFLAGS += -DRPN_SUPPORT -DzLib -DSVN_VERSION=\"$(SVN_VERSION)\" -I../include -I../2d_interpolate/nn -I../2d_interpolate/csa -I../xlslib -DUSE_XLS
+CFLAGS += -DRPN_SUPPORT -DzLib -I../include -I../2d_interpolate/nn -I../2d_interpolate/csa -I../xlslib -DUSE_XLS
+override CXXFLAGS += -DRPN_SUPPORT -DzLib -I../include -I../2d_interpolate/nn -I../2d_interpolate/csa -I../xlslib -DUSE_XLS
 
 ifeq ($(OS), Linux)
-  CFLAGS += -fopenmp
-  override CXXFLAGS += -fopenmp
+  # An EPICS extensions build pairs its local libgsl with the local headers.
+  GSL_LOCAL_INC = $(if $(and $(filter 1,$(USE_EPICS_DIRS)),$(wildcard $(RULES_DIR)gsl/gsl)),-I$(RULES_DIR)gsl)
+  CFLAGS += -fopenmp $(GSL_LOCAL_INC)
+  override CXXFLAGS += -fopenmp $(GSL_LOCAL_INC)
   LDFLAGS += -fopenmp
   PROD_SYS_LIBS := $(LZMA_LIB) $(GSL_LINK_LIBS) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lcsa -lnnetwork -lmdbcommon -lmatlib -lfftpack -lSDDS1 -lrpnlib -lmdbmth -lmdblib -lxls
@@ -187,8 +189,6 @@ ifeq ($(OS), Darwin)
 endif
 
 ifeq ($(OS), Windows)
-  LINKEXE += /MANIFEST:EMBED /MANIFESTINPUT:windows-utf8.manifest
-  PROD_SYS_DEPS += windows-utf8.manifest
   CFLAGS += -I../tiff -I../lzma -I../zlib -I../../gsl -openmp -wd4018 -wd4244 -wd4267 -wd4305 -wd4311 -wd4312
   override CXXFLAGS += -I../tiff -I../lzma -I../zlib -I../../gsl -openmp -wd4018 -wd4244 -wd4267 -wd4305 -wd4311 -wd4312
   PROD_LIBS = csa.lib nnetwork.lib mdbcommon.lib matlib.lib fftpack.lib SDDS1.lib rpnlib.lib $(GSL_LINK_LIBS) mdbmth.lib mdblib.lib lzma.lib z.lib xls.lib
@@ -197,6 +197,11 @@ endif
 CUSTOM_LINK_PRODUCTS += sdds2tiff tiff2sdds sdds2mpl sddsanalyticsignal sddscorrelate sddsderiv sddsdistest sddsfdfilter sddsfft sdds2dfft sddsgenericfit sddsinteg sddsinterp sddskde sddskde2d sddsmultihist sddsmxref sddsnaff sddsoutlier sddsprocess sddsrowstats sddsrunstats sddsshiftcor sddssplinefit sddsspotanalysis sddsxref sddsselect
 
 include ../Makefile.build
+
+# The revision is applied per target, outside the recorded build
+# configuration, so a new commit does not rebuild every program.
+$(OBJ_DIR)/%.$(OBJEXT): override CFLAGS += -DSVN_VERSION=\"$(SVN_VERSION)\"
+$(OBJ_DIR)/%.$(OBJEXT): override CXXFLAGS += -DSVN_VERSION=\"$(SVN_VERSION)\"
 
 $(OBJ_DIR)/sdds2tiff$(EXEEXT): $(sdds2tiff_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sdds2tiff_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(TIFF_LIBS) $(PROD_SYS_LIBS)

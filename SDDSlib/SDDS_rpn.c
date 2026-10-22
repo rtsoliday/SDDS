@@ -449,9 +449,9 @@ int32_t SDDS_ComputeParameter(SDDS_DATASET *SDDS_dataset, int32_t parameter, cha
   layout = &SDDS_dataset->layout;
   if (parameter < 0 || parameter >= layout->n_parameters)
     goto cleanup;
-  if (!SDDS_NUMERIC_TYPE(layout->parameter_definition[parameter].type) &&
-      layout->parameter_definition[parameter].type != SDDS_CHARACTER) {
-    SDDS_SetError("Unable to compute nonnumeric parameter; explicit conversion is required (SDDS_ComputeParameter)");
+  /* String targets keep the legacy behaviour: the equation is evaluated but no value is stored. */
+  if (layout->parameter_definition[parameter].type == SDDS_ENUM) {
+    SDDS_SetError("Unable to compute nonnumeric enum parameter; explicit conversion is required (SDDS_ComputeParameter)");
     goto cleanup;
   }
 
@@ -534,9 +534,9 @@ int32_t SDDS_ComputeColumn(SDDS_DATASET *SDDS_dataset, int32_t column, char *equ
   layout = &SDDS_dataset->layout;
   if (column < 0 || column >= layout->n_columns)
     goto cleanup;
-  if (!SDDS_NUMERIC_TYPE(layout->column_definition[column].type) &&
-      layout->column_definition[column].type != SDDS_CHARACTER) {
-    SDDS_SetError("Unable to compute nonnumeric column; explicit conversion is required (SDDS_ComputeColumn)");
+  /* String targets keep the legacy behaviour: the equation is evaluated but no value is stored. */
+  if (layout->column_definition[column].type == SDDS_ENUM) {
+    SDDS_SetError("Unable to compute nonnumeric enum column; explicit conversion is required (SDDS_ComputeColumn)");
     goto cleanup;
   }
 

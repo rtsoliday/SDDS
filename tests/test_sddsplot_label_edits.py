@@ -106,12 +106,28 @@ def test_native_label_edit_matches_literal_at_workspace_limit(tmp_path, target, 
 
 @pytest.mark.parametrize("target", TARGETS)
 @pytest.mark.parametrize("value_type", ["enum", "string"])
-def test_failed_label_edit_is_reported(tmp_path, target, value_type):
+@pytest.mark.parametrize("edit,expected", [
+    pytest.param("i", "aa", id="missing-delimiter"),
+    pytest.param("%/a/A/%/a/B", "Aa", id="unterminated-second-replace"),
+])
+def test_malformed_label_edit_warns_and_keeps_legacy_result(tmp_path, target, value_type,
+                                                            edit, expected):
+  # Legacy sddsplot ignored edit_string() failures and plotted the partially edited label.
   source = label_input(tmp_path / "source.sdds", value_type, "aa")
-  result = run_plot(source, tmp_path / "invalid.json", *label_options(target, "i"),
-                    check=False)
-  assert result.returncode > 0, result.stdout + result.stderr
-  assert "unable to edit label" in result.stderr.lower()
+  output = tmp_path / "malformed.json"
+  result = run_plot(source, output, *label_options(target, edit), check=False)
+  assert result.returncode == 0, result.stdout + result.stderr
+  assert "warning: invalid label edit command" in result.stderr
+  doc = json.loads(output.read_text())
+  layout = doc["plots"][0]["layout"]
+  if target in ("title", "topline"):
+    assert layout[target] == expected
+  elif target in ("xlabel", "ylabel"):
+    assert layout[target[0] + "axis"]["title"] == expected
+  elif target == "legend":
+    assert traces(doc)[0]["name"] == expected
+  elif target == "enumeratedScales":
+    assert layout["xaxis"]["ticktext"] == [expected]
 
 
 def test_expanded_filename_label_edit_is_rejected(tmp_path):

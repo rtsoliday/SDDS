@@ -139,6 +139,13 @@ class [[deprecated("use the SDDS++ API in SDDS.hpp")]] SDDSPP_API SDDSFile {
   int32_t defineEnumColumn(char *name, char *mapping);
   /** @copydoc defineEnumParameter */
   int32_t defineEnumArray(char *name, char *mapping, uint32_t dimensions);
+  /**
+   * @brief Define a primitive field; applies to every defineParameter,
+   * defineColumn and defineArray overload below.
+   * @return Zero-based field index on success. SDDS_ENUM is rejected with -1
+   * (use the enum definers above); other failures keep the historical zero
+   * return. Failures record an error.
+   */
   int32_t defineParameter(char *name, int32_t type);
   int32_t defineParameter(char *name, char *type);
   int32_t defineParameter(char *name, char *symbol, char *units, char *description,

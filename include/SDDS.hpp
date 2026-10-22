@@ -164,7 +164,8 @@ SDDSPP_API std::string_view typeName(Type type) noexcept;
  * @param target Destination type.
  * @param rounding Floating-point-to-integer rounding policy.
  * @return Converted scalar.
- * @throws TypeError If the conversion is invalid or loses data without permission.
+ * @throws TypeError If the conversion is invalid or loses data without permission,
+ * or if the source or target is Type::Enum (even identity; use convertEnumScalar).
  */
 SDDSPP_API Scalar convertScalar(const Scalar &value, Type target,
                                RoundingMode rounding = RoundingMode::Reject);
@@ -174,7 +175,8 @@ SDDSPP_API Scalar convertScalar(const Scalar &value, Type target,
  * @param target Destination type.
  * @param rounding Floating-point-to-integer rounding policy.
  * @return Converted homogeneous values.
- * @throws TypeError If any element cannot be converted.
+ * @throws TypeError If any element cannot be converted, or if the source or
+ * target is Type::Enum (even identity; use convertEnumValues).
  */
 SDDSPP_API Values convertValues(const Values &values, Type target,
                                RoundingMode rounding = RoundingMode::Reject);
@@ -661,7 +663,6 @@ class SDDSPP_API Page {
 
 /** @brief Per-reader resource limits for untrusted or very large input. */
 struct ReaderLimits {
-  std::uint64_t maxEnumDefinitionBytes = 1024U * 1024U; /**< Maximum decoded enum mapping bytes. */
   std::int64_t maxRows = INT64_MAX; /**< Maximum source rows in one page. */
   std::uint64_t maxElements = static_cast<std::uint64_t>(SIZE_MAX); /**< Maximum values in one field. */
   std::uint64_t maxStringBytes = INT32_MAX; /**< Maximum bytes in one string. */
@@ -671,6 +672,7 @@ struct ReaderLimits {
   std::uint32_t maxIncludeDepth = 64; /**< Maximum nested include depth. */
   std::uint32_t maxProjectedFields = UINT32_MAX; /**< Maximum named projected fields. */
   std::uint64_t maxPageIndexEntries = UINT64_MAX; /**< Maximum cached page offsets. */
+  std::uint64_t maxEnumDefinitionBytes = 1024U * 1024U; /**< Maximum decoded enum mapping bytes. */
 };
 
 /** @brief Per-object options used when opening an SDDS reader. */

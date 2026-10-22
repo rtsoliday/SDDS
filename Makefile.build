@@ -170,8 +170,20 @@ BUILD_CONFIG_VALUES := $(foreach variable,$(sort $(BUILD_CONFIG_VARIABLES)),$(ca
 BUILD_OBJECTS += $(PROD_OBJECTS) $(LIBRARY_OBJS)
 BUILD_CONFIG_OBJECTS := $(sort $(BUILD_OBJECTS))
 BUILD_CONFIG_GENERATED := $(sort $(BUILD_GENERATED))
+# Compare with the recorded configuration while parsing, so dry runs and
+# question mode treat an unchanged configuration as current.
+ifeq ($(OS),Windows)
+BUILD_CONFIG_RECORDED := $(strip $(if $(wildcard $(BUILD_CONFIG)),$(file <$(BUILD_CONFIG))))
+BUILD_CONFIG_CURRENT := $(strip $(BUILD_CONFIG_VALUES))
+else
+BUILD_CONFIG_RECORDED := $(strip $(if $(wildcard $(BUILD_CONFIG)),$(shell cat $(BUILD_CONFIG))))
+BUILD_CONFIG_CURRENT := $(strip $(foreach variable,$(sort $(BUILD_CONFIG_VARIABLES)),$(variable)=$($(variable))))
+endif
 .PHONY: force-build-config
-$(BUILD_CONFIG): force-build-config | $(OBJ_DIR)
+ifneq ($(BUILD_CONFIG_RECORDED),$(BUILD_CONFIG_CURRENT))
+$(BUILD_CONFIG): force-build-config
+endif
+$(BUILD_CONFIG): | $(OBJ_DIR)
 ifeq ($(OS),Windows)
 # Write directly from make to avoid Windows shell command limits. Recipe
 # functions also expand during dry runs, when OBJ_DIR may not exist.
@@ -291,22 +303,30 @@ install-programs: $(INSTALL_PROGRAMS) $(BUNDLED_RUNTIME_FILES) | $(BIN_DIR) $(EP
 INSTALLED_LIBRARIES = $(addprefix $(LIB_DIR)/,$(notdir $(LIBRARY) $(PYTHON_SHARED_LIBRARY)))
 install-libraries: $(INSTALLED_LIBRARIES) $(BUNDLED_RUNTIME_FILES)
 .PHONY: force-install-libraries
+# Copies are compared while parsing.  One that differs from its source, for
+# example after switching object trees, is replaced even when it is newer;
+# matching copies stay current for dry runs and question mode.
+build_copy_differs = $(shell cmp -s $(1) $(2) || echo 1)
+build_force_changed_copies = $(foreach copy,$(2),$(if $(call build_copy_differs,$(filter %/$(notdir $(copy)),$(1)),$(copy)),$(eval $(copy): force-install-libraries)))
 # Bundled runtimes and their licenses follow libraries into extensions installs,
 # including components that build only programs.
 ifneq ($(and $(EPICS_LIB_DIR),$(BUNDLED_RUNTIME_FILES)),)
 EPICS_BUNDLED_RUNTIME_FILES = $(addprefix $(EPICS_LIB_DIR)/,$(notdir $(BUNDLED_RUNTIME_FILES)))
 install-programs install-libraries: $(EPICS_BUNDLED_RUNTIME_FILES)
-$(EPICS_BUNDLED_RUNTIME_FILES): $(BUNDLED_RUNTIME_FILES) force-install-libraries | $(EPICS_LIB_DIR)
+$(EPICS_BUNDLED_RUNTIME_FILES): $(BUNDLED_RUNTIME_FILES) | $(EPICS_LIB_DIR)
 	@$(call copy_if_changed,$(filter %/$(@F),$(BUNDLED_RUNTIME_FILES)),$@)
+$(call build_force_changed_copies,$(BUNDLED_RUNTIME_FILES),$(EPICS_BUNDLED_RUNTIME_FILES))
 endif
 ifneq ($(strip $(LIBRARY) $(PYTHON_SHARED_LIBRARY)),)
-$(INSTALLED_LIBRARIES): $(LIBRARY) $(PYTHON_SHARED_LIBRARY) force-install-libraries | $(LIB_DIR)
+$(INSTALLED_LIBRARIES): $(LIBRARY) $(PYTHON_SHARED_LIBRARY) | $(LIB_DIR)
 	@$(call copy_if_changed,$(filter %/$(@F),$(LIBRARY) $(PYTHON_SHARED_LIBRARY)),$@)
+$(call build_force_changed_copies,$(LIBRARY) $(PYTHON_SHARED_LIBRARY),$(INSTALLED_LIBRARIES))
 ifneq ($(EPICS_LIB_DIR),)
 EPICS_INSTALLED_LIBRARIES = $(addprefix $(EPICS_LIB_DIR)/,$(notdir $(LIBRARY) $(PYTHON_SHARED_LIBRARY)))
 install-libraries: $(EPICS_INSTALLED_LIBRARIES)
-$(EPICS_INSTALLED_LIBRARIES): $(LIBRARY) $(PYTHON_SHARED_LIBRARY) force-install-libraries | $(EPICS_LIB_DIR)
+$(EPICS_INSTALLED_LIBRARIES): $(LIBRARY) $(PYTHON_SHARED_LIBRARY) | $(EPICS_LIB_DIR)
 	@$(call copy_if_changed,$(filter %/$(@F),$(LIBRARY) $(PYTHON_SHARED_LIBRARY)),$@)
+$(call build_force_changed_copies,$(LIBRARY) $(PYTHON_SHARED_LIBRARY),$(EPICS_INSTALLED_LIBRARIES))
 endif
 ifeq ($(OS),Windows)
 ifneq ($(NO_DLL),1)

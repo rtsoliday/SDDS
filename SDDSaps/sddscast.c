@@ -126,6 +126,26 @@ typedef struct {
   int used;
 } ENUM_TARGET;
 
+/* -enumValues is scanned before scanargs to keep the raw mapping (escaped commas), but
+   its name is matched like other options: case-insensitive, abbreviable, '_' ignored. */
+static char *enumValuesTail(char *arg) {
+  char *equals, *name, *candidate[N_OPTIONS + 1];
+  long i, match;
+  if (arg[0] != '-' || !(equals = strchr(arg, '=')) || equals == arg + 1)
+    return NULL;
+  if (!(name = malloc(equals - arg)))
+    SDDS_Bomb("enum option allocation failed");
+  memcpy(name, arg + 1, equals - arg - 1);
+  name[equals - arg - 1] = 0;
+  delete_chars(name, "_");
+  for (i = 0; i < N_OPTIONS; i++)
+    candidate[i] = option[i];
+  candidate[N_OPTIONS] = "enumValues";
+  match = match_string(name, candidate, N_OPTIONS + 1, 0);
+  free(name);
+  return match == N_OPTIONS ? equals + 1 : NULL;
+}
+
 /** @brief Apply an explicit enum conversion only to a new output layout. */
 static int configureCast(SDDS_DATASET *output, CAST_NAME *casts, int32_t kind, ENUM_TARGET *targets, long count) {
   long i, j;
@@ -181,7 +201,7 @@ char *USAGE =
 void process_cast_columns(SDDS_DATASET *SDDS_input, CAST_NAME *column_cast, CAST_REQUEST *col_request, long col_requests, long noWarnings);
 void process_cast_parameters(SDDS_DATASET *SDDS_input, CAST_NAME *parameter_cast, CAST_REQUEST *par_request, long par_requests, long noWarnings);
 void process_cast_arrays(SDDS_DATASET *SDDS_input, CAST_NAME *array_cast, CAST_REQUEST *array_request, long array_requests, long noWarnings);
-long add_casts(char *old_type, long sdds_type, CAST_NAME *cast_name, char *add_name, char *new_type, long index, long noWarnings);
+long add_casts(char *old_type, long sdds_type, CAST_NAME *cast_name, char *add_name, char *new_type, long index, long noWarnings, long exactName);
 void cleanUpCast(CAST_NAME *cast_name);
 
 int main(int argc, char **argv) {
@@ -214,15 +234,16 @@ int main(int argc, char **argv) {
   argv = expandedArgs;
   /* Consume exactly two structural commas; leave the logical mapping untouched. */
   for (i = 1; i < argc; i++) {
-    if (!strncmp(argv[i], "-enumValues=", 12)) {
+    char *tail = enumValuesTail(argv[i]);
+    if (tail) {
       char *text = NULL, *first, *second;
       int32_t kind;
-      if (!SDDS_CopyString(&text, argv[i] + 12)) SDDS_Bomb("enum option allocation failed");
+      if (!SDDS_CopyString(&text, tail)) SDDS_Bomb("enum option allocation failed");
       first = strchr(text, ',');
       second = first ? strchr(first + 1, ',') : NULL;
       if (!first || !second || !second[1]) SDDS_Bomb("invalid -enumValues syntax");
       *first++ = 0; *second++ = 0;
-      kind = match_string(text, mode_name, MODES, EXACT_MATCH);
+      kind = match_string(text, mode_name, MODES, 0);
       if (kind < 0 || !*first) SDDS_Bomb("invalid -enumValues element kind/name");
       enumTargets = SDDS_Realloc(enumTargets, sizeof(*enumTargets) * (enumTargetCount + 1));
       enumTargets[enumTargetCount++] = (ENUM_TARGET){kind, first, second, text, 0};
@@ -348,7 +369,16 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (!readResult) SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  if (!readResult) {
+    /* Keep the pages already written readable, but never replace an in-place input. */
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Terminate(&SDDS_input);
+    if (!SDDS_Terminate(&SDDS_output))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    if (tmpfile_used)
+      remove(outputfile);
+    exit(EXIT_FAILURE);
+  }
   for (i = 0; i < enumTargetCount; i++) free(enumTargets[i].storage);
   free(enumTargets);
   if (!SDDS_Terminate(&SDDS_input) || !SDDS_Terminate(&SDDS_output)) {
@@ -434,7 +464,7 @@ void process_cast_columns(SDDS_DATASET *SDDS_input, CAST_NAME *column_cast, CAST
           continue;
         }
         type = SDDS_GetColumnType(SDDS_input, index);
-        add_casts(type_string[k], type, column_cast, Match_string[k], col_request[i].new_type, index, noWarnings);
+        add_casts(type_string[k], type, column_cast, Match_string[k], col_request[i].new_type, index, noWarnings, 1);
       } else {
         SDDS_SetColumnFlags(SDDS_input, 0);
         if (!SDDS_SetColumnsOfInterest(SDDS_input, SDDS_MATCH_STRING, Match_string[k], SDDS_OR))
@@ -446,7 +476,7 @@ void process_cast_columns(SDDS_DATASET *SDDS_input, CAST_NAME *column_cast, CAST
           for (j = 0; j < names; j++) {
             index = SDDS_GetColumnIndex(SDDS_input, Names[j]);
             type = SDDS_GetColumnType(SDDS_input, index);
-            add_casts(type_string[k], type, column_cast, Names[j], col_request[i].new_type, index, noWarnings);
+            add_casts(type_string[k], type, column_cast, Names[j], col_request[i].new_type, index, noWarnings, 0);
             free(Names[j]);
           }
           free(Names);
@@ -511,13 +541,13 @@ void process_cast_parameters(SDDS_DATASET *SDDS_input, CAST_NAME *parameter_cast
           continue;
         }
         type = SDDS_GetParameterType(SDDS_input, index);
-        add_casts(type_string[k], type, parameter_cast, Match_string[k], par_request[i].new_type, index, noWarnings);
+        add_casts(type_string[k], type, parameter_cast, Match_string[k], par_request[i].new_type, index, noWarnings, 1);
       } else {
         for (j = 0; j < names; j++) {
           if (wild_match(Names[j], Match_string[k])) {
             index = SDDS_GetParameterIndex(SDDS_input, Names[j]);
             type = SDDS_GetParameterType(SDDS_input, index);
-            add_casts(type_string[k], type, parameter_cast, Names[j], par_request[i].new_type, index, noWarnings);
+            add_casts(type_string[k], type, parameter_cast, Names[j], par_request[i].new_type, index, noWarnings, 0);
           }
         }
       }
@@ -588,13 +618,13 @@ void process_cast_arrays(SDDS_DATASET *SDDS_input, CAST_NAME *array_cast, CAST_R
           continue;
         }
         type = SDDS_GetArrayType(SDDS_input, index);
-        add_casts(type_string[k], type, array_cast, Match_string[k], array_request[i].new_type, index, noWarnings);
+        add_casts(type_string[k], type, array_cast, Match_string[k], array_request[i].new_type, index, noWarnings, 1);
       } else {
         for (j = 0; j < names; j++) {
           if (wild_match(Names[j], Match_string[k])) {
             index = SDDS_GetArrayIndex(SDDS_input, Names[j]);
             type = SDDS_GetArrayType(SDDS_input, index);
-            add_casts(type_string[k], type, array_cast, Names[j], array_request[i].new_type, index, noWarnings);
+            add_casts(type_string[k], type, array_cast, Names[j], array_request[i].new_type, index, noWarnings, 0);
           }
         }
       }
@@ -610,7 +640,7 @@ void process_cast_arrays(SDDS_DATASET *SDDS_input, CAST_NAME *array_cast, CAST_R
   free(Names);
 }
 
-long add_casts(char *old_type, long sdds_type, CAST_NAME *cast_name, char *add_name, char *new_type, long index, long noWarnings) {
+long add_casts(char *old_type, long sdds_type, CAST_NAME *cast_name, char *add_name, char *new_type, long index, long noWarnings, long exactName) {
   long add = 0;
 
   if (strcmp(old_type, "*") == 0)
@@ -668,15 +698,26 @@ long add_casts(char *old_type, long sdds_type, CAST_NAME *cast_name, char *add_n
       fprintf(stderr, "Warning: The type of '%s' does not match '%s'.\n", add_name, old_type);
     return 0;
   }
-  /* A name wildcard can include fields excluded by the source-type filter. */
+  /* A name wildcard can include fields excluded by the source-type filter.  An unsupported
+     cast is an error only when the field was requested by exact name or explicit source type. */
   {
     int32_t target = SDDS_IdentifyType(new_type);
+    const char *problem = NULL;
     if (sdds_type == SDDS_ENUM || target == SDDS_ENUM) {
       if (!((sdds_type == SDDS_ENUM && (target == SDDS_ENUM || target == SDDS_LONG || target == SDDS_STRING)) ||
             (target == SDDS_ENUM && (sdds_type == SDDS_LONG || sdds_type == SDDS_STRING))))
-        SDDS_Bomb("enum conversions require enum, long codes, or string labels");
+        problem = "enum conversions require enum, long codes, or string labels";
+    } else if (target == SDDS_STRING) {
+      problem = "The new type to cast has to be a numeric type (string is allowed only for enum sources)!";
     } else if (!SDDS_NUMERIC_TYPE(sdds_type) || !SDDS_NUMERIC_TYPE(target)) {
       if (!noWarnings) fprintf(stderr, "Warning: unsupported nonnumeric cast for %s\n", add_name);
+      return 0;
+    }
+    if (problem) {
+      if (exactName || strcmp(old_type, "*"))
+        SDDS_Bomb((char *)problem);
+      if (!noWarnings)
+        fprintf(stderr, "Warning: unsupported cast of '%s' to %s skipped.\n", add_name, new_type);
       return 0;
     }
   }

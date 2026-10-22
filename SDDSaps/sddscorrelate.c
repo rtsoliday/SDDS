@@ -120,6 +120,7 @@ void replaceWithRank(double *data, int64_t n);
 double *findRank(double *data, int64_t n);
 void markStDevOutliers(double *data, double limit, long passes, short *keep, int64_t n);
 static long correlationPairIndex(long i, long j, long columns);
+static int isEnumColumn(SDDS_DATASET *SDDSin, char *name);
 
 int main(int argc, char **argv) {
   int iArg;
@@ -237,19 +238,23 @@ int main(int argc, char **argv) {
   if (!SDDS_InitializeInput(&SDDSin, input))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-  /* Wildcards select numeric fields, but explicit selections must not silently disappear. */
+  /* Missing and string columns are dropped as before, but explicitly selected enums are
+   * rejected rather than silently disappearing. */
   for (i = 0; i < columns; i++) {
     if (has_wildcards(column[i]))
       continue;
     for (j = 0; j < excludeColumns; j++)
       if (wild_match(column[i], excludeColumn[j]))
         break;
-    if (j == excludeColumns &&
-        SDDS_CheckColumn(&SDDSin, column[i], NULL, SDDS_ANY_NUMERIC_TYPE, stderr) != SDDS_CHECK_OKAY)
-      SDDS_Bomb("Explicitly selected correlation columns must be numeric; convert enums with sddscast first.");
+    if (j == excludeColumns && isEnumColumn(&SDDSin, column[i])) {
+      fprintf(stderr, "Error (sddscorrelate): column %s is an enum; convert enums with sddscast first.\n", column[i]);
+      exit(EXIT_FAILURE);
+    }
   }
-  if (withOnly && SDDS_CheckColumn(&SDDSin, withOnly, NULL, SDDS_ANY_NUMERIC_TYPE, stderr) != SDDS_CHECK_OKAY)
-    SDDS_Bomb("-withOnly requires a numeric column; convert enums with sddscast first.");
+  if (withOnly && isEnumColumn(&SDDSin, withOnly)) {
+    fprintf(stderr, "Error (sddscorrelate): -withOnly column %s is an enum; convert enums with sddscast first.\n", withOnly);
+    exit(EXIT_FAILURE);
+  }
 
   if (!columns)
     columns = appendToStringArray(&column, columns, "*");
@@ -416,6 +421,11 @@ int main(int argc, char **argv) {
   }
 
   return EXIT_SUCCESS;
+}
+
+static int isEnumColumn(SDDS_DATASET *SDDSin, char *name) {
+  int32_t index;
+  return (index = SDDS_GetColumnIndex(SDDSin, name)) >= 0 && SDDS_GetColumnType(SDDSin, index) == SDDS_ENUM;
 }
 
 static long correlationPairIndex(long i, long j, long columns) {

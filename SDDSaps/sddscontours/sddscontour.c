@@ -3328,6 +3328,37 @@ void checkParameter(SDDS_TABLE *SDDS_table, char *parameter_name) {
   }
 }
 
+/**
+ * @brief Edit a label in place with the legacy tolerance for malformed edit commands.
+ *
+ * As with the legacy unchecked edit_string() call, a malformed command keeps the label
+ * edited up to the failing command, with a warning.  An edit that does not fit the
+ * buffer at any step is fatal.  A malformed command stops at the same point when given
+ * more room, while a capacity failure gets further; that difference tells them apart.
+ */
+static void editContourLabel(char *buffer, size_t bufferSize, char *edit) {
+  char *original, *scratch;
+  size_t capacity = bufferSize < (1 << 20) ? (1 << 20) : 2 * bufferSize;
+  long capacityFailure;
+
+  if (!SDDS_CopyString(&original, buffer))
+    SDDS_Bomb("String copy problem (editContourLabel)");
+  if (edit_string_bounded(buffer, bufferSize, edit)) {
+    free(original);
+    return;
+  }
+  if (!(scratch = malloc(capacity)))
+    SDDS_Bomb("Memory allocation failure (editContourLabel)");
+  strcpy(scratch, original);
+  capacityFailure = edit_string_bounded(scratch, capacity, edit) || strcmp(scratch, buffer);
+  free(scratch);
+  free(original);
+  if (capacityFailure)
+    SDDS_Bomb("Unable to edit parameter label (edited label is too long)");
+  fprintf(stderr, "warning: invalid label edit command \"%s\"; using the partially edited label \"%s\"\n",
+          edit, buffer);
+}
+
 char *getParameterLabel(SDDS_TABLE *SDDS_table, char *parameter_name, char *edit, char *format) {
   char *ptr, buffer[SDDS_MAXLINE], *dataBuffer = NULL;
   long type = 0;
@@ -3363,8 +3394,7 @@ char *getParameterLabel(SDDS_TABLE *SDDS_table, char *parameter_name, char *edit
     if (strlen(ptr) >= sizeof(buffer))
       SDDS_Bomb("Parameter label is too long for editing");
     strcpy(buffer, ptr);
-    if (!edit_string_bounded(buffer, sizeof(buffer), edit))
-      SDDS_Bomb("Unable to edit parameter label (invalid edit or result too long)");
+    editContourLabel(buffer, sizeof(buffer), edit);
     free(ptr);
     SDDS_CopyString(&ptr, buffer);
   }

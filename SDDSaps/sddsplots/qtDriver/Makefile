@@ -42,3 +42,10 @@ $(mpl_qt_OBJS): CPPFLAGS += -DMPL_QT_ENABLE_3D
 $(OBJ_DIR)/mpl_qt_moc.h: mpl_qt.cc | $(OBJ_DIR)
 	$(MOC) $(QT_CFLAGS) -DMPL_QT_ENABLE_3D $< -o $@
 $(OBJ_DIR)/mpl_qt.$(OBJEXT): $(OBJ_DIR)/mpl_qt_moc.h
+
+# mpl_qt replaced the separate mpl_qt_3d viewer; remove stale installed copies.
+STALE_PROGRAMS = $(wildcard $(addsuffix /mpl_qt_3d$(EXEEXT),$(BIN_DIR) $(EPICS_BIN_DIR)))
+.PHONY: remove-stale-programs
+install-programs: remove-stale-programs
+remove-stale-programs:
+	$(if $(STALE_PROGRAMS),rm -f $(STALE_PROGRAMS))

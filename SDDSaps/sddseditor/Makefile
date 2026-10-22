@@ -57,12 +57,9 @@ $(OBJ_DIR)/SDDSEditor.$(OBJEXT): SDDSEditor.h ArrayViewer.h $(OBJ_DIR)/SDDSEdito
 $(OBJ_DIR)/ArrayViewer.$(OBJEXT): ArrayViewer.h
 
 # Checked-in regression programs; all executables and fixtures stay in OBJ_DIR.
-ifeq ($(OS), Windows)
-  $(OBJ_DIR)/sddseditor_tests$(EXEEXT): LDFLAGS += Qt$(QT_MAJOR)Test.lib
-else
-  $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT): CXXFLAGS += $(shell $(PKG_CONFIG) --cflags Qt$(QT_MAJOR)Test)
-  $(OBJ_DIR)/sddseditor_tests$(EXEEXT): LDFLAGS += $(shell $(PKG_CONFIG) --libs Qt$(QT_MAJOR)Test)
-endif
+# QtTest comes from the same Qt kit as the editor (pkg-config, qmake or QT_DIR).
+$(OBJ_DIR)/SDDSEditorTests.$(OBJEXT): CPPFLAGS += $(QT_TEST_CFLAGS)
+$(OBJ_DIR)/sddseditor_tests$(EXEEXT): LDFLAGS += $(QT_TEST_LIBS)
 
 $(OBJ_DIR)/SDDSEditorTests.$(OBJEXT): SDDSEditor.cc SDDSEditor.h ArrayViewer.h $(OBJ_DIR)/SDDSEditor_moc.h
 

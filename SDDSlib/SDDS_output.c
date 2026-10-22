@@ -40,6 +40,10 @@
 
 #undef DEBUG
 
+/* Version given to new output layouts until SDDS_WriteLayout() selects the written
+ * version (SDDS6 only when an enum is defined, otherwise the minimum legacy version). */
+#define SDDS_INITIAL_OUTPUT_VERSION 5
+
 /* Allows "temporarily" closing a file.  Use SDDS_ReconnectFile() to open it
  * again in the same position.  Updates the present page and flushes the
  * table.
@@ -692,7 +696,7 @@ int32_t SDDS_InitializeOutput(SDDS_DATASET *SDDS_dataset, int32_t data_mode, int
     SDDS_SetError(s);
     return 0;
   }
-  SDDS_dataset->layout.version = SDDS_VERSION;
+  SDDS_dataset->layout.version = SDDS_INITIAL_OUTPUT_VERSION;
   SDDS_dataset->layout.data_mode.mode = data_mode;
   SDDS_dataset->layout.data_mode.lines_per_row = lines_per_row;
   SDDS_dataset->layout.data_mode.no_row_counts = 0;
@@ -795,7 +799,7 @@ int32_t SDDS_Parallel_InitializeOutput(SDDS_DATASET *SDDS_dataset, const char *d
   }
   /* set big-endian for binary files, since it is the only type of MPI binary file.
      SDDS_dataset->layout.byteOrderDeclared = SDDS_BIGENDIAN; */
-  SDDS_dataset->layout.version = SDDS_VERSION;
+  SDDS_dataset->layout.version = SDDS_INITIAL_OUTPUT_VERSION;
   /* it turned out that hard to write ascii file in parallel, fixed it as SDDS_BINARY */
   SDDS_dataset->layout.data_mode.mode = SDDS_BINARY;
   SDDS_dataset->layout.data_mode.lines_per_row = 0;
@@ -1014,10 +1018,10 @@ int32_t SDDS_WriteLayout(SDDS_DATASET *SDDS_dataset) {
   for (i = 0; i < layout->n_arrays; i++)
     if (layout->array_definition[i].type == SDDS_ENUM) layout->version = 6;
 
-  if (layout->version == 6) {
+  if (layout->version == 6)
     layout->data_mode.endian = (int32_t)layout->byteOrderDeclared;
-    SDDS_dataset->original_layout.version = 6;
-  }
+  /* Keep the saved layout on the written version so SDDS_StartPage() does not restore a stale one. */
+  SDDS_dataset->original_layout.version = layout->version;
 
   // force layout version 5 because the row and column indexes are now 64bit long integers
   // layout->version = 5;
@@ -1548,7 +1552,8 @@ int32_t SDDS_DefineParameter(SDDS_DATASET *SDDS_dataset, const char *name, const
     return (-1);
   }
   definition->type = type;
-  if (format_string) {
+  /* A blank format_string means "no format", as the legacy header writer never emits one. */
+  if (format_string && !SDDS_StringIsBlank((char *)format_string)) {
     if (!SDDS_VerifyPrintfFormat(format_string, type)) {
       SDDS_SetError("Invalid format string (SDDS_DefineParameter)");
       return (-1);
@@ -1561,6 +1566,19 @@ int32_t SDDS_DefineParameter(SDDS_DATASET *SDDS_dataset, const char *name, const
   if (fixed_value && !SDDS_CopyString(&(definition->fixed_value), fixed_value)) {
     SDDS_SetError("Couldn't copy fixed_value string (SDDS_DefineParameter)");
     return (-1);
+  }
+  if (SDDS_dataset->parameter) {
+    /* page storage already exists--grow it for the new parameter, as SDDS_DefineColumn does for columns */
+    void **parameter;
+    if (!(parameter = SDDS_Realloc(SDDS_dataset->parameter, sizeof(*parameter) * (layout->n_parameters + 1)))) {
+      SDDS_SetError("Memory allocation failure (SDDS_DefineParameter)");
+      return (-1);
+    }
+    SDDS_dataset->parameter = parameter;
+    if (!(parameter[layout->n_parameters] = calloc(1, SDDS_type_size[type - 1]))) {
+      SDDS_SetError("Memory allocation failure (SDDS_DefineParameter)");
+      return (-1);
+    }
   }
   definition->definition_mode = SDDS_NORMAL_DEFINITION;
   if (type == SDDS_STRING)
@@ -1671,7 +1689,8 @@ int32_t SDDS_DefineArray(SDDS_DATASET *SDDS_dataset, const char *name, const cha
     return (-1);
   }
   definition->type = type;
-  if (format_string) {
+  /* A blank format_string means "no format", as the legacy header writer never emits one. */
+  if (format_string && !SDDS_StringIsBlank((char *)format_string)) {
     if (!SDDS_VerifyPrintfFormat(format_string, type)) {
       SDDS_SetError("Invalid format string (SDDS_DefineArray)");
       return (-1);
@@ -1801,7 +1820,8 @@ int32_t SDDS_DefineColumn(SDDS_DATASET *SDDS_dataset, const char *name, const ch
     return (-1);
   }
   definition->type = type;
-  if (format_string) {
+  /* A blank format_string means "no format", as the legacy header writer never emits one. */
+  if (format_string && !SDDS_StringIsBlank((char *)format_string)) {
     if (!SDDS_VerifyPrintfFormat(format_string, type)) {
       SDDS_SetError("Invalid format string (SDDS_DefineColumn)");
       return (-1);

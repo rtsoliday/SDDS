@@ -168,8 +168,37 @@ typedef struct
 } COLUMN_INFO;
 
 typedef struct {
-  char *kind, *name, *mapping, *storage;
+  long kind;
+  char *name, *mapping, *storage;
 } ENUM_INPUT;
+
+static char *enumKind[3] = {"parameter", "column", "array"};
+
+/** @brief Report whether an element's explicit or default type is a valid type other than enum. */
+static int isNonEnumTypeName(char *typename, char *defaultType) {
+  int32_t type = SDDS_IdentifyType(typename ? typename : (defaultType ? defaultType : "none"));
+  return type > 0 && type != SDDS_ENUM;
+}
+
+/* -enumValues is scanned before scanargs to keep the raw mapping (escaped commas), but
+   its name is matched like other options: case-insensitive, abbreviable, '_' ignored. */
+static char *enumValuesTail(char *arg) {
+  char *equals, *name, *candidate[N_OPTIONS + 1];
+  long i, match;
+  if (arg[0] != '-' || !(equals = strchr(arg, '=')) || equals == arg + 1)
+    return NULL;
+  if (!(name = malloc(equals - arg)))
+    SDDS_Bomb("enum option allocation failed");
+  memcpy(name, arg + 1, equals - arg - 1);
+  name[equals - arg - 1] = 0;
+  delete_chars(name, "_");
+  for (i = 0; i < N_OPTIONS; i++)
+    candidate[i] = option[i];
+  candidate[N_OPTIONS] = "enumValues";
+  match = match_string(name, candidate, N_OPTIONS + 1, 0);
+  free(name);
+  return match == N_OPTIONS ? equals + 1 : NULL;
+}
 
 /** @brief Parse a decimal enum code without narrowing or overflow. */
 static int32_t checkedEnumCode(const char *text) {
@@ -227,15 +256,19 @@ int main(int argc, char **argv) {
   argc = add_file_arguments(argc, argv, &expandedArgs);
   argv = expandedArgs;
   for (i = 1; i < argc; i++) {
-    if (!strncmp(argv[i], "-enumValues=", 12)) {
+    char *tail = enumValuesTail(argv[i]);
+    if (tail) {
       char *text = NULL, *first, *second;
-      SDDS_CopyString(&text, argv[i] + 12);
+      long kind;
+      SDDS_CopyString(&text, tail);
       first = text ? strchr(text, ',') : NULL;
       second = first ? strchr(first + 1, ',') : NULL;
       if (!first || !second || !second[1]) SDDS_Bomb("invalid -enumValues syntax");
       *first++ = 0; *second++ = 0;
+      if ((kind = match_string(text, enumKind, 3, 0)) < 0 || !*first)
+        SDDS_Bomb("invalid -enumValues element kind/name");
       enumInputs = SDDS_Realloc(enumInputs, sizeof(*enumInputs) * (enumInputCount + 1));
-      enumInputs[enumInputCount++] = (ENUM_INPUT){text, first, second, text};
+      enumInputs[enumInputCount++] = (ENUM_INPUT){kind, first, second, text};
       free(argv[i]);
     } else argv[writeArg++] = argv[i];
   }
@@ -458,11 +491,11 @@ int main(int argc, char **argv) {
   for (i = 0; i < enumInputCount; i++) {
     ENUM_INPUT *entry = enumInputs + i;
     char **slot = NULL;
-    if (!strcmp(entry->kind, "parameter")) {
+    if (entry->kind == 0) {
       for (j = 0; j < parameters; j++) if (!strcmp(parameter[j]->name, entry->name)) slot = &parameter[j]->enum_values;
-    } else if (!strcmp(entry->kind, "column")) {
+    } else if (entry->kind == 1) {
       for (j = 0; j < columns; j++) if (!strcmp(column[j]->name, entry->name)) slot = &column[j]->enum_values;
-    } else if (!strcmp(entry->kind, "array")) {
+    } else {
       for (j = 0; j < arrays; j++) if (!strcmp(array[j]->name, entry->name)) slot = &array[j]->enum_values;
     }
     if (!slot || *slot) SDDS_Bomb("unknown or duplicate -enumValues target");
@@ -470,6 +503,22 @@ int main(int argc, char **argv) {
     free(entry->storage);
   }
   free(enumInputs);
+  /* A mapping is meaningful only for an enum element; don't silently drop it. */
+  for (i = 0; i < parameters; i++)
+    if (parameter[i]->enum_values && isNonEnumTypeName(parameter[i]->typename, defaultType)) {
+      fprintf(stderr, "Error: Enum values given for non-enum parameter '%s'; use type=enum.\n", parameter[i]->name);
+      exit(EXIT_FAILURE);
+    }
+  for (i = 0; i < columns; i++)
+    if (column[i]->enum_values && isNonEnumTypeName(column[i]->typename, defaultType)) {
+      fprintf(stderr, "Error: Enum values given for non-enum column '%s'; use type=enum.\n", column[i]->name);
+      exit(EXIT_FAILURE);
+    }
+  for (i = 0; i < arrays; i++)
+    if (array[i]->enum_values && isNonEnumTypeName(array[i]->typename, defaultType)) {
+      fprintf(stderr, "Error: Enum values given for non-enum array '%s'; use type=enum.\n", array[i]->name);
+      exit(EXIT_FAILURE);
+    }
   SetInfoData(parameter, parameters, column, columns, array, arrays, defaultType, noWarnings, maxrows);
 
   if (append == 0) {

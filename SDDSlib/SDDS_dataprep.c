@@ -1165,6 +1165,42 @@ int32_t SDDS_SetRowValues(SDDS_DATASET *SDDS_dataset, int32_t mode, int64_t row,
 }
 
 /**
+ * @brief Validate the codes of an enum array source before any stored array state changes.
+ *
+ * Walks the caller's data with the same layout rules used by SDDS_SetArray(). Problems other
+ * than invalid codes (negative dimensions, missing data) are left to the caller's existing checks.
+ *
+ * @return Returns 1 if every code is mapped (or there is nothing to check), otherwise 0 with an error recorded.
+ */
+static int32_t validateEnumArraySource(ARRAY_DEFINITION *definition, int32_t mode, void *data_pointer, int32_t *dimension) {
+  int32_t i, *counter, result = 1;
+  int64_t elements = 1;
+  void *ptr;
+  for (i = 0; i < definition->dimensions; i++) {
+    if (dimension[i] < 0)
+      return 1;
+    elements *= dimension[i];
+  }
+  if (!elements || !data_pointer)
+    return 1;
+  if (definition->dimensions == 1 || mode & SDDS_CONTIGUOUS_DATA)
+    return SDDS_ValidateEnumData(definition->enum_definition, data_pointer, elements);
+  if (!(counter = calloc((size_t)definition->dimensions - 1, sizeof(*counter)))) {
+    SDDS_SetError("Unable to set array--allocation failure (SDDS_SetArray)");
+    return 0;
+  }
+  do {
+    ptr = data_pointer;
+    for (i = 0; i < definition->dimensions - 1; i++)
+      ptr = ((void **)ptr)[counter[i]];
+    if (!SDDS_ValidateEnumData(definition->enum_definition, ptr, dimension[i]))
+      result = 0;
+  } while (result && SDDS_AdvanceCounter(counter, dimension, definition->dimensions - 1) != -1);
+  free(counter);
+  return result;
+}
+
+/**
  * @brief Sets the values of an array variable in the SDDS dataset using variable arguments for dimensions.
  *
  * This function assigns data to a specified array within the current SDDS dataset. The dimensions of the array are
@@ -1213,6 +1249,22 @@ int32_t SDDS_SetArrayVararg(SDDS_DATASET *SDDS_dataset, char *array_name, int32_
     SDDS_SetError("Unable to set array--internal array definition pointer is NULL (SDDS_SetArrayVararg)");
     return (0);
   }
+  if (layout->array_definition[index].type == SDDS_ENUM) {
+    /* Check the codes before the stored dimensions or data change. */
+    int32_t *newDimension;
+    if (!(newDimension = (int32_t *)SDDS_Malloc(sizeof(*newDimension) * layout->array_definition[index].dimensions))) {
+      SDDS_SetError("Unable to set array--allocation failure (SDDS_SetArrayVararg)");
+      return (0);
+    }
+    va_start(argptr, data_pointer);
+    for (i = 0; i < layout->array_definition[index].dimensions; i++)
+      newDimension[i] = va_arg(argptr, int32_t);
+    va_end(argptr);
+    retval = validateEnumArraySource(layout->array_definition + index, mode, data_pointer, newDimension);
+    free(newDimension);
+    if (!retval)
+      return (0);
+  }
   array->definition = layout->array_definition + index;
   if (!array->dimension && !(array->dimension = (int32_t *)SDDS_Malloc(sizeof(*array->dimension) * array->definition->dimensions))) {
     SDDS_SetError("Unable to set array--allocation failure (SDDS_SetArrayVararg)");
@@ -1258,7 +1310,6 @@ int32_t SDDS_SetArrayVararg(SDDS_DATASET *SDDS_dataset, char *array_name, int32_
       SDDS_SetError("Unable to set array--string copy failure (SDDS_SetArrayVararg");
       return (0);
     }
-    if (array->definition->type == SDDS_ENUM && !SDDS_ValidateEnumData(array->definition->enum_definition, array->data, array->elements)) return 0;
     return (1);
   }
 
@@ -1282,7 +1333,6 @@ int32_t SDDS_SetArrayVararg(SDDS_DATASET *SDDS_dataset, char *array_name, int32_
   } while (SDDS_AdvanceCounter(counter, array->dimension, array->definition->dimensions - 1) != -1);
   if (counter)
     free(counter);
-  if (array->definition->type == SDDS_ENUM && !SDDS_ValidateEnumData(array->definition->enum_definition, array->data, array->elements)) return 0;
   return (1);
 }
 
@@ -1340,6 +1390,9 @@ int32_t SDDS_SetArray(SDDS_DATASET *SDDS_dataset, char *array_name, int32_t mode
     SDDS_SetError("Unable to set array--internal array definition pointer is NULL (SDDS_SetArray)");
     return (0);
   }
+  /* Check enum codes before the stored dimensions or data change. */
+  if (layout->array_definition[index].type == SDDS_ENUM && !validateEnumArraySource(layout->array_definition + index, mode, data_pointer, dimension))
+    return (0);
   array->definition = layout->array_definition + index;
   if (!array->dimension && !(array->dimension = (int32_t *)SDDS_Malloc(sizeof(*array->dimension) * array->definition->dimensions))) {
     SDDS_SetError("Unable to set array--allocation failure (SDDS_SetArray)");
@@ -1374,7 +1427,6 @@ int32_t SDDS_SetArray(SDDS_DATASET *SDDS_dataset, char *array_name, int32_t mode
       SDDS_SetError("Unable to set array--string copy failure (SDDS_SetArrayVararg");
       return (0);
     }
-    if (array->definition->type == SDDS_ENUM && !SDDS_ValidateEnumData(array->definition->enum_definition, array->data, array->elements)) return 0;
     return (1);
   }
 
@@ -1398,7 +1450,6 @@ int32_t SDDS_SetArray(SDDS_DATASET *SDDS_dataset, char *array_name, int32_t mode
   } while (SDDS_AdvanceCounter(counter, array->dimension, array->definition->dimensions - 1) != -1);
   if (counter)
     free(counter);
-  if (array->definition->type == SDDS_ENUM && !SDDS_ValidateEnumData(array->definition->enum_definition, array->data, array->elements)) return 0;
   return (1);
 }
 

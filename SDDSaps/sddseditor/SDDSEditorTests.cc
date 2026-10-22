@@ -466,6 +466,152 @@ public:
     checkFilter("X == \"01\"", {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
   }
 
+  /** Cells the editor creates in enum fields start in a declared state, or Save names the cell. */
+  static void enumCreatedCells(const QString &root) {
+    fprintf(stdout, "sddseditor_tests: enum cells created by the editor\n");
+    SDDSEditor editor;
+    require(editor.ensureDataset(), "initialize created-cell enum document");
+    const char *mapping = "0:OFF,10:ON,-1:FAULT";
+    require(SDDS_DefineEnumColumn(&editor.dataset, "State", nullptr, nullptr, nullptr, nullptr, mapping, 0) == 0 &&
+                SDDS_DefineEnumColumn(&editor.dataset, "NoZero", nullptr, nullptr, nullptr, nullptr, "1:A,2:B", 0) == 1,
+            "define created-cell enum columns");
+    require(SDDS_DefineEnumParameter(&editor.dataset, "StateParameter", nullptr, nullptr, nullptr, nullptr, mapping, nullptr) == 0 &&
+                SDDS_DefineEnumParameter(&editor.dataset, "FixedState", nullptr, nullptr, nullptr, nullptr, mapping,
+                                         const_cast<char *>("-1")) == 1,
+            "define created-cell enum parameters");
+    require(SDDS_DefineEnumArray(&editor.dataset, "StateArray", nullptr, nullptr, nullptr, nullptr, mapping, 0, 1, nullptr) == 0,
+            "define created-cell enum array");
+    require(SDDS_SaveLayout(&editor.dataset), "save created-cell enum layout");
+    editor.pages[0].columns = {{"ON", "FAULT"}, {"A", "B"}};
+    editor.pages[0].parameters = {"ON", "FAULT"};
+    editor.pages[0].arrays = {{{"ON"}, {1}}};
+    editor.populateModels();
+    editor.show();
+    QCoreApplication::processEvents();
+
+    // Insert Rows: code 0's state when it is declared, otherwise blank and named by Save.
+    editor.columnView->setCurrentIndex(QModelIndex());
+    acceptDialog("Insert Rows", [](QDialog *) {});
+    editor.insertColumnRows();
+    require(editor.pages[0].columns[0] == QVector<QString>({"ON", "FAULT", "OFF"}) &&
+                editor.pages[0].columns[1] == QVector<QString>({"A", "B", ""}),
+            "Insert Rows starts enum cells at the state of code 0");
+    QString error;
+    require(!validatePageForWrite(editor.dataset.layout, editor.pages[0], 0, &error) &&
+                error.contains("column 'NoZero', row 3 has no enum state"),
+            "Save names a blank enum cell that needs a state");
+    fprintf(stdout, "PASS Insert Rows initializes enum cells and Save names blank ones\n");
+
+    // Delete cannot blank an enum cell; it says so instead of doing nothing.
+    editor.activateWindow();
+    const QModelIndex stateCell = editor.columnModel->index(0, 0);
+    editor.columnView->setCurrentIndex(stateCell);
+    editor.columnView->selectionModel()->select(stateCell, QItemSelectionModel::ClearAndSelect);
+    editor.columnView->setFocus();
+    QCoreApplication::processEvents();
+    require(editor.focusedTable() == editor.columnView, "Delete targets the enum column");
+    const int history = editor.undoStack->count();
+    editor.deleteCells();
+    require(editor.pages[0].columns[0][0] == "ON" && editor.undoStack->count() == history &&
+                editor.consoleEdit->toPlainText().contains("Delete left 1 enum cell(s) unchanged"),
+            "Delete on an enum cell keeps its state and reports why");
+    fprintf(stdout, "PASS Delete reports enum cells it cannot blank\n");
+
+    // A blank in another element must not block a dictionary change, nor one in the remapped element.
+    require(editor.replaceEnumMapping(0, 0, "0:OFF,10:ON,-1:FAULT,5:NEW"),
+            "remap one enum column while another has a blank cell");
+    require(editor.replaceEnumMapping(0, 1, "0:NONE,1:A,2:B"), "remap the enum column that holds the blank cell");
+    require(!editor.replaceEnumMapping(0, 1, "0:NONE,1:A"), "remap still rejects a state that is in use");
+    require(applyCellEditWithUndo(editor.undoStack, editor.columnModel, editor.columnModel->index(2, 1), "NONE") &&
+                validatePageForWrite(editor.dataset.layout, editor.pages[0], 0, &error),
+            "the state added by remapping completes the inserted row");
+    fprintf(stdout, "PASS enum remapping validates only the remapped element\n");
+
+    // Resize Array and Insert Page create enum elements in the state of code 0.
+    acceptDialog("Resize Array", [](QDialog *dialog) { dialog->findChildren<QSpinBox *>()[0]->setValue(3); });
+    editor.resizeArray(0);
+    require(editor.pages[0].arrays[0].values == QVector<QString>({"ON", "OFF", "OFF"}),
+            "Resize Array starts new enum elements at the state of code 0");
+    editor.insertPage();
+    require(editor.pages.size() == 2 && editor.currentPage == 1, "insert a page after the enum page");
+    editor.commitModels();
+    const PageStore &added = editor.pages[1];
+    require(added.columns[0] == QVector<QString>({"OFF", "OFF", "OFF"}) &&
+                added.columns[1] == QVector<QString>({"NONE", "NONE", "NONE"}) &&
+                added.parameters == QVector<QString>({"OFF", "FAULT"}) &&
+                added.arrays[0].values == QVector<QString>({"OFF", "OFF", "OFF"}),
+            "Insert Page starts enum cells at code 0 and keeps the fixed state");
+    const QString path = root + "/enum-created-cells.sdds";
+    require(editor.writeFile(path), "save pages, rows and elements created in enum fields");
+    SDDSEditor loaded;
+    require(loaded.loadFile(path) && loaded.pages.size() == 2 && loaded.pages[1].columns[0][2] == "OFF" &&
+                loaded.pages[1].parameters[1] == "FAULT" && loaded.pages[0].arrays[0].values[2] == "OFF",
+            "created enum cells survive save/reopen");
+    fprintf(stdout, "PASS Resize Array and Insert Page initialize enum cells\n");
+
+    // A fixed parameter changes state and drops its old label in one attribute edit.
+    editor.pageChanged(0);
+    editor.paramView->setCurrentIndex(editor.parameterValueCell(1));
+    acceptDialog("Parameter Attributes", [](QDialog *dialog) {
+      const auto fields = dialog->findChildren<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
+      require(fields[5]->text() == "FAULT", "parameter attributes show the fixed enum state");
+      fields[5]->setText("TRIP");
+      dialog->findChild<QLineEdit *>("enumMapping")->setText("0:OFF,10:ON,20:TRIP");
+    });
+    editor.editParameterAttributes();
+    const PARAMETER_DEFINITION &fixedDef = editor.dataset.layout.parameter_definition[1];
+    require(fixedValueForDisplay(fixedDef) == "TRIP" && !SDDS_EnumCodeToLabel(fixedDef.enum_definition, -1) &&
+                editor.pages[0].parameters[1] == "TRIP" && editor.pages[1].parameters[1] == "TRIP",
+            "one attribute edit replaces the fixed state and its old label");
+    editor.undoStack->undo();
+    require(fixedValueForDisplay(editor.dataset.layout.parameter_definition[1]) == "FAULT" &&
+                editor.pages[0].parameters[1] == "FAULT",
+            "Undo restores the old fixed enum state");
+    editor.undoStack->redo();
+    const QString fixedPath = root + "/enum-fixed-one-step.sdds";
+    require(editor.writeFile(fixedPath), "save the one-step fixed enum edit");
+    SDDSEditor reloaded;
+    require(reloaded.loadFile(fixedPath) && reloaded.pages[1].parameters[1] == "TRIP",
+            "the new fixed enum state survives save/reopen");
+    fprintf(stdout, "PASS fixed enum parameter changes state and mapping in one edit\n");
+  }
+
+  /** The enum editor ignores the wheel, and labels with placeholders display literally. */
+  static void enumEditorText() {
+    fprintf(stdout, "sddseditor_tests: enum editor wheel and label text\n");
+    SDDSEditor editor;
+    require(editor.ensureDataset(), "initialize enum editor text document");
+    require(SDDS_DefineEnumColumn(&editor.dataset, "State", nullptr, nullptr, nullptr, nullptr,
+                                  "0:%2 x,1:%1,2:plain", 0) == 0, "define enum column with placeholder labels");
+    require(SDDS_SaveLayout(&editor.dataset), "save enum editor text layout");
+    editor.pages[0].columns = {{"%2 x", "%1", "plain"}};
+    editor.populateModels();
+    editor.show();
+    QCoreApplication::processEvents();
+    require(editor.columnModel->index(0, 0).data(Qt::DisplayRole).toString() == "%2 x (0)" &&
+                editor.columnModel->index(1, 0).data(Qt::DisplayRole).toString() == "%1 (1)",
+            "enum cells display labels containing %1 and %2 literally");
+    const QModelIndex cell = editor.columnModel->index(1, 0);
+    editor.columnView->setCurrentIndex(cell);
+    editor.columnView->edit(cell);
+    QCoreApplication::processEvents();
+    QComboBox *combo = editor.columnView->viewport()->findChild<QComboBox *>();
+    require(combo && !combo->isHidden() && combo->currentData().toString() == "%1",
+            "open the enum editor on a placeholder label");
+    require(combo->itemText(0) == "%2 x (0)" && combo->itemText(1) == "%1 (1)",
+            "enum editor choices show labels containing %1 and %2 literally");
+    const QPoint center = combo->rect().center();
+    for (int delta : {-120, 120}) {
+      QWheelEvent wheel(QPointF(center), QPointF(combo->mapToGlobal(center)), QPoint(), QPoint(0, delta), Qt::NoButton,
+                        Qt::NoModifier, Qt::NoScrollPhase, false);
+      QApplication::sendEvent(combo, &wheel);
+      QCoreApplication::processEvents();
+      require(combo->currentData().toString() == "%1" && cell.data(Qt::EditRole).toString() == "%1",
+              "the mouse wheel over an open enum editor leaves the state unchanged");
+    }
+    fprintf(stdout, "PASS enum editor ignores the wheel and shows placeholder labels literally\n");
+  }
+
   /** Save, page changes and Undo must consume active categorical delegate editors. */
   static void enumPendingEdits(const QString &root) {
     fprintf(stdout, "sddseditor_tests: pending enum edits\n");
@@ -5305,6 +5451,8 @@ int main(int argc, char **argv) {
   SDDSEditorTests::enumSorting(artifacts.path());
   SDDSEditorTests::enumFiltering(artifacts.path());
   SDDSEditorTests::enumPendingEdits(artifacts.path());
+  SDDSEditorTests::enumCreatedCells(artifacts.path());
+  SDDSEditorTests::enumEditorText();
   SDDSEditorTests::timeDisplay(artifacts.path());
   SDDSEditorTests::timeDisplayLifetime();
   SDDSEditorTests::newFiles(artifacts.path());

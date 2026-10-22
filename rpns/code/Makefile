@@ -33,8 +33,10 @@ CFLAGS += -I../../include -DUSE_GSL
 override CXXFLAGS += -I../../include -DUSE_GSL
 
 ifeq ($(OS), Linux)
-  CFLAGS += -fopenmp
-  override CXXFLAGS += -fopenmp
+  # An EPICS extensions build pairs its local libgsl with the local headers.
+  GSL_LOCAL_INC = $(if $(and $(filter 1,$(USE_EPICS_DIRS)),$(wildcard $(RULES_DIR)gsl/gsl)),-I$(RULES_DIR)gsl)
+  CFLAGS += -fopenmp $(GSL_LOCAL_INC)
+  override CXXFLAGS += -fopenmp $(GSL_LOCAL_INC)
   PROD_SYS_LIBS := $(GSL_LINK_LIBS) $(Z_LIB) $(PROD_SYS_LIBS)
   PROD_LIBS = -lrpnlib -lmdbmth -lmdblib 
 endif

@@ -2,14 +2,23 @@
 ! Copyright (c) 2026 The University of Chicago.
 ! Distributed under the Software License Agreement in LICENSE.
 ! Dataset pointers refer to C-owned SDDS_DATASET handles. Strings are NUL-terminated.
-module SDDS_enum_interfaces
-  use, intrinsic :: iso_c_binding
+!
+! SDDS_enum_interfaces declares only the C interfaces, so it can be used together with
+! SDDSFortran.h, which already defines the type constants. Code that does not include
+! SDDSFortran.h can obtain the same constants with "use SDDS_enum_constants".
+module SDDS_enum_constants
+  use, intrinsic :: iso_c_binding, only: c_int32_t
   implicit none
   integer(c_int32_t), parameter :: SDDS_ENUM = 12
   integer(c_int32_t), parameter :: SDDS_NUM_TYPES = 12
   integer(c_int32_t), parameter :: SDDS_ANY_NUMERIC_TYPE = 65537
   integer(c_int32_t), parameter :: SDDS_ANY_FLOATING_TYPE = 65538
   integer(c_int32_t), parameter :: SDDS_ANY_INTEGER_TYPE = 65539
+end module SDDS_enum_constants
+
+module SDDS_enum_interfaces
+  use, intrinsic :: iso_c_binding
+  implicit none
   interface
     function SDDS_CreateEnumDefinition(mapping) bind(C, name="SDDS_CreateEnumDefinition") result(dictionary)
       import :: c_ptr, c_char

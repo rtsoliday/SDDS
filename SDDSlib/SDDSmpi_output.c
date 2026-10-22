@@ -1022,9 +1022,14 @@ int32_t SDDS_MPI_InitializeOutput(SDDS_DATASET *SDDS_dataset, char *description,
   MPI_DATASET *MPI_dataset = SDDS_dataset->MPI_dataset;
 
   const char *suffix = filename ? strrchr(filename, '.') : NULL;
-  if (suffix && (!strcmp(suffix, ".gz") || !strcmp(suffix, ".xz") || !strcmp(suffix, ".lzma"))) {
+  /* An uncompressed file named *.xz or *.lzma cannot be read back by the serial tools. */
+  if (suffix && (!strcmp(suffix, ".xz") || !strcmp(suffix, ".lzma"))) {
     SDDS_SetError("MPI output requires an uncompressed binary file; compress using serial SDDS afterward"); return 0;
   }
+  /* Legacy behaviour: a *.gz name gives an uncompressed file, which serial readers
+   * still accept because zlib reads uncompressed data transparently. */
+  if (suffix && !strcmp(suffix, ".gz") && MPI_dataset && !MPI_dataset->myid)
+    fprintf(stderr, "Warning: MPI output is not compressed; %s is written as an uncompressed SDDS file\n", filename);
   if (!SDDS_Parallel_InitializeOutput(SDDS_dataset, description, contents, filename))
     return 0;
   if (flags & SDDS_MPI_READ_ONLY) {

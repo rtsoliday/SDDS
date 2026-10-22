@@ -179,6 +179,12 @@ struct SDDSFile::Impl {
     return 0;
   }
 
+  /** Primitive definers reject SDDS_ENUM with -1, which cannot be mistaken for index 0. */
+  int rejectPrimitiveEnum() {
+    errors.emplace_back("use defineEnumParameter/Column/Array with a mapping");
+    return -1;
+  }
+
   sdds::Page &page(std::uint32_t number) {
     if (!number)
       throw sdds::StateError(sdds::ErrorKind::State, "legacy page numbers start at one");
@@ -455,7 +461,7 @@ int32_t SDDSFile::defineParameter(char *name, char *symbol, char *units, char *d
     definition.format = optionalText(formatString);
     definition.type = checkedType(type);
     if (definition.type == sdds::Type::Enum)
-      throw sdds::TypeError(sdds::ErrorKind::Type, "use defineEnumParameter/Column/Array with a mapping");
+      return impl_->rejectPrimitiveEnum();
     definition.fixedValue = optionalText(fixedValue);
     impl_->layout->parameters.push_back(std::move(definition));
     return static_cast<int32_t>(impl_->layout->parameters.size() - 1);
@@ -481,7 +487,7 @@ int32_t SDDSFile::defineColumn(char *name, char *symbol, char *units, char *desc
     definition.format = optionalText(formatString);
     definition.type = checkedType(type);
     if (definition.type == sdds::Type::Enum)
-      throw sdds::TypeError(sdds::ErrorKind::Type, "use defineEnumParameter/Column/Array with a mapping");
+      return impl_->rejectPrimitiveEnum();
     definition.fieldLength = static_cast<std::int32_t>(fieldLength);
     impl_->layout->columns.push_back(std::move(definition));
     return static_cast<int32_t>(impl_->layout->columns.size() - 1);
@@ -509,7 +515,7 @@ int32_t SDDSFile::defineArray(char *name, char *symbol, char *units, char *descr
     definition.groupName = optionalText(groupName);
     definition.type = checkedType(type);
     if (definition.type == sdds::Type::Enum)
-      throw sdds::TypeError(sdds::ErrorKind::Type, "use defineEnumParameter/Column/Array with a mapping");
+      return impl_->rejectPrimitiveEnum();
     definition.fieldLength = static_cast<std::int32_t>(fieldLength);
     definition.dimensions = static_cast<std::int32_t>(dimensions);
     impl_->layout->arrays.push_back(std::move(definition));

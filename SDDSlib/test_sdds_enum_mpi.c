@@ -442,9 +442,238 @@ static void testMasterReader(const char *directory, int rank, int ranks) {
   }
 }
 
+/** @brief Select the byte order used by later serial and MPI writers. */
+static void setOutputEndian(int endian) {
+#if defined(_WIN32)
+  _putenv_s("SDDS_OUTPUT_ENDIANESS", endian ? "big" : "little");
+#else
+  setenv("SDDS_OUTPUT_ENDIANESS", endian ? "big" : "little", 1);
+#endif
+}
+
+/** @brief Copy all but the last @p drop bytes of @p source (called by rank zero). */
+static void copyTruncated(const char *source, const char *target, long drop, int rank) {
+  FILE *in, *out;
+  char *bytes;
+  long size;
+  CHECK((in = fopen(source, "rb")));
+  CHECK(!fseek(in, 0, SEEK_END) && (size = ftell(in)) > drop && !fseek(in, 0, SEEK_SET));
+  CHECK((bytes = malloc((size_t)size)));
+  CHECK(fread(bytes, 1, (size_t)size, in) == (size_t)size);
+  CHECK(!fclose(in));
+  CHECK((out = fopen(target, "wb")));
+  CHECK(fwrite(bytes, 1, (size_t)(size - drop), out) == (size_t)(size - drop));
+  CHECK(!fclose(out));
+  free(bytes);
+}
+
+/**
+ * @brief Read SDDS1-5 pages in both orders, and fail or recover on every rank together
+ * when only the last rank's share of a page is truncated.
+ */
+static void testLegacyLayoutAndTruncation(const char *directory, int rank, int ranks) {
+  char path[2048], truncated[2048];
+  int major, endian, collective, recover;
+  int64_t total = 4 * (int64_t)ranks, row;
+  for (major = 0; major < 2; major++) for (endian = 0; endian < 2; endian++) {
+    int32_t previous;
+    snprintf(path, sizeof(path), "%s/legacy-%d-%d.sdds", directory, major, endian);
+    snprintf(truncated, sizeof(truncated), "%s/legacy-truncated-%d-%d.sdds", directory, major, endian);
+    setOutputEndian(endian);
+    if (!rank) {
+      SDDS_DATASET writer = {0};
+      double *values = malloc(sizeof(*values) * (size_t)total);
+      CHECK(values);
+      for (row = 0; row < total; row++) values[row] = row + 0.5;
+      CHECK(SDDS_InitializeOutput(&writer, SDDS_BINARY, 1, NULL, NULL, path));
+      CHECK(SDDS_DefineColumn(&writer, "legacyValue", NULL, NULL, NULL, NULL, SDDS_DOUBLE, 0) == 0);
+      writer.layout.data_mode.column_major = (short)major;
+      CHECK(SDDS_WriteLayout(&writer));
+      CHECK(SDDS_StartPage(&writer, total));
+      CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_INDEX, values, total, 0));
+      CHECK(SDDS_WritePage(&writer));
+      CHECK(SDDS_Terminate(&writer));
+      free(values);
+      /* Leave the last rank 12 of its 32 bytes: one complete value. */
+      copyTruncated(path, truncated, 20, rank);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    for (collective = 0; collective < 2; collective++) {
+      SDDS_DATASET reader = {0};
+      SDDS_MPI_Setup(&reader, 1, ranks, rank, MPI_COMM_WORLD, 1);
+      CHECK(SDDS_MPI_InitializeInput(&reader, path));
+      /* Non-root ranks learn the data order from the SDDS1-5 layout broadcast. */
+      CHECK(reader.layout.version < 6 && reader.layout.data_mode.column_major == major);
+      reader.MPI_dataset->collective_io = (short)collective;
+      CHECK(SDDS_MPI_ReadBinaryPage(&reader) == 1);
+      CHECK(reader.n_rows == 4);
+      for (row = 0; row < reader.n_rows; row++)
+        CHECK(((double *)reader.data[0])[row] == reader.MPI_dataset->start_row + row + 0.5);
+      CHECK(SDDS_MPI_ReadBinaryPage(&reader) == -1);
+      CHECK(SDDS_Terminate(&reader));
+    }
+    /* An 8-byte buffer makes the collective row reader refill once per value, so the
+     * short rank would issue fewer MPI_File_read_all calls if it stopped early. */
+    previous = SDDS_SetDefaultReadBufferSize(8);
+    for (collective = 0; collective < 2; collective++) for (recover = 0; recover < 2; recover++) {
+      SDDS_DATASET reader = {0};
+      /* Auto-recovery applies to independent row-by-row reads. */
+      if (recover && (major || collective)) continue;
+      SDDS_MPI_Setup(&reader, 1, ranks, rank, MPI_COMM_WORLD, 1);
+      CHECK(SDDS_MPI_InitializeInput(&reader, truncated));
+      reader.MPI_dataset->collective_io = (short)collective;
+      if (recover) CHECK(SDDS_SetAutoReadRecovery(&reader, SDDS_AUTOREADRECOVER));
+      CHECK(SDDS_MPI_ReadBinaryPage(&reader) == (recover ? 1 : 0));
+      if (recover) {
+        CHECK(reader.n_rows == (rank == ranks - 1 ? 1 : 4));
+        CHECK(SDDS_MPI_ReadBinaryPage(&reader) == -1);
+      }
+      SDDS_ClearErrors();
+      CHECK(SDDS_Terminate(&reader));
+    }
+    SDDS_SetDefaultReadBufferSize(previous);
+  }
+}
+
+/** @brief Write only the selected rows in row-major order, independently and collectively. */
+static void testSelectedRowMajorRows(const char *directory, int rank, int ranks) {
+  char path[2048];
+  int endian, collective, page;
+  for (endian = 0; endian < 2; endian++) for (collective = 0; collective < 2; collective++) {
+    SDDS_DATASET writer = {0};
+    snprintf(path, sizeof(path), "%s/selected-rows-%d-%d.sdds", directory, endian, collective);
+    setOutputEndian(endian);
+    SDDS_MPI_Setup(&writer, 1, ranks, rank, MPI_COMM_WORLD, 0);
+    CHECK(SDDS_MPI_InitializeOutput(&writer, NULL, NULL, path, SDDS_MPI_WRITE_ONLY, 0));
+    CHECK(MPI_File_set_size(writer.MPI_dataset->MPI_file, 0) == MPI_SUCCESS);
+    writer.MPI_dataset->collective_io = (short)collective;
+    CHECK(SDDS_DefineColumn(&writer, "selectedValue", NULL, NULL, NULL, NULL, SDDS_DOUBLE, 0) == 0);
+    CHECK(SDDS_MPI_WriteLayout(&writer));
+    for (page = 0; page < 2; page++) {
+      double values[3];
+      int row;
+      for (row = 0; row < 3; row++) values[row] = 100.0 * page + 10.0 * rank + row;
+      CHECK(SDDS_StartPage(&writer, 3));
+      CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_INDEX, values, 3, 0));
+      /* Rank one drops its first row, so the ranks write different row counts. */
+      if (rank == 1) writer.row_flag[0] = 0;
+      CHECK(SDDS_WritePage(&writer));
+    }
+    CHECK(SDDS_Terminate(&writer));
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (!rank) {
+      SDDS_DATASET serial = {0};
+      CHECK(SDDS_InitializeInput(&serial, path));
+      for (page = 0; page < 2; page++) {
+        int64_t row = 0;
+        int source, k;
+        CHECK(SDDS_ReadPage(&serial) == page + 1);
+        CHECK(serial.n_rows == 3 * ranks - 1);
+        for (source = 0; source < ranks; source++)
+          for (k = source == 1; k < 3; k++, row++)
+            CHECK(((double *)serial.data[0])[row] == 100.0 * page + 10.0 * source + k);
+      }
+      CHECK(SDDS_ReadPage(&serial) == -1);
+      CHECK(SDDS_Terminate(&serial));
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+}
+
+/** @brief Read MPI-written string rows in native and swapped byte order. */
+static void testStringRows(const char *directory, int rank, int ranks) {
+  char path[2048], expected[64];
+  int endian, single, collective;
+  for (endian = 0; endian < 2; endian++) for (single = 0; single < 2; single++) {
+    /* Either two rows per rank, or one row in total, which the collective reader
+     * then reads outside its (empty) collective part. */
+    SDDS_DATASET writer = {0};
+    int32_t rows = single ? !rank : 2, row;
+    snprintf(path, sizeof(path), "%s/string-rows-%d-%d.sdds", directory, endian, single);
+    setOutputEndian(endian);
+    SDDS_MPI_Setup(&writer, 1, ranks, rank, MPI_COMM_WORLD, 0);
+    CHECK(SDDS_MPI_InitializeOutput(&writer, NULL, NULL, path, SDDS_MPI_WRITE_ONLY, 0));
+    CHECK(MPI_File_set_size(writer.MPI_dataset->MPI_file, 0) == MPI_SUCCESS);
+    CHECK(SDDS_DefineColumn(&writer, "rowText", NULL, NULL, NULL, NULL, SDDS_STRING, 0) == 0);
+    CHECK(SDDS_DefineColumn(&writer, "rowNumber", NULL, NULL, NULL, NULL, SDDS_LONG, 0) == 1);
+    CHECK(SDDS_MPI_WriteLayout(&writer));
+    CHECK(SDDS_StartPage(&writer, rows));
+    for (row = 0; row < rows; row++) {
+      snprintf(expected, sizeof(expected), "rank%d-row%d", rank, (int)row);
+      CHECK(SDDS_SetRowValues(&writer, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE, row, 0, expected, 1, (int32_t)(rank * 10 + row), -1));
+    }
+    CHECK(SDDS_WritePage(&writer));
+    CHECK(SDDS_Terminate(&writer));
+    MPI_Barrier(MPI_COMM_WORLD);
+    for (collective = 0; collective < 2; collective++) {
+      SDDS_DATASET reader = {0};
+      SDDS_MPI_Setup(&reader, 1, ranks, rank, MPI_COMM_WORLD, 1);
+      CHECK(SDDS_MPI_InitializeInput(&reader, path));
+      reader.MPI_dataset->collective_io = (short)collective;
+      if (collective && !single) {
+        /* Collective row reads reject string columns on every rank. */
+        CHECK(!SDDS_MPI_ReadBinaryPage(&reader));
+        SDDS_ClearErrors();
+      } else {
+        int64_t index;
+        CHECK(SDDS_MPI_ReadBinaryPage(&reader) == 1);
+        CHECK(reader.n_rows == (single ? !rank : 2));
+        for (index = 0; index < reader.n_rows; index++) {
+          int64_t global = reader.MPI_dataset->start_row + index;
+          int source = (int)(global / 2);
+          char *text = ((char **)reader.data[0])[index];
+          size_t length;
+          snprintf(expected, sizeof(expected), "rank%d-row%d", source, (int)(global % 2));
+          length = strlen(expected);
+          /* The MPI writer pads strings to the default string length. */
+          CHECK(!strncmp(text, expected, length) && strspn(text + length, " ") == strlen(text + length));
+          CHECK(((int32_t *)reader.data[1])[index] == source * 10 + (int32_t)(global % 2));
+        }
+        CHECK(SDDS_MPI_ReadBinaryPage(&reader) == -1);
+      }
+      CHECK(SDDS_Terminate(&reader));
+    }
+  }
+}
+
+/** @brief Keep accepting *.gz MPI output names, written uncompressed, and reject *.xz. */
+static void testCompressedOutputNames(const char *directory, int rank, int ranks) {
+  char path[2048];
+  SDDS_DATASET writer = {0};
+  double value = rank;
+  snprintf(path, sizeof(path), "%s/uncompressed.sdds.xz", directory);
+  SDDS_MPI_Setup(&writer, 1, ranks, rank, MPI_COMM_WORLD, 0);
+  CHECK(!SDDS_MPI_InitializeOutput(&writer, NULL, NULL, path, SDDS_MPI_WRITE_ONLY, 0));
+  SDDS_ClearErrors();
+  free(writer.MPI_dataset);
+  snprintf(path, sizeof(path), "%s/uncompressed.sdds.gz", directory);
+  SDDS_MPI_Setup(&writer, 1, ranks, rank, MPI_COMM_WORLD, 0);
+  CHECK(SDDS_MPI_InitializeOutput(&writer, NULL, NULL, path, SDDS_MPI_WRITE_ONLY, 0));
+  CHECK(MPI_File_set_size(writer.MPI_dataset->MPI_file, 0) == MPI_SUCCESS);
+  CHECK(SDDS_DefineColumn(&writer, "gzValue", NULL, NULL, NULL, NULL, SDDS_DOUBLE, 0) == 0);
+  CHECK(SDDS_MPI_WriteLayout(&writer));
+  CHECK(SDDS_StartPage(&writer, 1));
+  CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_INDEX, &value, 1, 0));
+  CHECK(SDDS_WritePage(&writer));
+  CHECK(SDDS_Terminate(&writer));
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (!rank) {
+    SDDS_DATASET serial = {0};
+    int source;
+    /* zlib reads the uncompressed file transparently. */
+    CHECK(SDDS_InitializeInput(&serial, path));
+    CHECK(SDDS_ReadPage(&serial) == 1 && serial.n_rows == ranks);
+    for (source = 0; source < ranks; source++) CHECK(((double *)serial.data[0])[source] == source);
+    CHECK(SDDS_Terminate(&serial));
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+}
+
 /** @brief Run serial/MPI round trips and test rejection on a single failing rank. */
+#define RUN(test) do { if (!only || !strcmp(only, #test)) test(argv[1], rank, ranks); } while (0)
 int main(int argc, char **argv) {
   int rank, ranks, major, endian;
+  const char *only;
   char path[2048];
   char mapping[32768] = "0:OFF,10:ON,-1:FAULT", description[4097];
   size_t used = strlen(mapping);
@@ -454,8 +683,10 @@ int main(int argc, char **argv) {
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &ranks);
-  CHECK(argc == 2 && ranks >= 2);
-  for (major = 0; major < 2; major++) for (endian = 0; endian < 2; endian++) {
+  /* An optional second argument runs one named test function (or "main") only. */
+  CHECK((argc == 2 || argc == 3) && ranks >= 2);
+  only = argc == 3 ? argv[2] : NULL;
+  for (major = 0; major < 2 && (!only || !strcmp(only, "main")); major++) for (endian = 0; endian < 2; endian++) {
     SDDS_DATASET w = {0}, r = {0};
     int32_t values[] = {0, 10, -1}, dimensions[] = {3};
     SDDS_ENUM_DEFINITION *different = NULL, *old;
@@ -546,13 +777,17 @@ int main(int argc, char **argv) {
     CHECK(SDDS_Terminate(&r));
     STAGE("complete");
   }
-  testEmptyMultidimensionalArrays(argv[1], rank, ranks);
-  testRootOnlyTitleData(argv[1], rank, ranks);
-  testHeaderSerializationFailure(argv[1], rank, ranks);
-  testWriteOnlyDefinitions(argv[1], rank, ranks);
-  testMasterReader(argv[1], rank, ranks);
-  testDirectPageAPIs(argv[1], rank, ranks);
-  if (!rank) puts("SDDS6 MPI enum tests passed");
+  RUN(testEmptyMultidimensionalArrays);
+  RUN(testRootOnlyTitleData);
+  RUN(testHeaderSerializationFailure);
+  RUN(testWriteOnlyDefinitions);
+  RUN(testMasterReader);
+  RUN(testDirectPageAPIs);
+  RUN(testLegacyLayoutAndTruncation);
+  RUN(testSelectedRowMajorRows);
+  RUN(testStringRows);
+  RUN(testCompressedOutputNames);
+  if (!rank) puts(only ? "Selected SDDS MPI test passed" : "SDDS6 MPI enum tests passed");
   MPI_Finalize();
   return 0;
 }

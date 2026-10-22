@@ -81,6 +81,10 @@ This document defines the initial JSON schema for `sddsplot -device=json`. The g
 
 - `plots[]` contains one entry per rendered panel. This keeps multi-page, multi-panel output intact.
 - `layout.*` is Plotly-compatible. Axis ranges are optional; if not specified by `sddsplot`, omit `range` and let Plotly auto-range.
+- `xaxis.title` and `yaxis.title` (and each `yaxes[].title`) are the axis labels exactly as
+  `sddsplot` draws them, after any `-xlabel`/`-ylabel` options and edits. The default label
+  therefore already includes the units, for example `x (m)`; the raw units string is also
+  given separately in `units`, so clients should not append it to the title again.
 - String and SDDS6 enum column axes retain numeric trace coordinates and include
   `tickmode: "array"`, `tickvals`, and `ticktext` in the corresponding `xaxis` or
   `yaxis`. The paired tick arrays map category positions to their labels, with

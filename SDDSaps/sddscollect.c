@@ -250,7 +250,15 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
   }
-  if (!code || !SDDS_Terminate(&SDDSout) || !SDDS_Terminate(&SDDSin)) {
+  if (!code) {
+    /* Still fail, but keep the pages already written readable. */
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Terminate(&SDDSin);
+    if (!SDDS_Terminate(&SDDSout))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
+  if (!SDDS_Terminate(&SDDSout) || !SDDS_Terminate(&SDDSin)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
   return EXIT_SUCCESS;

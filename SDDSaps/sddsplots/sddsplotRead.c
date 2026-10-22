@@ -38,12 +38,29 @@ static void edit_plot_strings(char **strings, long count, char *buffer, size_t b
   }
   for (i = count; i-- > 0;) {
     strcpy_ss(buffer, strings[i]);
-    if (!edit_string_bounded(buffer, bufferSize, edit))
-      SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
+    edit_plot_label(buffer, bufferSize, edit);
     free(strings[i]);
     if (!SDDS_CopyString(&strings[i], buffer))
       SDDS_Bomb("String copy problem (edit_plot_strings)");
   }
+}
+
+/** @brief Give a parameter defined on an already-loaded page zeroed value storage.
+ *
+ * Unlike SDDS_DefineColumn, SDDS_DefineParameter does not extend the value storage of
+ * a page that is already in memory, so computing the new parameter would dereference
+ * a missing slot. The definition is saved in the layout, so later pages keep the slot. */
+static void add_defined_parameter_storage(SDDS_TABLE *table, int32_t index)
+{
+  void **parameter;
+
+  if (index < 0 || index != table->layout.n_parameters - 1)
+    SDDS_Bomb("unexpected parameter index for -define (add_defined_parameter_storage)");
+  if (!(parameter = SDDS_Realloc(table->parameter, sizeof(*parameter) * table->layout.n_parameters)))
+    SDDS_Bomb("memory allocation failure (add_defined_parameter_storage)");
+  table->parameter = parameter;
+  if (!(parameter[index] = calloc(1, SDDS_type_size[table->layout.parameter_definition[index].type - 1])))
+    SDDS_Bomb("memory allocation failure (add_defined_parameter_storage)");
 }
 
 static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq)
@@ -61,6 +78,7 @@ static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq)
         if (!SDDS_ProcessParameterString(table, def->text, SDDS_WRITEONLY_DEFINITION))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         index = SDDS_GetParameterIndex(table, def->name);
+        add_defined_parameter_storage(table, index);
       } else if (def->argc) {
         if (!SDDS_RedefineParameter(table, def->name, def->argv, def->argc))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
@@ -230,11 +248,22 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
 #endif
     pagesRead = 0;
     while (mplFile || (datapage=SDDS_ReadPageSparse(&table, 0, presparseInterval, presparseOffset, 0))>=0) {
-      /* Preserve legacy partial-page recovery, but never salvage an SDDS6 page
-         whose categorical values may be incomplete or invalid. */
-      if (!mplFile && datapage==0 &&
-          (table.layout.version>=6 || !SDDS_ReadRecoveryPossible(&table)))
-        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+      if (!mplFile && datapage==0) {
+        /* SDDS6 reports truncated rows and invalid categorical data through the same
+           failed-row path, so an SDDS6 read error is fatal rather than salvaged. */
+        if (table.layout.version>=6)
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+        /* Legacy files (often still being written): use the recoverable part of the
+           page; otherwise stop and plot the pages already read. */
+        if (!SDDS_ReadRecoveryPossible(&table)) {
+          /* With no pages read, the errors are reported with the warning below. */
+          if (pagesRead)
+            SDDS_ClearErrors();
+          break;
+        }
+        /* The partial page is used, so its read error must not fail later checks. */
+        SDDS_ClearErrors();
+      }
       pagesRead++;
 #if defined(DEBUG)
       fprintf(stderr, "memory: %ld\n", memory_count());
@@ -1105,8 +1134,7 @@ void determine_dataset_legends(PLOT_SPEC *plspec, SDDS_TABLE *table, PLOT_DATA *
     if (strlen(dataset->legend) >= sizeof(buffer))
       SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
     strcpy_ss(buffer, dataset->legend);
-    if (!edit_string_bounded(buffer, sizeof(buffer), request->legend.edit_command))
-      SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
+    edit_plot_label(buffer, sizeof(buffer), request->legend.edit_command);
     free(dataset->legend);
     SDDS_CopyString(&dataset->legend, buffer);
   }
@@ -1176,8 +1204,7 @@ void determine_dataset_strings(PLOT_SPEC *plspec, SDDS_TABLE *table, PLOT_DATA *
       if (strlen(dataset->string_label[i].string) >= sizeof(buffer))
         SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
       strcpy_ss(buffer, dataset->string_label[i].string);
-      if (!edit_string_bounded(buffer, sizeof(buffer), request->string_label[i].edit_command))
-        SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
+      edit_plot_label(buffer, sizeof(buffer), request->string_label[i].edit_command);
       free(dataset->string_label[i].string);
       SDDS_CopyString(&dataset->string_label[i].string, buffer);
     }

@@ -268,6 +268,21 @@ static char **defaultFormat = NULL;
 static char **csvFormat = NULL;
 static char *latexJustify = NULL;
 
+/* Enum labels may approach the mapping limit, so keep one buffer for the whole run
+   instead of allocating (and zeroing) several MiB on every page. */
+static char *getPrintBuffer(size_t size) {
+  static char *buffer = NULL;
+  static size_t bufferSize = 0;
+  if (size > bufferSize) {
+    free(buffer);
+    if (!(buffer = malloc(size)))
+      SDDS_Bomb("Allocation failure in getPrintBuffer");
+    bufferSize = size;
+  }
+  buffer[0] = 0;
+  return buffer;
+}
+
 #define SPREADSHEET_ON 0x0001U
 #define SPREADSHEET_DELIMITER 0x0002U
 #define SPREADSHEET_QUOTEMARK 0x0004U
@@ -282,7 +297,7 @@ int main(int argc, char **argv) {
   PRINT_COLUMN *printColumn;
   PRINT_PARAMETER *printParameter;
   PRINT_ARRAY *printArray;
-  long printColumns, printParameters, printArrays, firstPage, bufferLines;
+  long printColumns, printParameters, printArrays, firstPage, bufferLines, readFailed;
   long fromPage, toPage, names, pageAdvance, noTitle, noLabels, noWarnings;
   int32_t blankLines;
   unsigned long latexFormat, htmlFormat, markdownFormat;
@@ -682,7 +697,7 @@ int main(int argc, char **argv) {
   }
 
   while ((pageNumber = SDDS_ReadPageSparse(&SDDS_dataset, 0, (printColumns || SDDS_dataset.layout.data_mode.column_major) ? 1 : 1000000, 0, 0)) > 0) {
-    if ((fromPage && pageNumber < fromPage) || (toPage && pageNumber > toPage))
+    if (fromPage && pageNumber < fromPage)
       continue;
     if (pagination.flags & PAGINATION_ON) {
       if (!firstPage) {
@@ -733,12 +748,19 @@ int main(int argc, char **argv) {
         fputc('\n', fpOut);
     }
     firstPage = 0;
+    /* Don't read past -toPage, so damage after the requested pages is irrelevant. */
+    if (toPage && pageNumber >= toPage)
+      break;
   }
 
-  if (pageNumber == 0)
-    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-  if (!SDDS_Terminate(&SDDS_dataset))
-    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  /* A read failure still fails, but only after finishing the pages already printed. */
+  readFailed = pageNumber == 0;
+  if (readFailed)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+  if (!SDDS_Terminate(&SDDS_dataset)) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    readFailed = 1;
+  }
   for (i = 0; i < printColumns; i++) {
     if (printColumn[i].headers) {
       for (long j = 0; j < printColumn[i].headers; j++) {
@@ -752,7 +774,7 @@ int main(int argc, char **argv) {
 
   free(printColumn);
   free_scanargs(&s_arg, argc);
-  return EXIT_SUCCESS;
+  return readFailed ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 long processPrintColumns(PRINT_COLUMN **printRequestPtr, long printRequests, SDDS_DATASET *inTable, long noWarnings,
@@ -1232,7 +1254,7 @@ void doPrintParameters(SDDS_DATASET *inTable, PRINT_PARAMETER *printParameter, l
   if (!dataBuffer && !(dataBuffer = malloc(sizeof(void *) * 4)))
     SDDS_Bomb("Allocation failure in doPrintParameters");
 
-  printBuffer = tmalloc(printBufferSize);
+  printBuffer = getPrintBuffer(printBufferSize);
   outputRow = 0;
   for (parameter = 0; parameter < printParameters; parameter++) {
     format = NULL;
@@ -1277,7 +1299,6 @@ void doPrintParameters(SDDS_DATASET *inTable, PRINT_PARAMETER *printParameter, l
     checkPagination(fpOut, pagination, title);
     fputc('\n', fpOut);
   }
-  free(printBuffer);
 }
 
 char **makeListOfNames(char *string, long *names) {
@@ -1486,7 +1507,7 @@ void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long print
   else if (!rows)
     return;
 
-  printBuffer = tmalloc(printBufferSize);
+  printBuffer = getPrintBuffer(printBufferSize);
   if ((latexTitle != NULL) && (latexTitle[0] == '@')) {
     latexTitle = latexTitle + 1;
     t = SDDS_GetParameterAsString(inTable, latexTitle, &t);
@@ -1654,7 +1675,6 @@ void doPrintColumns(SDDS_DATASET *inTable, PRINT_COLUMN *printColumn, long print
     SDDS_FreeStringArray(groupData, rows);
     free(groupData);
   }
-  free(printBuffer);
 }
 
 void replaceFormatWidth(char *buffer, char *format, long width) {

@@ -2976,7 +2976,7 @@ char *SDDS_GetParameterAsFormattedString(SDDS_DATASET *SDDS_dataset, char *param
       return NULL;
     label = SDDS_EnumCodeToLabel(definition, *code);
     format = suppliedformat ? suppliedformat : "%s";
-    if (!SDDS_VerifyPrintfFormat(format, SDDS_STRING)) {
+    if (!SDDS_VerifyStringFormat(format)) {
       SDDS_SetError("Enum display format must be a string format (SDDS_GetParameterAsFormattedString)");
       return NULL;
     }
@@ -3042,6 +3042,10 @@ char *SDDS_GetParameterAsFormattedString(SDDS_DATASET *SDDS_dataset, char *param
       sprintf(buffer, format, *(char *)value);
       break;
     case SDDS_STRING:
+      if (!SDDS_VerifyStringFormat(format)) {
+        SDDS_SetError("Unable to get parameter value--string format must have exactly one string conversion (SDDS_GetParameterAsFormattedString)");
+        return (NULL);
+      }
       sprintf(buffer, format, *(char **)value);
       break;
     default:
@@ -4780,7 +4784,8 @@ int32_t SDDS_GetDescription(SDDS_DATASET *SDDS_dataset, char **text, char **cont
  * @note
  * - The `new_units` parameter must not be `NULL`. Passing `NULL` will result in an error.
  * - If the dataset has not been read yet (`pages_read == 0`), the conversion factor is stored but not applied immediately.
- * - Only numeric arrays are supported; categorical enums require explicit conversion before scaling.
+ * - Enum arrays are rejected; categorical enums require explicit conversion before scaling.
+ *   String and character arrays only have their units relabelled.
  *
  * @sa SDDS_SetColumnUnitsConversion, SDDS_SetParameterUnitsConversion, SDDS_GetArray
  */
@@ -4802,8 +4807,8 @@ int32_t  SDDS_SetArrayUnitsConversion(SDDS_DATASET *SDDS_dataset, char *array_na
     SDDS_SetError("Unable to get array--data type undefined (SDDS_SetArrayUnitsConversion)");
     return(0);
   }
-  if (!SDDS_NUMERIC_TYPE(type)) {
-    SDDS_SetError("Unable to convert units of nonnumeric array (SDDS_SetArrayUnitsConversion)");
+  if (type == SDDS_ENUM) {
+    SDDS_SetError("Unable to convert units of nonnumeric enum array; explicit conversion is required (SDDS_SetArrayUnitsConversion)");
     return(0);
   }
   if (SDDS_dataset->layout.array_definition[index].units != NULL) {
@@ -4897,7 +4902,8 @@ int32_t  SDDS_SetArrayUnitsConversion(SDDS_DATASET *SDDS_dataset, char *array_na
  * @note
  * - The `new_units` parameter must not be `NULL`. Passing `NULL` will result in an error.
  * - If the dataset has not been read yet (`pages_read == 0`), the conversion factor is stored but not applied immediately.
- * - Only numeric columns are supported; categorical enums require explicit conversion before scaling.
+ * - Enum columns are rejected; categorical enums require explicit conversion before scaling.
+ *   String and character columns only have their units relabelled.
  *
  * @sa SDDS_SetArrayUnitsConversion, SDDS_SetParameterUnitsConversion, SDDS_GetColumn
  */
@@ -4919,8 +4925,8 @@ int32_t  SDDS_SetColumnUnitsConversion(SDDS_DATASET *SDDS_dataset, char *column_
     SDDS_SetError("Unable to get column--data type undefined (SDDS_SetColumnUnitsConversion)");
     return(0);
   }
-  if (!SDDS_NUMERIC_TYPE(type)) {
-    SDDS_SetError("Unable to convert units of nonnumeric column (SDDS_SetColumnUnitsConversion)");
+  if (type == SDDS_ENUM) {
+    SDDS_SetError("Unable to convert units of nonnumeric enum column; explicit conversion is required (SDDS_SetColumnUnitsConversion)");
     return(0);
   }
   if (SDDS_dataset->layout.column_definition[index].units != NULL) {
@@ -5016,7 +5022,8 @@ int32_t  SDDS_SetColumnUnitsConversion(SDDS_DATASET *SDDS_dataset, char *column_
  * @note
  * - The `new_units` parameter must not be `NULL`. Passing `NULL` will result in an error.
  * - If the dataset has not been read yet (`pages_read == 0`), the conversion factor is stored but not applied immediately.
- * - Only numeric parameters are supported; categorical enums require explicit conversion before scaling.
+ * - Enum parameters are rejected; categorical enums require explicit conversion before scaling.
+ *   String and character parameters only have their units relabelled.
  *
  * @sa SDDS_SetArrayUnitsConversion, SDDS_SetColumnUnitsConversion, SDDS_GetParameter
  */
@@ -5037,8 +5044,8 @@ int32_t  SDDS_SetParameterUnitsConversion(SDDS_DATASET *SDDS_dataset, char *para
     SDDS_SetError("Unable to get parameter--data type undefined (SDDS_SetParameterUnitsConversion)");
     return(0);
   }
-  if (!SDDS_NUMERIC_TYPE(type)) {
-    SDDS_SetError("Unable to convert units of nonnumeric parameter (SDDS_SetParameterUnitsConversion)");
+  if (type == SDDS_ENUM) {
+    SDDS_SetError("Unable to convert units of nonnumeric enum parameter; explicit conversion is required (SDDS_SetParameterUnitsConversion)");
     return(0);
   }
   if (SDDS_dataset->layout.parameter_definition[index].units != NULL) {

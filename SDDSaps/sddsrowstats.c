@@ -785,6 +785,17 @@ STAT_DEFINITION *compileStatDefinitions(SDDS_DATASET *inData, STAT_REQUEST *requ
   if (!(stat = (STAT_DEFINITION *)malloc(sizeof(*stat) * requests)))
     SDDS_Bomb("memory allocation failure");
   for (iReq = iStat = 0; iReq < requests; iReq++) {
+    /* Wildcards select numeric columns only, but an explicitly named enum is an error. */
+    for (iName = 0; iName < request[iReq].sourceColumns; iName++) {
+      int32_t index;
+      if (!has_wildcards(request[iReq].sourceColumn[iName]) &&
+          (index = SDDS_GetColumnIndex(inData, request[iReq].sourceColumn[iName])) >= 0 &&
+          SDDS_GetColumnType(inData, index) == SDDS_ENUM) {
+        fprintf(stderr, "Error (sddsrowstats): column %s is an enum; convert enums with sddscast first.\n",
+                request[iReq].sourceColumn[iName]);
+        exit(EXIT_FAILURE);
+      }
+    }
     if ((stat[iStat].sourceColumns = expandColumnPairNames(inData, &request[iReq].sourceColumn, NULL, request[iReq].sourceColumns, NULL, 0, FIND_NUMERIC_TYPE, 0)) <= 0) {
       if (!noWarnings) {
         fprintf(stderr, "Warning: no match for column names (sddsrowstats):\n");

@@ -24,6 +24,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iomanip>
 #include <limits>
@@ -230,6 +231,117 @@ std::string encodeFixedString(std::string_view text) {
     encoded += octal;
   }
   return encoded;
+}
+
+/** Apply C SDDS_InterpretEscapes, keeping only the text before any decoded NUL. */
+std::string interpretDataEscapes(std::string_view input) {
+  std::string result;
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    if (input[i] != '\\') {
+      result.push_back(input[i]);
+      continue;
+    }
+    if (++i == input.size()) {
+      result.push_back('\\');
+      break;
+    }
+    const char next = input[i];
+    switch (next) {
+    case 'n': result.push_back('\n'); break;
+    case 't': result.push_back('\t'); break;
+    case 'b': result.push_back('\b'); break;
+    case 'r': result.push_back('\r'); break;
+    case 'f': result.push_back('\f'); break;
+    case 'v': result.push_back('\v'); break;
+    case 'a': result.push_back('\a'); break;
+    case '\\': case '\'': case '"': case '?': case '!': result.push_back(next); break;
+    default:
+      if (next >= '0' && next <= '9') {
+        unsigned char value = 0;
+        for (int digits = 0; digits < 3 && i < input.size() && input[i] >= '0' && input[i] <= '9'; ++digits)
+          value = static_cast<unsigned char>(8U * value + static_cast<unsigned>(input[i++] - '0'));
+        --i;
+        result.push_back(static_cast<char>(value));
+      } else {
+        result.push_back('\\');
+        --i;
+      }
+    }
+  }
+  const auto nul = result.find('\0');
+  if (nul != std::string::npos) result.resize(nul);
+  return result;
+}
+
+/** Extract the next data token exactly as C SDDS_GetToken does, or nothing when blank. */
+std::optional<std::string> dataToken(std::string_view text) {
+  const auto at = [&](std::size_t index) { return index < text.size() ? text[index] : '\0'; };
+  const auto space = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
+  std::size_t s = 0;
+  while (space(at(s))) ++s;
+  if (!at(s)) return std::nullopt;
+  std::size_t first = s;
+  if (at(s) == '"') {
+    first = s + 1;
+    std::size_t literal = std::string::npos;
+    do {
+      ++s;
+      literal = std::string::npos;
+      if (at(s) == '\\' && at(s + 1) == '\\') {
+        literal = s + 1;
+        s += 2;
+      }
+    } while (at(s) && (at(s) != '"' || (at(s - 1) == '\\' && s - 1 != literal)));
+  } else {
+    do {
+      ++s;
+      if (at(s) == '"' && at(s - 1) != '\\')
+        while (at(++s) && !(at(s) == '"' && at(s - 1) != '\\')) {}
+    } while (at(s) && !space(at(s)));
+  }
+  return std::string(text.substr(first, std::min(s, text.size()) - first));
+}
+
+/**
+ * Decode an SDDS6 fixed string/character value as C SDDS_ScanFixedValue does. A
+ * character without a token decodes to empty text so reading its page fails as in C.
+ */
+std::string scanFixedText(std::string text, Type type) {
+  if (type == Type::Character) {
+    const auto token = dataToken(text);
+    if (!token) return {};
+    const auto decoded = interpretDataEscapes(*token);
+    return std::string(1, decoded.empty() ? '\0' : decoded.front());
+  }
+  if (!text.empty() && text.back() == '\r') text.pop_back();
+  if (!text.empty() && text.front() == '"') text = dataToken(text).value_or(std::string{});
+  return interpretDataEscapes(text);
+}
+
+/** Parse an SDDS6 integer namelist value with the C strtoimax grammar and range. */
+std::int32_t parseSdds6Integer(const std::string &text, std::int32_t minimum, std::int32_t maximum,
+                               const char *what, const std::filesystem::path &path) {
+  errno = 0;
+  char *end = nullptr;
+  const long long value = std::strtoll(text.c_str(), &end, 10);
+  if (errno || end == text.c_str() || *end || value < minimum || value > maximum)
+    throwFormat(std::string("invalid SDDS6 ") + what + " value: " + text, path);
+  return static_cast<std::int32_t>(value);
+}
+
+/**
+ * Decode an SDDS6 &associate sdds flag. The C library skips &associate commands
+ * (RW_ASSOCIATES is 0), so no value rejects a file: the C integer grammar is tried
+ * first, then the historical boolean words, and anything else reads as false.
+ */
+bool sdds6AssociateFlag(const std::string &text) {
+  errno = 0;
+  char *end = nullptr;
+  const long long value = std::strtoll(text.c_str(), &end, 10);
+  if (!errno && end != text.c_str() && !*end)
+    return value != 0;
+  const std::string word = lower(trim(text));
+  return word == "true" || word == "yes";
 }
 
 Type parseType(const std::string &name) {
@@ -1530,7 +1642,7 @@ void parseLayoutStream(BufferedStream &stream, Layout &layout, const ReaderOptio
       static_cast<FieldMetadata &>(definition) = fieldFrom(command->tags, layout.version, options.limits);
       definition.fixedValue = tag(command->tags, "fixed_value");
       if (layout.version == 6 && (definition.type == Type::String || definition.type == Type::Character) && definition.fixedValue)
-        definition.fixedValue = unescape(*definition.fixedValue);
+        definition.fixedValue = scanFixedText(*definition.fixedValue, definition.type);
       layout.parameters.push_back(std::move(definition));
     } else if (command->name == "column") {
       ColumnDefinition definition;
@@ -1557,7 +1669,7 @@ void parseLayoutStream(BufferedStream &stream, Layout &layout, const ReaderOptio
       definition.description = tag(command->tags, "description");
       definition.contents = tag(command->tags, "contents");
       if (auto value = tag(command->tags, "sdds"))
-        definition.isSdds = parseBool(*value);
+        definition.isSdds = layout.version == 6 ? sdds6AssociateFlag(*value) : parseBool(*value);
       layout.associates.push_back(std::move(definition));
     } else if (command->name == "include") {
       const std::filesystem::path includePath(requiredTag(command->tags, "filename"));
@@ -1571,26 +1683,35 @@ void parseLayoutStream(BufferedStream &stream, Layout &layout, const ReaderOptio
                         commentOrder, fixedRowComment, false);
       includeStack.erase(key);
     } else if (command->name == "data") {
-      const std::string mode = lower(requiredTag(command->tags, "mode"));
+      // SDDS6 follows the C SDDS6_ParseNamelist grammar: exact keywords and base-10 integers.
+      const bool strict = layout.version == 6;
+      auto integer = [&](const std::string &value, const char *what) {
+        return strict ? parseSdds6Integer(value, INT32_MIN, INT32_MAX, what, path)
+                      : parseInteger<std::int32_t>(value, what);
+      };
+      auto flag = [&](const std::string &value, const char *what, std::int32_t minimum, std::int32_t maximum) {
+        return strict ? parseSdds6Integer(value, minimum, maximum, what, path) != 0 : parseBool(value);
+      };
+      const std::string mode = strict ? requiredTag(command->tags, "mode") : lower(requiredTag(command->tags, "mode"));
       if (mode == "binary") layout.data.mode = DataMode::Binary;
       else if (mode == "ascii") layout.data.mode = DataMode::Ascii;
       else throwFormat("invalid SDDS data mode: " + mode, path);
       if (auto value = tag(command->tags, "lines_per_row"))
-        layout.data.linesPerRow = parseInteger<std::int32_t>(*value, "lines_per_row");
+        layout.data.linesPerRow = integer(*value, "lines_per_row");
       if (auto value = tag(command->tags, "additional_header_lines"))
-        layout.data.additionalHeaderLines = parseInteger<std::int32_t>(*value, "additional_header_lines");
+        layout.data.additionalHeaderLines = integer(*value, "additional_header_lines");
       if (auto value = tag(command->tags, "column_major_order"))
-        layout.data.majorOrder = parseBool(*value) ? MajorOrder::Column : MajorOrder::Row;
+        layout.data.majorOrder = flag(*value, "column_major_order", SHRT_MIN, SHRT_MAX) ? MajorOrder::Column : MajorOrder::Row;
       if (auto value = tag(command->tags, "endian")) {
-        const std::string order = lower(*value);
+        const std::string order = strict ? *value : lower(*value);
         if (order == "big") layout.data.byteOrder = ByteOrder::Big;
         else if (order == "little") layout.data.byteOrder = ByteOrder::Little;
         else throwFormat("invalid endian value: " + *value, path);
       }
       if (auto value = tag(command->tags, "no_row_counts"))
-        layout.data.rowCountMode = parseBool(*value) ? RowCountMode::None : RowCountMode::Variable;
+        layout.data.rowCountMode = flag(*value, "no_row_counts", INT32_MIN, INT32_MAX) ? RowCountMode::None : RowCountMode::Variable;
       if (auto value = tag(command->tags, "fixed_row_count"))
-        if (parseBool(*value)) layout.data.rowCountMode = RowCountMode::Fixed;
+        if (flag(*value, "fixed_row_count", INT32_MIN, INT32_MAX)) layout.data.rowCountMode = RowCountMode::Fixed;
       if (fixedRowComment)
         layout.data.rowCountMode = RowCountMode::Fixed;
       if (commentOrder)

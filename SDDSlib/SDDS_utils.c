@@ -113,7 +113,8 @@ int32_t SDDS_PrintTypedValue(void *data, int64_t index, int32_t type, char *form
       SDDS_SetError("Buffer size overflow (SDDS_PrintTypedValue)");
       return 0;
     }
-    SDDS_SprintTypedValue(data, index, type, format, buffer, mode);
+    if (!SDDS_SprintTypedValue(data, index, type, format, buffer, mode))
+      return 0;
     fputs(buffer, fp);
     break;
   case SDDS_CHARACTER:
@@ -162,6 +163,34 @@ int32_t SDDS_SprintTypedValue(void *data, int64_t index, int32_t type, const cha
   return SDDS_SprintTypedValueFactor(data, index, type, format, buffer, mode, 1.0);
 }
 
+/** @brief Print one unscaled integer value with its own printf conversion. */
+static int32_t sprintUnscaledInteger(void *data, int64_t index, int32_t type, const char *format, char *buffer) {
+  switch (type) {
+  case SDDS_SHORT:
+    sprintf(buffer, format ? format : "%hd", *((short *)data + index));
+    break;
+  case SDDS_USHORT:
+    sprintf(buffer, format ? format : "%hu", *((unsigned short *)data + index));
+    break;
+  case SDDS_LONG:
+    sprintf(buffer, format ? format : "%" PRId32, *((int32_t *)data + index));
+    break;
+  case SDDS_ULONG:
+    sprintf(buffer, format ? format : "%" PRIu32, *((uint32_t *)data + index));
+    break;
+  case SDDS_LONG64:
+    sprintf(buffer, format ? format : "%" PRId64, *((int64_t *)data + index));
+    break;
+  case SDDS_ULONG64:
+    sprintf(buffer, format ? format : "%" PRIu64, *((uint64_t *)data + index));
+    break;
+  default:
+    SDDS_SetError("Unable to print value--not an integer type (SDDS_SprintTypedValue)");
+    return (0);
+  }
+  return (1);
+}
+
 /**
  * @brief Reallocates memory to a new size and zero-initializes the additional space.
  *
@@ -205,6 +234,21 @@ int32_t SDDS_SprintTypedValueFactor(void *data, int64_t index, int32_t type, con
     SDDS_SetError("Unable to print value--buffer pointer is NULL (SDDS_SprintTypedValueFactor)");
     return (0);
   }
+  /* Without scaling, print integers directly: converting through double rounds 64-bit values
+   * and maps values above the double range of the target type (such as UINT64_MAX) to garbage. */
+  if (factor == 1.0) {
+    switch (type) {
+    case SDDS_SHORT:
+    case SDDS_USHORT:
+    case SDDS_LONG:
+    case SDDS_ULONG:
+    case SDDS_LONG64:
+    case SDDS_ULONG64:
+      return sprintUnscaledInteger(data, index, type, format, buffer);
+    default:
+      break;
+    }
+  }
   switch (type) {
   case SDDS_SHORT:
     sprintf(buffer, format ? format : "%hd", (short)(*((short *)data + index) * (factor)));
@@ -241,6 +285,10 @@ int32_t SDDS_SprintTypedValueFactor(void *data, int64_t index, int32_t type, con
     s = *((char **)data + index);
     if ((int32_t)strlen(s) > SDDS_PRINT_BUFLEN - 3) {
       SDDS_SetError("Buffer size overflow (SDDS_SprintTypedValue)");
+      return (0);
+    }
+    if (format && !SDDS_VerifyStringFormat(format)) {
+      SDDS_SetError("Unable to print value--string format must have exactly one string conversion (SDDS_SprintTypedValue)");
       return (0);
     }
     if (!(mode & SDDS_PRINT_NOQUOTES)) {
@@ -789,6 +837,43 @@ void *SDDS_Recalloc(void *old_ptr, size_t old_size, size_t new_size) {
 }
 
 /**
+ * @brief Verifies that a printf format consumes exactly one string argument.
+ *
+ * Accepts one `%s` conversion with an optional `-` flag, width and precision, plus any number
+ * of `%%` literals.  This is the check required before passing a format and a single string
+ * (such as a string value or an enum label) to printf.
+ *
+ * @param[in] format The printf format string to check.
+ * @return Returns `1` if the format is safe for one string argument, otherwise `0`.
+ */
+int32_t SDDS_VerifyStringFormat(const char *format) {
+  int32_t conversions = 0;
+  if (!format)
+    return 0;
+  while (*format) {
+    if (*format++ != '%')
+      continue;
+    if (*format == '%') {
+      format++;
+      continue;
+    }
+    if (*format == '-')
+      format++;
+    while (*format >= '0' && *format <= '9')
+      format++;
+    if (*format == '.') {
+      format++;
+      while (*format >= '0' && *format <= '9')
+        format++;
+    }
+    if (*format != 's' || conversions++)
+      return 0;
+    format++;
+  }
+  return conversions == 1;
+}
+
+/**
  * @brief Verifies that a printf format string is compatible with a specified data type.
  *
  * This function checks whether the provided printf format string is appropriate for the given SDDS data type. It ensures that the format specifier matches the type, preventing potential formatting errors during data output.
@@ -810,9 +895,12 @@ void *SDDS_Recalloc(void *old_ptr, size_t old_size, size_t new_size) {
  * @return Returns `1` if the format string is valid for the specified type; otherwise, returns `0` and records an error message.
  *
  * @note This function does not modify the format string; it only validates its compatibility with the given type.
- * String formats accept one string conversion with optional width and precision, plus escaped percent literals.
+ * For `SDDS_STRING` this keeps the legacy acceptance used for header format strings (only the
+ * first conversion is checked); code that passes a string to printf validates the format with
+ * SDDS_VerifyStringFormat() at the point of formatting.
  *
  * @see SDDS_SetError
+ * @see SDDS_VerifyStringFormat
  */
 int32_t SDDS_VerifyPrintfFormat(const char *string, int32_t type) {
   char *percent, *s;
@@ -820,31 +908,8 @@ int32_t SDDS_VerifyPrintfFormat(const char *string, int32_t type) {
 
   if (!string)
     return 0;
-  if (type == SDDS_STRING) {
-    const char *format = string;
-    int32_t conversions = 0;
-    while (*format) {
-      if (*format++ != '%')
-        continue;
-      if (*format == '%') {
-        format++;
-        continue;
-      }
-      if (*format == '-')
-        format++;
-      while (*format >= '0' && *format <= '9')
-        format++;
-      if (*format == '.') {
-        format++;
-        while (*format >= '0' && *format <= '9')
-          format++;
-      }
-      if (*format != 's' || conversions++)
-        return 0;
-      format++;
-    }
-    return conversions == 1;
-  }
+  if (type == SDDS_STRING && SDDS_VerifyStringFormat(string))
+    return 1;
 
   s = (char *)string;
   do {
@@ -910,6 +975,14 @@ int32_t SDDS_VerifyPrintfFormat(const char *string, int32_t type) {
     if (--len == 0)
       return (1);
     if ((tmp = strspn(s, "-+.0123456789 ")) < len)
+      return (0);
+    break;
+  case SDDS_STRING:
+    if ((len = strcspn(s, "s")) == strlen(s))
+      return (0);
+    if (len == 0)
+      return (1);
+    if ((tmp = strspn(s, "-0123456789")) < len)
       return (0);
     break;
   case SDDS_CHARACTER:

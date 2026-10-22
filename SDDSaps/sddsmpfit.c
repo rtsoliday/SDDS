@@ -1168,11 +1168,12 @@ void RemoveElementFromStringArray(char **array, long index, long length) {
 char **RemoveNonNumericColumnsFromNameArray(SDDS_DATASET * SDDSin, char **columns, int32_t *numColumns) {
   long i, numNumericColumns = *numColumns;
 
-  for (i = 0; i < *numColumns; i++) {
+  for (i = 0; i < numNumericColumns; i++) {
     if (SDDS_CheckColumn(SDDSin, columns[i], NULL, SDDS_ANY_NUMERIC_TYPE, NULL)) {
-      printf("Removing %s because not a numeric type.\n", columns[i]);
-      RemoveElementFromStringArray(columns, i, *numColumns);
+      fprintf(stderr, "Removing %s because not a numeric type.\n", columns[i]);
+      RemoveElementFromStringArray(columns, i, numNumericColumns);
       numNumericColumns--;
+      i--;
     }
   }
 
@@ -1183,6 +1184,16 @@ char **RemoveNonNumericColumnsFromNameArray(SDDS_DATASET * SDDSin, char **column
 char **ResolveColumnNames(SDDS_DATASET * SDDSin, char **wildcardList, long length, int32_t *numYNames) {
   char **result;
   long i;
+
+  /* Wildcards select numeric columns only, but an explicitly named enum is an error. */
+  for (i = 0; i < length; i++) {
+    int32_t index;
+    if (!has_wildcards(wildcardList[i]) && (index = SDDS_GetColumnIndex(SDDSin, wildcardList[i])) >= 0 &&
+        SDDS_GetColumnType(SDDSin, index) == SDDS_ENUM) {
+      fprintf(stderr, "Error (sddsmpfit): column %s is an enum; convert enums with sddscast first.\n", wildcardList[i]);
+      exit(EXIT_FAILURE);
+    }
+  }
 
   /* initially set the columns of interest to none, to make SDDS_OR work below */
   SDDS_SetColumnsOfInterest(SDDSin, SDDS_MATCH_STRING, "", SDDS_AND);

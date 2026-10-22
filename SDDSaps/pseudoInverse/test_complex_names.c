@@ -12,8 +12,10 @@ int main(int argc, char **argv) {
   char **names = NULL, *automatic = NULL, *requested, *root;
   double *real, *imag;
   int32_t i, j, page, count = 0;
+  long digits = 3;
 
-  if (argc != 6)
+  /* Optional sixth argument: the -digits value passed to the production name generator. */
+  if ((argc != 6 && argc != 7) || (argc == 7 && !get_long(&digits, argv[6])))
     return EXIT_FAILURE;
   SDDS_RegisterProgramName(argv[0]);
   requested = strcmp(argv[4], "-") ? argv[4] : NULL;
@@ -36,7 +38,7 @@ int main(int argc, char **argv) {
       SDDS_Bomb("No rows in dataset or too many rows.");
     if (page == 1) {
       count = (int32_t)rows;
-      if (!(names = getComplexOutputNames(&input, root, automatic, requested, 3)) ||
+      if (!(names = getComplexOutputNames(&input, root, automatic, requested, digits)) ||
           !initializeComplexReconstruction(&reconstruction, &input, argv[3]))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     } else if (rows != count)

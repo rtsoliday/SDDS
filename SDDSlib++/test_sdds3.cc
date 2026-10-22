@@ -300,6 +300,23 @@ void legacyEnumDefinitionFailures() {
     }
     assert(file.checkForErrors() > 0);
   };
+  // Primitive definers reject SDDS_ENUM with -1, never a value that looks like index 0.
+  const auto rejectPrimitiveEnums = [&](int32_t count) {
+    file.clearErrors();
+    char enumName[] = "enum";
+    assert(file.defineParameter(extra, SDDS_ENUM) == -1);
+    assert(file.defineParameter(extra, enumName) == -1);
+    assert(file.defineParameter(extra, nullptr, nullptr, nullptr, nullptr, SDDS_ENUM, fixed) == -1);
+    assert(file.defineColumn(extra, SDDS_ENUM) == -1);
+    assert(file.defineColumn(extra, enumName) == -1);
+    assert(file.defineColumn(extra, nullptr, nullptr, nullptr, nullptr, SDDS_ENUM, 0) == -1);
+    assert(file.defineArray(extra, SDDS_ENUM, 1) == -1);
+    assert(file.defineArray(extra, enumName, 1) == -1);
+    assert(file.defineArray(extra, nullptr, nullptr, nullptr, nullptr, nullptr, SDDS_ENUM, 0, 1) == -1);
+    checkCounts(count);
+    assert(file.checkForErrors() == 9);
+  };
+  rejectPrimitiveEnums(0);
   rejectMappings(0);
   rejectFixedValues(0);
   assert(file.defineEnumParameter(first, mapping, fixed) == 0);
@@ -307,6 +324,7 @@ void legacyEnumDefinitionFailures() {
   assert(file.defineEnumArray(first, mapping, 1) == 0);
   rejectMappings(1);
   rejectFixedValues(1);
+  rejectPrimitiveEnums(1);
   assert(file.defineEnumParameter(second, mapping) == 1);
   assert(file.defineEnumColumn(second, mapping) == 1);
   assert(file.defineEnumArray(second, mapping, 2) == 1);

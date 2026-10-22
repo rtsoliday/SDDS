@@ -29,6 +29,53 @@ void determine_labels(PLOT_SPEC *plspec)
 
 char *makeNameUnitsLabel(PLOT_SPEC *plspec, long panel, long plane, long group);
 
+/* Scratch capacity used to tell a malformed edit command from one that outgrows the label buffer. */
+#define EDIT_PLOT_LABEL_RETRY_CAPACITY (1<<20)
+
+/**
+ * @brief Edit a label in place with the legacy tolerance for malformed edit commands.
+ *
+ * As with the legacy unchecked edit_string() call, a malformed command (for example a
+ * missing final delimiter in %/x/X) leaves the label edited up to the failing command;
+ * a warning is printed.  An edit that does not fit the buffer at any step is fatal.
+ *
+ * @param buffer Label to edit; must hold a string shorter than bufferSize.
+ * @param bufferSize Size of buffer in bytes, including the terminating NUL.
+ * @param edit Edit command, as for edit_string().
+ * @return 1 if the edit completed, 0 if the partial result of a malformed command was kept.
+ */
+long edit_plot_label(char *buffer, size_t bufferSize, char *edit)
+{
+  static char *lastWarned = NULL;
+  char *original, *scratch;
+  size_t capacity = bufferSize < EDIT_PLOT_LABEL_RETRY_CAPACITY ? EDIT_PLOT_LABEL_RETRY_CAPACITY : 2 * bufferSize;
+  long capacityFailure;
+
+  if (strlen(buffer) >= bufferSize)
+    SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
+  if (!SDDS_CopyString(&original, buffer))
+    SDDS_Bomb("String copy problem (edit_plot_label)");
+  if (edit_string_bounded(buffer, bufferSize, edit)) {
+    free(original);
+    return 1;
+  }
+  /* A malformed command stops at the same point with more room; a capacity failure gets further. */
+  if (!(scratch = malloc(capacity)))
+    SDDS_Bomb("Memory allocation failure (edit_plot_label)");
+  strcpy(scratch, original);
+  capacityFailure = edit_string_bounded(scratch, capacity, edit) || strcmp(scratch, buffer);
+  free(scratch);
+  free(original);
+  if (capacityFailure)
+    SDDS_Bomb("unable to edit label: edited label is too long");
+  if (edit != lastWarned) {
+    fprintf(stderr, "warning: invalid label edit command \"%s\"; using the partially edited label \"%s\"\n",
+            edit, buffer);
+    lastWarned = edit;
+  }
+  return 0;
+}
+
 void determine_panel_labels(PLOT_SPEC *plspec, long panel_index)
 {
   long i, request, file, datasets;
@@ -132,8 +179,7 @@ void determine_panel_labels(PLOT_SPEC *plspec, long panel_index)
           SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
         strcpy_ss(buffer, newLabel);
         free(newLabel);
-        if (!edit_string_bounded(buffer, sizeof(buffer), editCommand))
-          SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
+        edit_plot_label(buffer, sizeof(buffer), editCommand);
         if (plspec->scaleLabelInfo[plane][group].label)
           free(plspec->scaleLabelInfo[plane][group].label);
         if (!SDDS_CopyString(&plspec->scaleLabelInfo[plane][group].label, buffer))
@@ -169,8 +215,7 @@ void determine_panel_labels(PLOT_SPEC *plspec, long panel_index)
       if (strlen(plspec->panel[panel_index].title[j]) >= sizeof(buffer))
         SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
       strcpy_ss(buffer, plspec->panel[panel_index].title[j]);
-      if (!edit_string_bounded(buffer, sizeof(buffer), editCommand))
-        SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
+      edit_plot_label(buffer, sizeof(buffer), editCommand);
       free(plspec->panel[panel_index].title[j]);
       SDDS_CopyString(plspec->panel[panel_index].title+j, buffer);
     }
@@ -189,8 +234,7 @@ void determine_panel_labels(PLOT_SPEC *plspec, long panel_index)
         if (strlen(filename[i]) >= sizeof(buffer))
           SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
         strcpy_ss(buffer, filename[i]);
-        if (!edit_string_bounded(buffer, sizeof(buffer), plspec->plot_request[request].filenamesOnToplineEditCmd))
-          SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
+        edit_plot_label(buffer, sizeof(buffer), plspec->plot_request[request].filenamesOnToplineEditCmd);
         SDDS_CopyString(&filename[i], buffer);
       }
     }

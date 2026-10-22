@@ -316,7 +316,7 @@ int32_t SDDS_DefineColumnLikeArray(SDDS_DATASET *target, SDDS_DATASET *source, c
     SDDS_SetError("Unable to define column--already exists (SDDS_DefineColumnLikeArray)");
     return 0;
   }
-  if ((arrayDef->type == SDDS_ENUM ? SDDS_DefineEnumColumn(target, newName, arrayDef->symbol, arrayDef->units, arrayDef->description, arrayDef->format_string, arrayDef->enum_values, 0) : SDDS_DefineColumn(target, newName, arrayDef->symbol, arrayDef->units, arrayDef->description, arrayDef->format_string, arrayDef->type, 0)) < 0) {
+  if ((arrayDef->type == SDDS_ENUM ? SDDS_DefineEnumColumn(target, newName, arrayDef->symbol, arrayDef->units, arrayDef->description, arrayDef->format_string, arrayDef->enum_values, 0) : SDDS_DefineColumn(target, newName, arrayDef->symbol, arrayDef->units, arrayDef->description, arrayDef->format_string, arrayDef->type, arrayDef->field_length)) < 0) {
     SDDS_FreeArrayDefinition(arrayDef);
     SDDS_SetError("Unable to define column--call to define column failed (SDDS_DefineColumnLikeArray)");
     return 0;

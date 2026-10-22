@@ -539,14 +539,13 @@ CHANGE_DEFINITION *compileChangeDefinitions(SDDS_DATASET *inSet, long *changes, 
         change[iChange + iName].sourceColumn = columnName[iName];
         change[iChange + iName].optionCode = request[iReq].optionCode;
         change[iChange + iName].change = change[iChange + iName].baseline = NULL;
-        change[iChange + iName].type = SDDS_GetNamedColumnType(inSet, change[iChange].sourceColumn);
-        if (change[iChange].optionCode == SET_CHANGESIN && !SDDS_NUMERIC_TYPE(SDDS_GetNamedColumnType(inSet, change[iChange].sourceColumn))) {
-          fprintf(stderr, "Error: Column '%s' is non-numeric. Cannot compute changes.\n", change[iChange].sourceColumn);
+        change[iChange + iName].type = SDDS_GetNamedColumnType(inSet, change[iChange + iName].sourceColumn);
+        if (change[iChange + iName].optionCode == SET_CHANGESIN && !SDDS_NUMERIC_TYPE(change[iChange + iName].type)) {
+          fprintf(stderr, "Error: Column '%s' is non-numeric. Cannot compute changes.\n", change[iChange + iName].sourceColumn);
           exit(EXIT_FAILURE);
         }
-        change[iChange].copy = change[iChange].pass = NULL;
-        change[iChange].baseline = change[iChange].change = NULL;
-        change[iChange].newType = request[iReq].typeCode;
+        change[iChange + iName].copy = change[iChange + iName].pass = NULL;
+        change[iChange + iName].newType = request[iReq].typeCode;
       }
       iChange += columnNames;
       free(columnName);

@@ -845,6 +845,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "error: SDDS data garbled--consider using -recover option\n");
         fprintf(stderr, "warning: one or more data pages may be missing\n");
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+        /* Keep the pages already written readable, but never replace an in-place input. */
+        SDDS_Terminate(&SDDS_orig);
+        if (!SDDS_Terminate(&SDDS_dataset))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+        if (tmpfile_used)
+          remove(output);
         return EXIT_FAILURE;
       } else {
         if (recover != 2 && SDDS_ReadRecoveryPossible(&SDDS_orig)) {

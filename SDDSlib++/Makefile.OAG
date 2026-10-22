@@ -19,7 +19,7 @@ CMPLR = ANSI
 ifdef RATIONAL
 HOST_OPT = NO
 CC := $(RATIONAL) -best-effort $(CC)
-CXX := $(RATIONAL) -best-effort $(CXX)
+CCC := $(RATIONAL) -best-effort $(CCC)
 endif
 
 LIBRARY = SDDSpp

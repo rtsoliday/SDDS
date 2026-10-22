@@ -319,6 +319,12 @@ char *usageArray[] = {
 */
 static RPN_THREAD_LOCAL long table_number_mem = -1, i_page_mem = -1, n_rows_mem = -1, i_row_mem = -1;
 
+/** @brief Return the output type of the element defined by an equation. */
+static int32_t equationTargetType(SDDS_DATASET *dataset, EQUATION_DEFINITION *equation) {
+  return equation->is_parameter ? SDDS_GetParameterType(dataset, SDDS_GetParameterIndex(dataset, equation->name)) :
+    SDDS_GetColumnType(dataset, SDDS_GetColumnIndex(dataset, equation->name));
+}
+
 typedef char *STRING_PAIR[2];
 
 typedef struct
@@ -1060,8 +1066,8 @@ int main(int argc, char **argv) {
           }
         }
       }
-      index = equation_ptr->is_parameter ? SDDS_GetParameterIndex(&SDDS_output, equation_ptr->name) : SDDS_GetColumnIndex(&SDDS_output, equation_ptr->name);
-      if (!REDEFINABLE_TYPE(equation_ptr->is_parameter ? SDDS_GetParameterType(&SDDS_output, index) : SDDS_GetColumnType(&SDDS_output, index))) {
+      /* Legacy: a string target is created but not computed; only enum targets are rejected. */
+      if (equationTargetType(&SDDS_output, equation_ptr) == SDDS_ENUM) {
         fprintf(stderr, "Can't compute non-numeric %s %s; explicit conversion is required (sddsprocess)\n", PARAMETER_OR_COLUMN(equation_ptr->is_parameter), equation_ptr->name);
         exit(EXIT_FAILURE);
       }
@@ -1211,7 +1217,8 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
       }
       index = evaluate_ptr->is_parameter ? SDDS_GetParameterIndex(&SDDS_output, evaluate_ptr->name) : SDDS_GetColumnIndex(&SDDS_output, evaluate_ptr->name);
-      if (!REDEFINABLE_TYPE(evaluate_ptr->is_parameter ? SDDS_GetParameterType(&SDDS_output, index) : SDDS_GetColumnType(&SDDS_output, index))) {
+      /* Legacy: a string target is created and left empty; only enum targets are rejected. */
+      if ((evaluate_ptr->is_parameter ? SDDS_GetParameterType(&SDDS_output, index) : SDDS_GetColumnType(&SDDS_output, index)) == SDDS_ENUM) {
         fprintf(stderr, "Can't evaluate non-numeric %s %s; explicit conversion is required (sddsprocess)\n", PARAMETER_OR_COLUMN(evaluate_ptr->is_parameter), evaluate_ptr->name);
         exit(EXIT_FAILURE);
       }
@@ -1472,7 +1479,9 @@ int main(int argc, char **argv) {
         break;
       case IS_EQUATION_DEFINITION:
         equation_ptr = (EQUATION_DEFINITION *)definition[i].structure;
-        if (equation_ptr->is_parameter) {
+        if (equationTargetType(&SDDS_output, equation_ptr) == SDDS_STRING) {
+          /* Legacy behaviour: string targets are created but never computed. */
+        } else if (equation_ptr->is_parameter) {
           if (!SDDS_ComputeParameter(&SDDS_output, SDDS_GetParameterIndex(&SDDS_output, equation_ptr->name), equation_ptr->udf_name)) {
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
             exit(EXIT_FAILURE);
@@ -1481,7 +1490,7 @@ int main(int argc, char **argv) {
           k = i++;
           while (i < definitions && definition[i].type == IS_EQUATION_DEFINITION) {
             equation_ptr = (EQUATION_DEFINITION *)definition[i].structure;
-            if (equation_ptr->is_parameter)
+            if (equation_ptr->is_parameter || equationTargetType(&SDDS_output, equation_ptr) == SDDS_STRING)
               break;
             else
               i++;
@@ -1854,8 +1863,14 @@ int main(int argc, char **argv) {
   }
 
   if (page_number == 0) {
+    /* Keep the pages already written readable, but never replace an in-place input. */
     fprintf(stderr, "Error: problem reading input file\n");
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Terminate(&SDDS_input);
+    if (!SDDS_Terminate(&SDDS_output))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    if (tmpfile_used)
+      remove(outputfile);
     exit(EXIT_FAILURE);
   }
 

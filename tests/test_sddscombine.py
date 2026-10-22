@@ -31,9 +31,8 @@ PAGE2 = textwrap.dedent(
 ).strip()
 
 MERGED_ALL = "\n".join([PAGE1, PAGE2, PAGE1, PAGE2])
-MERGE_PARAM_PAGE1 = PAGE1
-MERGE_PARAM_PAGE2 = "\n".join([PAGE2, PAGE1])
-MERGE_PARAM_PAGE3 = PAGE2
+# The key changes at the file boundary (SecondPage -> FirstPage), so no pages merge.
+MERGE_PARAM_PAGES = [PAGE1, PAGE2, PAGE1, PAGE2]
 SPARSE_PAGE1 = "\n".join(["1", "3", "5"])
 SPARSE_PAGE2 = "\n".join(["6", "8"])
 PIPE_SHORTCOL = "\n".join(["1","2","3","4","5","6","7","8","1","2","3","4","5","6","7","8"])
@@ -153,10 +152,9 @@ def test_merge_parameter(tmp_path):
     check=True,
   )
   assert _sddscheck_ok(output) == "ok"
-  assert _npages(output) == 3
-  _assert_stream_matches(_stream(output, page=1), MERGE_PARAM_PAGE1)
-  _assert_stream_matches(_stream(output, page=2), MERGE_PARAM_PAGE2)
-  _assert_stream_matches(_stream(output, page=3), MERGE_PARAM_PAGE3)
+  assert _npages(output) == len(MERGE_PARAM_PAGES)
+  for page, expected in enumerate(MERGE_PARAM_PAGES, 1):
+    _assert_stream_matches(_stream(output, page=page), expected)
 
 
 def test_append(tmp_path):
@@ -354,7 +352,7 @@ def test_collapse_accepts_equal_enum_dictionaries(tmp_path, mapping):
   _write_collapse_state(second, mapping=mapping, values=(0, 1))
   subprocess.run([str(SDDSCOMBINE), str(first), str(second), str(output), "-collapse"], check=True)
   assert _sddscheck_ok(output) == "ok"
-  assert _stream(output, columns="state").split() == ['"ON"', '"OFF"', '"OFF"', '"ON"']
+  assert _stream(output, columns="state").split() == ['ON', 'OFF', 'OFF', 'ON']
 
 
 @pytest.mark.parametrize("first_type,second_type,second_mapping,second_value", [
@@ -383,7 +381,7 @@ def test_collapse_missing_parameters_keep_zero_default(tmp_path, field_type):
   _write_collapse_state(first, field_type=field_type, values=(1,))
   _write_collapse_state(second, field_type=None)
   subprocess.run([str(SDDSCOMBINE), str(first), str(second), str(output), "-collapse"], check=True)
-  expected = ['"ON"', '"OFF"'] if field_type == "enum" else ["1", "0"]
+  expected = ['ON', 'OFF'] if field_type == "enum" else ["1", "0"]
   assert _stream(output, columns="state").split() == expected
 
 
@@ -425,7 +423,7 @@ def test_merge_enum_parameter(tmp_path, collapse, delete_key, reorder_mapping):
     assert _npages(output) == 1
     assert _stream(output, columns="other").split() == ["5"] * 4
     if not delete_key:
-      assert _stream(output, columns="state").split() == ['"ON"', '"OFF"', '"IDLE"', '"ON"']
+      assert _stream(output, columns="state").split() == ['ON', 'OFF', 'IDLE', 'ON']
   else:
     assert _npages(output) == 4
     for page, rows in enumerate((2, 2, 2, 1), start=1):
@@ -433,7 +431,7 @@ def test_merge_enum_parameter(tmp_path, collapse, delete_key, reorder_mapping):
     if not delete_key:
       result = subprocess.run([str(SDDS2STREAM), str(output), "-parameters=state"],
                               capture_output=True, text=True, check=True)
-      assert result.stdout.split() == ['"ON"', '"OFF"', '"IDLE"', '"ON"']
+      assert result.stdout.split() == ['ON', 'OFF', 'IDLE', 'ON']
 
 
 @pytest.mark.parametrize("collapse", [False, True])

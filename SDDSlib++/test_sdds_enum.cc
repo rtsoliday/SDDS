@@ -13,6 +13,9 @@
 #include <iostream>
 #include <fstream>
 #include <cstdio>
+#include <string>
+#include <tuple>
+#include <vector>
 
 /** @brief Both libraries read every fixed character byte from an SDDS6 file. */
 static void checkFixedCharacters(const std::filesystem::path &path) {
@@ -518,7 +521,9 @@ static void testEnumBulkConversions() {
            std::vector<EnumValue>(count, EnumValue{10}));
     assert(std::get<std::vector<EnumValue>>(convertEnumValues(labels, Type::Enum, nullptr, &target)) ==
            std::vector<EnumValue>(count, EnumValue{8}));
-    assert(convertValues(enums, Type::Enum) == enums);
+    // The ordinary conversion API rejects enums, even for identity, like convertScalar.
+    rejects([&] { convertValues(enums, Type::Enum); });
+    rejects([&] { convertScalar(EnumValue{10}, Type::Enum); });
     for (const Type type : {Type::Int32, Type::String, Type::Double}) {
       rejects([&] { convertValues(enums, type); });
       rejects([&] { convertEnumValues(enums, type, nullptr); });
@@ -537,6 +542,186 @@ static void testEnumBulkConversions() {
   }
 }
 
+/** @brief Write a raw SDDS6 header and data text. */
+static void writeText(const std::filesystem::path &path, const std::string &text) {
+  std::ofstream file(path, std::ios::binary);
+  file << text;
+  assert(file);
+}
+
+/** @brief Whether the C library accepts the header and first page. */
+static bool cReadsFirstPage(const std::filesystem::path &path) {
+  SDDS_DATASET dataset{};
+  auto filename = path.string();
+  bool accepted = SDDS_InitializeInput(&dataset, filename.data());
+  if (accepted) accepted = SDDS_ReadPage(&dataset) > 0;
+  SDDS_Terminate(&dataset);
+  SDDS_ClearErrors();
+  return accepted;
+}
+
+/** @brief Whether the C++ library accepts the header and first page. */
+static bool cppReadsFirstPage(const std::filesystem::path &path) {
+  try {
+    auto reader = sdds::Reader::open(path);
+    return reader.next().has_value();
+  } catch (const sdds::Error &) {
+    return false;
+  }
+}
+
+/** @brief Both libraries read the expected SDDS6 fixed string/character values. */
+static void checkFixedTextValues(const std::filesystem::path &path,
+                                 const std::vector<std::pair<sdds::Type, std::string>> &expected) {
+  SDDS_DATASET dataset{};
+  auto filename = path.string();
+  assert(SDDS_InitializeInput(&dataset, filename.data()) && dataset.layout.version == 6);
+  assert(SDDS_ReadPage(&dataset) > 0);
+  auto reader = sdds::Reader::open(path);
+  const auto page = reader.next();
+  assert(page);
+  for (std::size_t i = 0; i < expected.size(); ++i) {
+    const auto &[type, value] = expected[i];
+    if (type == sdds::Type::String) {
+      assert(*static_cast<char **>(dataset.parameter[i]) == value);
+      assert(std::get<std::string>(page->parameter(i)) == value);
+    } else {
+      assert(*static_cast<char *>(dataset.parameter[i]) == value.front());
+      assert(std::get<char>(page->parameter(i)) == value.front());
+    }
+  }
+  assert(SDDS_Terminate(&dataset));
+}
+
+/** @brief SDDS6 fixed text uses the C data-token quoting and escape rules, and round-trips. */
+static void testSdds6FixedTextParity(const std::filesystem::path &outputDirectory) {
+  using sdds::Type;
+  const auto directory = outputDirectory / "fixed-text-parity";
+  std::filesystem::create_directories(directory);
+  // Header text inside fixed_value="...", and the value both libraries must decode.
+  const std::vector<std::tuple<Type, std::string, std::string>> cases = {
+      {Type::String, R"(\"hello world\")", "hello world"},
+      {Type::String, R"(a\\bc)", "a\bc"},
+      {Type::String, R"(\"quoted\" tail)", "quoted"},
+      {Type::String, R"(\"a\\\"b\" c)", "a\"b"},
+      {Type::String, R"(  x\\q\\?\\'\\v\\9\\f\\a)", "  x\\q?'\v\t\f\a"},
+      {Type::String, R"(\\101\\060)", "A0"},
+      {Type::String, R"(trail\\)", "trail\\"},
+      {Type::String, R"(nul\\000after)", "nul"},
+      {Type::String, R"(cr\r)", "cr"},
+      {Type::String, "", ""},
+      {Type::Character, R"(\\101x)", "A"},
+      {Type::Character, R"(  \"b c\")", "b"},
+      {Type::Character, R"(\\b)", "\b"},
+      {Type::Character, R"(\"\")", std::string(1, '\0')},
+  };
+  std::string header = "SDDS6\n";
+  std::vector<std::pair<Type, std::string>> expected;
+  for (std::size_t i = 0; i < cases.size(); ++i) {
+    const auto &[type, text, value] = cases[i];
+    header += "&parameter name=p" + std::to_string(i) + ", type=" +
+              (type == Type::String ? "string" : "character") + ", fixed_value=\"" + text + "\", &end\n";
+    expected.emplace_back(type, value);
+  }
+  header += "&column name=state, type=enum, enum_values=\"0:OFF\", &end\n&data mode=ascii, &end\n1\n0\n";
+  const auto source = directory / "source.sdds";
+  writeText(source, header);
+  checkFixedTextValues(source, expected);
+
+  // The C++ writer re-encodes decoded values so that both libraries read them back unchanged.
+  for (const auto mode : {sdds::DataMode::Ascii, sdds::DataMode::Binary}) {
+    auto reader = sdds::Reader::open(source);
+    auto layout = reader.layout();
+    layout.data.mode = mode;
+    const auto output = directory / (mode == sdds::DataMode::Ascii ? "cpp-ascii.sdds" : "cpp-binary.sdds");
+    auto writer = sdds::Writer::create(output, layout);
+    writer.beginPage(1);
+    writer.setColumn("state", std::vector<sdds::EnumValue>{{0}});
+    writer.commitPage();
+    writer.close();
+    checkFixedTextValues(output, expected);
+  }
+
+  // A blank fixed character fails when its page is read, in both libraries.
+  const auto blank = directory / "blank-character.sdds";
+  writeText(blank, "SDDS6\n&parameter name=c, type=character, fixed_value=\"  \", &end\n"
+                   "&column name=state, type=enum, enum_values=\"0:OFF\", &end\n&data mode=ascii, &end\n1\n0\n");
+  assert(!cReadsFirstPage(blank) && !cppReadsFirstPage(blank));
+}
+
+/** @brief SDDS6 &data and &associate values follow the C SDDS6 namelist grammar exactly. */
+static void testSdds6DataAndAssociateValues(const std::filesystem::path &outputDirectory) {
+  const auto directory = outputDirectory / "data-namelist-parity";
+  std::filesystem::create_directories(directory);
+  const std::vector<std::tuple<std::string, std::string, bool>> cases = {
+      {"mode=ascii", "", true},
+      {"mode=\"ascii\"", "", true},
+      {"mode=ASCII", "", false},
+      {"mode=Ascii", "", false},
+      {"mode=ascii, endian=big", "", true},
+      {"mode=ascii, endian=BIG", "", false},
+      {"mode=ascii, endian=Little", "", false},
+      {"mode=ascii, no_row_counts=true", "", false},
+      {"mode=ascii, no_row_counts=yes", "", false},
+      {"mode=ascii, no_row_counts=2", "", true},
+      {"mode=ascii, no_row_counts=-1", "", true},
+      {"mode=ascii, no_row_counts=+1", "", true},
+      {"mode=ascii, no_row_counts=\" 1\"", "", true},
+      {"mode=ascii, no_row_counts=\"1 \"", "", false},
+      {"mode=ascii, no_row_counts=0x1", "", false},
+      {"mode=ascii, no_row_counts=2147483648", "", false},
+      {"mode=ascii, fixed_row_count=true", "", false},
+      {"mode=ascii, fixed_row_count=3", "", true},
+      {"mode=ascii, column_major_order=true", "", false},
+      {"mode=ascii, column_major_order=32767", "", true},
+      {"mode=ascii, column_major_order=-32768", "", true},
+      {"mode=ascii, column_major_order=32768", "", false},
+      {"mode=ascii, lines_per_row=+1", "", true},
+      {"mode=ascii, lines_per_row=true", "", false},
+      {"mode=ascii, additional_header_lines=+0", "", true},
+      {"mode=ascii", "sdds=1", true},
+      {"mode=ascii", "sdds=2", true},
+      // C skips &associate commands (RW_ASSOCIATES is 0), so no sdds value rejects a file.
+      {"mode=ascii", "sdds=true", true},
+      {"mode=ascii", "sdds=yes", true},
+      {"mode=ascii", "sdds=maybe", true},
+  };
+  for (std::size_t i = 0; i < cases.size(); ++i) {
+    const auto &[data, associate, valid] = cases[i];
+    std::string text = "SDDS6\n";
+    if (!associate.empty()) text += "&associate name=a, " + associate + ", &end\n";
+    text += "&column name=state, type=enum, enum_values=\"0:OFF\", &end\n&data " + data + ", &end\n";
+    const bool noRowCounts = data.find("no_row_counts") != std::string::npos &&
+                             data.find("no_row_counts=0") == std::string::npos;
+    text += noRowCounts ? "0\n" : "1\n0\n";
+    const auto path = directory / ("case" + std::to_string(i) + ".sdds");
+    writeText(path, text);
+    const bool c = cReadsFirstPage(path), cpp = cppReadsFirstPage(path);
+    if (c != valid || cpp != valid)
+      std::cerr << "Unexpected SDDS6 &data/&associate result for \"" << data << "\" \"" << associate
+                << "\": C=" << c << " C++=" << cpp << '\n';
+    assert(c == valid && cpp == valid);
+  }
+  const auto nonBooleanFlags = directory / "non-boolean-flags.sdds";
+  writeText(nonBooleanFlags, "SDDS6\n&associate name=a, sdds=2, &end\n&associate name=b, sdds=\" 0\", &end\n"
+                             "&associate name=c, sdds=true, &end\n&associate name=d, sdds=maybe, &end\n"
+                             "&column name=state, type=enum, enum_values=\"0:OFF\", &end\n"
+                             "&data mode=ascii, no_row_counts=2, column_major_order=-1, &end\n0\n");
+  auto reader = sdds::Reader::open(nonBooleanFlags);
+  assert(reader.layout().data.rowCountMode == sdds::RowCountMode::None);
+  assert(reader.layout().data.majorOrder == sdds::MajorOrder::Column);
+  const auto &associates = reader.layout().associates;
+  assert(associates.size() == 4 && associates[0].isSdds && !associates[1].isSdds);
+  assert(associates[2].isSdds && !associates[3].isSdds);
+}
+
+/** @brief New ReaderLimits members follow the pre-SDDS6 ones, keeping positional initializers. */
+static void testReaderLimitsOrder() {
+  const sdds::ReaderLimits limits{5, 6, 7, 8};
+  assert(limits.maxRows == 5 && limits.maxElements == 6 && limits.maxStringBytes == 7);
+  assert(limits.maxLayoutCommandBytes == 8 && limits.maxEnumDefinitionBytes == 1024U * 1024U);
+}
+
 /** @brief Run enum round trips in both directions using the C regression fixtures. */
 int main(int argc, char **argv) try {
   using namespace sdds;
@@ -550,6 +735,9 @@ int main(int argc, char **argv) try {
   testProjectedAsciiEnumArrays(outputDirectory);
   testProjectedBinaryEnumColumns();
   testEnumBulkConversions();
+  testSdds6FixedTextParity(outputDirectory);
+  testSdds6DataAndAssociateValues(outputDirectory);
+  testReaderLimitsOrder();
   const EnumDefinition a("0:OFF,10:ON,-1:FAULT"), b("-1:FAULT,0:OFF,10:ON"), c("7:OFF,8:ON,9:FAULT");
   assert(a == b && a != c && a.code("FAULT") == -1);
   assert(remapEnum(EnumValue{10}, a, c).code == 8);

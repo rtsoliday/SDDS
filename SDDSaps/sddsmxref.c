@@ -638,8 +638,10 @@ int main(int argc, char **argv) {
     if (SDDS_GetParameterIndex(&SDDS_output, take_RefData.new_parameter[i]) >= 0) {
       free(take_RefData.orig_parameter[i]);
       free(take_RefData.new_parameter[i]);
-      for (j = i; j < take_RefData.parameters - 1; j++)
+      for (j = i; j < take_RefData.parameters - 1; j++) {
         take_RefData.orig_parameter[j] = take_RefData.orig_parameter[j + 1];
+        take_RefData.new_parameter[j] = take_RefData.new_parameter[j + 1];
+      }
       take_RefData.parameters -= 1;
       i--;
       if (take_RefData.parameters == 0)
@@ -651,11 +653,13 @@ int main(int argc, char **argv) {
   }
 
   for (i = 0; i < take_RefData.arrays; i++) {
-    if (SDDS_GetArrayIndex(&SDDS_output, take_RefData.new_array[i]) < 0) {
+    if (SDDS_GetArrayIndex(&SDDS_output, take_RefData.new_array[i]) >= 0) {
       free(take_RefData.orig_array[i]);
       free(take_RefData.new_array[i]);
-      for (j = i; j < take_RefData.arrays - 1; j++)
+      for (j = i; j < take_RefData.arrays - 1; j++) {
         take_RefData.orig_array[j] = take_RefData.orig_array[j + 1];
+        take_RefData.new_array[j] = take_RefData.new_array[j + 1];
+      }
       take_RefData.arrays -= 1;
       i--;
       if (take_RefData.arrays == 0)

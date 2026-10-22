@@ -425,11 +425,10 @@ int main(int argc, char **argv) {
     }
     if (SDDS_NumberOfErrors())
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    if (merge && param) {
-      if ((param_index = SDDS_GetParameterIndex(&SDDS_output, param)) < 0)
-        SDDS_Bomb("-merge parameter not in append destination");
+    if (merge && param && (param_index = SDDS_GetParameterIndex(&SDDS_output, param)) >= 0) {
       if (SDDS_GetParameterType(&SDDS_output, param_index) == SDDS_ENUM) {
-        /* The existing last page participates in the first merge comparison. */
+        /* The existing last page participates in the first enum merge comparison.
+         * Otherwise the first appended input seeds the comparison, as before. */
         param_size = SDDS_GetTypeSize(param_type = SDDS_ENUM);
         this_param = tmalloc(param_size);
         last_param = tmalloc(param_size);
@@ -645,8 +644,9 @@ int main(int argc, char **argv) {
               if (!SDDS_EnumDefinitionsEqual(paramEnumDefinition,
                                              SDDS_input.layout.parameter_definition[param_index].enum_definition))
                 SDDS_Bomb("Incompatible enum mappings for -merge parameter; use explicit remapping");
-              memcpy(last_param, this_param, param_size);
             }
+            /* Compare the first page of this file with the last page of the previous one. */
+            memcpy(last_param, this_param, param_size);
           } else {
             param_size = SDDS_GetTypeSize(param_type = SDDS_GetParameterType(&SDDS_input, param_index));
             /* Keep the comparison dictionary after the first input is terminated,

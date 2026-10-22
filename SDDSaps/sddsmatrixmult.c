@@ -128,6 +128,7 @@ int main(int argc, char **argv) {
     bomb(NULL, USAGE);
 
   inputfile1 = inputfile2 = outputfile = NULL;
+  R1 = R2 = R3 = NULL;
   Input1DoubleColumn = Input2DoubleColumn = OutputDoubleColumn = NULL;
   Input1Rows = Input1DoubleColumns = Input2Rows = Input2DoubleColumns = OutputRows = lastPage1 = lastPage2 = 0;
   tmpfile_used = 0;
@@ -271,7 +272,9 @@ int main(int argc, char **argv) {
     if (ipage1 > 0) {
       if (Input1Rows != SDDS_CountRowsOfInterest(&input1Page))
         fprintf(stderr, "Number of rows in page %ld of file %s changed.\n", ipage, inputfile1 ? inputfile1 : "stdin");
-      for (col = 0; col < Input1DoubleColumns; col++) {
+      /* R1 exists only when the first page has rows and numeric columns. */
+      for (col = 0; R1 && col < Input1DoubleColumns; col++) {
+        free(R1->a[col]);
         if (!(R1->a[col] = (double *)SDDS_GetColumnInDoubles(&input1Page, Input1DoubleColumn[col])))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       }
@@ -318,7 +321,8 @@ int main(int argc, char **argv) {
     if (ipage2 > 0) {
       if (Input2Rows != SDDS_CountRowsOfInterest(&input2Page))
         fprintf(stderr, "Number of rows in page %ld of file %s changed.\n", ipage, inputfile2);
-      for (col = 0; col < Input2DoubleColumns; col++) {
+      for (col = 0; R2 && col < Input2DoubleColumns; col++) {
+        free(R2->a[col]);
         if (!(R2->a[col] = (double *)SDDS_GetColumnInDoubles(&input2Page, Input2DoubleColumn[col])))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       }
@@ -355,10 +359,13 @@ int main(int argc, char **argv) {
     if (OutputRows && OutputDoubleColumns) {
       if (ipage == 1)
         m_alloc(&R3, OutputDoubleColumns, OutputRows);
-      if (verbose)
-        fprintf(stderr, "Multiplying %d x %d matrix by %d x %d matrix\n", R2->m, R2->n, R1->m, R1->n);
-      if (!threaded_matrix_mult(R3, R2, R1, threads))
-        SDDS_Bomb("Matrix multiplication failed");
+      /* With a zero inner dimension, R1 and R2 are empty and the zeroed R3 is the product. */
+      if (R1 && R2) {
+        if (verbose)
+          fprintf(stderr, "Multiplying %d x %d matrix by %d x %d matrix\n", R2->m, R2->n, R1->m, R1->n);
+        if (!threaded_matrix_mult(R3, R2, R1, threads))
+          SDDS_Bomb("Matrix multiplication failed");
+      }
       if (verbose) {
         m_alloc(&R3Trans, OutputRows, OutputDoubleColumns);
         m_trans(R3Trans, R3);

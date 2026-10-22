@@ -124,15 +124,15 @@ int main(int argc, char **argv) {
   SDDS_TABLE inputPage, *copiedPage, outputPage;
   long copiedPages;
   char *inputfile, *outputfile;
-  char **column, **excludeColumn = NULL;
-  int32_t columns;
+  char **column, **excludeColumn = NULL, **userColumn;
+  int32_t columns, userColumns, type;
   long excludeColumns;
   char *indParameterName;
   char **copyColumn;
   int32_t copyColumns;
   long verbose;
   long slopeErrors;
-  long iArg, i;
+  long iArg, i, j;
   double *indVar;
   char *indVarUnits;
   char **intColumn, **slopeColumn, **slopeSigmaColumn;
@@ -313,8 +313,33 @@ int main(int argc, char **argv) {
    * get columns of interest. use set_multicolumn_flags to simply
    * return new values for array column.
    \*************************************/
+  userColumn = column;
+  userColumns = columns;
   if (!set_multicolumn_flags(&inputPage, &column, &columns, excludeColumn, excludeColumns)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    exit(EXIT_FAILURE);
+  }
+  /* Wildcards select numeric columns only; explicitly named non-numeric columns are errors. */
+  for (i = iCol = 0; i < columns; i++) {
+    type = SDDS_GetNamedColumnType(&inputPage, column[i]);
+    if (SDDS_NUMERIC_TYPE(type)) {
+      column[iCol++] = column[i];
+      continue;
+    }
+    for (j = 0; j < userColumns; j++)
+      if (!has_wildcards(userColumn[j]) && strcmp(userColumn[j], column[i]) == 0)
+        break;
+    if (j < userColumns) {
+      if (type == SDDS_ENUM)
+        fprintf(stderr, "Error (sddsvslopes): column %s is an enum; convert enums with sddscast first.\n", column[i]);
+      else
+        fprintf(stderr, "Error (sddsvslopes): column %s is not numeric.\n", column[i]);
+      exit(EXIT_FAILURE);
+    }
+    free(column[i]);
+  }
+  if (!(columns = iCol)) {
+    fprintf(stderr, "Error (sddsvslopes): no numeric columns selected.\n");
     exit(EXIT_FAILURE);
   }
   /************************************\
@@ -415,7 +440,8 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Doing column %s.\n", column[iCol]);
     for (iRow = 0; iRow < rows; iRow++) {
       for (iPage = 0; iPage < copiedPages; iPage++) {
-        if (!SDDS_GetValue(&copiedPage[iPage], column[iCol], iRow, &depVar[iPage]))
+        depVar[iPage] = SDDS_GetValueAsDouble(&copiedPage[iPage], column[iCol], iRow);
+        if (SDDS_NumberOfErrors())
           SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
       }
       if (!(lsfn(indVar, depVar, weight, copiedPages, order, coef, coefsigma, &chi, diff))) {

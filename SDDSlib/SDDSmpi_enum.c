@@ -11,49 +11,75 @@
 #include <string.h>
 #include <limits.h>
 
-/** @brief Synchronize enum mappings without fixed-size metadata buffers. */
+/** @brief Return the type and enum fields of column (0), parameter (1) or array (2) @p i. */
+static int32_t *enumFields(SDDS_DATASET *dataset, int kind, int32_t i, SDDS_ENUM_DEFINITION ***definition, char ***text) {
+  if (kind == 0) {
+    *definition = &dataset->layout.column_definition[i].enum_definition;
+    *text = &dataset->layout.column_definition[i].enum_values;
+    return &dataset->layout.column_definition[i].type;
+  }
+  if (kind == 1) {
+    *definition = &dataset->layout.parameter_definition[i].enum_definition;
+    *text = &dataset->layout.parameter_definition[i].enum_values;
+    return &dataset->layout.parameter_definition[i].type;
+  }
+  *definition = &dataset->layout.array_definition[i].enum_definition;
+  *text = &dataset->layout.array_definition[i].enum_values;
+  return &dataset->layout.array_definition[i].type;
+}
+
+/**
+ * @brief Synchronize enum mappings without fixed-size metadata buffers.
+ * @details The element counts and then root's type vector are broadcast in one call
+ * each, so a layout without enums costs four collectives whatever its size. Only the
+ * enum fields of root's layout (the same on every rank) need a dictionary exchange.
+ * In check mode every rank's types must equal root's; in install mode non-root ranks
+ * receive the dictionaries of the fields that they defined as SDDS_LONG.
+ */
 static int32_t synchronizeEnums(SDDS_DATASET *dataset, int install) {
   MPI_DATASET *mpi = dataset->MPI_dataset;
-  int local = install ? 1 : SDDS_ValidateEnumLayout(dataset), all, kind, i;
+  int local = install ? 1 : SDDS_ValidateEnumLayout(dataset), all, kind;
   int32_t counts[3] = {dataset->layout.n_columns, dataset->layout.n_parameters, dataset->layout.n_arrays};
-  int32_t rootCounts[3];
+  int32_t rootCounts[3], *rootTypes = NULL, i;
+  int64_t total = (int64_t)counts[0] + counts[1] + counts[2], n, enums = 0;
+  SDDS_ENUM_DEFINITION **definition;
+  char **text;
   memcpy(rootCounts, counts, sizeof(counts));
   MPI_Bcast(rootCounts, 3, MPI_INT32_T, 0, mpi->comm);
-  if (memcmp(rootCounts, counts, sizeof(counts))) local = 0;
+  if (memcmp(rootCounts, counts, sizeof(counts)) || total > INT_MAX) local = 0;
+  /* Every rank allocates the agreed vector size, so the allocation joins the count agreement. */
+  if (local && total && !(rootTypes = malloc(sizeof(*rootTypes) * (size_t)total))) local = 0;
   MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, mpi->comm);
-  if (!all) { SDDS_SetError("MPI enum layout element counts differ between ranks"); return 0; }
-  for (kind = 0; kind < 3; kind++) {
-    for (i = 0; i < counts[kind]; i++) {
-      int32_t *type, rootType;
-      SDDS_ENUM_DEFINITION **definition, *parsed;
-      char **text, *payload;
+  if (!all) { free(rootTypes); SDDS_SetError("MPI enum layout element counts differ between ranks"); return 0; }
+  for (kind = n = 0; kind < 3; kind++)
+    for (i = 0; i < counts[kind]; i++, n++)
+      rootTypes[n] = *enumFields(dataset, kind, i, &definition, &text);
+  if (total) MPI_Bcast(rootTypes, (int)total, MPI_INT32_T, 0, mpi->comm);
+  for (kind = n = 0; kind < 3; kind++) {
+    for (i = 0; i < counts[kind]; i++, n++) {
+      if (!install && *enumFields(dataset, kind, i, &definition, &text) != rootTypes[n]) local = 0;
+      if (rootTypes[n] == SDDS_ENUM) enums++;
+    }
+  }
+  /* enums counts root's enum fields, so every rank either runs or skips this pass. */
+  for (kind = n = 0; enums && kind < 3; kind++) {
+    for (i = 0; i < counts[kind]; i++, n++) {
+      int32_t *type;
+      SDDS_ENUM_DEFINITION *parsed;
+      char *payload = NULL;
       uint64_t bytes = 0;
-      if (kind == 0) {
-        type = &dataset->layout.column_definition[i].type;
-        definition = &dataset->layout.column_definition[i].enum_definition;
-        text = &dataset->layout.column_definition[i].enum_values;
-      } else if (kind == 1) {
-        type = &dataset->layout.parameter_definition[i].type;
-        definition = &dataset->layout.parameter_definition[i].enum_definition;
-        text = &dataset->layout.parameter_definition[i].enum_values;
-      } else {
-        type = &dataset->layout.array_definition[i].type;
-        definition = &dataset->layout.array_definition[i].enum_definition;
-        text = &dataset->layout.array_definition[i].enum_values;
-      }
-      rootType = *type;
-      MPI_Bcast(&rootType, 1, MPI_INT32_T, 0, mpi->comm);
-      if (!install && *type != rootType) local = 0;
-      if (rootType != SDDS_ENUM) continue;
+      if (rootTypes[n] != SDDS_ENUM) continue;
+      type = enumFields(dataset, kind, i, &definition, &text);
       if (!mpi->myid && *text) bytes = strlen(*text);
       MPI_Bcast(&bytes, 1, MPI_UINT64_T, 0, mpi->comm);
       local = local && bytes && bytes <= SDDS_GetEnumMappingLimit() && bytes < INT_MAX;
+      if (local && !(payload = malloc((size_t)bytes + 1))) local = 0;
       MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, mpi->comm);
-      if (!all) { SDDS_SetError("MPI enum mapping exceeds a rank's reader limit or types differ"); return 0; }
-      payload = malloc((size_t)bytes + 1);
-      local = payload != NULL;
-      MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, mpi->comm);
-      if (!all) { free(payload); SDDS_SetError("MPI enum payload allocation failed"); return 0; }
+      if (!all) {
+        free(payload); free(rootTypes);
+        SDDS_SetError("MPI enum mapping exceeds a rank's reader limit, types differ or allocation failed");
+        return 0;
+      }
       if (!mpi->myid) memcpy(payload, *text, (size_t)bytes + 1);
       MPI_Bcast(payload, (int)bytes + 1, MPI_CHAR, 0, mpi->comm);
       parsed = SDDS_CreateEnumDefinition(payload);
@@ -61,7 +87,7 @@ static int32_t synchronizeEnums(SDDS_DATASET *dataset, int install) {
       local = parsed != NULL;
       if (local && (!install || !mpi->myid)) local = SDDS_EnumDefinitionsEqual(*definition, parsed);
       MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, mpi->comm);
-      if (!all) { SDDS_FreeEnumDefinition(parsed); SDDS_SetError("MPI enum dictionaries differ between ranks or are invalid"); return 0; }
+      if (!all) { SDDS_FreeEnumDefinition(parsed); free(rootTypes); SDDS_SetError("MPI enum dictionaries differ between ranks or are invalid"); return 0; }
       if (install && mpi->myid) {
         SDDS_FreeEnumDefinition(*definition);
         *definition = parsed;
@@ -70,6 +96,7 @@ static int32_t synchronizeEnums(SDDS_DATASET *dataset, int install) {
       } else SDDS_FreeEnumDefinition(parsed);
     }
   }
+  free(rootTypes);
   MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, mpi->comm);
   if (!all) SDDS_SetError("MPI layout types differ between ranks");
   return all;
@@ -89,7 +116,9 @@ static int32_t validateMPIEnumPage(SDDS_DATASET *dataset, int32_t inputPage) {
     page.layout.n_parameters = 0;
     page.layout.n_arrays = 0;
   }
-  /* Column-major MPI writes every row, regardless of its selection flag. */
+  /* Column-major MPI writes every row, regardless of its selection flag. Row-major
+   * writers (independent and collective) write only the selected rows, which is
+   * exactly what SDDS_ValidateEnumPage checks when row_flag is kept. */
   if (!inputPage && dataset->layout.data_mode.column_major) page.row_flag = NULL;
   local = inputPage ? SDDS_ValidateEnumReadPage(&page) : SDDS_ValidateEnumPage(&page);
   MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, dataset->MPI_dataset->comm);

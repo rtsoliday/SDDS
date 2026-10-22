@@ -635,7 +635,8 @@ static long setupOutputFile(SDDS_DATASET *outTable, char *outputfile, SDDS_DATAS
                             char *dataColumn, char *weightColumn, char *filterColumn, double lowerFilter,
                             double upperFilter, SDDS_DATASET *regionTable, char *regionNameColumn, long doStats,
                             int64_t bins, double binSize, long normalizeMode, short columnMajorOrder) {
-  char *symbol, *units, *dataUnits, *outputFormat;
+  char *symbol, *units, *dataUnits;
+  COLUMN_DEFINITION *abscissa;
   int32_t outputType;
   char s[1024];
 
@@ -650,13 +651,17 @@ static long setupOutputFile(SDDS_DATASET *outTable, char *outputfile, SDDS_DATAS
 
   /* Define output columns */
   outputType = SDDS_DOUBLE;
-  outputFormat = "%21.15e";
 
   if (!SDDS_TransferColumnDefinition(outTable, inTable, dataColumn, NULL) ||
       !SDDS_ChangeColumnInformation(outTable, "type", &outputType, SDDS_BY_NAME, dataColumn) ||
-      !SDDS_ChangeColumnInformation(outTable, "format_string", outputFormat, SDDS_BY_NAME, dataColumn) ||
       (iIndep = SDDS_GetColumnIndex(outTable, dataColumn)) < 0)
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  /* Clear any input format, which may not suit the double abscissa (legacy behavior). */
+  abscissa = outTable->layout.column_definition + iIndep;
+  if (abscissa->format_string) {
+    free(abscissa->format_string);
+    abscissa->format_string = NULL;
+  }
   if (regionNameColumn) {
     COLUMN_DEFINITION *definition = regionTable->layout.column_definition + SDDS_GetColumnIndex(regionTable, regionNameColumn);
     /* Labels are projected to strings so the synthetic Beyond region is representable. */

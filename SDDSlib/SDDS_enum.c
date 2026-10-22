@@ -125,8 +125,11 @@ int32_t SDDS_RemapEnumValues(const SDDS_ENUM_DEFINITION *source, const SDDS_ENUM
   return 1;
 }
 
-/** @brief Parse one complete fixed enum integer with the same grammar as ASCII codes. */
-static int32_t parseFixedEnumCode(const char *text, int32_t *code) {
+/**
+ * @brief Parse one complete enum code (fixed values and ASCII data share this grammar).
+ * @details Optional surrounding whitespace, an optional '-' and decimal digits; '+' is rejected.
+ */
+int32_t SDDS_ParseEnumCode(const char *text, int32_t *code) {
   char *end;
   intmax_t value;
   if (!text) return 0;
@@ -143,18 +146,23 @@ static int32_t parseFixedEnumCode(const char *text, int32_t *code) {
 /** @brief Validate a complete fixed enum code before changing or writing its definition. */
 int32_t SDDS_ValidateFixedEnumValue(const SDDS_ENUM_DEFINITION *definition, const char *text) {
   int32_t code;
-  if (!parseFixedEnumCode(text, &code) || !sddsEnumLabel(definition, code)) {
+  if (!SDDS_ParseEnumCode(text, &code) || !sddsEnumLabel(definition, code)) {
     SDDS_SetError("Invalid fixed enum parameter code");
     return 0;
   }
   return 1;
 }
 
+/** @brief Enum fields take no format; a blank format_string counts as none. */
+static int32_t hasEnumFormat(const char *format) {
+  return format && !SDDS_StringIsBlank((char *)format);
+}
+
 /** @brief Define an enum column without changing the primitive definition ABI. */
 int32_t SDDS_DefineEnumColumn(SDDS_DATASET *dataset, const char *name, const char *symbol, const char *units, const char *description, const char *format, const char *values, int32_t fieldLength) {
   SDDS_ENUM_DEFINITION *d;
   int32_t index;
-  if (!dataset || (dataset->layout.layout_written && dataset->mode && !dataset->deferSavingLayout) || dataset->page_started || dataset->n_rows_allocated || fieldLength || format) {
+  if (!dataset || (dataset->layout.layout_written && dataset->mode && !dataset->deferSavingLayout) || dataset->page_started || dataset->n_rows_allocated || fieldLength || hasEnumFormat(format)) {
     SDDS_SetError("Enum definitions require a fresh layout, zero field_length and no format_string");
     return -1;
   }
@@ -175,7 +183,7 @@ int32_t SDDS_DefineEnumColumn(SDDS_DATASET *dataset, const char *name, const cha
 int32_t SDDS_DefineEnumParameter(SDDS_DATASET *dataset, const char *name, const char *symbol, const char *units, const char *description, const char *format, const char *values, char *fixedValue) {
   SDDS_ENUM_DEFINITION *d;
   int32_t index;
-  if (!dataset || (dataset->layout.layout_written && dataset->mode && !dataset->deferSavingLayout) || dataset->page_started || format) {
+  if (!dataset || (dataset->layout.layout_written && dataset->mode && !dataset->deferSavingLayout) || dataset->page_started || hasEnumFormat(format)) {
     SDDS_SetError("Enum parameter definitions require a fresh layout and no format_string");
     return -1;
   }
@@ -199,7 +207,7 @@ int32_t SDDS_DefineEnumParameter(SDDS_DATASET *dataset, const char *name, const 
 int32_t SDDS_DefineEnumArray(SDDS_DATASET *dataset, const char *name, const char *symbol, const char *units, const char *description, const char *format, const char *values, int32_t fieldLength, int32_t dimensions, const char *groupName) {
   SDDS_ENUM_DEFINITION *d;
   int32_t index;
-  if (!dataset || (dataset->layout.layout_written && dataset->mode && !dataset->deferSavingLayout) || dataset->page_started || format || fieldLength) {
+  if (!dataset || (dataset->layout.layout_written && dataset->mode && !dataset->deferSavingLayout) || dataset->page_started || hasEnumFormat(format) || fieldLength) {
     SDDS_SetError("Enum array definitions require a fresh layout, zero field_length and no format_string");
     return -1;
   }
@@ -278,7 +286,7 @@ static int32_t validateEnumPage(SDDS_DATASET *dataset, int32_t inputPage) {
       int32_t fixedCode;
       const int32_t *value = dataset->parameter ? dataset->parameter[i] : NULL;
       if (definition->fixed_value) {
-        if (!parseFixedEnumCode(definition->fixed_value, &fixedCode)) {
+        if (!SDDS_ParseEnumCode(definition->fixed_value, &fixedCode)) {
           SDDS_SetError("Invalid fixed enum parameter code"); return 0;
         }
         value = &fixedCode;
@@ -366,8 +374,12 @@ int32_t SDDS6_GetNamelist(SDDS_DATASET *dataset, void *stream, int32_t compressi
         commentText[commentUsed] = 0;
         if (commentText[0] == '#') SDDS_ParseSpecialComments(dataset, commentText + 1);
         commentUsed = 0; comment = 0;
-      } else if (commentUsed + 1 < sizeof(commentText)) commentText[commentUsed++] = (char)c;
-      continue;
+        /* Inside a command the newline ending a comment still separates tokens. */
+        if (!started) continue;
+      } else {
+        if (commentUsed + 1 < sizeof(commentText)) commentText[commentUsed++] = (char)c;
+        continue;
+      }
     }
     if (!quoted && c == '!') { comment = 1; continue; }
     if (!started) {
@@ -435,6 +447,8 @@ char *SDDS6_CreateNamelist(const char *command, const void *data, SDDS_FIELD_INF
     if (string) {
       value = *(char *const *)((const char *)data + fields[i].offset);
       if (!value) continue;
+      /* Like the legacy writer, omit a blank format_string; readers reject it as a format. */
+      if (!strcmp(fields[i].name, "format_string") && SDDS_StringIsBlank((char *)value)) continue;
       escaped = SDDS6_QuoteEnumValues(value);
       if (!escaped) goto done;
       value = escaped;
@@ -579,17 +593,82 @@ int32_t SDDS_SprintEnumValue(const SDDS_ENUM_DEFINITION *definition, const int32
     SDDS_SetError("Enum formatting requires a mapped code and no numeric scaling"); return 0;
   }
   if (showCodes) { snprintf(number, sizeof(number), "%" PRId32, codes[index]); label = number; }
-  if (format && !SDDS_VerifyPrintfFormat((char *)format, SDDS_STRING)) {
+  if (format && !SDDS_VerifyStringFormat(format)) {
     SDDS_SetError("Enum display format must be a string format"); return 0;
   }
-  if (!format && !(mode & SDDS_PRINT_NOQUOTES)) {
-    char *escaped = SDDS6_QuoteEnumValues(label);
-    if (!escaped) return 0;
-    result = snprintf(buffer, bufferSize, "\"%s\"", escaped);
-    free(escaped);
+  if (!showCodes && !(mode & SDDS_PRINT_NOQUOTES) &&
+      (SDDS_StringIsBlank((char *)label) || strchr(label, '"') || SDDS_HasWhitespace((char *)label))) {
+    /* Quote labels exactly as SDDS_SprintTypedValue() quotes string values; codes are never quoted. */
+    size_t length = strlen(label);
+    const char *s;
+    char *quoted, *p;
+    if (length > (SIZE_MAX - 3) / 2 || !(quoted = malloc(2 * length + 3))) {
+      SDDS_SetError("Unable to allocate enum display buffer"); return 0;
+    }
+    p = quoted + 1;
+    for (s = label; *s; s++) {
+      if (*s == '"' && (s == label || s[-1] != '\\')) *p++ = '\\';
+      *p++ = *s;
+    }
+    *p = 0;
+    if (SDDS_StringIsBlank((char *)label)) strcpy(quoted, "\"\"");
+    else if (SDDS_HasWhitespace(quoted + 1)) { quoted[0] = '"'; *p++ = '"'; *p = 0; }
+    else memmove(quoted, quoted + 1, (size_t)(p - quoted));
+    result = snprintf(buffer, bufferSize, format ? format : "%s", quoted);
+    free(quoted);
   } else result = snprintf(buffer, bufferSize, format ? format : "%s", label);
   if (result < 0 || (size_t)result >= bufferSize) { SDDS_SetError("Enum display buffer too small"); return 0; }
   return 1;
+}
+
+/**
+ * @brief Escape a label as a legacy string fixed value.
+ * @details Only bytes that the legacy header reader or SDDS_InterpretEscapes() would alter are
+ * written as octal escapes: backslashes, quotes, comment/namelist delimiters, control bytes,
+ * and leading or trailing blanks.  Other bytes, including UTF-8 sequences, are copied unchanged.
+ */
+static char *escapeLegacyFixedString(const char *label) {
+  size_t i, length = strlen(label), first = 0, last = length;
+  char *output, *p;
+  while (first < length && label[first] == ' ') first++;
+  while (last > first && label[last - 1] == ' ') last--;
+  if (length > (SIZE_MAX - 1) / 4 || !(output = malloc(4 * length + 1))) return NULL;
+  for (i = 0, p = output; i < length; i++) {
+    unsigned char c = (unsigned char)label[i];
+    /* A backslash is octal too: a trailing "\\" would escape the closing quote for legacy readers. */
+    if (c < 0x20 || c == 0x7f || c == '\\' || c == '"' || c == '!' || c == '&' || (c == ' ' && (i < first || i >= last))) {
+      snprintf(p, 5, "\\%03o", c); p += 4;
+    } else *p++ = (char)c;
+  }
+  *p = 0;
+  return output;
+}
+
+/** @brief Length of one field as written by SDDS_PrintNamelistField() (0 when omitted). */
+static size_t legacyNamelistFieldLength(const char *name, const char *value) {
+  size_t length, quotes = 0;
+  const char *s;
+  if (!value) return 0;
+  if (!*value) return strlen(name) + 5;
+  for (s = value; *s; s++) if (*s == '"') quotes++;
+  length = strlen(name) + 1 + strlen(value) + quotes + 2;
+  return strpbrk(value, " ,*$\t\n\b") ? length + 2 : length;
+}
+
+/** @brief Whether a legacy (SDDS1-5) reader can read this string parameter definition. */
+static int32_t legacyParameterHeaderFits(const PARAMETER_DEFINITION *d, const char *fixed) {
+  static const char *names[3] = {"symbol", "units", "description"};
+  const char *values[3];
+  size_t length = strlen("&parameter ") + strlen("&end\n");
+  int i;
+  values[0] = d->symbol; values[1] = d->units; values[2] = d->description;
+  length += legacyNamelistFieldLength("name", d->name);
+  for (i = 0; i < 3; i++)
+    if (values[i] && !SDDS_StringIsBlank((char *)values[i])) length += legacyNamelistFieldLength(names[i], values[i]);
+  length += legacyNamelistFieldLength("type", "string");
+  length += legacyNamelistFieldLength("fixed_value", fixed);
+  /* The legacy reader accepts a definition line of up to SDDS_MAXLINE bytes including its newline. */
+  return length <= SDDS_MAXLINE;
 }
 
 /** @brief Configure an explicit conversion in a newly constructed output layout only. */
@@ -630,7 +709,7 @@ int32_t SDDS_ConfigureEnumConversion(SDDS_DATASET *target, int32_t kind, int32_t
       free(scan);
       label = decodedFixed;
     } else if (sourceType == SDDS_ENUM) {
-      if (!parseFixedEnumCode(*fixed, &code) || !(label = sddsEnumLabel(*definition, code))) goto fixedError;
+      if (!SDDS_ParseEnumCode(*fixed, &code) || !(label = sddsEnumLabel(*definition, code))) goto fixedError;
     } else {
       char *end;
       intmax_t value;
@@ -646,10 +725,12 @@ int32_t SDDS_ConfigureEnumConversion(SDDS_DATASET *target, int32_t kind, int32_t
     }
     if (targetType != SDDS_STRING) { snprintf(number, sizeof(number), "%" PRId32, code); label = number; }
     if (targetType == SDDS_STRING) {
-      size_t i, length = strlen(label);
-      if (length > (SIZE_MAX - 1) / 4 || !(newFixed = malloc(4 * length + 1))) goto fixedError;
-      for (i = 0; i < length; i++) snprintf(newFixed + 4 * i, 5, "\\%03o", (unsigned char)label[i]);
-      newFixed[4 * length] = 0;
+      if (!(newFixed = escapeLegacyFixedString(label))) goto fixedError;
+      if (!legacyParameterHeaderFits(target->layout.parameter_definition + index, newFixed)) {
+        SDDS_FreeEnumDefinition(parsed); free(newFixed); free(decodedFixed);
+        SDDS_SetError("Fixed enum label is too long for a string fixed value in an SDDS1-5 header; make the parameter page data first (SDDS_ConfigureEnumConversion)");
+        return 0;
+      }
     } else if (!SDDS_CopyString(&newFixed, label)) goto fixedError;
     free(decodedFixed); decodedFixed = NULL;
   }

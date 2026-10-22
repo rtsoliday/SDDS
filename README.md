@@ -44,7 +44,9 @@ sudo port install zlib zstd xz hdf5 libaec gsl libpng gd2 lerc libdeflate tiff q
 - Install GNU Make through Cygwin or Strawberry Perl. The launcher checks
   `C:\cygwin64\bin\make.exe` and `C:\Strawberry\c\bin\make.exe`.
 - Install [Microsoft MPI](https://learn.microsoft.com/en-us/message-passing-interface/microsoft-mpi)
-  if MPI support is needed.
+  (both the runtime and the SDK) if MPI support is needed. MPI is enabled only
+  when the SDK's `Include/mpi.h` and `Lib/x64/msmpi.lib` are found, via
+  `MSMPI_INC`/`MSMPI_LIB64` or the standard SDK locations.
 - Install Qt 6.12.0 LTS for MSVC 2022 in `C:\Qt\6.12.0\msvc2022_64`.
 - Install and build GNU Scientific Library:
 
@@ -161,6 +163,11 @@ To select another installation, set `PKG_CONFIG` and, if needed,
 `PKG_CONFIG_PATH` explicitly, for example `make -j4 PKG_CONFIG=/path/to/pkg-config`.
 Run `make clean` before switching between host and container builds or Qt
 installations, then rebuild in the selected shell.
+
+`CC`, `CXX`, `CPPFLAGS`, `CXXFLAGS` and `LDLIBS` from the environment (for
+example from an activated Conda compiler package) are ignored, so the platform
+defaults are always used. Override them on the make command line, for example
+`make -j CC=clang`, or add flags with `EXTRA_CFLAGS`/`EXTRA_CXXFLAGS`.
 
 ## Usage
 

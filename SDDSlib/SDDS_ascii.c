@@ -1850,19 +1850,12 @@ int32_t SDDS_ScanData(char *string, int32_t type, int32_t field_length, void *da
       return (1);
     }
     break;
-  case SDDS_ENUM: {
-    char *end;
-    intmax_t code;
-    errno = 0;
-    code = strtoimax(buffer, &end, 10);
-    while (*end && isspace((unsigned char)*end)) end++;
-    if (!errno && end != buffer && !*end && code >= INT32_MIN && code <= INT32_MAX && *buffer != '+') {
-      ((int32_t *)data)[index] = (int32_t)code;
+  case SDDS_ENUM:
+    if (SDDS_ParseEnumCode(buffer, ((int32_t *)data) + index)) {
       free(buffer);
       return 1;
     }
     break;
-  }
   case SDDS_LONG:
     if (sscanf(buffer, "%" SCNd32, ((int32_t *)data) + index) == 1) {
       if (buffer)
@@ -2071,19 +2064,12 @@ int32_t SDDS_ScanData2(char *string, char **pstring, int32_t *strlength, int32_t
       return (1);
     }
     break;
-  case SDDS_ENUM: {
-    char *end;
-    intmax_t code;
-    errno = 0;
-    code = strtoimax(buffer, &end, 10);
-    while (*end && isspace((unsigned char)*end)) end++;
-    if (!errno && end != buffer && !*end && code >= INT32_MIN && code <= INT32_MAX && *buffer != '+') {
-      ((int32_t *)data)[index] = (int32_t)code;
+  case SDDS_ENUM:
+    if (SDDS_ParseEnumCode(buffer, ((int32_t *)data) + index)) {
       free(buffer);
       return 1;
     }
     break;
-  }
   case SDDS_LONG:
     if (sscanf(buffer, "%" SCNd32, ((int32_t *)data) + index) == 1) {
       if (buffer)

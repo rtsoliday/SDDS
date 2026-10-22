@@ -603,9 +603,30 @@ static QVariant enumChoices(const SDDS_ENUM_DEFINITION *definition) {
   return choices;
 }
 
+/** The dictionary itself, so validation uses its indexed label lookup instead of a choice list. */
+static constexpr int EnumDefinitionRole = Qt::UserRole + 147;
+
+static QVariant enumDefinitionData(const SDDS_ENUM_DEFINITION *definition) {
+  return definition ? QVariant::fromValue(const_cast<void *>(static_cast<const void *>(definition))) : QVariant();
+}
+
+/** A label and its code; one arg call, so a label containing %1 is shown literally. */
+static QString enumChoiceText(const QString &label, int32_t code) {
+  return QStringLiteral("%1 (%2)").arg(label, QString::number(code));
+}
+
 static QString enumDisplay(const SDDS_ENUM_DEFINITION *definition, const QString &label) {
   int32_t code;
-  return enumLabelCode(definition, label, &code) ? QStringLiteral("%1 (%2)").arg(label).arg(code) : label;
+  return enumLabelCode(definition, label, &code) ? enumChoiceText(label, code) : label;
+}
+
+/**
+ * Text for cells the editor creates.  SDDS zero-initializes new values, so an
+ * enum cell starts as the state of code 0; without one it stays blank and
+ * Save asks for a state to be chosen.
+ */
+static QString newCellText(int32_t type, const SDDS_ENUM_DEFINITION *definition) {
+  return type == SDDS_ENUM ? QString::fromUtf8(SDDS_EnumCodeToLabel(definition, 0)) : QString();
 }
 
 static QString sddsValueToString(const void *data, int64_t index, int32_t type, const SDDS_ENUM_DEFINITION *definition = nullptr) {
@@ -751,7 +772,11 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
     const int32_t type = pdef.type;
     int32_t enumCode;
     if (!validateTextForType(val, type, false) || (type == SDDS_ENUM && !enumLabelCode(pdef.enum_definition, val, &enumCode))) {
-      if (errorText) {
+      if (errorText && type == SDDS_ENUM && val.isEmpty()) {
+        *errorText = QObject::tr("Page %1: parameter '%2' has no enum state; choose one of its declared labels")
+                         .arg(pageIndex + 1)
+                         .arg(QString::fromLocal8Bit(pdef.name));
+      } else if (errorText) {
         *errorText = QObject::tr("Page %1: parameter '%2' has invalid value '%3' for type %4")
                          .arg(pageIndex + 1)
                          .arg(QString::fromLocal8Bit(pdef.name))
@@ -790,7 +815,12 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
         const QString &cell = pd.columns[c][r];
         int32_t enumCode;
         if (!validateTextForType(cell, type, false) || (type == SDDS_ENUM && !enumLabelCode(layout.column_definition[c].enum_definition, cell, &enumCode))) {
-          if (errorText) {
+          if (errorText && type == SDDS_ENUM && cell.isEmpty()) {
+            *errorText = QObject::tr("Page %1: column '%2', row %3 has no enum state; choose one of its declared labels")
+                             .arg(pageIndex + 1)
+                             .arg(QString::fromLocal8Bit(layout.column_definition[c].name))
+                             .arg(r + 1);
+          } else if (errorText) {
             const char *name = layout.column_definition[c].name;
             *errorText = QObject::tr("Page %1: column '%2', row %3 has invalid value '%4' for type %5")
                              .arg(pageIndex + 1)
@@ -845,7 +875,12 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
         const QString &cell = as.values[i];
         int32_t enumCode;
         if (!validateTextForType(cell, type, false) || (type == SDDS_ENUM && !enumLabelCode(adef.enum_definition, cell, &enumCode))) {
-          if (errorText) {
+          if (errorText && type == SDDS_ENUM && cell.isEmpty()) {
+            *errorText = QObject::tr("Page %1: array '%2', element %3 has no enum state; choose one of its declared labels")
+                             .arg(pageIndex + 1)
+                             .arg(QString::fromLocal8Bit(adef.name))
+                             .arg(i + 1);
+          } else if (errorText) {
             *errorText = QObject::tr("Page %1: array '%2', element %3 has invalid value '%4' for type %5")
                              .arg(pageIndex + 1)
                              .arg(QString::fromLocal8Bit(adef.name))
@@ -934,12 +969,12 @@ static bool validateTextForType(const QString &text, int type,
 /** Validate categorical labels before creating undo commands or undo macros. */
 static bool validateEnumCellText(const QModelIndex &index, const QString &text,
                                  bool showMessage = false) {
-  const QVariant choices = index.data(EnumChoicesRole);
-  if (!choices.isValid())
+  const QVariant definition = index.data(EnumDefinitionRole);
+  if (!definition.isValid())
     return true;
-  for (const QVariant &choice : choices.toList())
-    if (choice.toMap().value(QStringLiteral("label")).toString() == text)
-      return true;
+  int32_t code;
+  if (enumLabelCode(static_cast<const SDDS_ENUM_DEFINITION *>(definition.value<void *>()), text, &code))
+    return true;
   if (showMessage)
     QMessageBox::warning(nullptr, QObject::tr("SDDS"),
                          QObject::tr("Value must match a declared enum label"));
@@ -972,15 +1007,16 @@ static int dimProduct(const QVector<int> &dims) {
 
 /**
  * Copy array values into a new shape so every surviving element keeps its
- * coordinates (SDDS stores the last dimension fastest).  New cells are empty.
+ * coordinates (SDDS stores the last dimension fastest).  New cells hold fill.
  * Dimensions added or removed at the end have index 0, matching the length-1
  * dimensions the attribute editor appends.
  */
 static QVector<QString> reshapeArrayValues(const QVector<QString> &values,
                                            const QVector<int> &oldDims,
                                            const QVector<int> &newDims,
-                                           int newSize) {
-  QVector<QString> result(std::max(0, newSize));
+                                           int newSize,
+                                           const QString &fill = QString()) {
+  QVector<QString> result(std::max(0, newSize), fill);
   if (oldDims.isEmpty() || newDims.isEmpty() || dimProduct(oldDims) != values.size()) {
     for (int i = 0; i < result.size() && i < values.size(); ++i)
       result[i] = values[i];
@@ -4386,6 +4422,8 @@ public:
     }
     if (role == EnumChoicesRole && index.row() >= 0 && index.row() < dataset->layout.n_parameters)
       return enumChoices(dataset->layout.parameter_definition[index.row()].enum_definition);
+    if (role == EnumDefinitionRole && index.row() >= 0 && index.row() < dataset->layout.n_parameters)
+      return enumDefinitionData(dataset->layout.parameter_definition[index.row()].enum_definition);
     if (role != Qt::DisplayRole && role != Qt::EditRole)
       return QVariant();
     if (*currentPage < 0 || *currentPage >= pages->size())
@@ -4781,6 +4819,8 @@ public:
     }
     if (role == EnumChoicesRole && index.column() >= 0 && index.column() < dataset->layout.n_columns)
       return enumChoices(dataset->layout.column_definition[index.column()].enum_definition);
+    if (role == EnumDefinitionRole && index.column() >= 0 && index.column() < dataset->layout.n_columns)
+      return enumDefinitionData(dataset->layout.column_definition[index.column()].enum_definition);
     if (role != Qt::DisplayRole && role != Qt::EditRole && role != Qt::ToolTipRole)
       return QVariant();
     if (*currentPage < 0 || *currentPage >= pages->size())
@@ -5019,6 +5059,8 @@ public:
     }
     if (role == EnumChoicesRole && index.column() >= 0 && index.column() < dataset->layout.n_arrays)
       return enumChoices(dataset->layout.array_definition[index.column()].enum_definition);
+    if (role == EnumDefinitionRole && index.column() >= 0 && index.column() < dataset->layout.n_arrays)
+      return enumDefinitionData(dataset->layout.array_definition[index.column()].enum_definition);
     if (role != Qt::DisplayRole && role != Qt::EditRole)
       return QVariant();
     if (*currentPage < 0 || *currentPage >= pages->size())
@@ -5165,6 +5207,19 @@ private:
   int maxLen;
 };
 
+/**
+ * Enum cell editor.  A wheel turned over the open editor scrolls the table
+ * instead of silently changing the stored state; once the popup is shown its
+ * list receives and scrolls with the wheel itself.
+ */
+class EnumEditorBox : public QComboBox {
+public:
+  explicit EnumEditorBox(QWidget *parent = nullptr) : QComboBox(parent) {}
+
+protected:
+  void wheelEvent(QWheelEvent *event) override { event->ignore(); }
+};
+
 class SDDSItemDelegate : public QStyledItemDelegate {
 public:
   using TypeFunc = std::function<int(const QModelIndex &)>;
@@ -5177,11 +5232,11 @@ public:
                         const QModelIndex &index) const override {
     const QVariantList choices = index.data(EnumChoicesRole).toList();
     if (!choices.isEmpty()) {
-      QComboBox *combo = new QComboBox(parent);
+      QComboBox *combo = new EnumEditorBox(parent);
       for (const QVariant &choice : choices) {
         const QVariantMap entry = choice.toMap();
         const QString label = entry.value(QStringLiteral("label")).toString();
-        combo->addItem(QStringLiteral("%1 (%2)").arg(label).arg(entry.value(QStringLiteral("code")).toInt()), label);
+        combo->addItem(enumChoiceText(label, entry.value(QStringLiteral("code")).toInt()), label);
       }
       return combo;
     }
@@ -7410,10 +7465,16 @@ void SDDSEditor::deleteCells() {
     return;
   bool macroStarted = false;
   bool changed = false;
+  int enumCells = 0;
   QAbstractItemModel *model = view->model();
   for (const QModelIndex &idx : indexes) {
     if (!idx.isValid())
       continue;
+    // An enum value is always one of its declared states, so it cannot be blanked.
+    if (!validateEnumCellText(idx, QString())) {
+      ++enumCells;
+      continue;
+    }
     if (!canApplyCellEdit(model, idx, QString()))
       continue;
     if (undoStack && !macroStarted) {
@@ -7426,6 +7487,9 @@ void SDDSEditor::deleteCells() {
     undoStack->endMacro();
   if (changed)
     markDirty();
+  if (enumCells > 0)
+    message(tr("Delete left %1 enum cell(s) unchanged; an enum value must be one of its declared states.")
+                .arg(enumCells));
 }
 
 void SDDSEditor::openFile() {
@@ -10208,16 +10272,34 @@ void SDDSEditor::commitModels() {
     int expected = dimProduct(as.dims);
     if (expected < 0)
       continue;
-    if (expected != as.values.size())
+    if (expected != as.values.size()) {
+      const int old = as.values.size();
       as.values.resize(expected);
+      const QString fill = newCellText(dataset.layout.array_definition[a].type,
+                                       dataset.layout.array_definition[a].enum_definition);
+      for (int i = old; i < expected; ++i)
+        as.values[i] = fill;
+    }
   }
 }
 
-/** Replace enum metadata through an independently owned layout; page labels retain meaning. */
-bool SDDSEditor::replaceEnumMapping(int kind, int index, const QString &mapping) {
+/**
+ * Replace enum metadata through an independently owned layout; page labels retain meaning.
+ * Only the states assigned to the remapped element must exist in the new dictionary, so
+ * blank cells (here or elsewhere) do not block adding the state they need.  A parameter
+ * edit passes the fixed label it applies next: the old fixed value is dropped before the
+ * conversion, so the new dictionary need not keep the old fixed label.
+ */
+bool SDDSEditor::replaceEnumMapping(int kind, int index, const QString &mapping,
+                                    const QString *newFixedLabel) {
   SDDS_DATASET fresh = {};
   if (!SDDS_InitializeCopy(&fresh, &dataset, nullptr, const_cast<char *>("m"))) return false;
   fresh.mode = SDDS_WRITEMODE;
+  if (kind == 1 && newFixedLabel && index >= 0 && index < fresh.layout.n_parameters &&
+      index < fresh.original_layout.n_parameters && fresh.original_layout.parameter_definition &&
+      fresh.layout.parameter_definition[index].fixed_value)
+    replaceSharedLayoutString(&fresh.layout.parameter_definition[index].fixed_value,
+                              &fresh.original_layout.parameter_definition[index].fixed_value, QString());
   const QByteArray encoded = mapping.toUtf8();
   if (mapping.contains(QChar(0)) || !SDDS_ConfigureEnumConversion(&fresh, kind, index, SDDS_ENUM, encoded.constData())) {
     SDDS_Terminate(&fresh);
@@ -10226,13 +10308,52 @@ bool SDDSEditor::replaceEnumMapping(int kind, int index, const QString &mapping)
     return false;
   }
   fresh.mode = SDDS_MEMMODE;
+  const SDDS_ENUM_DEFINITION *definition =
+      kind == 0 ? fresh.layout.column_definition[index].enum_definition
+      : kind == 1 ? fresh.layout.parameter_definition[index].enum_definition
+                  : fresh.layout.array_definition[index].enum_definition;
+  const char *name = kind == 0 ? fresh.layout.column_definition[index].name
+                     : kind == 1 ? fresh.layout.parameter_definition[index].name
+                                 : fresh.layout.array_definition[index].name;
+  auto undeclared = [definition](const QString &label) {
+    int32_t code;
+    return !label.isEmpty() && !enumLabelCode(definition, label, &code);
+  };
   QString error;
-  for (int pg = 0; pg < pages.size(); ++pg)
-    if (!validatePageForWrite(fresh.layout, pages[pg], pg, &error)) {
-      SDDS_Terminate(&fresh);
-      QMessageBox::warning(this, tr("SDDS"), error);
-      return false;
+  for (int pg = 0; pg < pages.size() && error.isEmpty(); ++pg) {
+    const PageStore &pd = pages[pg];
+    const QVector<QString> *values = nullptr;
+    if (kind == 0 && index < pd.columns.size())
+      values = &pd.columns[index];
+    else if (kind == 2 && index < pd.arrays.size())
+      values = &pd.arrays[index].values;
+    int position = -1;
+    QString label;
+    if (values) {
+      for (int i = 0; i < values->size() && position < 0; ++i)
+        if (undeclared((*values)[i]))
+          position = i;
+      if (position >= 0)
+        label = (*values)[position];
+    } else if (kind == 1 && index < pd.parameters.size() &&
+               !(newFixedLabel && !newFixedLabel->isEmpty()) && undeclared(pd.parameters[index])) {
+      // A new fixed label replaces the value on every page, so the old one need not survive.
+      position = 0;
+      label = pd.parameters[index];
     }
+    if (position < 0)
+      continue;
+    const QString where = kind == 0 ? tr("column '%1', row %2").arg(QString::fromLocal8Bit(name)).arg(position + 1)
+                          : kind == 1 ? tr("parameter '%1'").arg(QString::fromLocal8Bit(name))
+                                      : tr("array '%1', element %2").arg(QString::fromLocal8Bit(name)).arg(position + 1);
+    error = tr("Page %1: %2 uses state '%3', which the new enum mapping does not declare")
+                .arg(QString::number(pg + 1), where, truncateForMessage(label));
+  }
+  if (!error.isEmpty()) {
+    SDDS_Terminate(&fresh);
+    QMessageBox::warning(this, tr("SDDS"), error);
+    return false;
+  }
   SDDS_Terminate(&dataset);
   dataset = fresh;
   return true;
@@ -10338,7 +10459,8 @@ void SDDSEditor::editParameterAttributes() {
   if (!captureStructuralSnapshot(this, &before))
     return;
   if (def->type == SDDS_ENUM && QString::fromUtf8(def->enum_values) != enumMapping.text()) {
-    if (!replaceEnumMapping(1, row, enumMapping.text())) return;
+    const QString fixedLabel = fixed.text();
+    if (!replaceEnumMapping(1, row, enumMapping.text(), &fixedLabel)) return;
     def = &dataset.layout.parameter_definition[row];
   }
   PARAMETER_DEFINITION *savedDef =
@@ -10749,7 +10871,8 @@ void SDDSEditor::editArrayAttributesAt(int col) {
     // Keep each element at its indices, as Resize does; dropped dimensions keep index 0.
     const int newSize = dimProduct(newDims);
     if (newSize >= 0)
-      as.values = reshapeArrayValues(as.values, as.dims, newDims, newSize);
+      as.values = reshapeArrayValues(as.values, as.dims, newDims, newSize,
+                                     newCellText(def->type, def->enum_definition));
     as.dims = newDims;
   }
   def->field_length = savedDef->field_length = length.value();
@@ -11723,7 +11846,8 @@ void SDDSEditor::resizeArray(int column) {
   }
   if (newDims == as.dims && newSize == as.values.size())
     return; // Keep history and the saved state when the shape is unchanged.
-  as.values = reshapeArrayValues(as.values, as.dims, newDims, newSize);
+  as.values = reshapeArrayValues(as.values, as.dims, newDims, newSize,
+                                 newCellText(def->type, def->enum_definition));
   as.dims = newDims;
 
   populateModels();
@@ -12669,8 +12793,10 @@ void SDDSEditor::insertColumnRows() {
       int pos = insertPos >= 0 && insertPos <= pd.columns[0].size()
                    ? insertPos
                    : pd.columns[0].size();
-      for (QVector<QString> &col : pd.columns)
-        col.insert(pos, rowsToAdd, QString());
+      for (int c = 0; c < pd.columns.size(); ++c) {
+        const COLUMN_DEFINITION *def = c < dataset.layout.n_columns ? &dataset.layout.column_definition[c] : nullptr;
+        pd.columns[c].insert(pos, rowsToAdd, def ? newCellText(def->type, def->enum_definition) : QString());
+      }
     }
   }
 
@@ -13331,6 +13457,11 @@ void SDDSEditor::insertPage() {
 
   PageStore pd;
   pd.parameters = QVector<QString>(dataset.layout.n_parameters);
+  for (int i = 0; i < dataset.layout.n_parameters; ++i) {
+    const PARAMETER_DEFINITION &def = dataset.layout.parameter_definition[i];
+    // Fixed values are shown from the definition on every page.
+    pd.parameters[i] = def.fixed_value ? fixedValueForDisplay(def) : newCellText(def.type, def.enum_definition);
+  }
 
   int ccount = dataset.layout.n_columns;
   pd.columns.resize(ccount);
@@ -13338,7 +13469,8 @@ void SDDSEditor::insertPage() {
   if (currentPage >= 0 && currentPage < pages.size() && !pages[currentPage].columns.isEmpty())
     rows = pages[currentPage].columns[0].size();
   for (int c = 0; c < ccount; ++c)
-    pd.columns[c].resize(rows);
+    pd.columns[c] = QVector<QString>(rows, newCellText(dataset.layout.column_definition[c].type,
+                                                      dataset.layout.column_definition[c].enum_definition));
 
   int acount = dataset.layout.n_arrays;
   pd.arrays.resize(acount);
@@ -13354,7 +13486,8 @@ void SDDSEditor::insertPage() {
                            tr("Array dimensions are too large."));
       return;
     }
-    pd.arrays[a].values.resize(size);
+    pd.arrays[a].values = QVector<QString>(size, newCellText(dataset.layout.array_definition[a].type,
+                                                             dataset.layout.array_definition[a].enum_definition));
   }
 
   int insertPos = currentPage + 1;

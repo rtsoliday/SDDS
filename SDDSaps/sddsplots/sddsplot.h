@@ -830,6 +830,7 @@ typedef struct {
 } PLOT_SPEC;
 
 void determine_labels(PLOT_SPEC *plspec);
+long edit_plot_label(char *buffer, size_t bufferSize, char *edit);
 void determine_panel_labels(PLOT_SPEC *plspec, long panel_index);
 void determine_dataset_labels(PLOT_SPEC *plspec, SDDS_TABLE *table, PLOT_DATA *dataset);
 void determine_dataset_tag(PLOT_SPEC *plspec, SDDS_TABLE *table, PLOT_DATA *dataset);

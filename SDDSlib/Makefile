@@ -37,7 +37,8 @@ ifeq ($(OS), Windows)
 ENUM_TEST_LIBS = $(LIBRARY_OBJS) $(addprefix $(LIB_DIR)/,$(LIBRARY_LIBS))
 ENUM_TEST_OUTPUT = /Fo$@.obj /Fe$@
 else
-ENUM_TEST_LIBS = -L$(LIB_DIR) -lSDDS1 -lrpnlib -lmdbmth -lmdblib $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm
+# Link the archive built here, not a previously installed copy.
+ENUM_TEST_LIBS = $(LIBRARY) -L$(LIB_DIR) -lrpnlib -lmdbmth -lmdblib $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm
 ENUM_TEST_OUTPUT = -o $@
 endif
 
@@ -45,7 +46,8 @@ $(ENUM_TEST): test_sdds_enum.c $(LIBRARY)
 	$(CC) $(CFLAGS) $(ENUM_TEST_OUTPUT) test_sdds_enum.c $(ENUM_TEST_LIBS)
 
 .PHONY: enum-test
-enum-test: $(ENUM_TEST)
+# Installing keeps later consumers (the SDDSlib++ enum test) on this archive.
+enum-test: $(ENUM_TEST) install-libraries
 	mkdir -p $(OBJ_DIR)/test-artifacts/enum/edgecases $(OBJ_DIR)/test-artifacts/enum/api
 	$(ENUM_TEST) $(OBJ_DIR)/test-artifacts/enum
 
@@ -59,7 +61,7 @@ endif
 endif
 ENUM_SANITIZER_TEST = $(OBJ_DIR)/test_sdds_enum_sanitized
 $(ENUM_SANITIZER_TEST): test_sdds_enum.c $(LIBRARY_SRC) ../include/SDDSenum.h ../include/SDDS.h | $(OBJ_DIR)
-	$(SANITIZER_CC) $(CFLAGS) $(SANITIZER_RUNTIME_FLAGS) -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -o $@ test_sdds_enum.c $(LIBRARY_SRC) $(filter-out -lSDDS1,$(ENUM_TEST_LIBS))
+	$(SANITIZER_CC) $(CFLAGS) $(SANITIZER_RUNTIME_FLAGS) -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -o $@ test_sdds_enum.c $(LIBRARY_SRC) $(filter-out $(LIBRARY),$(ENUM_TEST_LIBS))
 .PHONY: enum-sanitizer-test
 enum-sanitizer-test: $(ENUM_SANITIZER_TEST)
 	mkdir -p $(OBJ_DIR)/test-artifacts/enum-sanitized/edgecases $(OBJ_DIR)/test-artifacts/enum-sanitized/api

@@ -44,16 +44,18 @@ endif
 
 include ../Makefile.build
 
+# Match the shared compile rule, including header dependency tracking.
 $(OBJ_DIR)/%.mpi.$(OBJEXT): %.c
-	$(CC) $(CFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(EXTRA_CFLAGS) $(DEPFLAGS) $(if $(filter $(notdir $<), $(LIBRARY_SRC)),$(LIBRARY_CFLAGS)) -c $< $(OUTPUT)
 
 MPI_ENUM_TEST = $(OBJ_DIR)/test_sdds_enum_mpi$(EXEEXT)
 MPIEXEC ?= $(dir $(lastword $(MPI_CC)))mpiexec
+# Link the archive built here, not a previously installed copy.
 ifeq ($(OS), Windows)
-MPI_ENUM_LIBS = $(LIB_DIR)/SDDS1mpi.lib $(LIB_DIR)/rpnlib.lib $(LIB_DIR)/mdbmth.lib $(LIB_DIR)/mdblib.lib $(LIBRARY_LIBS) $(WIN_MPI_LIB)
+MPI_ENUM_LIBS = $(LIBRARY) $(LIB_DIR)/rpnlib.lib $(LIB_DIR)/mdbmth.lib $(LIB_DIR)/mdblib.lib $(LIBRARY_LIBS) $(WIN_MPI_LIB)
 MPI_ENUM_OUTPUT = /Fe$@
 else
-MPI_ENUM_LIBS = -L$(LIB_DIR) -lSDDS1mpi -lrpnlib -lmdbmth -lmdblib $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm
+MPI_ENUM_LIBS = $(LIBRARY) -L$(LIB_DIR) -lrpnlib -lmdbmth -lmdblib $(LZMA_LIB) $(GSL_LIB) $(GSLCBLAS_LIB) $(Z_LIB) -lm
 MPI_ENUM_OUTPUT = -o $@
 endif
 
@@ -61,6 +63,6 @@ $(MPI_ENUM_TEST): test_sdds_enum_mpi.c $(LIBRARY)
 	$(CC) $(CFLAGS) $(MPI_ENUM_OUTPUT) test_sdds_enum_mpi.c $(MPI_ENUM_LIBS)
 
 .PHONY: enum-test
-enum-test: $(MPI_ENUM_TEST)
+enum-test: $(MPI_ENUM_TEST) install-libraries
 	mkdir -p $(OBJ_DIR)/test-artifacts/enum-mpi
 	$(MPIEXEC) -n 2 $(MPI_ENUM_TEST) $(OBJ_DIR)/test-artifacts/enum-mpi

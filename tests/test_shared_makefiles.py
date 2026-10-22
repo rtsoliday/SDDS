@@ -5,6 +5,7 @@ No compiler wrappers or runtime injection are used.
 """
 
 from pathlib import Path
+import filecmp
 import os
 import platform
 import shlex
@@ -20,6 +21,20 @@ ROOT = Path(__file__).resolve().parents[1]
 pytestmark = pytest.mark.skipif(
     platform.system() not in ("Linux", "Darwin"), reason="Native Unix build checks"
 )
+
+
+def shared_source(name):
+    """Locate a sibling repository or component; SDDS is always this checkout."""
+    repository, _, component = name.partition("/")
+    root = ROOT if repository == "SDDS" else ROOT.parent / repository
+    return root / component if component else root
+
+
+def require_current_shared_rules(source, repository):
+    """Checks of newer shared behaviour skip siblings not yet synchronized."""
+    for name in ("Makefile.rules", "Makefile.build"):
+        if not filecmp.cmp(source / name, ROOT / name, shallow=False):
+            pytest.skip(f"{repository} has not synchronized the shared {name}")
 
 
 @pytest.fixture
@@ -157,7 +172,7 @@ def test_mixed_library_sources_and_header_rebuild(build_tree):
 @pytest.mark.parametrize("kind", ("dll", "static", "python"))
 def test_windows_library_objects_and_install_recipes(build_tree, repository, kind):
     """Library object names, MSVC links and DLL installation retain their modes."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.build").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     tree = build_tree
@@ -274,7 +289,7 @@ def test_custom_link_and_target_flags(build_tree):
 @pytest.mark.parametrize("architecture", ("x86_64", "aarch64", "arm64"))
 def test_linux_architecture_flags(build_tree, repository, architecture):
     """ARM compilation, linking and Fortran must not inherit Intel options."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     tree = build_tree
@@ -298,7 +313,7 @@ def test_linux_architecture_flags(build_tree, repository, architecture):
 @pytest.mark.parametrize("local_override", (False, True), ids=("shared-qt-flags", "local-qt-flags"))
 def test_windows_qt_flags(build_tree, repository, development, local_override):
     """Qt requirements and local replacements survive developer finalization."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     tree = build_tree
@@ -351,7 +366,7 @@ def test_local_flags_after_rules_in_development_build(build_tree):
 @pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
 def test_discovered_dependency_headers(build_tree, repository):
     """A real compile can use discovered dependency headers in every repository."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     tree = build_tree
@@ -384,7 +399,7 @@ def test_discovered_dependency_headers(build_tree, repository):
 @pytest.mark.parametrize("windows", (False, True), ids=("native-metadata", "windows-metadata"))
 def test_python_metadata(build_tree, repository, windows):
     """The real interpreter supplies native and Windows extension metadata."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     tree = build_tree
@@ -414,11 +429,16 @@ def test_python_metadata(build_tree, repository, windows):
 @pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
 def test_windows_mpi_discovery_without_python(build_tree, repository):
     """Windows SDK discovery does not need to run a Python interpreter."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     tree = build_tree
-    (tree / "C:" / "MicrosoftMPI").mkdir(parents=True)
+    # Empty SDK markers describe availability only; nothing compiles or links.
+    sdk = tree / "C:" / "MicrosoftMPI"
+    (sdk / "Include").mkdir(parents=True)
+    (sdk / "Lib" / "x64").mkdir(parents=True)
+    (sdk / "Include" / "mpi.h").touch()
+    (sdk / "Lib" / "x64" / "msmpi.lib").touch()
     makefile = tree / "Makefile"
     makefile.write_text(makefile.read_text().replace(str(ROOT), str(source)))
     values = query_make_variables(
@@ -433,29 +453,110 @@ def test_windows_mpi_discovery_without_python(build_tree, repository):
 
 
 @pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
-def test_environment_cppflags_reach_compilation(build_tree, repository, monkeypatch):
-    """Environment preprocessor flags survive shared defaults and local additions."""
-    source = ROOT.parent / repository
+@pytest.mark.parametrize("layout", ("runtime-only", "default-sdk", "sdk-environment", "missing-sdk-header"))
+def test_windows_mpi_sdk_discovery(build_tree, repository, layout, monkeypatch):
+    """MS-MPI needs SDK headers; SDK paths with spaces stay single arguments."""
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
+    require_current_shared_rules(source, repository)
+    for name in ("MPI_CC", "MSMPI_INC", "MSMPI_LIB64", "WIN_MPI_SEARCH"):
+        monkeypatch.delenv(name, raising=False)
+    tree = build_tree
+    makefile = tree / "Makefile"
+    makefile.write_text(makefile.read_text().replace(str(ROOT), str(source)))
+    # Empty SDK markers describe availability only; nothing compiles or links.
+    (tree / "C:" / "Program Files" / "Microsoft MPI" / "Bin").mkdir(parents=True)
+    sdk = tree / "C:" / "Program Files (x86)" / "Microsoft SDKs" / "MPI"
+    if layout == "sdk-environment":
+        sdk = tree / "MS MPI SDK"
+        monkeypatch.setenv("MSMPI_INC", "MS MPI SDK\\Include\\")
+        monkeypatch.setenv("MSMPI_LIB64", "MS MPI SDK\\Lib\\x64\\")
+    if layout != "runtime-only":
+        (sdk / "Include").mkdir(parents=True)
+        (sdk / "Lib" / "x64").mkdir(parents=True)
+        (sdk / "Lib" / "x64" / "msmpi.lib").touch()
+        if layout != "missing-sdk-header":
+            (sdk / "Include" / "mpi.h").touch()
+    values = query_make_variables(
+        tree, ("MPI_CC", "WIN_MPI_INC", "WIN_MPI_LIB"),
+        "OS=Windows", "ARCH=x86_64",
+        "EPICS_REQUIRED_LIBS=", "PYTHON=not-required-for-mpi-discovery",
+    )
+    if layout in ("runtime-only", "missing-sdk-header"):
+        assert values == {"MPI_CC": "", "WIN_MPI_INC": "", "WIN_MPI_LIB": ""}
+        return
+    root = "MS MPI SDK" if layout == "sdk-environment" else "C:/Program Files (x86)/Microsoft SDKs/MPI"
+    assert values["MPI_CC"] == "FOUND"
+    assert values["WIN_MPI_INC"] == f'-I"{root}/Include"'
+    assert values["WIN_MPI_LIB"] == f'"{root}/Lib/x64/msmpi.lib"'
+
+
+@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+def test_environment_compiler_settings_are_ignored(build_tree, repository, monkeypatch):
+    """Ambient compiler settings (for example Conda's) cannot replace the defaults."""
+    source = shared_source(repository)
+    if not (source / "Makefile.rules").is_file():
+        pytest.skip(f"Sibling repository {repository} is not available")
+    require_current_shared_rules(source, repository)
     tree = build_tree
     makefile = tree / "Makefile"
     makefile.write_text(makefile.read_text().replace(str(ROOT), str(source)))
     main = tree / "main.cc"
     main.write_text(
-        "#ifndef SHARED_CPPFLAGS_ENV\n#error Environment preprocessor flags were lost\n#endif\n"
+        "#ifdef LEAKED_ENVIRONMENT_FLAGS\n#error Environment compiler flags were used\n#endif\n"
+        "#ifndef EXTRA_ENVIRONMENT_FLAGS\n#error EXTRA_CXXFLAGS were lost\n#endif\n"
         + main.read_text()
     )
-    monkeypatch.setenv("CPPFLAGS", "-DSHARED_CPPFLAGS_ENV=1")
+    environment_prefix = tree / "conda-environment"
+    monkeypatch.setenv("CC", str(environment_prefix / "bin" / "x86_64-conda-linux-gnu-cc"))
+    monkeypatch.setenv("CXX", str(environment_prefix / "bin" / "x86_64-conda-linux-gnu-c++"))
+    monkeypatch.setenv("CPPFLAGS", f"-DLEAKED_ENVIRONMENT_FLAGS -isystem {environment_prefix}/include")
+    monkeypatch.setenv("CXXFLAGS", "-O0 -DLEAKED_ENVIRONMENT_FLAGS")
+    monkeypatch.setenv("LDLIBS", "-lleaked_environment_library")
+    # EXTRA_* remains the documented way to add flags.
+    monkeypatch.setenv("EXTRA_CXXFLAGS", "-DEXTRA_ENVIRONMENT_FLAGS")
     run_make(tree, "EPICS_REQUIRED_LIBS=", "AR=ar rcs", "RANLIB=ranlib")
     subprocess.run([str(tree / "bin" / "sample")], check=True)
+    values = query_make_variables(
+        tree, ("CC", "CXX", "CPPFLAGS", "CXXFLAGS", "LDLIBS"),
+        "EPICS_REQUIRED_LIBS=", "CC=command-line-cc",
+    )
+    assert values["CC"] == "command-line-cc"
+    assert "conda" not in values["CXX"]
+    assert "LEAKED" not in values["CPPFLAGS"] + values["CXXFLAGS"]
+    assert {"-O3", "-g", "-Wall"} <= set(values["CXXFLAGS"].split())
+    assert values["LDLIBS"] == ""
+
+
+@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+def test_dry_run_and_question_mode_after_build(build_tree, repository):
+    """An unchanged configuration leaves objects, archives and links current."""
+    source = shared_source(repository)
+    if not (source / "Makefile.rules").is_file():
+        pytest.skip(f"Sibling repository {repository} is not available")
+    require_current_shared_rules(source, repository)
+    tree = build_tree
+    makefile = tree / "Makefile"
+    makefile.write_text(makefile.read_text().replace(str(ROOT), str(source)))
+    arguments = ("EPICS_REQUIRED_LIBS=", "AR=ar rcs", "RANLIB=ranlib")
+    run_make(tree, *arguments)
+    outputs = ["O.test/main.o", "O.test/libanswer.a", f"{tree}/lib/libanswer.a", "O.test/sample"]
+    result = run_make(tree, "-n", *arguments)
+    for command in (" -c ", "printf ", "ar rcs", "-o O.test/sample"):
+        assert command not in result.stdout, result.stdout
+    assert run_make(tree, "-q", *outputs, *arguments, expect_success=False).returncode == 0
+    # A changed configuration is still reported and rebuilt.
+    result = run_make(tree, "-n", "VALUE=43", *arguments)
+    assert "-c main.cc" in result.stdout
+    assert run_make(tree, "-q", *outputs, "VALUE=43", *arguments, expect_success=False).returncode == 1
 
 
 @pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
 @pytest.mark.parametrize("track_makefiles", (True, False), ids=("default", "opt-out"))
 def test_makefile_changes_rebuild_custom_outputs(build_tree, repository, track_makefiles):
     """Recipe edits rebuild custom objects/generated headers without flag changes."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     tree = build_tree
@@ -523,7 +624,7 @@ def test_gsl_link_helper_keeps_missing_deployment_path(build_tree, repository):
     inspector = shutil.which("readelf")
     if not inspector:
         pytest.skip("readelf is required to inspect the linked ELF runtime path")
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     tree = build_tree
@@ -560,7 +661,7 @@ def test_openssl_link_helpers_keep_missing_deployment_path(build_tree, repositor
     inspector = shutil.which("readelf")
     if not inspector:
         pytest.skip("readelf is required to inspect the linked ELF runtime path")
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     tree = build_tree
@@ -595,7 +696,7 @@ def test_openssl_link_helpers_keep_missing_deployment_path(build_tree, repositor
 @pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
 def test_motif_extension_first_lookup(build_tree, repository):
     """Motif and static-Motif dependencies prefer shared libraries across directories."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     tree = build_tree
@@ -634,7 +735,7 @@ def test_motif_extension_first_lookup(build_tree, repository):
 @pytest.mark.parametrize("redirect_install", (False, True), ids=("default", "site-override"))
 def test_configured_extensions_install(build_tree, repository, redirect_install):
     """Every repository installs native outputs using the extensions configuration."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     top = build_tree / "extensions"
@@ -712,7 +813,7 @@ def test_configured_extensions_install(build_tree, repository, redirect_install)
 @pytest.mark.parametrize("scenario", ("missing-base", "missing-libraries", "clean"))
 def test_shared_rules_do_not_require_epics(build_tree, repository, scenario):
     """Shared defaults do not impose EPICS on callers that declare no dependency."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
     base = build_tree / "epics-base"
@@ -750,7 +851,7 @@ def test_shared_rules_do_not_require_epics(build_tree, repository, scenario):
 @pytest.mark.parametrize("scenario", ("missing-base", "missing-libraries", "minimal-inventory"))
 def test_component_epics_requirements(build_tree, component, required, windows, scenario):
     """Real component Makefiles accept minimal SDK inventories and reject missing dependencies."""
-    source = ROOT.parent / component
+    source = shared_source(component)
     if not (source / "Makefile").is_file():
         pytest.skip(f"Sibling component {component} is not available")
     tree = build_tree
@@ -809,7 +910,7 @@ def test_component_epics_requirements(build_tree, component, required, windows, 
 @pytest.mark.parametrize("mode", ("default", "unbundled", "disabled"))
 def test_direct_component_openmp_policy(build_tree, component, makefile, mode):
     """Direct component builds enable bundling and retain command-line overrides."""
-    source = ROOT.parent / component
+    source = shared_source(component)
     if not (source / makefile).is_file():
         pytest.skip(f"Sibling component {component} is not available")
     tree = build_tree
@@ -907,13 +1008,22 @@ def test_darwin_openmp_extension_runtime_install(build_tree, goal):
     ("", True, {"IMPROV_BUILD": "0"}, ("0", "0")),
     ("/site/swing.sh", True, {"IMPROV_BUILD": "0", "SWING_BUILD": "0"}, ("0", "0")),
     ("/site/improv.sh", True, {"IMPROV_BUILD": ""}, ("", "0")),
+    # Swing can see the Improv mount; its scheduler or node name selects Swing.
+    ("", True, {"SLURM_CLUSTER_NAME": "swing"}, ("0", "1")),
+    ("", True, {"LCRC_CLUSTER": "swing-login-01"}, ("0", "1")),
+    ("", True, {"SLURM_CLUSTER_NAME": "improv"}, ("1", "0")),
+    ("", True, {"SLURM_CLUSTER_NAME": "swing", "IMPROV_BUILD": "1"}, ("1", "0")),
+    ("", False, {"SLURM_CLUSTER_NAME": "swing"}, ("0", "0")),
 ))
 def test_shared_linux_site_selection(build_tree, monkeypatch, repository, environment, mounted, overrides, expected):
     """All repositories select the same site libraries and respect explicit choices."""
-    source = ROOT.parent / repository
+    source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
-    for name in ("IMPROV_BUILD", "SWING_BUILD", "MPI_BIN", "IOMP5_LIB", "IOMP5_LIB_DIR"):
+    if {"SLURM_CLUSTER_NAME", "LCRC_CLUSTER"} & set(overrides):
+        require_current_shared_rules(source, repository)
+    for name in ("IMPROV_BUILD", "SWING_BUILD", "MPI_BIN", "IOMP5_LIB", "IOMP5_LIB_DIR",
+                 "SLURM_CLUSTER_NAME", "LCRC_CLUSTER"):
         monkeypatch.delenv(name, raising=False)
     tree = build_tree
     site = tree / "spack"

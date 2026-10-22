@@ -1329,6 +1329,255 @@ static void longHeaderTests(const char *directory) {
   free(name);
 }
 
+/** @brief Compare two optional metadata strings. */
+static int sameText(const char *a, const char *b) {
+  return (!a && !b) || (a && b && !strcmp(a, b));
+}
+
+/**
+ * @brief Application definition strings keep literal backslashes in every output version.
+ * @details Only text read from an SDDS6 file header uses the SDDS6 escape grammar.
+ */
+static void applicationDefinitionStringTests(const char *directory) {
+  static const char *symbol = "y\\_1";
+  static const char *description = "C:\\temp\\new ! x &end y \\\\ z \\q";
+  static const char *units = "m\\s";
+  char path[2048], text[1024];
+  int withEnum, mode;
+  for (withEnum = 0; withEnum < 2; withEnum++) for (mode = SDDS_BINARY; mode <= SDDS_ASCII; mode++) {
+    SDDS_DATASET writer = {0}, reader = {0};
+    int32_t code = 10, dimension = 1, writtenVersion;
+    double number = 2;
+    snprintf(path, sizeof(path), "%s/api/application-strings-%d-%d.sdds", directory, withEnum, mode);
+    CHECK(SDDS_InitializeOutput(&writer, mode, 1, NULL, NULL, path));
+    CHECK(writer.layout.version < 6);
+    snprintf(text, sizeof(text), "&column name=y1, symbol=%s, units=%s, description=\"%s\", type=double &end", symbol, units, description);
+    CHECK(SDDS_ProcessColumnString(&writer, text, 0));
+    snprintf(text, sizeof(text), "&parameter name=p1, symbol=%s, units=%s, description=\"%s\", type=double &end", symbol, units, description);
+    CHECK(SDDS_ProcessParameterString(&writer, text, 0));
+    snprintf(text, sizeof(text), "&array name=a1, symbol=%s, units=%s, description=\"%s\", type=double &end", symbol, units, description);
+    CHECK(SDDS_ProcessArrayString(&writer, text));
+    /* Unknown SDDS6 escapes are not errors for application strings. */
+    CHECK(SDDS_ProcessColumnString(&writer, "&column name=y2, symbol=y\\_2, type=double &end", 0));
+    if (withEnum) {
+      CHECK(SDDS_ProcessColumnString(&writer, "&column name=state, type=enum, enum_values=\"0:OFF,10:ON\" &end", 0));
+      CHECK(SDDS_ProcessParameterString(&writer, "&parameter name=fixedState, type=enum, enum_values=\"0:OFF,10:ON\", fixed_value=10 &end", 0));
+      CHECK(SDDS_ProcessArrayString(&writer, "&array name=states, type=enum, enum_values=\"0:OFF,10:ON\" &end"));
+    }
+    CHECK(!strcmp(writer.layout.column_definition[0].symbol, symbol) && !strcmp(writer.layout.column_definition[0].units, units));
+    CHECK(!strcmp(writer.layout.column_definition[0].description, description));
+    CHECK(!strcmp(writer.layout.parameter_definition[0].description, description));
+    CHECK(!strcmp(writer.layout.array_definition[0].description, description));
+    CHECK(SDDS_WriteLayout(&writer));
+    writtenVersion = writer.layout.version;
+    CHECK(withEnum ? writtenVersion == 6 : writtenVersion < 6);
+    CHECK(writer.original_layout.version == writtenVersion);
+    CHECK(SDDS_StartPage(&writer, 1) && writer.layout.version == writtenVersion);
+    CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_NAME, &number, 1, "y1"));
+    CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_NAME, &number, 1, "y2"));
+    CHECK(SDDS_SetParameter(&writer, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, "p1", number));
+    CHECK(SDDS_SetArray(&writer, "a1", SDDS_CONTIGUOUS_DATA, &number, &dimension));
+    if (withEnum) {
+      CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_NAME, &code, 1, "state"));
+      CHECK(SDDS_SetArray(&writer, "states", SDDS_CONTIGUOUS_DATA, &code, &dimension));
+    }
+    CHECK(SDDS_WritePage(&writer) && SDDS_Terminate(&writer));
+    CHECK(SDDS_InitializeInput(&reader, path) && reader.layout.version == writtenVersion);
+    /* Strings added to a reader of an SDDS6 file also use the application grammar. */
+    SDDS_DeferSavingLayout(&reader, 1);
+    CHECK(SDDS_ProcessColumnString(&reader, "&column name=y3, symbol=y\\_3, type=double &end", SDDS_WRITEONLY_DEFINITION));
+    SDDS_DeferSavingLayout(&reader, 0);
+    CHECK(SDDS_SaveLayout(&reader));
+    CHECK(sameText(reader.layout.column_definition[reader.layout.n_columns - 1].symbol, "y\\_3"));
+    CHECK(SDDS_ReadPage(&reader) == 1);
+    CHECK(sameText(reader.layout.column_definition[0].symbol, symbol) && sameText(reader.layout.column_definition[0].units, units));
+    CHECK(sameText(reader.layout.column_definition[0].description, description));
+    CHECK(sameText(reader.layout.parameter_definition[0].symbol, symbol) && sameText(reader.layout.parameter_definition[0].description, description));
+    CHECK(sameText(reader.layout.array_definition[0].units, units) && sameText(reader.layout.array_definition[0].description, description));
+    CHECK(sameText(reader.layout.column_definition[1].symbol, "y\\_2"));
+    if (withEnum) {
+      CHECK(reader.layout.column_definition[2].type == SDDS_ENUM && *(int32_t *)reader.data[2] == 10);
+      CHECK(!strcmp(reader.layout.parameter_definition[1].fixed_value, "10"));
+    }
+    CHECK(SDDS_Terminate(&reader));
+  }
+}
+
+/** @brief Blank format strings mean "no format" and are omitted from SDDS6 headers. */
+static void blankFormatStringTests(const char *directory) {
+  SDDS_DATASET writer = {0}, reader = {0};
+  char path[2048];
+  int32_t code = 0, dimension = 1;
+  double number = 1;
+  snprintf(path, sizeof(path), "%s/api/blank-format.sdds", directory);
+  CHECK(SDDS_InitializeOutput(&writer, SDDS_ASCII, 1, NULL, NULL, path));
+  CHECK(SDDS_DefineColumn(&writer, "x", NULL, NULL, NULL, "", SDDS_DOUBLE, 0) == 0);
+  CHECK(SDDS_DefineParameter(&writer, "p", NULL, NULL, NULL, " ", SDDS_DOUBLE, NULL) == 0);
+  CHECK(SDDS_DefineArray(&writer, "a", NULL, NULL, NULL, "", SDDS_DOUBLE, 0, 1, NULL) == 0);
+  CHECK(SDDS_DefineEnumColumn(&writer, "state", NULL, NULL, NULL, "", mapping, 0) == 1);
+  CHECK(!writer.layout.column_definition[0].format_string && !writer.layout.parameter_definition[0].format_string);
+  /* Even a blank format stored directly must not reach the SDDS6 header. */
+  CHECK(SDDS_CopyString(&writer.layout.column_definition[0].format_string, ""));
+  CHECK(SDDS_WriteLayout(&writer) && writer.layout.version == 6 && SDDS_StartPage(&writer, 1));
+  CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_NAME, &number, 1, "x"));
+  CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_NAME, &code, 1, "state"));
+  CHECK(SDDS_SetParameter(&writer, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, "p", number));
+  CHECK(SDDS_SetArray(&writer, "a", SDDS_CONTIGUOUS_DATA, &number, &dimension));
+  CHECK(SDDS_WritePage(&writer) && SDDS_Terminate(&writer));
+  CHECK(SDDS_InitializeInput(&reader, path) && SDDS_ReadPage(&reader) == 1);
+  CHECK(!reader.layout.column_definition[0].format_string);
+  CHECK(SDDS_Terminate(&reader));
+}
+
+/** @brief Units of string/character elements are relabelled; enums are rejected. */
+static void stringUnitsConversionTests(const char *directory) {
+  SDDS_DATASET writer = {0}, reader = {0};
+  char path[2048], *text = "label", character = 'q';
+  int32_t dimension = 1;
+  snprintf(path, sizeof(path), "%s/api/string-units-conversion.sdds", directory);
+  CHECK(SDDS_InitializeOutput(&writer, SDDS_ASCII, 1, NULL, NULL, path));
+  CHECK(SDDS_DefineColumn(&writer, "text", NULL, "old", NULL, NULL, SDDS_STRING, 0) == 0);
+  CHECK(SDDS_DefineColumn(&writer, "character", NULL, "old", NULL, NULL, SDDS_CHARACTER, 0) == 1);
+  CHECK(SDDS_DefineParameter(&writer, "textParameter", NULL, "old", NULL, NULL, SDDS_STRING, NULL) == 0);
+  CHECK(SDDS_DefineArray(&writer, "textArray", NULL, "old", NULL, NULL, SDDS_STRING, 0, 1, NULL) == 0);
+  CHECK(SDDS_WriteLayout(&writer) && SDDS_StartPage(&writer, 1));
+  CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_INDEX, &text, 1, 0));
+  CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_INDEX, &character, 1, 1));
+  CHECK(SDDS_SetParameter(&writer, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE, 0, text));
+  CHECK(SDDS_SetArray(&writer, "textArray", SDDS_CONTIGUOUS_DATA, &text, &dimension));
+  CHECK(SDDS_WritePage(&writer) && SDDS_Terminate(&writer));
+  CHECK(SDDS_InitializeInput(&reader, path) && SDDS_ReadPage(&reader) == 1);
+  CHECK(SDDS_SetColumnUnitsConversion(&reader, "text", "new", "old", 2));
+  CHECK(SDDS_SetColumnUnitsConversion(&reader, "character", "new", NULL, 2));
+  CHECK(SDDS_SetParameterUnitsConversion(&reader, "textParameter", "new", "old", 2));
+  CHECK(SDDS_SetArrayUnitsConversion(&reader, "textArray", "new", "old", 2));
+  CHECK(!strcmp(reader.layout.column_definition[0].units, "new") && !strcmp(reader.layout.column_definition[1].units, "new"));
+  CHECK(!strcmp(reader.layout.parameter_definition[0].units, "new") && !strcmp(reader.layout.array_definition[0].units, "new"));
+  CHECK(!strcmp(((char **)reader.data[0])[0], "label") && ((char *)reader.data[1])[0] == 'q');
+  CHECK(!strcmp(*(char **)reader.parameter[0], "label") && !strcmp(((char **)reader.array[0].data)[0], "label"));
+  CHECK(SDDS_Terminate(&reader));
+}
+
+/** @brief Header string formats keep legacy acceptance; formatting a string requires one string conversion. */
+static void stringFormatTests(void) {
+  SDDS_DATASET dataset = {0};
+  char *value = "x", buffer[SDDS_PRINT_BUFLEN];
+  CHECK(SDDS_VerifyPrintfFormat("%s (%s)", SDDS_STRING) && SDDS_VerifyPrintfFormat("%s %d", SDDS_STRING));
+  CHECK(SDDS_VerifyPrintfFormat("%-10.4s|", SDDS_STRING) && !SDDS_VerifyPrintfFormat("%d", SDDS_STRING));
+  CHECK(!SDDS_VerifyStringFormat("%s (%s)") && !SDDS_VerifyStringFormat("%s %d") && SDDS_VerifyStringFormat("%%%-10.4s%%"));
+  CHECK(SDDS_InitializeOutput(&dataset, SDDS_ASCII, 1, NULL, NULL, NULL));
+  CHECK(SDDS_DefineColumn(&dataset, "legacyFormat", NULL, NULL, NULL, "%s (%s)", SDDS_STRING, 0) == 0);
+  CHECK(SDDS_Terminate(&dataset));
+  CHECK(SDDS_SprintTypedValue(&value, 0, SDDS_STRING, "[%-3s]", buffer, SDDS_PRINT_NOQUOTES) && !strcmp(buffer, "[x  ]"));
+  CHECK(!SDDS_SprintTypedValue(&value, 0, SDDS_STRING, "%s (%s)", buffer, SDDS_PRINT_NOQUOTES));
+  CHECK(SDDS_NumberOfErrors() > 0); SDDS_ClearErrors();
+}
+
+/** @brief Enum labels are quoted like strings only when needed; codes are never quoted. */
+static void enumPresentationQuotingTests(void) {
+  SDDS_ENUM_DEFINITION *definition;
+  int32_t codes[] = {0, 10, -1, 20};
+  char buffer[256];
+  CHECK((definition = SDDS_CreateEnumDefinition("0:OFF,10:two words,-1:say \\\"hi\\\",20:a\\\"b")));
+  CHECK(SDDS_SprintEnumValue(definition, codes, 0, NULL, buffer, sizeof(buffer), 0, 1, 0) && !strcmp(buffer, "OFF"));
+  CHECK(SDDS_SprintEnumValue(definition, codes, 1, NULL, buffer, sizeof(buffer), 0, 1, 0) && !strcmp(buffer, "\"two words\""));
+  CHECK(SDDS_SprintEnumValue(definition, codes, 2, NULL, buffer, sizeof(buffer), 0, 1, 0) && !strcmp(buffer, "\"say \\\"hi\\\"\""));
+  CHECK(SDDS_SprintEnumValue(definition, codes, 3, NULL, buffer, sizeof(buffer), 0, 1, 0) && !strcmp(buffer, "a\\\"b"));
+  CHECK(SDDS_SprintEnumValue(definition, codes, 1, NULL, buffer, sizeof(buffer), SDDS_PRINT_NOQUOTES, 1, 0) && !strcmp(buffer, "two words"));
+  CHECK(SDDS_SprintEnumValue(definition, codes, 1, "[%s]", buffer, sizeof(buffer), 0, 1, 0) && !strcmp(buffer, "[\"two words\"]"));
+  CHECK(SDDS_SprintEnumValue(definition, codes, 2, NULL, buffer, sizeof(buffer), 0, 1, 1) && !strcmp(buffer, "-1"));
+  CHECK(!SDDS_SprintEnumValue(definition, codes, 0, "%s (%s)", buffer, sizeof(buffer), 0, 1, 0)); SDDS_ClearErrors();
+  SDDS_FreeEnumDefinition(definition);
+}
+
+/** @brief Rejected enum array assignments leave the previous dimensions and data intact. */
+static void rejectedArrayAssignmentTests(void) {
+  SDDS_DATASET dataset = {0};
+  int32_t good[] = {0, 10, -1, 0}, bad[] = {10, 42, 0, 0}, row0[] = {10, 0}, row1[] = {0, 42};
+  int32_t *rows[] = {row0, row1}, shape[] = {2, 2}, small[] = {2};
+  CHECK(SDDS_InitializeOutput(&dataset, SDDS_BINARY, 1, NULL, NULL, NULL));
+  CHECK(SDDS_DefineEnumArray(&dataset, "flat", NULL, NULL, NULL, NULL, mapping, 0, 1, NULL) == 0);
+  CHECK(SDDS_DefineEnumArray(&dataset, "grid", NULL, NULL, NULL, NULL, mapping, 0, 2, NULL) == 1);
+  CHECK(SDDS_SaveLayout(&dataset) && SDDS_StartPage(&dataset, 1));
+  CHECK(SDDS_SetArray(&dataset, "flat", SDDS_CONTIGUOUS_DATA, good, small));
+  CHECK(!SDDS_SetArray(&dataset, "flat", SDDS_CONTIGUOUS_DATA, bad, shape)); SDDS_ClearErrors();
+  CHECK(!SDDS_SetArrayVararg(&dataset, "flat", SDDS_CONTIGUOUS_DATA, bad, 3)); SDDS_ClearErrors();
+  CHECK(dataset.array[0].elements == 2 && dataset.array[0].dimension[0] == 2 && !memcmp(dataset.array[0].data, good, 2 * sizeof(*good)));
+  CHECK(SDDS_SetArray(&dataset, "grid", SDDS_CONTIGUOUS_DATA, good, shape));
+  CHECK(!SDDS_SetArray(&dataset, "grid", SDDS_POINTER_ARRAY, rows, shape)); SDDS_ClearErrors();
+  CHECK(!SDDS_SetArrayVararg(&dataset, "grid", SDDS_POINTER_ARRAY, rows, 2, 2)); SDDS_ClearErrors();
+  CHECK(!SDDS_SetArrayVararg(&dataset, "grid", SDDS_CONTIGUOUS_DATA, bad, 1, 4)); SDDS_ClearErrors();
+  CHECK(dataset.array[1].elements == 4 && dataset.array[1].dimension[0] == 2 && dataset.array[1].dimension[1] == 2);
+  CHECK(!memcmp(dataset.array[1].data, good, sizeof(good)));
+  row1[1] = -1;
+  CHECK(SDDS_SetArrayVararg(&dataset, "grid", SDDS_POINTER_ARRAY, rows, 2, 2));
+  CHECK(((int32_t *)dataset.array[1].data)[0] == 10 && ((int32_t *)dataset.array[1].data)[3] == -1);
+  CHECK(SDDS_Terminate(&dataset));
+}
+
+/** @brief String RPN targets keep the legacy no-store success; enum targets stay rejected. */
+static void stringRpnTargetTests(void) {
+#if defined(RPN_SUPPORT)
+  SDDS_DATASET dataset = {0};
+  char *text[] = {"a", "b"};
+  SDDS_ClearErrors();
+  CHECK(SDDS_InitializeOutput(&dataset, SDDS_BINARY, 1, NULL, NULL, NULL));
+  CHECK(SDDS_DefineColumn(&dataset, "stringRpnTargetColumn", NULL, NULL, NULL, NULL, SDDS_STRING, 0) == 0);
+  CHECK(SDDS_DefineParameter(&dataset, "stringRpnTargetParameter", NULL, NULL, NULL, NULL, SDDS_STRING, NULL) == 0);
+  CHECK(SDDS_SaveLayout(&dataset) && SDDS_StartPage(&dataset, 2));
+  CHECK(SDDS_SetColumn(&dataset, SDDS_SET_BY_INDEX, text, 2, 0));
+  CHECK(SDDS_SetParameter(&dataset, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE, 0, "p"));
+  CHECK(SDDS_ComputeColumn(&dataset, 0, "0") && SDDS_NumberOfErrors() == 0);
+  CHECK(SDDS_ComputeParameter(&dataset, 0, "0") && SDDS_NumberOfErrors() == 0);
+  CHECK(!strcmp(((char **)dataset.data[0])[1], "b") && !strcmp(*(char **)dataset.parameter[0], "p"));
+  CHECK(SDDS_Terminate(&dataset));
+#endif
+}
+
+/** @brief Columns defined like arrays keep the array field length (enum columns use zero). */
+static void columnLikeArrayTests(void) {
+  SDDS_DATASET source = {0}, target = {0};
+  CHECK(SDDS_InitializeOutput(&source, SDDS_ASCII, 1, NULL, NULL, NULL));
+  CHECK(SDDS_DefineArray(&source, "fixedWidth", NULL, NULL, NULL, NULL, SDDS_STRING, 5, 1, NULL) == 0);
+  CHECK(SDDS_DefineEnumArray(&source, "states", NULL, NULL, NULL, NULL, mapping, 0, 1, NULL) == 1);
+  CHECK(SDDS_InitializeOutput(&target, SDDS_ASCII, 1, NULL, NULL, NULL));
+  CHECK(SDDS_DefineColumnLikeArray(&target, &source, "fixedWidth", NULL));
+  CHECK(SDDS_DefineColumnLikeArray(&target, &source, "states", "stateColumn"));
+  CHECK(target.layout.column_definition[0].field_length == 5 && target.layout.column_definition[0].type == SDDS_STRING);
+  CHECK(target.layout.column_definition[1].field_length == 0 && target.layout.column_definition[1].type == SDDS_ENUM);
+  CHECK(SDDS_Terminate(&target) && SDDS_Terminate(&source));
+}
+
+/** @brief Parameters defined after page storage exists receive their own value storage. */
+static void lateParameterDefinitionTests(void) {
+  SDDS_DATASET dataset = {0};
+  char *text;
+  CHECK(SDDS_InitializeOutput(&dataset, SDDS_ASCII, 1, NULL, NULL, NULL));
+  CHECK(SDDS_DefineParameter(&dataset, "early", NULL, NULL, NULL, NULL, SDDS_DOUBLE, NULL) == 0);
+  CHECK(SDDS_SaveLayout(&dataset) && SDDS_StartPage(&dataset, 1));
+  CHECK(SDDS_ProcessParameterString(&dataset, "&parameter name=late, type=double &end", SDDS_WRITEONLY_DEFINITION));
+  CHECK(SDDS_DefineParameter(&dataset, "lateText", NULL, NULL, NULL, NULL, SDDS_STRING, NULL) == 2);
+  CHECK(SDDS_SaveLayout(&dataset));
+  CHECK(dataset.parameter[1] && *(double *)dataset.parameter[1] == 0 && *(char **)dataset.parameter[2] == NULL);
+  CHECK(SDDS_SetParameters(&dataset, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, "late", 2.5, "lateText", "value", NULL));
+  CHECK(*(double *)dataset.parameter[1] == 2.5 && !strcmp(*(char **)dataset.parameter[2], "value"));
+  CHECK((text = SDDS_GetParameterAsFormattedString(&dataset, "late", NULL, NULL)) != NULL);
+  free(text);
+  CHECK(SDDS_Terminate(&dataset));
+}
+
+/** @brief Unscaled 64-bit integers print exactly. */
+static void integerPrintingTests(void) {
+  uint64_t unsignedValues[] = {UINT64_MAX, 9007199254740993ULL};
+  int64_t signedValues[] = {INT64_MAX, INT64_MIN};
+  char buffer[SDDS_PRINT_BUFLEN];
+  CHECK(SDDS_SprintTypedValue(unsignedValues, 0, SDDS_ULONG64, NULL, buffer, 0) && !strcmp(buffer, "18446744073709551615"));
+  CHECK(SDDS_SprintTypedValue(unsignedValues, 1, SDDS_ULONG64, NULL, buffer, 0) && !strcmp(buffer, "9007199254740993"));
+  CHECK(SDDS_SprintTypedValue(signedValues, 0, SDDS_LONG64, NULL, buffer, 0) && !strcmp(buffer, "9223372036854775807"));
+  CHECK(SDDS_SprintTypedValueFactor(signedValues, 1, SDDS_LONG64, NULL, buffer, 0, 1.0) && !strcmp(buffer, "-9223372036854775808"));
+  CHECK(SDDS_SprintTypedValueFactor(unsignedValues, 1, SDDS_ULONG64, NULL, buffer, 0, 2.0) && !strcmp(buffer, "18014398509481984"));
+}
+
 /** @brief Run the checked-in enum regression matrix in the supplied artifact directory. */
 int main(int argc, char **argv) {
   const char *suffixes[] = {"sdds", "sdds.gz", "sdds.xz", "sdds.lzma"};
@@ -1370,6 +1619,16 @@ int main(int argc, char **argv) {
   enumRowMatchValidationTests();
   formattedEnumParameterTests();
   longHeaderTests(argv[1]);
+  applicationDefinitionStringTests(argv[1]);
+  blankFormatStringTests(argv[1]);
+  stringUnitsConversionTests(argv[1]);
+  stringFormatTests();
+  enumPresentationQuotingTests();
+  rejectedArrayAssignmentTests();
+  stringRpnTargetTests();
+  integerPrintingTests();
+  columnLikeArrayTests();
+  lateParameterDefinitionTests();
   for (mode = SDDS_BINARY; mode <= SDDS_ASCII; mode++)
     for (major = 0; major < 2; major++)
       for (endian = 0; endian < 2; endian++)

@@ -123,13 +123,19 @@ long MakeColumnHeaderSummary(SDDS_DATASET *outSet, SDDS_DATASET *inSet, char *in
 long MakeParameterHeaderSummary(SDDS_DATASET *outSet, SDDS_DATASET *inSet, char *inputFile);
 long MakeArrayHeaderSummary(SDDS_DATASET *outSet, SDDS_DATASET *inSet, char *inputFile);
 
-/** @brief Read and validate all pages requested by -readAll. */
-static void readAllPages(SDDS_DATASET *dataset) {
+/** @brief Read and validate all pages requested by -readAll; on failure, finish any SDDS output and exit. */
+static void readAllPages(SDDS_DATASET *dataset, SDDS_DATASET *output) {
   int32_t readCode;
   while ((readCode = SDDS_ReadPageSparse(dataset, 0, dataset->layout.data_mode.column_major ? 1 : 1000, 0, 0)) > 0)
     ;
-  if (readCode == 0 || SDDS_NumberOfErrors())
-    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Terminate(dataset);
+    /* Keep the summaries already written readable. */
+    if (output && !SDDS_Terminate(output))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    exit(EXIT_FAILURE);
+  }
 }
 
 int main(int argc, char **argv) {
@@ -264,7 +270,7 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
       }
       if (readAll)
-        readAllPages(&SDDS_dataset);
+        readAllPages(&SDDS_dataset, &SDDSout);
 #ifdef SOLARIS
       if (!SDDS_Terminate(&SDDS_dataset)) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
@@ -347,7 +353,7 @@ int main(int argc, char **argv) {
         break;
       }
       if (readAll && list_request != SET_VERSION)
-        readAllPages(&SDDS_dataset);
+        readAllPages(&SDDS_dataset, NULL);
 #ifdef SOLARIS
       if (list_request != SET_VERSION && !SDDS_Terminate(&SDDS_dataset)) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
@@ -450,7 +456,7 @@ int main(int argc, char **argv) {
     }
     fflush(stdout);
     if (readAll)
-      readAllPages(&SDDS_dataset);
+      readAllPages(&SDDS_dataset, NULL);
     if (!SDDS_Terminate(&SDDS_dataset)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
       exit(EXIT_FAILURE);

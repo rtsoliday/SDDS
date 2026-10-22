@@ -504,7 +504,7 @@ long CompareDefinitions(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *fi
   int32_t *same, *datatype;
   int32_t names1, names2;
   char **name1, **name2, *def, **same_name;
-  long type1, type2, i, returnValue = 0, first = 1;
+  long type1, type2, i, returnValue = 0, enumMismatches = 0, first = 1;
   int32_t index1, index2;
   char *units1, *units2;
   units1 = units2 = NULL;
@@ -714,12 +714,18 @@ long CompareDefinitions(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *fi
         const SDDS_ENUM_DEFINITION *b = type == SDDS_COLUMN_TYPE ? dataset2->layout.column_definition[index2].enum_definition :
           type == SDDS_PARAMETER_TYPE ? dataset2->layout.parameter_definition[index2].enum_definition : dataset2->layout.array_definition[index2].enum_definition;
         if (!SDDS_EnumDefinitionsEqual(a, b)) {
+          /* Unlike type and units mismatches, this is a difference even with -compareCommon. */
           fprintf(stderr, "Incompatible enum mapping for %s; explicit remapping required\n", same_name[i]);
-          returnValue++; same[i] = 0; sames--; continue;
+          returnValue++;
+          enumMismatches++;
+          same[i] = 0;
+          sames--;
         }
       }
       datatype[i] = type1;
-      if (type1 != type2) {
+      if (!same[i]) {
+        /* already rejected above */
+      } else if (type1 != type2) {
         if (first && !compareCommon) {
           fprintf(stderr, "The type of the following %ss do not match in the two files:\n", def);
           fprintf(stderr, "%20s\t%20s\t%20s\n", "Name", file1, file2);
@@ -786,7 +792,7 @@ long CompareDefinitions(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *fi
   if (free_same_name)
     free(same_name);
   free(def);
-  return compareCommon ? 0 : returnValue;
+  return compareCommon ? enumMismatches : returnValue;
 }
 
 long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, char *file2,
@@ -1019,7 +1025,8 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
   switch (datatype) {
   case SDDS_ENUM: {
     int32_t a = ((int32_t *)data1)[index], b = ((int32_t *)data2)[index];
-    if (absolute) SDDS_Bomb("absolute numeric comparison is not supported for enums");
+    /* Like strings, enums compare by equality (identical mappings are required), so
+     * -absolute does not apply. */
     if (a != b) {
       if (first) printTitle(flags, name, page, 0, labelName);
       if (rowLabelValue)

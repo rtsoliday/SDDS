@@ -255,10 +255,11 @@ Scalar convertScalar(const Scalar &value, Type target, RoundingMode rounding) {
 }
 
 Values convertValues(const Values &values, Type target, RoundingMode rounding) {
-  if (typeOf(values) == target)
-    return values;
+  // Like convertScalar, reject enums even for identity; use convertEnumValues.
   if (typeOf(values) == Type::Enum || target == Type::Enum)
     typeError("enum conversion requires a dictionary-aware operation");
+  if (typeOf(values) == target)
+    return values;
   Values result = emptyValues(target);
   const std::size_t count = std::visit([](const auto &items) { return items.size(); }, values);
   for (std::size_t index = 0; index < count; ++index)

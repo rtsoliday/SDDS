@@ -57,6 +57,9 @@ example, logical `10:a\,b\:c\\d` appears in a file as
 The shared [fixtures](../testdata/enums/README.md) include every escape, UTF-8,
 trailing whitespace, integer limits, NUL, malformed mappings and version failures.
 SDDS6 has a separate bounded namelist parser; SDDS1–5 retain their legacy parser.
+The SDDS6 escape grammar applies only to SDDS6 file headers. Definition strings
+that applications pass to `SDDS_Process*String` always use the legacy grammar, so
+backslashes in symbols, units and descriptions stay literal at every version.
 
 Zero initialization continues to produce code zero. It is valid only when the
 dictionary explicitly maps zero. Neither library substitutes the first state.
@@ -82,7 +85,8 @@ validate membership. Readers validate codes, including discarded sparse rows;
 whole-page writers revalidate direct C buffer changes before serialization.
 Context-free numeric getters, casts and presentation formatters reject enums.
 The low-level ASCII wire encoder/decoder uses integer codes; label presentation
-uses the dictionary-aware `SDDS_SprintEnumValue` instead.
+uses the dictionary-aware `SDDS_SprintEnumValue` instead. Labels are quoted
+exactly as string values would be (only when needed); codes are never quoted.
 
 | API | Ownership / behavior |
 | --- | --- |
@@ -163,7 +167,9 @@ implementation selected by `SDDS3_ENABLE_UNMODERNIZED_API` remains unsupported
 for SDDS6. External Python bindings, separately maintained Fortran `_F` adapters,
 Java/Tcl/Matlab consumers and other independently built applications require their
 own coordinated update/rebuild. `SDDSFortran.h` includes the new constants, and
-`SDDSenum.f90` supplies ISO_C_BINDING interfaces using C-owned dataset handles.
+`SDDSenum.f90` supplies ISO_C_BINDING interfaces (`SDDS_enum_interfaces`) using
+C-owned dataset handles. Code that does not include `SDDSFortran.h` takes the type
+constants from `use SDDS_enum_constants`; the two can be used together.
 
 ## Toolkit and editor workflows
 
@@ -182,6 +188,8 @@ sddsprocess states.sdds on.sdds -match=column,state=ON
 for columns, parameters and arrays, and takes integer codes as data. Appending
 requires the same mapping. The first two option separators are structural;
 the remainder is parsed using the dictionary grammar, preserving escaped commas.
+Like other options, `-enumValues` is case-insensitive and may be abbreviated
+(`-enum=`). A mapping given for an element that is not `type=enum` is an error.
 
 Sorts compare labels in UTF-8 byte order; equality/differences require compatible
 mappings. Numeric/absolute sorts, arithmetic, statistics, interpolation and numeric
@@ -214,14 +222,24 @@ sddscast states.sdds remapped.sdds -cast=column,state,enum,enum \
 Use `parameter` or `array` for other element kinds. Converting to enum requires a
 target mapping; missing labels or unmapped codes are errors. Further numeric
 conversion goes through an explicit ordinary `long` conversion. Primitive downgrade
-inherits legacy reader header-size limits. For long fixed-label exports, first use
+inherits legacy reader header-size limits; casting a fixed enum parameter to
+`string` fails with a clear error when its legacy header line would exceed
+1024 bytes. For long fixed-label exports, first use
 `sddsprocess input.sdds varying.sdds` to make fixed parameters page data, then
 cast the resulting parameters to strings; ordinary long labels belong in data
 rather than oversized SDDS1–5 fixed headers. Primitive-only
 exporters reject enum input and direct users to `sddscast` first. The editor shows
 `label (code)`, edits values through validated state choices, preserves mappings on
 save, and replaces dictionaries through a new layout with checked label conversion.
-CSV/HDF editor export also requires explicit primitive conversion.
+CSV/HDF editor export also requires explicit primitive conversion. Rows, pages
+and array elements the editor creates start at the state of code 0 when the
+dictionary maps it; otherwise they stay blank and Save names the cell that needs
+a state. Delete cannot blank an enum cell.
+In `sddscast`, a wildcard name with source type `*` skips unsupported enum or
+string casts with a warning; an exact name or explicit source type makes them
+errors. A `string` target is allowed only for enum sources.
+`sddsprocess -define=...,type=string` creates an empty string element as before;
+only enum targets are rejected.
 `sddsprintout` prints long SDDS6 element names, but its legacy `editLabel` editor
 accepts input labels shorter than 1024 bytes. Use `label=<short-label>` with
 `editLabel` when an element's name exceeds that limit.
@@ -288,6 +306,9 @@ make -C SDDSlib++ benchmark-gate
 ```
 
 Parallel MPI file I/O requires an MPI-capable host and uncompressed binary files;
+an MPI output name ending in `.gz` is accepted for compatibility and written
+uncompressed with a warning, while `.xz`/`.lzma` output names are rejected.
+Row-major MPI writes write only the selected rows, as serial writers do;
 use serial SDDS conversion before/after parallel file I/O for compression. The
 `SDDS_Master_InitializeInput` / `SDDS_Master_ReadPage` API reads serially on rank
 zero and broadcasts complete pages, including enum parameters, arrays and columns;

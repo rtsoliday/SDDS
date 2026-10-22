@@ -331,11 +331,7 @@ int main(int argc, char **argv) {
       SDDS_SetError("Problem starting output page");
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
-    if (!SDDS_CopyParameters(&SDDS_output, &SDDS_2) ||
-        !SDDS_CopyArrays(&SDDS_output, &SDDS_2)) {
-      SDDS_SetError("Problem copying parameter or array data from second input file");
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    }
+    /* The output layout comes from input1, so its parameters and arrays are copied from there. */
     if (!SDDS_CopyParameters(&SDDS_output, &SDDS_1) ||
         !SDDS_CopyArrays(&SDDS_output, &SDDS_1)) {
       SDDS_SetError("Problem copying parameter or array data from first input file");

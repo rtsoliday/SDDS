@@ -29,12 +29,41 @@ static int32_t checkComplexNameColumn(SDDS_DATASET *input, char *column) {
   return 0;
 }
 
+/** @brief Widen the minimum digit count so every index below count has the same width (legacy rule). */
+static long widenComplexNameDigits(long digits, int64_t count) {
+  return count > 0 ? MAX(digits, (long)(log10((double)count) + 1)) : digits;
+}
+
+/** @brief Allocate legacy root%0<digits>ld index names, sizing each buffer from its formatted length. */
+static char **makeComplexIndexNames(const char *root, int64_t count, long digits) {
+  char **names;
+  int64_t i;
+  int length;
+
+  if (count <= 0 || (uint64_t)count > SIZE_MAX / sizeof(*names) || digits > INT_MAX || digits < -INT_MAX) {
+    SDDS_SetError("Invalid count or digit width for complex matrix names");
+    return NULL;
+  }
+  if (!(names = SDDS_Calloc(count, sizeof(*names))))
+    return NULL;
+  for (i = 0; i < count; i++) {
+    if ((length = snprintf(NULL, 0, "%s%0*" PRId64, root, (int)digits, i)) < 0 ||
+        !(names[i] = SDDS_Malloc((size_t)length + 1))) {
+      SDDS_FreeStringArray(names, count);
+      free(names);
+      SDDS_SetError("Unable to allocate complex matrix names");
+      return NULL;
+    }
+    snprintf(names[i], (size_t)length + 1, "%s%0*" PRId64, root, (int)digits, i);
+  }
+  return names;
+}
+
 /** @brief Return owned row names, giving an explicit column precedence over automatic discovery. */
 static char **getComplexOutputNames(SDDS_DATASET *input, char *root, char *automaticColumn,
                                     char *requestedColumn, long digits) {
-  char **names;
   char *column = requestedColumn ? requestedColumn : automaticColumn;
-  int64_t rows = SDDS_CountRowsOfInterest(input), i;
+  int64_t rows = SDDS_CountRowsOfInterest(input);
 
   if (requestedColumn && !checkComplexNameColumn(input, requestedColumn))
     return NULL;
@@ -43,28 +72,7 @@ static char **getComplexOutputNames(SDDS_DATASET *input, char *root, char *autom
       return NULL;
     return SDDS_GetColumnInString(input, column);
   }
-  if (rows <= 0 || (uint64_t)rows > SIZE_MAX / sizeof(*names) || digits < 1 || digits > INT_MAX) {
-    SDDS_SetError("Invalid row count or digit width for complex matrix names");
-    return NULL;
-  }
-  if (!(names = SDDS_Calloc(rows, sizeof(*names))))
-    return NULL;
-  root = root ? root : "Column";
-  for (i = 0; i < rows; i++) {
-    char number[32];
-    size_t length = (size_t)snprintf(number, sizeof(number), "%" PRId64, i);
-    size_t width = MAX((size_t)digits, length), rootLength = strlen(root);
-    if (rootLength > SIZE_MAX - width - 1 || !(names[i] = SDDS_Malloc(rootLength + width + 1))) {
-      SDDS_FreeStringArray(names, rows);
-      free(names);
-      SDDS_SetError("Unable to allocate complex matrix names");
-      return NULL;
-    }
-    memcpy(names[i], root, rootLength);
-    memset(names[i] + rootLength, '0', width - length);
-    memcpy(names[i] + rootLength + width - length, number, length + 1);
-  }
-  return names;
+  return makeComplexIndexNames(root ? root : "Column", rows, widenComplexNameDigits(digits, rows));
 }
 
 /** @brief Define real/imaginary column pairs without limiting categorical label lengths. */
@@ -448,7 +456,7 @@ int main(int argc, char **argv)
                         'S': the first min(M,N) columns of U and the first min(M,N) rows of V**H are returned in the arrays U and VT;
                         'O': if M>=N, the first N columns of U are overwritten in the array A and all rows of V**H are turned in the array VT;
                         'N': no columns of U or rows of V**H are computed. */ 
-  MKL_INT lda, ldu, ldvt, kk, ldb, lwork, lrwork, m, n, minmn, vrows;
+  MKL_INT lda, ldu, ldvt, kk, ldb, lwork, lrwork, m, n, vrows;
   MKL_Complex16 wkopt, *work, alpha, beta;
   MKL_INT *iwork=NULL;
   double  *rwork=NULL;
@@ -723,7 +731,7 @@ int main(int argc, char **argv)
       }
     }
     if (includeCorrWeights) {
-      for (j=0;numericalColumns;j++) {
+      for (j=0;j<numericalColumns;j++) {
         for (i=0;i<rows;i++) {
           R[j * rows +i].real *= corrW[j];
           R[j * rows +i].imag *= corrW[j];
@@ -733,7 +741,6 @@ int main(int argc, char **argv)
     
     m = (MKL_INT)rows;
     n = (MKL_INT)numericalColumns;
-    minmn = MIN(m, n);
     /* On first passs, allocate the memory. On subsequent passes,
        the memory may have been free, and the pointer made NULL */
     if (!SValue) {
@@ -833,10 +840,9 @@ int main(int argc, char **argv)
       by setting the inverse singular values to 0*/
     for (i=0;i<deleteVectors;i++) {
       if (0<=deleteVector[i] && deleteVector[i]<numericalColumns) {
-        if (firstdelete)
-          sprintf(deletedVector,"%ld",deleteVector[i]);
-        else
-          sprintf(deletedVector,"%s %ld",deletedVector,deleteVector[i]);
+        size_t used = strlen(deletedVector);
+        /* Append in place; the old "%s %ld" form read from its own destination. */
+        snprintf(deletedVector + used, sizeof(deletedVector) - used, firstdelete ? "%ld" : " %ld", deleteVector[i]);
         firstdelete=0;
         InvSValue[deleteVector[i]] = 0;
         SValueUsed[deleteVector[i]] = 0;
@@ -947,8 +953,9 @@ int main(int argc, char **argv)
         zgemm_("N", "N", &productRows, &productCols, &kk, &alpha, RInv, &lda, Multi, &ldb, &beta, Product, &productRows);
       else 
         zgemm_("N", "N", &productRows, &productCols, &kk, &alpha, Multi, &lda, RInv, &ldb, &beta, Product, &productRows);
-      realData = malloc(sizeof(*realData)*productRows);
-      imagData = malloc(sizeof(*imagData)*productRows);
+      /* One output column per product column, each holding productRows values. */
+      realData = malloc(sizeof(*realData)*productCols);
+      imagData = malloc(sizeof(*imagData)*productCols);
       for (i=0; i<productCols; i++) {
         realData[i] = malloc(sizeof(**realData)*productRows);
         imagData[i] = malloc(sizeof(**imagData)*productRows);
@@ -962,7 +969,7 @@ int main(int argc, char **argv)
       outputRows = productRows;
       outputColumns = productCols;
       free(Product); Product = NULL;
-      free(Multi); Multi = NULL;
+      /* Multi is kept so a shorter multiply file reuses its last page. */
     }
     free(RInv); RInv=NULL;
     
@@ -998,12 +1005,12 @@ int main(int argc, char **argv)
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     } else {
       if (strColIndex>=0)
-        if (SDDS_SetColumn(&outputPage, SDDS_SET_BY_INDEX | SDDS_PASS_BY_REFERENCE,
-                           actuatorName, productRows, strColIndex))
+        if (!SDDS_SetColumn(&outputPage, SDDS_SET_BY_INDEX | SDDS_PASS_BY_REFERENCE,
+                            actuatorName, productRows, strColIndex))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
     for(i=0;i<outputColumns;i++) {
-      if (!setComplexNamedColumn(&outputPage, outputColumnName[i], numericalColumns, realData[i], imagData[i]))
+      if (!setComplexNamedColumn(&outputPage, outputColumnName[i], outputRows, realData[i], imagData[i]))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       free(realData[i]);
       free(imagData[i]);
@@ -1214,6 +1221,7 @@ int main(int argc, char **argv)
     SDDS_FreeStringArray(corrWeightsName, corrWeightsRows);
     free(corrWeightsName);
   }
+  free(Multi);
   if (tmpfile_used && !replaceFileAndBackUp(inputfile, outputfile)) 
     exit(1);
   free_scanargs(&s_arg, argc); 
@@ -1319,7 +1327,7 @@ void SetupOutputFiles(char *inputDescription, char *inputContents, char *outputf
 {
   char *outputDescription=NULL;
   long i;
-  char format[80], realcol[256], imagcol[256];
+  char realcol[256], imagcol[256];
   
   if (inputDescription) {
     outputDescription = (char*) malloc( sizeof(char) * (strlen("Pseudo-inverse of ") + strlen(inputDescription) + 1));
@@ -1396,13 +1404,8 @@ void SetupOutputFiles(char *inputDescription, char *inputContents, char *outputf
     report_stats(stderr,"\nAfter defining columns.\n");
   }
   if (uFile || vFile || (sFile && sFileAsMatrix)) {
-    *orthoColumnName = (char**) malloc( MAX(rows, numericalColumns)
-                                       * sizeof(char*) );
-    for(i=0;i<MAX(rows,numericalColumns);i++) {
-      (*orthoColumnName)[i] = (char*) malloc( sizeof(char) * (strlen("SV") + digits + 1) );
-      sprintf( format, "SV%%0%ldld", digits);
-      sprintf( (*orthoColumnName)[i], format, i);
-    }
+    if (!(*orthoColumnName = makeComplexIndexNames("SV", MAX(rows, numericalColumns), digits)))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
   if (uFile) {
     if ( 0 > SDDS_DefineColumn(uPage, 
@@ -1482,9 +1485,10 @@ void ReadOtherInputData(long verbose, long noWarnings, long ipage, SDDS_DATASET 
                         int32_t *multiplyRows, int32_t *freeMultiCol, char ***actuatorName, int32_t *actuators, MKL_Complex16 **Multi,
                         double **w, double **corrW)
 {
-  char format[80], realcol[256], imagcol[256];
+  char realcol[256], imagcol[256];
   long i, j;
   int32_t mpage;
+  static int32_t lastMultiplyPage = 0;
   double *real=NULL, *imag=NULL;
 
   if (verbose&FL_VERBOSE) {
@@ -1499,6 +1503,9 @@ void ReadOtherInputData(long verbose, long noWarnings, long ipage, SDDS_DATASET 
     *rowsFirstPage = *rows;
     if (!Root && !newColumnNamesColumn && !stringColumnName)
       Root = "Column";
+    /* Generated names share one width, which the -root names built below reuse. */
+    if (Root)
+      digits = widenComplexNameDigits(digits, *rows);
     if (!(*outputColumnName = getComplexOutputNames(inputPage, Root, stringColumnName, newColumnNamesColumn, digits)))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     *outputColumns = *rows;
@@ -1517,7 +1524,15 @@ void ReadOtherInputData(long verbose, long noWarnings, long ipage, SDDS_DATASET 
     mpage = SDDS_ReadPage(multiplyPage);
     if (mpage == 0)
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    if (mpage < 0) {
+      /* A single multiply page applies to every input page; otherwise pages must pair up. */
+      if (lastMultiplyPage == 0)
+        SDDS_Bomb("The multiply matrix file has no data pages.");
+      if (lastMultiplyPage > 1)
+        SDDS_Bomb("The multiply matrix file has fewer pages than the input file.");
+    }
     if (mpage>0) {
+      lastMultiplyPage = mpage;
       *multiplyRows = SDDS_CountRowsOfInterest(multiplyPage);
       if (mpage==1) {
         if (!invertMultiply) {
@@ -1531,12 +1546,8 @@ void ReadOtherInputData(long verbose, long noWarnings, long ipage, SDDS_DATASET 
             *outputColumnName = multiplyColumnName;
           else {
             *freeMultiCol = 1;
-            *outputColumnName = (char**) malloc( *outputColumns * sizeof(char*) );
-            for (i=0; i<*outputColumns; i++) {
-              (*outputColumnName)[i] = (char*) malloc( sizeof(char) * (strlen(Root) + digits + 1) );
-              sprintf( format, "%s%%0%ldld", Root, digits);
-              sprintf( (*outputColumnName)[i], format, i);
-            }
+            if (!(*outputColumnName = makeComplexIndexNames(Root, *outputColumns, digits)))
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
           }
         } else {
           /*get the actutaor name from multiply matrix */
@@ -1552,17 +1563,15 @@ void ReadOtherInputData(long verbose, long noWarnings, long ipage, SDDS_DATASET 
           if (Root) {
             SDDS_FreeStringArray(*outputColumnName, *outputColumns);
             free(*outputColumnName);
-            *outputColumnName = (char**) malloc( *outputColumns * sizeof(char*) );
-            for (i=0; i<*outputColumns; i++) {
-              (*outputColumnName)[i] = (char*) malloc( sizeof(char) * (strlen(Root) + digits + 1) );
-              sprintf( format, "%s%%0%ldld", Root, digits);
-              sprintf( (*outputColumnName)[i], format, i);
-            }
+            if (!(*outputColumnName = makeComplexIndexNames(Root, *outputColumns, digits)))
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
           }
         } 
       }
-      if (!(*Multi)) 
-        *Multi = malloc(sizeof(**Multi)* (*multiplyRows) * multiplyColumns);
+      /* Each multiply page may have a different row count. */
+      free(*Multi);
+      if (!(*Multi = malloc(sizeof(**Multi)* (*multiplyRows) * multiplyColumns)))
+        SDDS_Bomb("Error allocating memory for the multiply matrix.");
       for (i=0; i< multiplyColumns; i++) {
         sprintf(realcol, "Real%s", multiplyColumnName[i]);
         sprintf(imagcol, "Imag%s", multiplyColumnName[i]);
