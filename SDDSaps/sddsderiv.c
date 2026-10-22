@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
   char *errorTemplate[3] = {NULL, NULL, NULL};
   long i, iArg, yNames, yExcludeNames;
   int64_t rows;
-  int32_t interval;
+  int32_t interval, readCode;
   SDDS_DATASET SDDSin, SDDSout;
   SCANNED_ARG *scanned;
   unsigned long flags, pipeFlags, majorOrderFlag;
@@ -284,7 +284,7 @@ int main(int argc, char **argv) {
 
   setupOutputFile(&SDDSout, &SDDSin, output, &yOutputName, &yOutputErrorName, &yOutputUnits, xName, xErrorName, yName, yErrorName, yNames, mainTemplate, errorTemplate, interval, SGOrder >= 0 ? SGDerivOrder : 1, columnMajorOrder);
 
-  while (SDDS_ReadPage(&SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     if ((rows = SDDS_CountRowsOfInterest(&SDDSin)) < 2)
       SDDS_Bomb("Can't compute derivatives: too little data.");
     derivative = SDDS_Realloc(derivative, sizeof(*derivative) * rows);
@@ -325,6 +325,8 @@ int main(int argc, char **argv) {
       free(xError);
     xData = xError = NULL;
   }
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDSin) || !SDDS_Terminate(&SDDSout)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

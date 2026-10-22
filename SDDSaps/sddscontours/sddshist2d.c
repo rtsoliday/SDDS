@@ -455,6 +455,8 @@ int main(int argc, char **argv)
       threads = 1;
     n_pages++;
   }
+  if (tablecount == 0)
+    SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
   if (!SDDS_Terminate(&SDDS_in))
     SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
   if (copyParameters)

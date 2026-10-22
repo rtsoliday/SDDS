@@ -114,6 +114,7 @@ int main(int argc, char **argv) {
   SDDS_ARRAY *readbackNameArray = NULL;
   SDDS_ARRAY *readbackNameArray2 = NULL;
   long page = 0;
+  int32_t readCode;
   int64_t row, rows, snapshotrow = 0, initRow = 0, outrow;
   double *rowdata = NULL;
   long *origToNewIndex = NULL;
@@ -273,7 +274,7 @@ int main(int argc, char **argv) {
   }
 
   outrow = 0;
-  while (SDDS_ReadTable(&SDDS_input) > 0) {
+  while ((readCode = SDDS_ReadTable(&SDDS_input)) > 0) {
     page++;
     rows = SDDS_RowCount(&SDDS_input);
     if (page == 1) {
@@ -458,6 +459,8 @@ int main(int argc, char **argv) {
     if (controlNameIndexData)
       free(controlNameIndexData);
   }
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (rowdata)
     free(rowdata);
   if (origToNewIndex)

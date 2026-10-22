@@ -135,6 +135,7 @@ int main(int argc, char **argv) {
   double snapshotTime, minimumInterval, previousOutputTime, startTime, endTime;
   short filterTime;
   int32_t outIndex[N_OUTPUT_COLUMNS];
+  int32_t readCode;
   int available[N_OUTPUT_COLUMNS];
   int hasIndexedData, hasExplicitData, copiedParameters;
   int hasControlNameString, hasAlarmStatusString, hasAlarmSeverityString;
@@ -327,7 +328,7 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  while (SDDS_ReadTable(&SDDS_input) > 0) {
+  while ((readCode = SDDS_ReadTable(&SDDS_input)) > 0) {
     int64_t row, rows;
     double pageStartTime, pageStartHour;
     double *timeData, *timeOfDayData, *timeOfDayWSData, *durationData, *previousRowData;
@@ -502,6 +503,9 @@ int main(int argc, char **argv) {
     if (relatedControlNameArray)
       SDDS_FreeArray(relatedControlNameArray);
   }
+
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   if (snapshot) {
     for (i = 0; i < snapshotEvents; i++) {

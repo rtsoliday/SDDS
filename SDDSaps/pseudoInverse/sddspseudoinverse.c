@@ -203,6 +203,8 @@ static char *USAGE3 = "root           use the string specified to generate colum
 digits         minimum number of digits used in the number appended to the root\n\
                part of the column names. Default is value 3.\n\
 newColumnNames use the column specified as the source for new column names.\n\
+               The column must have string or enum type; enum labels supply names.\n\
+               Weight name columns also accept string or enum labels.\n\
 sFile, uMatrix, vMatrix writes the u and v column-orthogonal matrices \n\
                and the singular values vector to files. \n\
                The SVD decomposition follows the convention A = u (SValues) v^T \n\
@@ -245,6 +247,7 @@ void *SDDS_GetCastMatrixOfRows_SunPerf(SDDS_DATASET *SDDS_dataset, int64_t *n_ro
 int32_t InitializeInputAndGetColumnNames(SDDS_DATASET *SDDS_dataset, char *filename,
                                          char ***numericalColumnName, int32_t *numericalColumns,
                                          char **stringColumName, char **inputDescription, char **inputContents);
+static char **getNameColumn(SDDS_DATASET *dataset, char *name);
 
 int main(int argc, char **argv) {
   SCANNED_ARG *s_arg;
@@ -286,7 +289,7 @@ int main(int argc, char **argv) {
   double t_alpha = 0.01, t_beta = 0;
   long NSVUsed;
   long ascii;
-  long digits, foundStringColumn = 0, invertMultiply = 0, strColIndex = -1;
+  long digits, invertMultiply = 0, strColIndex = -1;
   unsigned long pipeFlags;
   long tmpfile_used, noWarnings;
   long ipage, row_match;
@@ -600,6 +603,11 @@ int main(int argc, char **argv) {
   }
   InitializeInputAndGetColumnNames(&inputPage, inputfile, &numericalColumnName, &numericalColumns,
                                    &stringColumnName, &inputDescription, &inputContents);
+  if (newColumnNamesColumn) {
+    int32_t type = SDDS_GetNamedColumnType(&inputPage, newColumnNamesColumn);
+    if (type != SDDS_STRING && type != SDDS_ENUM)
+      SDDS_Bomb("-newColumnNames column must exist and have string or enum type");
+  }
   if (verbose & FL_VERBOSE) {
     report_stats(stderr, "\nAfter initializing SDDS input.\n");
   }
@@ -626,23 +634,12 @@ int main(int argc, char **argv) {
       if (verbose & FL_VERBOSE)
         fprintf(stderr, "Page %ld has %" PRId64 " rows.\n", ipage, rows);
       rowsFirstPage = rows;
-      /* read string column or create names for output file columns*/
-      if (!Root && stringColumnName) {
-        /* use specified string column, or first string column encountered */
-        if (!newColumnNamesColumn) {
-          /* first string column encountered */
-          outputColumnName = (char **)SDDS_GetColumn(&inputPage, stringColumnName);
-          foundStringColumn = 1;
-        } else {
-          /* use specified string column */
-          if (SDDS_CheckColumn(&inputPage, newColumnNamesColumn, NULL, SDDS_STRING, stderr) != SDDS_CHECK_OKAY)
-            SDDS_Bomb("column named with -newColumnNames does not exist in input");
-          outputColumnName = (char **)SDDS_GetColumn(&inputPage, newColumnNamesColumn);
-          foundStringColumn = 1;
-        }
+      /* Explicit categorical names take precedence over automatic string discovery. */
+      if (!Root && (newColumnNamesColumn || stringColumnName)) {
+        if (!(outputColumnName = getNameColumn(&inputPage, newColumnNamesColumn ? newColumnNamesColumn : stringColumnName)))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       } else {
         /* use command line options to produce column names in the output file */
-        foundStringColumn = 0;
         outputColumnName = (char **)malloc(rows * sizeof(char *));
         digits = MAX(digits, log10(rows) + 1);
         if (!Root) {
@@ -669,7 +666,12 @@ int main(int argc, char **argv) {
     /* ***** read multiply matrix file */
     if (multiplyFile) {
 #if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
-      if ((mpage = SDDS_ReadPage(&multiplyPage)) > 0) {
+      mpage = SDDS_ReadPage(&multiplyPage);
+      if (mpage == 0 || SDDS_NumberOfErrors()) {
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+        return EXIT_FAILURE;
+      }
+      if (mpage > 0) {
         multiplyRows = SDDS_CountRowsOfInterest(&multiplyPage);
         if (!SDDS_SetColumnFlags(&multiplyPage, 0))
           SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
@@ -696,14 +698,10 @@ int main(int argc, char **argv) {
             }
           } else {
             /*get the actutaor name from multiply matrix */
-            if (multiStringCol) {
-              actuatorName = (char **)SDDS_GetColumn(&multiplyPage, multiStringCol);
+            if (multiStringCol || newColumnNamesColumn) {
+              if (!(actuatorName = getNameColumn(&multiplyPage, multiStringCol ? multiStringCol : newColumnNamesColumn)))
+                SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
               actuators = multiplyRows;
-            } else if (newColumnNamesColumn) {
-              if (SDDS_CheckColumn(&multiplyPage, newColumnNamesColumn, NULL, SDDS_STRING, NULL) == SDDS_CHECK_OK) {
-                actuatorName = (char **)SDDS_GetColumn(&multiplyPage, newColumnNamesColumn);
-                actuators = multiplyRows;
-              }
             }
             if (multiplyColumnName)
               freeMultiCol = 1;
@@ -763,12 +761,14 @@ int main(int argc, char **argv) {
       if (!SDDS_InitializeInput(&weightsPage, weightsFile) ||
           !(weightsColumnName = (char **)SDDS_GetColumnNames(&weightsPage, &weightsColumns)))
         SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
-      if (0 < SDDS_ReadTable(&weightsPage))
-        SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      if (SDDS_ReadTable(&weightsPage) <= 0) {
+        SDDS_SetError("Unable to read weights data page");
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      }
       if (!(weightsRows = SDDS_CountRowsOfInterest(&weightsPage)))
         SDDS_Bomb("No rows in weights dataset.");
       /* check for the presence of the two columns */
-      if (!(weightsName = SDDS_GetColumn(&weightsPage, weightsNamesColumn)))
+      if (!(weightsName = getNameColumn(&weightsPage, weightsNamesColumn)))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       if (!(weights = SDDS_GetColumnInDoubles(&weightsPage, weightsValuesColumn)))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -802,12 +802,14 @@ int main(int argc, char **argv) {
       if (!SDDS_InitializeInput(&weightsPage, corrWeightsFile) ||
           !(corrWeightsColumnName = (char **)SDDS_GetColumnNames(&weightsPage, &corrWeightsColumns)))
         SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
-      if (0 < SDDS_ReadTable(&weightsPage))
-        SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      if (SDDS_ReadTable(&weightsPage) <= 0) {
+        SDDS_SetError("Unable to read corrector weights data page");
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      }
       if (!(corrWeightsRows = SDDS_CountRowsOfInterest(&weightsPage)))
         SDDS_Bomb("No rows in weights dataset.");
       /* check for the presence of the two columns */
-      if (!(corrWeightsName = SDDS_GetColumn(&weightsPage, corrWeightsNamesColumn)))
+      if (!(corrWeightsName = getNameColumn(&weightsPage, corrWeightsNamesColumn)))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       if (!(weights = SDDS_GetColumnInDoubles(&weightsPage, corrWeightsValuesColumn)))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -823,7 +825,7 @@ int main(int argc, char **argv) {
                                           corrWeightsRows, EXACT_MATCH))) {
           if (!noWarnings)
             fprintf(stderr, "Warning: Name %s doesn't exist in file %s.\n",
-                    numericalColumnName[i], weightsFile);
+                    numericalColumnName[i], corrWeightsFile);
           corrW->ve[i] = 1.0;
         } else {
           corrW->ve[i] = weights[row_match];
@@ -882,8 +884,9 @@ int main(int argc, char **argv) {
       mem_bytes(TYPE_MAT, 0, rows * numericalColumns * sizeof(Real));
       mem_bytes(TYPE_MAT, 0, rows * sizeof(Real *));
     }
-    /* free data page memory as soon as possible */
-    SDDS_FreeDataPage(&inputPage);
+    /* Reconstruction needs the original categorical columns and dictionaries. */
+    if (!reconstructFile)
+      SDDS_FreeDataPage(&inputPage);
 
     if (verbose & FL_VERBOSE) {
       report_stats(stderr, "\nAfter filling R matrix with data.\n");
@@ -1815,8 +1818,6 @@ int main(int argc, char **argv) {
       if (reconstructFile) {
         if (!SDDS_InitializeCopy(&reconstructPage, &inputPage, reconstructFile, "w"))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-        if (newColumnNamesColumn && !SDDS_DefineSimpleColumn(&reconstructPage, newColumnNamesColumn, NULL, SDDS_STRING))
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         if (!SDDS_FindParameter(&inputPage, FIND_NUMERIC_TYPE, "NumberOfSingularValuesUsed", NULL))
           if (0 > SDDS_DefineParameter(&reconstructPage, "NumberOfSingularValuesUsed",
                                        "NumberOfSingularValuesUsed", NULL,
@@ -1996,18 +1997,13 @@ int main(int argc, char **argv) {
       if (!SDDS_StartPage(&reconstructPage, rows) ||
           !SDDS_CopyParameters(&reconstructPage, &inputPage) ||
           !SDDS_CopyArrays(&reconstructPage, &inputPage) ||
+          !SDDS_CopyColumns(&reconstructPage, &inputPage) ||
           !SDDS_SetParameters(&reconstructPage, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
                               "NumberOfSingularValuesUsed", NSVUsed, NULL) ||
           !SDDS_SetParameters(&reconstructPage, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
                               "DeletedVectors", deletedVector, NULL))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      if (foundStringColumn) {
-        if (!SDDS_SetColumn(&reconstructPage, SDDS_SET_BY_NAME | SDDS_PASS_BY_REFERENCE,
-                            outputColumnName, rows,
-                            newColumnNamesColumn ? newColumnNamesColumn : stringColumnName))
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      }
-
+      SDDS_FreeDataPage(&inputPage);
       for (i = 0; i < numericalColumns; i++) {
         /* to output a matrix one has to write columns of the transpose! */
 #if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
@@ -2142,6 +2138,10 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (ipage == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (!SDDS_Terminate(&inputPage) || !SDDS_Terminate(&outputPage))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (multiplyFile && !SDDS_Terminate(&multiplyPage))
@@ -2233,6 +2233,16 @@ MAT *m_diag(VEC *diagElements, MAT *A) {
   for (i = 0; i < MIN(A->n, A->m); i++)
     A->me[i][i] = diagElements->ve[i];
   return A;
+}
+
+/** @brief Return owned labels for a STRING or ENUM name column. */
+static char **getNameColumn(SDDS_DATASET *dataset, char *name) {
+  int32_t type = SDDS_GetNamedColumnType(dataset, name);
+  if (type != SDDS_STRING && type != SDDS_ENUM) {
+    SDDS_SetError("Name column must exist and have string or enum type");
+    return NULL;
+  }
+  return SDDS_GetColumnInString(dataset, name);
 }
 
 int32_t InitializeInputAndGetColumnNames(SDDS_DATASET *SDDS_dataset, char *filename,

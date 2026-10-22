@@ -301,6 +301,10 @@ int main(int argc, char **argv) {
   }
 
   /* Terminate input and output files */
+  if (read_code == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (!SDDS_Terminate(&sdds_in)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

@@ -128,9 +128,12 @@ void determine_panel_labels(PLOT_SPEC *plspec, long panel_index)
       }
       if (editCommand) {
         /* Edit the label per user request. */
+        if (strlen(newLabel) >= sizeof(buffer))
+          SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
         strcpy_ss(buffer, newLabel);
         free(newLabel);
-        edit_string(buffer, editCommand);
+        if (!edit_string_bounded(buffer, sizeof(buffer), editCommand))
+          SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
         if (plspec->scaleLabelInfo[plane][group].label)
           free(plspec->scaleLabelInfo[plane][group].label);
         if (!SDDS_CopyString(&plspec->scaleLabelInfo[plane][group].label, buffer))
@@ -163,8 +166,11 @@ void determine_panel_labels(PLOT_SPEC *plspec, long panel_index)
         SDDS_CopyString(plspec->panel[panel_index].title+j, "");
     }
     if ((editCommand=plspec->panel[panel_index].titleSpec[j].edit_command)) {
+      if (strlen(plspec->panel[panel_index].title[j]) >= sizeof(buffer))
+        SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
       strcpy_ss(buffer, plspec->panel[panel_index].title[j]);
-      edit_string(buffer, editCommand);
+      if (!edit_string_bounded(buffer, sizeof(buffer), editCommand))
+        SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
       free(plspec->panel[panel_index].title[j]);
       SDDS_CopyString(plspec->panel[panel_index].title+j, buffer);
     }
@@ -180,8 +186,11 @@ void determine_panel_labels(PLOT_SPEC *plspec, long panel_index)
       file = plspec->panel[panel_index].dataset[i]->file_index;
       filename[i] = plspec->plot_request[request].filename[file];
       if (plspec->plot_request[request].filenamesOnToplineEditCmd) {
+        if (strlen(filename[i]) >= sizeof(buffer))
+          SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
         strcpy_ss(buffer, filename[i]);
-        edit_string(buffer, plspec->plot_request[request].filenamesOnToplineEditCmd);
+        if (!edit_string_bounded(buffer, sizeof(buffer), plspec->plot_request[request].filenamesOnToplineEditCmd))
+          SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
         SDDS_CopyString(&filename[i], buffer);
       }
     }
@@ -189,9 +198,11 @@ void determine_panel_labels(PLOT_SPEC *plspec, long panel_index)
           string_cmpasc);
     i = unique(filename, plspec->panel[panel_index].datasets, sizeof(*filename),
                string_cmpasc, string_copy);
-    if (plspec->panel[panel_index].title[1][0])
+    if (plspec->panel[panel_index].title[1][0]) {
+      if (strlen(plspec->panel[panel_index].title[1]) + 3 > sizeof(s))
+        SDDS_Bomb("topline label is too long to append filenames; use a shorter display label or format");
       sprintf(s, "%s  ", plspec->panel[panel_index].title[1]);
-    else
+    } else
       s[0] = 0;
     for (j=0; j<i; j++) {
       if ((strlen(s)+strlen(filename[j])+3)>1024)
@@ -308,13 +319,20 @@ void determine_dataset_labels(PLOT_SPEC *plspec, SDDS_TABLE *table, PLOT_DATA *d
       long type;
       char *dataBuffer = NULL;
       char *format =NULL;
+
+      if (!(type = SDDS_GetParameterType(table, SDDS_GetParameterIndex(table, request->label[i].label))))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+      if (type == SDDS_ENUM) {
+        if (!(dataset->label[i] = SDDS_GetParameterAsFormattedString(table, request->label[i].label, NULL,
+                                                                    request->label[i].flags&LABEL_FORMAT_GIVEN ? request->label[i].format : NULL)))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+        continue;
+      }
       
       if ( !(dataBuffer = malloc(sizeof(double)*4)))
           SDDS_Bomb("Allocation failure in determin_dataset_labels");
       if (!SDDS_GetParameter(table,request->label[i].label, dataBuffer))
          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);  
-      if(!(type=SDDS_GetParameterType(table,SDDS_GetParameterIndex(table,request->label[i].label))))
-	     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);	 
       if(SDDS_GetParameterInformation(table,"format_string",&format,SDDS_GET_BY_NAME,request->label[i].label) !=SDDS_STRING)
          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);  	  
       

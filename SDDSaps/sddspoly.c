@@ -118,6 +118,7 @@ int main(int argc, char **argv) {
   unsigned long pipeFlags;
   SCANNED_ARG *scanned;
   SDDS_DATASET SDDSin, SDDSout;
+  int32_t readCode;
   double *outputData;
 
   SDDS_RegisterProgramName(argv[0]);
@@ -219,7 +220,7 @@ int main(int argc, char **argv) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
 
-  while (SDDS_ReadPage(&SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     rows = SDDS_CountRowsOfInterest(&SDDSin);
     if (!SDDS_CopyPage(&SDDSout, &SDDSin)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -260,6 +261,8 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   free(outputData);
 
   if (!SDDS_Terminate(&SDDSin)) {
@@ -387,7 +390,7 @@ void initializePolynomial(POLYNOMIAL *poly, SDDS_DATASET *SDDSin, SDDS_DATASET *
     SDDS_Bomb("memory allocation failure");
   }
 
-  poly->inputData = SDDS_Malloc(sizeof(*(poly->inputData)) * poly->nInputs);
+  poly->inputData = SDDS_Calloc(poly->nInputs, sizeof(*(poly->inputData)));
   if (!poly->inputData) {
     SDDS_Bomb("memory allocation failure");
   }

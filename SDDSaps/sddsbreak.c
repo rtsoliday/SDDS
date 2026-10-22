@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
   long matchPatternAfter = 0;
   double increaseOfAmount = -1, decreaseOfAmount = -1;
   long retval;
-  int32_t dataType;
+  int32_t dataType, *enumData = NULL;
   long overlap = 0;
   unsigned long flags = 0, pipeFlags = 0, changeFlags = 0, decreaseOfFlags = 0, increaseOfFlags = 0;
   unsigned long majorOrderFlag;
@@ -544,7 +544,12 @@ int main(int argc, char **argv) {
       break;
 
     case SET_CHANGEOF:
-      if (dataType != SDDS_STRING) {
+      if (dataType == SDDS_ENUM) {
+        if (!(enumData = SDDS_GetColumn(&SDDSold, columnName))) {
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+          return EXIT_FAILURE;
+        }
+      } else if (dataType != SDDS_STRING) {
         columnData = SDDS_GetColumnInDoubles(&SDDSold, columnName);
         if (!columnData) {
           SDDS_SetError("Unable to read specified column");
@@ -561,16 +566,19 @@ int main(int argc, char **argv) {
       }
       {
         int64_t newStart = 0;
-        if (dataType == SDDS_STRING || !changeAmount) {
+        if (dataType == SDDS_STRING || dataType == SDDS_ENUM || !changeAmount) {
           for (i = 1; i <= rows; i++) {
             if (i != rows &&
                 ((dataType == SDDS_STRING && strcmp(stringData[i], stringData[i - 1]) == 0) ||
-                 (dataType != SDDS_STRING && columnData[i] == columnData[i - 1])))
+                 (dataType == SDDS_ENUM && enumData[i] == enumData[i - 1]) ||
+                 (dataType != SDDS_STRING && dataType != SDDS_ENUM && columnData[i] == columnData[i - 1])))
               continue;
             if (!SDDS_CopyRows(&SDDSnew, &SDDSold, newStart, i - 1) ||
                 !SDDS_WritePage(&SDDSnew)) {
               SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-              if (dataType != SDDS_STRING)
+              if (dataType == SDDS_ENUM)
+                free(enumData);
+              else if (dataType != SDDS_STRING)
                 free(columnData);
               else
                 SDDS_FreeStringArray(stringData, rows);
@@ -605,7 +613,10 @@ int main(int argc, char **argv) {
           }
         }
       }
-      if (dataType != SDDS_STRING)
+      if (dataType == SDDS_ENUM) {
+        free(enumData);
+        enumData = NULL;
+      } else if (dataType != SDDS_STRING)
         free(columnData);
       else
         SDDS_FreeStringArray(stringData, rows);

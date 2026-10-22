@@ -80,6 +80,7 @@ int main(int argc, char **argv) {
   int64_t i_row, rows;
   void *data;
   int32_t columns;
+  int32_t readCode;
   short *integer_type;
   char *input, *output, **column_name, **column_match, **integer_column;
   char buff[1024], **binary_string;
@@ -212,7 +213,7 @@ int main(int argc, char **argv) {
   fprintf(stderr, "Reading integer data from input file.\n");
 #endif
   /* Read and process each page */
-  while (SDDS_ReadPage(&sdds_orig) > 0) {
+  while ((readCode = SDDS_ReadPage(&sdds_orig)) > 0) {
     if ((rows = SDDS_CountRowsOfInterest(&sdds_orig)) < 0)
       continue;
     binary_string = malloc(sizeof(*binary_string) * rows);
@@ -275,6 +276,10 @@ int main(int argc, char **argv) {
   }
 
   /* Finalize and clean up */
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (!SDDS_Terminate(&sdds_orig) || !SDDS_Terminate(&sdds_dataset))
     SDDS_PrintErrors(stderr,
                      SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);

@@ -109,6 +109,7 @@ int main(int argc, char **argv)
   long nEvalPoints, iArg;
   unsigned long pipeFlags;
   int threads = 1;
+  int32_t readCode;
   
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&s_arg, argc, argv);
@@ -291,7 +292,7 @@ int main(int argc, char **argv)
   if (coefficientsFile)
     initializeCoefficientsFile(&SDDScoef, coefficientsFile, &SDDSin, coefUnits, xName, nOrders, copyParameters);
 
-  while (SDDS_ReadPage(&SDDSin)>0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin))>0) {
     invalid = 0;
     isFit = 0;     
     x[0] = x[1] = y = diff = NULL;
@@ -370,6 +371,8 @@ int main(int argc, char **argv)
       free(y);
     }
   }
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDSin) || !SDDS_Terminate(&SDDSout)  ||
       (evalLocationFile && !SDDS_Terminate(&SDDSeval)) ||
       (coefficientsFile && !SDDS_Terminate(&SDDScoef))) {

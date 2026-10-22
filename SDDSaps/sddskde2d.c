@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
   SCANNED_ARG *s_arg;
   double **column_data_x, **column_data_y, *pdf;
   int64_t *rows, rows0;
-  int32_t n_pages, i_page;
+  int32_t n_pages, i_page, readCode;
 
   input_file = output_file = NULL;
   pdf = NULL;
@@ -187,13 +187,9 @@ int main(int argc, char **argv) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return 1;
   }
-  if ((columns = expandColumnPairNames(&SDDSin, &column, NULL, columns, NULL, 0, FIND_NUMERIC_TYPE, 0)) <= 0) {
-    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    SDDS_Bomb("no columns selected.");
-  }
-  if (columns > 2) {
-    fprintf(stderr, "%s", usage);
-    SDDS_Bomb("Only 2 columns may be accepted.");
+  columns = expandColumnPairNames(&SDDSin, &column, NULL, columns, NULL, 0, FIND_NUMERIC_TYPE, 0);
+  if (columns != 2) {
+    SDDS_Bomb("Exactly two numeric columns are required; explicitly convert enum columns with sddscast first.");
   }
   if (!SDDS_InitializeOutput(&SDDSout, SDDS_BINARY, 1, NULL, NULL, output_file))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -209,7 +205,7 @@ int main(int argc, char **argv) {
   column_data_x = NULL;
   column_data_y = NULL;
   rows = NULL;
-  while (SDDS_ReadPage(&SDDSin) >= 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     if ((rows0 = SDDS_CountRowsOfInterest(&SDDSin))) {
       column_data_x = (double **)SDDS_Realloc(column_data_x, sizeof(*column_data_x) * (n_pages + 1));
       column_data_y = (double **)SDDS_Realloc(column_data_y, sizeof(*column_data_y) * (n_pages + 1));
@@ -221,6 +217,10 @@ int main(int argc, char **argv) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       n_pages++;
     }
+  }
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
   }
   if (n_pages == 0)
     SDDS_Bomb("No data in file");

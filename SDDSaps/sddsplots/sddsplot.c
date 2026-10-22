@@ -1398,6 +1398,113 @@ static const char *plotly_trace_type_and_mode(long element, const char **mode)
   }
 }
 
+typedef struct {
+  double value;
+  char *label;
+  size_t order;
+} AXIS_CATEGORY;
+
+static int compare_axis_category_values(const void *a, const void *b)
+{
+  const AXIS_CATEGORY *ca = a, *cb = b;
+  if (ca->value != cb->value)
+    return ca->value < cb->value ? -1 : 1;
+  return ca->order < cb->order ? -1 : ca->order > cb->order;
+}
+
+static int compare_axis_category_order(const void *a, const void *b)
+{
+  const AXIS_CATEGORY *ca = a, *cb = b;
+  return ca->order < cb->order ? -1 : ca->order > cb->order;
+}
+
+/**
+ * @brief Collect unique categorical ticks for one panel's scale group.
+ * @details The caller owns the returned arrays; label strings remain owned by
+ * the datasets. Ticks retain the first-seen category order across all datasets
+ * using this plane and scale group.
+ */
+static long collect_panel_axis_categories(PLOT_PANEL *panel, long plane, long group,
+                                          char ***labels, double **positions)
+{
+  AXIS_CATEGORY *category;
+  size_t count = 0, used = 0, unique, i;
+  long set, point;
+
+  *labels = NULL;
+  *positions = NULL;
+  for (set = 0; set < panel->datasets; set++) {
+    PLOT_DATA *dataset = panel->dataset[set];
+    if (!dataset->enumerate || dataset->enumPlane != plane ||
+        dataset->scalesGroupIndex[plane] != group || dataset->points <= 0)
+      continue;
+    if ((size_t)dataset->points > SIZE_MAX / sizeof(*category) - count ||
+        (size_t)dataset->points > (size_t)LONG_MAX - count)
+      SDDS_Bomb("Too many categorical ticks for plot scale");
+    count += (size_t)dataset->points;
+  }
+  if (!count)
+    return 0;
+  if (!(category = SDDS_Malloc(count * sizeof(*category))))
+    SDDS_Bomb("Unable to allocate categorical ticks for plot scale");
+  for (set = 0; set < panel->datasets; set++) {
+    PLOT_DATA *dataset = panel->dataset[set];
+    const double *values = plane ? dataset->y : dataset->x;
+    if (!dataset->enumerate || dataset->enumPlane != plane ||
+        dataset->scalesGroupIndex[plane] != group)
+      continue;
+    for (point = 0; point < dataset->points; point++) {
+      category[used].value = values[point];
+      category[used].label = dataset->enumerate[point];
+      category[used].order = used;
+      used++;
+    }
+  }
+  qsort(category, used, sizeof(*category), compare_axis_category_values);
+  unique = 0;
+  for (i = 0; i < used; i++)
+    if (!unique || category[i].value != category[unique - 1].value)
+      category[unique++] = category[i];
+  qsort(category, unique, sizeof(*category), compare_axis_category_order);
+
+  if (!(*labels = SDDS_Malloc(unique * sizeof(**labels))) ||
+      !(*positions = SDDS_Malloc(unique * sizeof(**positions))))
+    SDDS_Bomb("Unable to allocate categorical ticks for plot scale");
+  for (i = 0; i < unique; i++) {
+    (*labels)[i] = category[i].label;
+    (*positions)[i] = category[i].value;
+  }
+  free(category);
+  return (long)unique;
+}
+
+/** @brief Append categorical tick labels for one panel's scale group. */
+static void json_print_axis_categories(FILE *fp, PLOT_PANEL *panel, long plane, long group)
+{
+  char **labels;
+  double *positions;
+  long count, i;
+
+  if (!(count = collect_panel_axis_categories(panel, plane, group, &labels, &positions)))
+    return;
+
+  fputs(", \"tickmode\": \"array\", \"tickvals\": [", fp);
+  for (i = 0; i < count; i++) {
+    if (i)
+      fputs(", ", fp);
+    json_print_number(fp, positions[i]);
+  }
+  fputs("], \"ticktext\": [", fp);
+  for (i = 0; i < count; i++) {
+    if (i)
+      fputs(", ", fp);
+    json_print_string_or_null(fp, labels[i]);
+  }
+  fputs("]", fp);
+  free(labels);
+  free(positions);
+}
+
 static void output_sddsplot_json(PLOT_SPEC *plspec)
 {
   FILE *fp = outfile ? outfile : stdout;
@@ -1443,6 +1550,9 @@ static void output_sddsplot_json(PLOT_SPEC *plspec)
       yLabel = ds0->info[1].symbol;
       xUnits = ds0->info[0].units;
       yUnits = ds0->info[1].units;
+      if (plspec->scaleLabelInfo[0] && ds0->scalesGroupIndex[0] >= 0 &&
+          plspec->scaleLabelInfo[0][ds0->scalesGroupIndex[0]].label)
+        xLabel = plspec->scaleLabelInfo[0][ds0->scalesGroupIndex[0]].label;
     }
     if (pp->scalesUsed[1] > 0 && pp->scalesGroupIndex[1]) {
       long i;
@@ -1552,6 +1662,8 @@ static void output_sddsplot_json(PLOT_SPEC *plspec)
           fputs("\n          \"units\": ", fp);
           json_print_string_or_null(fp, xUnits);
         }
+        if (pp->datasets)
+          json_print_axis_categories(fp, pp, 0, pp->dataset[0]->scalesGroupIndex[0]);
         fputs("\n        }", fp);
         hasLayout = 1;
       }
@@ -1576,6 +1688,8 @@ static void output_sddsplot_json(PLOT_SPEC *plspec)
           json_print_number(fp, yGroupMax[0]);
           fputs("]", fp);
         }
+        if (pp->datasets)
+          json_print_axis_categories(fp, pp, 1, yGroupCount ? yGroups[0] : pp->dataset[0]->scalesGroupIndex[1]);
         fputs("\n        }", fp);
         hasLayout = 1;
       }
@@ -1601,6 +1715,7 @@ static void output_sddsplot_json(PLOT_SPEC *plspec)
           }
           fputs(", \"side\": ", fp);
           json_print_string_or_null(fp, yGroupSides[g]);
+          json_print_axis_categories(fp, pp, 1, yGroups[g]);
           fputs("}", fp);
         }
         fputs("]", fp);
@@ -2674,10 +2789,13 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
                           else if (plspec->panel[panel].dataset[idata]->enumerate &&
                                    plane == plspec->panel[panel].dataset[idata]->enumPlane)
                             {
-                              makeEnumeratedScale(plane,
-                                                  plspec->panel[panel].dataset[idata]->enumerate,
-                                                  plane ? plspec->panel[panel].dataset[idata]->y : plspec->panel[panel].dataset[idata]->x,
-                                                  plspec->panel[panel].dataset[idata]->points,
+                              char **categoryLabels;
+                              double *categoryPositions;
+                              long categories;
+
+                              categories = collect_panel_axis_categories(plspec->panel + panel, plane, scalesGroup,
+                                                                          &categoryLabels, &categoryPositions);
+                              makeEnumeratedScale(plane, categoryLabels, categoryPositions, categories,
                                                   &plreq->enumerate_settings, labelPosition,
                                                   (plspec->scaleLabelInfo[plane][scalesGroup].scaleNumber == 1 ? limit[1 + 2 * otherPlane] : labelPosition),
                                                   plane == 0 && plspec->panel[panel].joinScaleFlags & JOINSCALE_NOBOT ? 0 : labelHeight, 
@@ -2685,6 +2803,8 @@ void plot_sddsplot_data(PLOT_SPEC *plspec, short initializeDevice)
                                                   tickLinethickness, tickLabelThickness,
                                                   plspec->scaleLabelInfo[plane][scalesGroup].label ? plspec->scaleLabelInfo[plane][scalesGroup].label : NULL /* label string */,
                                                   labelCharLineType);
+                              free(categoryLabels);
+                              free(categoryPositions);
                             }
                           else if (timeMode)
                             {

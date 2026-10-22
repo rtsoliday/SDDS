@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
   unsigned long pipe_flags = 0, major_order_flag;
   void **data = NULL;
   SourceData *column_source = NULL, *parameter_source = NULL;
-  int32_t column_sources, parameter_sources;
+  int32_t column_sources, parameter_sources, readCode;
   char **name;
   char buffer[32];
   short column_major_order = -1;
@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
   }
 
   /* Process each page of the input dataset */
-  while (SDDS_ReadPage(&SDDS_input) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDS_input)) > 0) {
     if ((rows = SDDS_RowCount(&SDDS_input)) < 0)
       continue;
 
@@ -235,6 +235,8 @@ int main(int argc, char **argv) {
   }
 
   /* Terminate the input and output datasets */
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDS_input) || !SDDS_Terminate(&SDDS_output)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

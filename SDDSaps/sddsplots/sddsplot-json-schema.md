@@ -81,6 +81,12 @@ This document defines the initial JSON schema for `sddsplot -device=json`. The g
 
 - `plots[]` contains one entry per rendered panel. This keeps multi-page, multi-panel output intact.
 - `layout.*` is Plotly-compatible. Axis ranges are optional; if not specified by `sddsplot`, omit `range` and let Plotly auto-range.
+- String and SDDS6 enum column axes retain numeric trace coordinates and include
+  `tickmode: "array"`, `tickvals`, and `ticktext` in the corresponding `xaxis` or
+  `yaxis`. The paired tick arrays map category positions to their labels, with
+  repeated categories listed once in first-seen order. Separate `yaxes` entries
+  include the categorical ticks for their own scale group. Enum labels are
+  displayed without assigning numeric meaning to their stored codes.
 - `traces[]` corresponds to SDDS datasets after all transforms (sampling, clipping, splitting, transpose, etc.).
 - `meta.*` carries SDDS-specific information to support downstream filtering or labeling in a client app.
 - `style` captures line/marker settings derived from `-graphic`, `-linetypeDefault`, and thickness settings.

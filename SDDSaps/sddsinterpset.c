@@ -149,6 +149,7 @@ int main(int argc, char **argv) {
   double ***out_depenValue = NULL, atValue = 0;
   int32_t **rowFlag = NULL;
   long valid_data = 0, index, pages = 0;
+  int32_t readCode;
   int64_t *rows = NULL;
   int64_t i, j, row;
   short columnMajorOrder = -1;
@@ -366,7 +367,7 @@ int main(int argc, char **argv) {
   else
     SDDSout.layout.data_mode.column_major = SDDSin.layout.data_mode.column_major;
 
-  while (SDDS_ReadPage(&SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     rows = SDDS_Realloc(rows, sizeof(*rows) * (pages + 1));
     out_depenValue = SDDS_Realloc(out_depenValue, sizeof(*out_depenValue) * (pages + 1));
     rowFlag = SDDS_Realloc(rowFlag, sizeof(*rowFlag) * (pages + 1));
@@ -515,7 +516,8 @@ int main(int argc, char **argv) {
     if (!SDDS_CopyColumns(&SDDSout, &SDDSin))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-    if (!SDDS_CopyParameters(&SDDSout, &SDDSin))
+    if (!SDDS_CopyParameters(&SDDSout, &SDDSin) ||
+        !SDDS_CopyArrays(&SDDSout, &SDDSin))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
     for (i = 0; i < dataControls; i++) {
@@ -543,6 +545,8 @@ int main(int argc, char **argv) {
 
     pages++;
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   if (!SDDS_Terminate(&SDDSin))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);

@@ -1,6 +1,26 @@
 \begin{sddsprog}{sddscombine}
   \item \textbf{description:} \verb|sddscombine| combines data from a series of SDDS files into a single SDDS file with one page for each page in each file. Data is added from files in the order that they are listed on the command line. All of the data files must contain the columns and parameters contained by the first; the program ignores any columns or parameters in a subsequent data file that are not in the first data file.
 
+  SDDS6 enum columns, parameters, and arrays retain their code-to-label dictionaries.
+  Corresponding enum fields must have equal mappings; declaration order may differ.
+  Mappings are checked while reading input layouts, including parameters and arrays
+  on pages whose rows are merged into an existing page. Enum and plain numeric
+  fields are incompatible even when their stored integer values are equal.
+  Use \progref{sddscast} to convert or remap incompatible fields explicitly.
+  Enum merge keys are compared by code after checking their mappings, including
+  when the key is excluded from the output. With \verb|-collapse|, enum parameters
+  become enum columns; a missing parameter defaults to zero only if its mapping
+  contains code zero. Sparse statistics apply only to floating-point columns;
+  enum codes are taken from the selected input rows without arithmetic.
+  With \verb|-append|, incoming values of a fixed enum parameter must equal the
+  destination's fixed value. To append different states, first use
+  \progref{sddsconvert} to create a destination with varying parameters.
+  With \verb|-append -merge=parameterName|, an enum merge key is checked against
+  the destination's last page, including its mapping. A different key starts a new page.
+  Generated \verb|Filename| and \verb|NumberCombined| fields require string and
+  long types, respectively; enum fields with these reserved metadata names are rejected
+  when the program assigns that metadata.
+
   \item \textbf{examples:}
     \begin{verbatim}
     sddscombine APS1.twi APS2.twi APS3.twi APSall.twi
@@ -10,7 +30,7 @@
     \begin{verbatim}
     sddscombine [inputFileList] [outputFile] [-pipe[=input][,output]]
                [-merge=parameterName] [-overWrite] [-sparse=integer]
-               [-collapse]
+               [-collapse] [-append] [-recover[=clip]]
                [-delete={columns | parameters | arrays},matchingString[,...]]
                [-retain={columns | parameters | arrays},matchingString[,...]]
                [-xzLevel=integer]
@@ -26,6 +46,8 @@
       \item \verb|-overWrite| --- Forces \verb|sddscombine| to overwrite \emph{outputFile} if it exists.
       \item \verb|-sparse=integer| --- Specifies sparsing the tabular data in the input to retain only every \emph{integer}-th row.
       \item \verb|-collapse| --- Specifies collapsing the data, as done by \verb|sddscollapse|.
+      \item \verb|-append| --- Appends to the first input file. With \verb|-merge|, rows are appended to its last page; a change in an enum merge key starts a new page.
+      \item \verb|-recover[=clip]| --- Keeps recoverable data from corrupted input and continues with later input files. With \verb|clip|, the corrupted page is discarded. Read errors handled by recovery are reported as warnings.
       \item \verb|-xzLevel=integer| --- Sets the LZMA compression level when writing \verb|.xz| files.
       \item \verb|-threads=number| --- Specifies the number of input files to read concurrently in ordinary combine mode. The default is 1. At most this many input files have a page loaded at one time, and output pages are still written serially in command-line order. Merge, collapse, append, and recover modes are processed serially.
       \item {\tt -delete=\{columns | parameters | arrays\},matchingString[,...]},\\
@@ -36,6 +58,8 @@
     \begin{itemize}
       \item \hyperref[exampleData]{Data for Examples}
       \item \progref{sddscollapse}
+      \item \progref{sddsconvert}
+      \item \progref{sddscast}
     \end{itemize}
 
   \item \textbf{author:} M. Borland, ANL/APS.

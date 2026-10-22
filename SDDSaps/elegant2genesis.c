@@ -569,6 +569,11 @@ int main(int argc, char **argv) {
     free(ypValues);
     free(pValues);
   }
+  if (retval == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
+  if (firstOne)
+    SDDS_Bomb("No data pages found in input");
   free(sValues);
 
   /* Close the output file */

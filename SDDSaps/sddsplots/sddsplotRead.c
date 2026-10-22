@@ -27,6 +27,25 @@ extern int32_t SDDS_ComputeParameter(SDDS_DATASET *SDDS_dataset, int32_t paramet
 extern int32_t SDDS_ComputeColumn(SDDS_DATASET *SDDS_dataset, int32_t column, char *equation);
 static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq);
 
+/** @brief Edit labels with checked bounds for the entire edit sequence. */
+static void edit_plot_strings(char **strings, long count, char *buffer, size_t bufferSize, char *edit)
+{
+  long i;
+
+  for (i = 0; i < count; i++) {
+    if (strlen(strings[i]) >= bufferSize)
+      SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
+  }
+  for (i = count; i-- > 0;) {
+    strcpy_ss(buffer, strings[i]);
+    if (!edit_string_bounded(buffer, bufferSize, edit))
+      SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
+    free(strings[i]);
+    if (!SDDS_CopyString(&strings[i], buffer))
+      SDDS_Bomb("String copy problem (edit_plot_strings)");
+  }
+}
+
 static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq)
 {
   long i;
@@ -46,8 +65,8 @@ static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq)
         if (!SDDS_RedefineParameter(table, def->name, def->argv, def->argc))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
       }
-      SDDS_StoreParametersInRpnMemories(table);
-      SDDS_StoreColumnsInRpnArrays(table);
+      if (!SDDS_StoreParametersInRpnMemories(table) || !SDDS_StoreColumnsInRpnArrays(table))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
       if (!SDDS_ComputeParameter(table, index, def->equation))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
     } else {
@@ -59,8 +78,8 @@ static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq)
         if (!SDDS_RedefineColumn(table, def->name, def->argv, def->argc))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
       }
-      SDDS_StoreParametersInRpnMemories(table);
-      SDDS_StoreColumnsInRpnArrays(table);
+      if (!SDDS_StoreParametersInRpnMemories(table) || !SDDS_StoreColumnsInRpnArrays(table))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
       if (!SDDS_ComputeColumn(table, index, def->equation))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
     }
@@ -133,6 +152,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
           for (j=0 ; j<matches; j++) {
             if (SDDS_SetArrayUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
               fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
             }
             free(matchname[j]);
           }
@@ -141,6 +161,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
         } else {
           if (SDDS_SetArrayUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
             fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
           }
         }
       }
@@ -150,6 +171,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
           for (j=0 ; j<matches; j++) {
             if (SDDS_SetColumnUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
               fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
             }
             free(matchname[j]);
           }
@@ -158,6 +180,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
         } else {
           if (SDDS_SetColumnUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
             fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
           }
         }
       }
@@ -167,6 +190,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
           for (j=0 ; j<matches; j++) {
             if (SDDS_SetParameterUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
               fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
             }
             free(matchname[j]);
           }
@@ -175,6 +199,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
         } else {
           if (SDDS_SetParameterUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
             fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
           }
         }
       }
@@ -184,6 +209,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
     for (ireq=1; ireq<plspec->plot_requests; ireq++) {
       plreq = plspec->plot_request+ireq;
       plreq->split.value_valid = 0;
+      plreq->split.data_type = 0;
       requestData[ireq].iset = -1;
       if (plreq->presparse_interval>1) {
         for (ifile=0; ifile<plreq->filenames; ifile++) {
@@ -204,9 +230,11 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
 #endif
     pagesRead = 0;
     while (mplFile || (datapage=SDDS_ReadPageSparse(&table, 0, presparseInterval, presparseOffset, 0))>=0) {
-      /* if data from this page can be recovered, then use it; otherwise, skip it */
-      if (datapage==0 && !SDDS_ReadRecoveryPossible(&table))
-        break;
+      /* Preserve legacy partial-page recovery, but never salvage an SDDS6 page
+         whose categorical values may be incomplete or invalid. */
+      if (!mplFile && datapage==0 &&
+          (table.layout.version>=6 || !SDDS_ReadRecoveryPossible(&table)))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
       pagesRead++;
 #if defined(DEBUG)
       fprintf(stderr, "memory: %ld\n", memory_count());
@@ -219,6 +247,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
             for (j=0 ; j<matches; j++) {
               if (SDDS_SetArrayUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
                 fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+                SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
               }
               free(matchname[j]);
             }
@@ -227,6 +256,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
           } else {
             if (SDDS_SetArrayUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
               fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
             }
           }
         }
@@ -236,6 +266,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
             for (j=0 ; j<matches; j++) {
               if (SDDS_SetColumnUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
                 fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+                SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
               }
               free(matchname[j]);
             }
@@ -244,6 +275,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
           } else {
             if (SDDS_SetColumnUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
               fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
             }
           }
         }
@@ -253,6 +285,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
             for (j=0 ; j<matches; j++) {
               if (SDDS_SetParameterUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
                 fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+                SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
               }
               free(matchname[j]);
             }
@@ -261,6 +294,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
           } else {
             if (SDDS_SetParameterUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
               fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
             }
           }
         }
@@ -400,8 +434,12 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
               ytype[idata] = SDDS_GetNamedArrayType(&table, plreq->yname[idata]);
               break;
             }
-            if (xtype[idata]==SDDS_STRING && ytype[idata]==SDDS_STRING)
-              bomb("x and y data cannot both be string type", NULL);
+            if ((xtype[idata]==SDDS_STRING || xtype[idata]==SDDS_ENUM) &&
+                (ytype[idata]==SDDS_STRING || ytype[idata]==SDDS_ENUM))
+              bomb("x and y data cannot both be categorical (string or enum)", NULL);
+            if (plreq->data_class!=COLUMN_DATA &&
+                (xtype[idata]==SDDS_ENUM || ytype[idata]==SDDS_ENUM))
+              bomb("enum parameter and array axes require explicit conversion with sddscast", NULL);
           }
 
           if (!perform_sddsplot_filtering(&table, plreq->filter, plreq->filters) ||
@@ -543,12 +581,16 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                 }
               else
                 {
-                  if ((xtype[idata]==SDDS_STRING && !(enumerate=SDDS_GetColumn(&table, plreq->xname[idata]))) ||
-                      (xtype[idata]!=SDDS_STRING && !(x=SDDS_GetColumnInDoubles(&table, plreq->xname[idata]))))
+                  if (xtype[idata]==SDDS_STRING || xtype[idata]==SDDS_ENUM) {
+                    if (!(enumerate=SDDS_GetColumnInString(&table, plreq->xname[idata])))
+                      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+                  } else if (!(x=SDDS_GetColumnInDoubles(&table, plreq->xname[idata])))
                     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
                 }
-              if ((ytype[idata]==SDDS_STRING && !(enumerate=SDDS_GetColumn(&table, plreq->yname[idata]))) ||
-                  (ytype[idata]!=SDDS_STRING && !(y=SDDS_GetColumnInDoubles(&table, plreq->yname[idata]))))
+              if (ytype[idata]==SDDS_STRING || ytype[idata]==SDDS_ENUM) {
+                if (!(enumerate=SDDS_GetColumnInString(&table, plreq->yname[idata])))
+                  SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+              } else if (!(y=SDDS_GetColumnInDoubles(&table, plreq->yname[idata])))
                 SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
               if ((plreq->sort_flags&SORT_GIVEN) && plreq->sort_name) {
                 if (!SDDS_GetNamedColumnType(&table, plreq->sort_name)) {
@@ -600,9 +642,9 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                   !(pointLabel=SDDS_GetColumnInString(&table, plreq->pointLabelSettings.name)))
                 SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
               if (plreq->pointLabelSettings.name && plreq->pointLabelSettings.editCommand)
-                edit_strings(pointLabel, points, edit_buffer, plreq->pointLabelSettings.editCommand);
+                edit_plot_strings(pointLabel, points, edit_buffer, sizeof(edit_buffer), plreq->pointLabelSettings.editCommand);
               if (enumerate && plreq->enumerate_settings.flags&ENUM_EDITCOMMANDGIVEN)
-                edit_strings(enumerate, points, edit_buffer, plreq->enumerate_settings.editcommand);
+                edit_plot_strings(enumerate, points, edit_buffer, sizeof(edit_buffer), plreq->enumerate_settings.editcommand);
               if (plreq->graphic.type_column &&
                   !(graphicType = SDDS_GetColumnInLong(&table, plreq->graphic.type_column)))
                 SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
@@ -652,6 +694,7 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
                 }
 
               if (!SDDS_GetParameterAsDouble(&table, plreq->yname[idata], &yparam) ||
+                  (plreq->x1name[idata] && !SDDS_GetParameterAsDouble(&table, plreq->x1name[idata], &x1param)) ||
                   (plreq->y1name[idata] && !SDDS_GetParameterAsDouble(&table, plreq->y1name[idata], &y1param)) ||
                   (plreq->split.flags&SPLIT_PARAMETERCHANGE && !SDDS_GetParameterAsDouble(&table, plreq->split.name,&splitparam)))
                 SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
@@ -850,6 +893,10 @@ long check_for_split(SDDS_TABLE *table, SPLIT_SPEC *split, long datapage,long da
         fprintf(stderr, "error: problem splitting with parameter %s\n", split->name);
         SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
       }
+      if (split->data_type == SDDS_ENUM) {
+        fprintf(stderr, "error: parameterChange splitting requires a numeric parameter; enum parameter %s requires explicit conversion with sddscast\n", split->name);
+        exit(1);
+      }
     }
     else if (split->flags&SPLIT_COLUMNBIN) {
       if ((index=SDDS_GetColumnIndex(table, split->name))<0 ||
@@ -1009,37 +1056,44 @@ void determine_dataset_legends(PLOT_SPEC *plspec, SDDS_TABLE *table, PLOT_DATA *
     long type;
     char *dataBuffer = NULL;
     char *format=NULL;
-      
-    if ( !(dataBuffer = malloc(sizeof(double)*4)))
-      SDDS_Bomb("Allocation failure in determin_dataset_labels");
-    if (!SDDS_GetParameter(table,request->legend.value, dataBuffer))
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);  
-    if(!(type=SDDS_GetParameterType(table,SDDS_GetParameterIndex(table,request->legend.value))))
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);	 
-    if(SDDS_GetParameterInformation(table,"format_string",&format,SDDS_GET_BY_NAME,request->legend.value) !=SDDS_STRING)
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);  	   
-      
-    if(request->legend.code&LEGEND_FORMAT) {
-      if(!SDDS_VerifyPrintfFormat(request->legend.format,type)) {
-        fprintf(stderr, "error: given format (\"%s\") for parameter %s is invalid\n",
-                request->legend.format, request->legend.value);
-        exit(1);
-      }   
-      if(!(SDDS_SprintTypedValue((void*)dataBuffer,0,type,request->legend.format,buffer,SDDS_PRINT_NOQUOTES)))
+
+    if (!(type = SDDS_GetParameterType(table, SDDS_GetParameterIndex(table, request->legend.value))))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    if (type == SDDS_ENUM) {
+      if (!(dataset->legend = SDDS_GetParameterAsFormattedString(table, request->legend.value, NULL,
+                                                                request->legend.code&LEGEND_FORMAT ? request->legend.format : NULL)))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-      SDDS_CopyString(&dataset->legend,buffer); 
-    }	else {
-      if(!SDDS_StringIsBlank(format)) {
-        if(!(SDDS_SprintTypedValue((void*)dataBuffer,0,type,format,buffer,SDDS_PRINT_NOQUOTES)))
+    } else {
+
+      if ( !(dataBuffer = malloc(sizeof(double)*4)))
+        SDDS_Bomb("Allocation failure in determin_dataset_labels");
+      if (!SDDS_GetParameter(table,request->legend.value, dataBuffer))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+      if(SDDS_GetParameterInformation(table,"format_string",&format,SDDS_GET_BY_NAME,request->legend.value) !=SDDS_STRING)
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+
+      if(request->legend.code&LEGEND_FORMAT) {
+        if(!SDDS_VerifyPrintfFormat(request->legend.format,type)) {
+          fprintf(stderr, "error: given format (\"%s\") for parameter %s is invalid\n",
+                  request->legend.format, request->legend.value);
+          exit(1);
+        }
+        if(!(SDDS_SprintTypedValue((void*)dataBuffer,0,type,request->legend.format,buffer,SDDS_PRINT_NOQUOTES)))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-        SDDS_CopyString(&dataset->legend,buffer);  
-      } else {   
-        if (!(dataset->legend=SDDS_GetParameterAsString(table,request->legend.value,NULL)))
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-      }      
+        SDDS_CopyString(&dataset->legend,buffer);
+      } else {
+        if(!SDDS_StringIsBlank(format)) {
+          if(!(SDDS_SprintTypedValue((void*)dataBuffer,0,type,format,buffer,SDDS_PRINT_NOQUOTES)))
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+          SDDS_CopyString(&dataset->legend,buffer);
+        } else {
+          if (!(dataset->legend=SDDS_GetParameterAsString(table,request->legend.value,NULL)))
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+        }
+      }
+      free(dataBuffer);
+      free(format);
     }
-    free(dataBuffer);
-    free(format);	    
   }
   else
     return;
@@ -1048,8 +1102,11 @@ void determine_dataset_legends(PLOT_SPEC *plspec, SDDS_TABLE *table, PLOT_DATA *
     fprintf(stderr, "editing legend %s with edit command %s\n",
             dataset->legend, request->legend.edit_command);
 #endif
-    strcpy_ss(buffer, dataset->legend); 
-    edit_string(buffer, request->legend.edit_command);
+    if (strlen(dataset->legend) >= sizeof(buffer))
+      SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
+    strcpy_ss(buffer, dataset->legend);
+    if (!edit_string_bounded(buffer, sizeof(buffer), request->legend.edit_command))
+      SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
     free(dataset->legend);
     SDDS_CopyString(&dataset->legend, buffer);
   }
@@ -1116,8 +1173,11 @@ void determine_dataset_strings(PLOT_SPEC *plspec, SDDS_TABLE *table, PLOT_DATA *
 #endif
     if (request->string_label[i].flags&LABEL_EDITCOMMAND_GIVEN &&
         request->string_label[i].edit_command) {
-      strcpy_ss(buffer, dataset->string_label[i].string); 
-      edit_string(buffer, request->string_label[i].edit_command);
+      if (strlen(dataset->string_label[i].string) >= sizeof(buffer))
+        SDDS_Bomb("label is too long to edit; use a shorter display label or format before editing");
+      strcpy_ss(buffer, dataset->string_label[i].string);
+      if (!edit_string_bounded(buffer, sizeof(buffer), request->string_label[i].edit_command))
+        SDDS_Bomb("unable to edit label: invalid edit command or edited label is too long");
       free(dataset->string_label[i].string);
       SDDS_CopyString(&dataset->string_label[i].string, buffer);
     }

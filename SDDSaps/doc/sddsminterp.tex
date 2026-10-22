@@ -1,5 +1,6 @@
 \begin{sddsprog}{sddsminterp}
   \item \textbf{description:} \verb|sddsminterp| performs multiplicative renormalized model interpolation of a data set using another data set as a model function.
+    ENUM columns are copied with their dictionaries and codes when the output abscissae exactly match the input abscissae on each page. If the interpolation grid changes, ENUM columns must first be removed explicitly with \progref{sddsconvert}; categorical values are not interpolated. ENUM parameters and arrays are copied to the output.
   \item \textbf{examples:}
     \begin{verbatim}
 sddsminterp data.sdds output.sdds -columns=x,y \

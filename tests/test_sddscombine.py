@@ -456,4 +456,4 @@ def test_merge_enum_parameter_rejects_incompatible_mappings(tmp_path, collapse, 
   result = subprocess.run([str(SDDSCOMBINE), str(first), str(second), str(output), *options],
                           capture_output=True, text=True)
   assert result.returncode > 0
-  assert "Incompatible enum mappings for -merge parameter" in result.stderr
+  assert "Incompatible enum mapping" in result.stderr

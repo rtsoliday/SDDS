@@ -3185,9 +3185,19 @@ void getDimensionParameters(SDDS_TABLE *SDDS_table, char *name_of_name, char **v
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!units || !strlen(units)) {
     sprintf(s, "%sUnits", *variable);
-    if (SDDS_GetParameterIndex(SDDS_table, s) >= 0 && !SDDS_GetParameter(SDDS_table, s, &units))
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    if ((index = SDDS_GetParameterIndex(SDDS_table, s)) >= 0) {
+      int32_t type = SDDS_GetParameterType(SDDS_table, index);
+      if (type != SDDS_STRING && type != SDDS_ENUM) {
+        fprintf(stderr, "Parameter %s must have string or enum type\n", s);
+        exit(EXIT_FAILURE);
+      }
+      free(units);
+      if (!SDDS_GetParameterAsString(SDDS_table, s, &units))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    }
   }
+  if (units && strlen(*variable) + strlen(units) + 4 > sizeof(s))
+    SDDS_Bomb("Dimension units label is too long");
   *variableUnits = units;
 
   sprintf(s, "%sMinimum", *variable);
@@ -3322,14 +3332,18 @@ char *getParameterLabel(SDDS_TABLE *SDDS_table, char *parameter_name, char *edit
   char *ptr, buffer[SDDS_MAXLINE], *dataBuffer = NULL;
   long type = 0;
 
-  if (format && !SDDS_StringIsBlank(format)) {
+  if (!(type = SDDS_GetParameterType(SDDS_table, SDDS_GetParameterIndex(SDDS_table, parameter_name))))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  if (type == SDDS_ENUM) {
+    if (!(ptr = SDDS_GetParameterAsFormattedString(SDDS_table, parameter_name, NULL,
+                                                  format && !SDDS_StringIsBlank(format) ? format : NULL)))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  } else if (format && !SDDS_StringIsBlank(format)) {
     if (!(dataBuffer = malloc(sizeof(double) * 4)))
       SDDS_Bomb("Allocation failure in determin_dataset_labels");
     if (!SDDS_GetParameter(SDDS_table, parameter_name, dataBuffer))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-    if (!(type = SDDS_GetParameterType(SDDS_table, SDDS_GetParameterIndex(SDDS_table, parameter_name))))
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if (!SDDS_VerifyPrintfFormat(format, type)) {
       fprintf(stderr, "error: given format (\"%s\") for parameter %s is invalid\n",
               format, parameter_name);
@@ -3346,8 +3360,11 @@ char *getParameterLabel(SDDS_TABLE *SDDS_table, char *parameter_name, char *edit
     }
   }
   if (edit) {
+    if (strlen(ptr) >= sizeof(buffer))
+      SDDS_Bomb("Parameter label is too long for editing");
     strcpy(buffer, ptr);
-    edit_string(buffer, edit);
+    if (!edit_string_bounded(buffer, sizeof(buffer), edit))
+      SDDS_Bomb("Unable to edit parameter label (invalid edit or result too long)");
     free(ptr);
     SDDS_CopyString(&ptr, buffer);
   }

@@ -132,6 +132,7 @@ int main(int argc, char **argv) {
   long random_number_seed = 0;
   int64_t i, j, input_rows, stored_rows;
   short probabilistic = 0;
+  int32_t readCode;
 
   // Register the program name for error messages
   SDDS_RegisterProgramName(argv[0]);
@@ -229,7 +230,7 @@ int main(int argc, char **argv) {
   }
 
   // Main loop for reading and duplicating rows
-  while (SDDS_ReadPage(&sdds_input) > 0) {
+  while ((readCode = SDDS_ReadPage(&sdds_input)) > 0) {
     input_rows = SDDS_RowCount(&sdds_input); // Get number of rows in current page
     if (input_rows > 0) {
       dup_value = tmalloc(sizeof(*dup_value) * input_rows); // Allocate duplication array
@@ -323,6 +324,8 @@ int main(int argc, char **argv) {
   }
 
   // Terminate SDDS datasets and close files
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&sdds_input) || !SDDS_Terminate(&sdds_output)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }

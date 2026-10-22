@@ -80,14 +80,14 @@ void SetupOutputFile(SDDS_DATASET *SDDS_out, char *output, long zdim);
 void free_data_memory(double ***data, long zdim, long ydim);
 
 int main(int argc, char **argv) {
+  int32_t readCode;
   SDDS_DATASET SDDS_orig, SDDS_out;
   int32_t i, j, k, i_arg, rows, xfilter_provided, yfilter_provided, zfilter_provided, row;
   long power = 1;
   SCANNED_ARG *s_arg;
   char *inputFile, *outputRoot, output[1024], tmpcol[256];
   double xmin, xmax, ymin, ymax, zmin, zmax, xinterval, yinterval, zinterval;
-  int32_t xdim, ydim, zdim, columnNames, outputColumns, page = 0;
-  char **columnName, **outputColumn;
+  int32_t xdim, ydim, zdim, page = 0;
   double ***Rho, ***Jz, rhoSum, rhoSum1, yRho, zRho, jzRho;
   double x_min, x_max, y_min, y_max, z_min, z_max, x, y, z;
   unsigned long dummyFlags = 0;
@@ -103,8 +103,6 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  columnNames = outputColumns = 0;
-  columnName = outputColumn = NULL;
   Rho = Jz = NULL;
 
   for (i_arg = 1; i_arg < argc; i_arg++) {
@@ -205,7 +203,7 @@ int main(int argc, char **argv) {
 
   xdim = ydim = zdim = 1;
   zmin = zmax = zinterval = 0;
-  while (SDDS_ReadPage(&SDDS_orig) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDS_orig)) > 0) {
     if (page == 0) {
       if (!SDDS_GetParameterAsDouble(&SDDS_orig, "origin1", &xmin) ||
           !SDDS_GetParameterAsDouble(&SDDS_orig, "max_ext1", &xmax) ||
@@ -322,6 +320,8 @@ int main(int argc, char **argv) {
     page++;
   }
 
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDS_orig)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

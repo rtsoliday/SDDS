@@ -296,6 +296,7 @@ epicsShareFuncMDBLIB extern char *pad_with_spaces(char *s, int n_spaces);
 epicsShareFuncMDBLIB extern char *cp_str(char **target, char *source);
 epicsShareFuncMDBLIB  extern char *cpn_str(char **target, char *source, long n_characters);
 epicsShareFuncMDBLIB extern long edit_string(char *text, char *edit);
+epicsShareFuncMDBLIB extern long edit_string_bounded(char *text, size_t capacity, char *edit);
 epicsShareFuncMDBLIB extern void edit_strings(char **string, long strings, char *buffer, char *edit);
 epicsShareFuncMDBLIB char *strslide(char *s, long distance);
 

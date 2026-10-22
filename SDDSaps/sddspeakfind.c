@@ -242,6 +242,10 @@ int main(int argc, char **argv) {
       !SDDS_FindColumn(&in_set, FIND_NUMERIC_TYPE, x_column_name, NULL))
     SDDS_Bomb("the given x column is nonexistent or nonnumeric");
 
+  if (flags & PAR_THRESHOLD &&
+      SDDS_CheckParameter(&in_set, par_threshold_name, NULL, SDDS_ANY_NUMERIC_TYPE, stderr) != SDDS_CHECK_OKAY)
+    SDDS_Bomb("threshold parameter must have numeric type; use sddscast to convert enums explicitly");
+
   if (!SDDS_InitializeCopy(&out_set, &in_set, output, "w"))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
@@ -276,7 +280,7 @@ int main(int argc, char **argv) {
                  flags & SEVENPOINT ? 7 : (flags & FIVEPOINT ? 5 : 3));
 
       if (flags & PAR_THRESHOLD)
-        if (!SDDS_GetParameter(&in_set, par_threshold_name, &threshold))
+        if (!SDDS_GetParameterAsDouble(&in_set, par_threshold_name, &threshold))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
       if (flags & THRESHOLD || flags & PAR_THRESHOLD)
@@ -300,6 +304,9 @@ int main(int argc, char **argv) {
     if (!SDDS_WritePage(&out_set))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
+
+  if (page_returned == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   if (!SDDS_Terminate(&in_set) || !SDDS_Terminate(&out_set)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);

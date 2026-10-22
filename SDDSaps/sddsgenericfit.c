@@ -593,6 +593,9 @@ int main(int argc, char **argv) {
     if (syData)
       free(syData);
   }
+  if (retval == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
   if (!SDDS_Terminate(&InputTable) || !SDDS_Terminate(&OutputTable))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (logFile && !SDDS_Terminate(&logData))

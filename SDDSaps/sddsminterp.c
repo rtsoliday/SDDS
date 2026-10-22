@@ -38,6 +38,7 @@
  *
  * @subsection Incompatibilities
  *   - `-fileValues` is not operational yet
+ *   - ENUM columns require output abscissae identical to the input abscissae.
  *
  * @copyright
  *   - (c) 2002 The University of Chicago, as Operator of Argonne National Laboratory.
@@ -129,7 +130,7 @@ int main(int argc, char **argv) {
   char *outAbscissaName, *outOrdinateName;
   char *modFile, *dataFile, *valFile, *outFile;
   long dataOrder;
-  int32_t modOrder;
+  int32_t modOrder, readCode, column;
   double *modAbscissa, *modOrdinate;
   double *valAbscissa;
   double *dataAbscissa, *dataOrdinate, *dataScale, *dataOrdinateInterp;
@@ -249,14 +250,14 @@ int main(int argc, char **argv) {
 
   if (!SDDS_InitializeInput(&modDataSet, modFile))
     SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
-  if (SDDS_ReadPage(&modDataSet) < 0)
-    SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
+  if (SDDS_ReadPage(&modDataSet) <= 0)
+    SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
 
   if (valFlags) {
     if (!SDDS_InitializeInput(&valDataSet, valFile))
       SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
-    if (SDDS_ReadPage(&valDataSet) < 0)
-      SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
+    if (SDDS_ReadPage(&valDataSet) <= 0)
+      SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
   }
 
   /* Check that the selected columns exist */
@@ -331,13 +332,27 @@ int main(int argc, char **argv) {
   }
   SDDS_CopyString(&outOrdinateName, dataOrdinateName);
 
-  while (SDDS_ReadPage(&dataDataSet) > 0) {
+  while ((readCode = SDDS_ReadPage(&dataDataSet)) > 0) {
     dataAbscissa = (double *)SDDS_GetColumnInDoubles(&dataDataSet, dataAbscissaName);
     dataOrdinate = (double *)SDDS_GetColumnInDoubles(&dataDataSet, dataOrdinateName);
     if (!dataAbscissa || !dataOrdinate)
       SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
 
     dataRows = SDDS_CountRowsOfInterest(&dataDataSet);
+    /* Categories can only be copied when each output row has the same abscissa. */
+    for (column = 0; column < dataDataSet.layout.n_columns; column++) {
+      if (dataDataSet.layout.column_definition[column].type != SDDS_ENUM)
+        continue;
+      if (dataRows == outRows && outRows <= modRows) {
+        for (i = 0; i < dataRows && dataAbscissa[i] == outAbscissa[i] && dataAbscissa[i] == modAbscissa[i]; i++)
+          ;
+        if (i == dataRows)
+          break;
+      }
+      fprintf(stderr, "Error: cannot preserve enum column %s on a changed interpolation grid; remove the column with sddsconvert before interpolation.\n",
+              dataDataSet.layout.column_definition[column].name);
+      exit(EXIT_FAILURE);
+    }
     dataOrdinateInterp = (double *)malloc(sizeof(double) * dataRows);
     dataScale = (double *)malloc(sizeof(double) * dataRows);
 
@@ -355,14 +370,23 @@ int main(int argc, char **argv) {
       outOrdinate[i] = modOrdinate[i] * outScale[i];
     }
 
-    if (SDDS_StartPage(&outDataSet, outRows) < 0)
+    if (!SDDS_StartPage(&outDataSet, outRows))
       SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
 
+    for (column = 0; column < dataDataSet.layout.n_columns; column++) {
+      if (dataDataSet.layout.column_definition[column].type == SDDS_ENUM) {
+        char *name = dataDataSet.layout.column_definition[column].name;
+        void *codes = SDDS_GetColumn(&dataDataSet, name);
+        if (!codes || !SDDS_SetColumn(&outDataSet, SDDS_SET_BY_NAME, codes, outRows, name))
+          SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
+        free(codes);
+      }
+    }
     if (!SDDS_CopyParameters(&outDataSet, &dataDataSet) ||
         !SDDS_CopyArrays(&outDataSet, &dataDataSet) ||
         !SDDS_SetColumn(&outDataSet, SDDS_SET_BY_NAME | SDDS_PASS_BY_REFERENCE, modAbscissa, outRows, outAbscissaName) ||
         !SDDS_SetColumn(&outDataSet, SDDS_SET_BY_NAME | SDDS_PASS_BY_REFERENCE, outOrdinate, outRows, outOrdinateName) ||
-        SDDS_WritePage(&outDataSet) < 0)
+        !SDDS_WritePage(&outDataSet))
       SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
 
     free(dataAbscissa);
@@ -372,8 +396,11 @@ int main(int argc, char **argv) {
     free(outScale);
     free(outOrdinate);
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
 
   if (!SDDS_Terminate(&modDataSet) ||
+      (valFlags && !SDDS_Terminate(&valDataSet)) ||
       !SDDS_Terminate(&outDataSet) ||
       !SDDS_Terminate(&dataDataSet))
     SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);

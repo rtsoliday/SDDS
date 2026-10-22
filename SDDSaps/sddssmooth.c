@@ -419,6 +419,8 @@ int main(int argc, char **argv) {
     if (!SDDS_WritePage(&SDDSout))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDSin) || !SDDS_Terminate(&SDDSout)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

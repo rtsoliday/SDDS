@@ -125,7 +125,8 @@ static char *USAGE =
   "                                  If no string column exists, column names are formed with the root \"Column\".\n"
   "  -digits=<integer>               Sets the minimum number of digits appended to the root part of the column names.\n"
   "                                  Default is 3.\n"
-  "  -newColumnNames=<column>        Uses the specified column as the source for new column names.\n"
+  "  -newColumnNames=<column>        Uses the specified string or enum column as the source for new column names.\n"
+  "                                  Enum dictionary labels are used as names.\n"
   "  -symbol=<string>                Uses the specified string for the symbol field in all column definitions.\n"
   "  -ascii                          Outputs the file in ASCII format. Default is binary.\n"
   "  -matchColumn=<string>[,<string>,...]  Only transposes the columns that match the specified names.\n"
@@ -147,7 +148,7 @@ int main(int argc, char **argv) {
   char **outputStringColumnName, **outputDoubleColumnName, **matchColumn = NULL;
   long inputDoubleColumns, inputStringColumns, indexColumn = 0, noOldColumnNamesColumn = 0;
   int64_t inputRows;
-  int32_t matchColumns = 0;
+  int32_t matchColumns = 0, readCode;
   long outputRows, outputDoubleColumns, outputStringColumns;
   char **inputParameterName;
   int32_t inputParameters;
@@ -290,7 +291,7 @@ int main(int argc, char **argv) {
   /***********
    * Read data
    ***********/
-  while (0 < SDDS_ReadTable(&inputPage)) {
+  while ((readCode = SDDS_ReadTable(&inputPage)) > 0) {
     ipage++;
 #if defined(DEBUG)
     fprintf(stderr, "Working on page %ld\n", ipage);
@@ -432,17 +433,14 @@ int main(int argc, char **argv) {
       /***********************************
        * Define names for numerical columns 
        ***********************************/
-      if (!Root && inputStringColumns) {
-        /* Use specified string column, or first string column encountered */
-        if (!newColumnNamesColumn)
-          /* First string column encountered */
-          outputDoubleColumnName = (char **)SDDS_GetColumn(&inputPage, inputStringColumnName[0]);
-        else {
-          /* Use specified string column */
-          if (SDDS_CheckColumn(&inputPage, newColumnNamesColumn, NULL, SDDS_STRING, stderr) != SDDS_CHECK_OKAY)
-            SDDS_Bomb("Column specified with -newColumnNames does not exist in input file.");
-          outputDoubleColumnName = (char **)SDDS_GetColumn(&inputPage, newColumnNamesColumn);
-        }
+      if (!Root && (newColumnNamesColumn || inputStringColumns)) {
+        char *nameColumn = newColumnNamesColumn ? newColumnNamesColumn : inputStringColumnName[0];
+        int32_t nameType = SDDS_GetNamedColumnType(&inputPage, nameColumn);
+
+        if (nameType != SDDS_STRING && nameType != SDDS_ENUM)
+          SDDS_Bomb("Column specified with -newColumnNames must exist and have string or enum type.");
+        if (!(outputDoubleColumnName = SDDS_GetColumnInString(&inputPage, nameColumn)))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
         for (i = 1; i < inputRows; i++) {
           if (match_string(outputDoubleColumnName[i - 1], outputDoubleColumnName + i, inputRows - i, EXACT_MATCH) >= 0) {
@@ -661,6 +659,10 @@ int main(int argc, char **argv) {
 #endif
   }
 
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (inputDoubleColumns) {
     m_free(&RInv);
     m_free(&R);

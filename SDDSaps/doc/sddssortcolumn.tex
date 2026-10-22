@@ -16,7 +16,7 @@ sddssortcolumn [SDDSinput] [SDDSoutput] [-pipe=[input][,output]]
     \begin{itemize}
       \item \verb|-sortList=<column1>,<column2>,...| --- specify the order of column names in a list.
       \item \verb|-pipe=[input][,output]| --- the standard SDDS Toolkit pipe option.
-      \item \verb|-sortWith=<filename>,column=<string>| --- sort columns by the order in column \verb|<string>| of \verb|<filename>|; overrides other sorting.
+      \item \verb|-sortWith=<filename>,column=<string>| --- sort columns by the order in column \verb|<string>| of \verb|<filename>|; overrides other sorting. The selected column must have string or ENUM type. ENUM dictionary labels supply the column names.
       \item \verb|-bpmOrder| --- sort columns by the assumed BPM position in the storage ring.
       \item \verb|-decreasing| --- sort columns in decreasing order; default is increasing.
     \end{itemize}

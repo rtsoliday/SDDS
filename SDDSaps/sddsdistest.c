@@ -410,6 +410,7 @@ double chiSquaredCDF(double x) {
 
 void compareToDistribution(char *output, long testCode, SDDS_DATASET *SDDSin, char **columnName, char **sigmaName, long columnNames, long distCode, long degreesFree, char *dofParameter, short columnMajorOrder, int threads) {
   SDDS_DATASET SDDSout;
+  int32_t readCode;
   double *data, *data1, stat, sigLevel;
   long iStat, iSigLevel, iCount, iColumnName;
   long icol;
@@ -450,7 +451,7 @@ void compareToDistribution(char *output, long testCode, SDDS_DATASET *SDDSin, ch
   }
   if (!SDDS_WriteLayout(&SDDSout))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-  while (SDDS_ReadPage(SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(SDDSin)) > 0) {
     if (!SDDS_StartPage(&SDDSout, columnNames))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     rows = SDDS_CountRowsOfInterest(SDDSin);
@@ -523,6 +524,8 @@ void compareToDistribution(char *output, long testCode, SDDS_DATASET *SDDSin, ch
     if (!SDDS_WritePage(&SDDSout))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDSout)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

@@ -192,6 +192,7 @@ long (*filter_funct[])(STAGE *stage, long filterNum, int64_t npoints) =
 long verbose;
 
 int main(int argc, char *argv[]) {
+  int32_t readCode;
   SCANNED_ARG *s_arg;
   SDDS_DATASET SDDS_input, SDDS_output;
   char *inputfile, *outputfile, *xcolName, **ycolName, **ycolMatch;
@@ -409,7 +410,7 @@ int main(int argc, char *argv[]) {
   if (!SDDS_WriteLayout(&SDDS_output))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-  while ((SDDS_ReadPage(&SDDS_input)) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDS_input)) > 0) {
     if (!SDDS_CopyPage(&SDDS_output, &SDDS_input))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if ((npoints = SDDS_CountRowsOfInterest(&SDDS_input)) < 0)
@@ -467,6 +468,8 @@ int main(int argc, char *argv[]) {
     if (!SDDS_WritePage(&SDDS_output))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDS_input) || !SDDS_Terminate(&SDDS_output))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   for (i = 0; i < totalStages; i++) {
@@ -1234,7 +1237,7 @@ long processFilterParamsFromFile(char *filename, char *ACColumn, char *BDColumn,
     fprintf(stderr, "error: problem reading %s\n", filename);
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
-  if (SDDS_ReadPage(&SDDSdata) < 0)
+  if (SDDS_ReadPage(&SDDSdata) <= 0)
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!(rows = SDDS_CountRowsOfInterest(&SDDSdata))) {
     fprintf(stderr, "error: problem counting rows in file %s\n", filename);

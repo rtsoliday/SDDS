@@ -834,10 +834,12 @@ int main(int argc, char **argv) {
   buffer = tmalloc(max_size * sizeof(char));
 
   recovered = 0;
+  pageNumber = 0;
 #ifdef DEBUG
   fprintf(stderr, "Reading file\n");
 #endif
-  while (!recovered && (pageNumber = SDDS_ReadPage(&SDDS_orig)) >= 0) {
+  while (!recovered && (!toPage || pageNumber < toPage) &&
+         (pageNumber = SDDS_ReadPage(&SDDS_orig)) >= 0) {
     if (pageNumber == 0) {
       if (!recover) {
         fprintf(stderr, "error: SDDS data garbled--consider using -recover option\n");
@@ -845,9 +847,11 @@ int main(int argc, char **argv) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
         return EXIT_FAILURE;
       } else {
-        if (recover != 2 && SDDS_ReadRecoveryPossible(&SDDS_orig))
+        if (recover != 2 && SDDS_ReadRecoveryPossible(&SDDS_orig)) {
           recovered = 1;
-        else {
+          /* A read error returns zero, but page selection needs the input page number. */
+          pageNumber = SDDS_orig.page_number;
+        } else {
           if (recover != 2)
             fprintf(stderr, "warning: unable to recover data--pages may be missing\n");
           break;
@@ -1069,9 +1073,11 @@ static char **process_name_options(char **orig_name, long **orig_flag, long orig
       free(edit_request[i].match_string);
       edit_request[i].match_string = ptr;
       if (wild_match(new_name[j], edit_request[i].match_string)) {
+        if (strlen(new_name[j]) >= sizeof(edit_buffer))
+          SDDS_Bomb("name too long for -editnames (maximum input length is 255 bytes); use -rename instead");
         strcpy(edit_buffer, new_name[j]);
-        if (!edit_string(edit_buffer, edit_request[i].edit_string))
-          SDDS_Bomb("error editing name");
+        if (!edit_string_bounded(edit_buffer, sizeof(edit_buffer), edit_request[i].edit_string))
+          SDDS_Bomb("error editing name (invalid edit or result exceeds 255 bytes); use -rename for longer names");
         free(new_name[j]);
         SDDS_CopyString(&new_name[j], edit_buffer);
       }

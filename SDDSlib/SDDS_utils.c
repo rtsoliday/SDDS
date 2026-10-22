@@ -810,12 +810,41 @@ void *SDDS_Recalloc(void *old_ptr, size_t old_size, size_t new_size) {
  * @return Returns `1` if the format string is valid for the specified type; otherwise, returns `0` and records an error message.
  *
  * @note This function does not modify the format string; it only validates its compatibility with the given type.
+ * String formats accept one string conversion with optional width and precision, plus escaped percent literals.
  *
  * @see SDDS_SetError
  */
 int32_t SDDS_VerifyPrintfFormat(const char *string, int32_t type) {
   char *percent, *s;
   int32_t len, tmp;
+
+  if (!string)
+    return 0;
+  if (type == SDDS_STRING) {
+    const char *format = string;
+    int32_t conversions = 0;
+    while (*format) {
+      if (*format++ != '%')
+        continue;
+      if (*format == '%') {
+        format++;
+        continue;
+      }
+      if (*format == '-')
+        format++;
+      while (*format >= '0' && *format <= '9')
+        format++;
+      if (*format == '.') {
+        format++;
+        while (*format >= '0' && *format <= '9')
+          format++;
+      }
+      if (*format != 's' || conversions++)
+        return 0;
+      format++;
+    }
+    return conversions == 1;
+  }
 
   s = (char *)string;
   do {
@@ -881,14 +910,6 @@ int32_t SDDS_VerifyPrintfFormat(const char *string, int32_t type) {
     if (--len == 0)
       return (1);
     if ((tmp = strspn(s, "-+.0123456789 ")) < len)
-      return (0);
-    break;
-  case SDDS_STRING:
-    if ((len = strcspn(s, "s")) == strlen(s))
-      return (0);
-    if (len == 0)
-      return (1);
-    if ((tmp = strspn(s, "-0123456789")) < len)
       return (0);
     break;
   case SDDS_CHARACTER:

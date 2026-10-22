@@ -228,10 +228,18 @@ int main(int argc, char **argv) {
     outputPage.layout.data_mode.column_major = input1Page.layout.data_mode.column_major;
 
   /* Process data pages */
-  while ((ipage1 = SDDS_ReadTable(&input1Page)) && (ipage2 = SDDS_ReadTable(&input2Page))) {
+  while (1) {
+    ipage1 = SDDS_ReadTable(&input1Page);
+    if (ipage1 == 0)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    ipage2 = SDDS_ReadTable(&input2Page);
+    if (ipage2 == 0)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if ((reuse && (ipage1 < 0 && ipage2 < 0)) ||
         (!reuse && (ipage1 < 0 || ipage2 < 0)))
       break;
+    if (reuse && ((ipage1 < 0 && !lastPage1) || (ipage2 < 0 && !lastPage2)))
+      SDDS_Bomb("Unable to reuse a page from an empty matrix input");
 
     ipage = MAX(ipage1, ipage2);
 

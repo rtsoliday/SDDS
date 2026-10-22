@@ -29,7 +29,7 @@
 
     Multiple data pages of the input file will be processed and written to the output file if all the data pages of the input file have the same number of rows. The processing will stop at the first data page which does not have the same number of rows as that of the first page.
 
-    If applicable, the string column selected to generate column names for the output file is assumed to be the same in all input data sets. The string columns of only the first data set are read.
+    If applicable, the STRING or ENUM column selected to generate column names for the output file is assumed to be the same in all input data sets. Names are read from the first data set; ENUM dictionary labels supply the names.
 
   \item \textbf{switches:}
     \begin{itemize}
@@ -43,11 +43,12 @@
       \item \verb|-root=string| --- A string used to generate column names for the output file data. The first data column is named \verb|string000|, the second \verb|string001|, etc.
       \item \verb|-digits=integer| --- Minimum number of digits used in the number appended to \verb|root| of the output file column names. The default value is 3.
       \item \verb|-sFile=file| --- Writes the singular values vector to file.
-      \item \verb|-newColumnNames=string| --- Specifies a string column of the input file which will be used to define column names of the output file.
+      \item \verb|-newColumnNames=column| --- Specifies a STRING or ENUM column of the input file which will be used to define column names of the output file. ENUM dictionary labels supply the names. The named column must exist and have one of these types, even when no STRING columns are present. Reconstruction files retain the original categorical column and its dictionary.
       \item \verb|-uMatrix=file| --- Writes the $u$ column-orthogonal matrix to a file. The SVD decomposition follows the convention $A = u S v^T$. The ``transformed'' $x$ are $v^T x$, and the ``transformed'' $y$ are $u^T y$.
       \item \verb|-vMatrix=file| --- Writes the $v$ column-orthogonal matrix to a file.
       \item \verb|-removeDCVectors| --- Removes the eigenvectors which have an overall DC component.
       \item \verb|-weights=file,name=columnName,value=columnName| --- Specifies a file which contains weights for each of the rows of the matrix, thus giving different weights for solving the linear equations of the pseudoinverse problem. The equation that is solved is $wAx = wy$ where $w$ is the weight vector turned into a diagonal matrix and $A$ is the input matrix. The matrix solution returned is $(wA)^I w$ where $()^I$ means taking the pseudoinverse. The $u$ matrix now has a different interpretation: the ``transformed'' $x$ are $v^T x$, as before, but the ``transformed'' $y$ are $u^T w y$.
+      \item \verb|-correctorWeights=file,name=columnName,value=columnName| --- Specifies weights for the matrix columns. For both weight options, the name column must have STRING or ENUM type; ENUM dictionary labels are matched to the matrix names. Weight values must have numeric types.
       \item \verb|-symbol=string| --- The string for the symbol field of data column definitions.
       \item \verb|-reconstruct=file| --- Specifies a file which will reconstruct the original matrix with only the singular values retained in the inversion.
       \item \verb|-printPackage| --- Prints out the linear algebra package that was compiled.

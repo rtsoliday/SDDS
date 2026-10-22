@@ -11,13 +11,13 @@ pytestmark = pytest.mark.skipif(
   reason="required tools not built",
 )
 
+# Array-only pages have no tabular row-count entry.
 DATASET = """SDDS1
 &array name=A, type=long, dimensions=3, &end
 &data mode=ascii, &end
 ! page number 1
 2 2 2           ! 3-dimensional array A:
 1 2 3 4 5 6 7 8
-0
 """
 
 def create_input(tmp_path):

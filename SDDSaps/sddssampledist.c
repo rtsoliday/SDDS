@@ -602,21 +602,40 @@ int main(int argc, char **argv) {
   while (1) {
     if (verbose)
       fprintf(stderr, "Beginning page loop\n");
-    if (input && SDDS_ReadPage(&SDDSin) <= 0)
-      break;
+    if (mainInputOpened) {
+      int32_t readCode = SDDS_ReadPage(&SDDSin);
+      if (readCode == 0)
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      if (readCode < 0)
+        break;
+    }
     for (i = 0; i < seqRequests; i++)
       dataFilePageStatus[i] = 1;
 #pragma omp parallel for if (threads > 1 && seqRequests > 1) num_threads(threads) schedule(dynamic)
     for (i = 0; i < seqRequests; i++) {
-      if (seqRequest[i].flags & SEQ_DATAFILE)
+      if (seqRequest[i].flags & SEQ_DATAFILE) {
         dataFilePageStatus[i] = SDDS_ReadPage(&seqRequest[i].SDDSin);
+        if (dataFilePageStatus[i] == 0) {
+          /* The error stack belongs to this worker; print it before leaving. */
+#pragma omp critical(sddssampledist_read_errors)
+          {
+            fprintf(stderr, "Error reading distribution file %s\n", seqRequest[i].dataFileName);
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+            SDDS_ClearErrors();
+          }
+        }
+      }
     }
+    /* Errors in any input must take precedence over EOF in another input. */
+    for (i = 0; i < seqRequests; i++)
+      if ((seqRequest[i].flags & SEQ_DATAFILE) && dataFilePageStatus[i] == 0)
+        return EXIT_FAILURE;
     for (i = 0; i < seqRequests; i++)
       if ((seqRequest[i].flags & SEQ_DATAFILE) && dataFilePageStatus[i] <= 0)
         break;
     if (i != seqRequests)
       break;
-    if (!SDDS_StartPage(&SDDSout, samples) || (input && !SDDS_CopyParameters(&SDDSout, &SDDSin)))
+    if (!SDDS_StartPage(&SDDSout, samples) || (mainInputOpened && !SDDS_CopyParameters(&SDDSout, &SDDSin)))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if (verbose)
       fprintf(stderr, "Defining randomization tables\n");
@@ -666,7 +685,7 @@ int main(int argc, char **argv) {
         free(pos_x);
         free(pos_cdf);
       } else {
-        if (input && !(seqRequest[i].flags & SEQ_DATAFILE))
+        if (!(seqRequest[i].flags & SEQ_DATAFILE))
           SDDSptr = &SDDSin;
         else
           SDDSptr = &seqRequest[i].SDDSin;
@@ -778,7 +797,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Exited read loop\n");
   free(sample);
   free(dataFilePageStatus);
-  if ((input && !SDDS_Terminate(&SDDSin)) || !SDDS_Terminate(&SDDSout))
+  if ((mainInputOpened && !SDDS_Terminate(&SDDSin)) || !SDDS_Terminate(&SDDSout))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   for (i = 0; i < seqRequests; i++) {
     if (seqRequest[i].dataFileName)

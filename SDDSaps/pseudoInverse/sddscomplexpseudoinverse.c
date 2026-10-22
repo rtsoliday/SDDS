@@ -18,6 +18,194 @@
 #include "scan.h"
 #include "match_string.h"
 #include "SDDS.h"
+
+#ifndef SDDS_COMPLEX_WEIGHTS_TEST
+/** @brief Validate an explicitly selected categorical naming column before reading pages. */
+static int32_t checkComplexNameColumn(SDDS_DATASET *input, char *column) {
+  int32_t type = SDDS_GetNamedColumnType(input, column);
+  if (type == SDDS_STRING || type == SDDS_ENUM)
+    return 1;
+  SDDS_SetError("-newColumnNames column must exist and have string or enum type");
+  return 0;
+}
+
+/** @brief Return owned row names, giving an explicit column precedence over automatic discovery. */
+static char **getComplexOutputNames(SDDS_DATASET *input, char *root, char *automaticColumn,
+                                    char *requestedColumn, long digits) {
+  char **names;
+  char *column = requestedColumn ? requestedColumn : automaticColumn;
+  int64_t rows = SDDS_CountRowsOfInterest(input), i;
+
+  if (requestedColumn && !checkComplexNameColumn(input, requestedColumn))
+    return NULL;
+  if (!root && column) {
+    if (!checkComplexNameColumn(input, column))
+      return NULL;
+    return SDDS_GetColumnInString(input, column);
+  }
+  if (rows <= 0 || (uint64_t)rows > SIZE_MAX / sizeof(*names) || digits < 1 || digits > INT_MAX) {
+    SDDS_SetError("Invalid row count or digit width for complex matrix names");
+    return NULL;
+  }
+  if (!(names = SDDS_Calloc(rows, sizeof(*names))))
+    return NULL;
+  root = root ? root : "Column";
+  for (i = 0; i < rows; i++) {
+    char number[32];
+    size_t length = (size_t)snprintf(number, sizeof(number), "%" PRId64, i);
+    size_t width = MAX((size_t)digits, length), rootLength = strlen(root);
+    if (rootLength > SIZE_MAX - width - 1 || !(names[i] = SDDS_Malloc(rootLength + width + 1))) {
+      SDDS_FreeStringArray(names, rows);
+      free(names);
+      SDDS_SetError("Unable to allocate complex matrix names");
+      return NULL;
+    }
+    memcpy(names[i], root, rootLength);
+    memset(names[i] + rootLength, '0', width - length);
+    memcpy(names[i] + rootLength + width - length, number, length + 1);
+  }
+  return names;
+}
+
+/** @brief Define real/imaginary column pairs without limiting categorical label lengths. */
+static int32_t defineComplexNamedColumns(SDDS_DATASET *output, char **names, int32_t count, char *symbol) {
+  int32_t i;
+  for (i = 0; i < count; i++) {
+    size_t length = strlen(names[i]);
+    char *name;
+    int32_t realIndex, imagIndex;
+    if (length > SIZE_MAX - 5 || !(name = SDDS_Malloc(length + 5)))
+      return 0;
+    snprintf(name, length + 5, "Real%s", names[i]);
+    realIndex = SDDS_DefineColumn(output, name, symbol, NULL, NULL, NULL, SDDS_DOUBLE, 0);
+    snprintf(name, length + 5, "Imag%s", names[i]);
+    imagIndex = SDDS_DefineColumn(output, name, symbol, NULL, NULL, NULL, SDDS_DOUBLE, 0);
+    free(name);
+    if (realIndex < 0 || imagIndex < 0)
+      return 0;
+  }
+  return 1;
+}
+
+/** @brief Write a named real/imaginary pair using the complete categorical label. */
+static int32_t setComplexNamedColumn(SDDS_DATASET *output, char *label, int64_t rows,
+                                    double *real, double *imag) {
+  size_t length = strlen(label);
+  char *name;
+  int32_t realSet, imagSet;
+  if (length > SIZE_MAX - 5 || !(name = SDDS_Malloc(length + 5)))
+    return 0;
+  snprintf(name, length + 5, "Real%s", label);
+  realSet = SDDS_SetColumn(output, SDDS_SET_BY_NAME, real, rows, name);
+  snprintf(name, length + 5, "Imag%s", label);
+  imagSet = SDDS_SetColumn(output, SDDS_SET_BY_NAME, imag, rows, name);
+  free(name);
+  return realSet && imagSet;
+}
+
+/** @brief Retain original categorical definitions when preparing a reconstruction file. */
+static int32_t initializeComplexReconstruction(SDDS_DATASET *output, SDDS_DATASET *input, char *filename) {
+  if (!SDDS_InitializeCopy(output, input, filename, "w"))
+    return 0;
+  if (!SDDS_FindParameter(input, FIND_NUMERIC_TYPE, "NumberOfSingularValuesUsed", NULL) &&
+      SDDS_DefineParameter(output, "NumberOfSingularValuesUsed", NULL, NULL,
+                           "largest singular value used", NULL, SDDS_LONG, NULL) < 0)
+    return 0;
+  if (!SDDS_FindParameter(input, FIND_ANY_TYPE, "DeletedVectors", NULL) &&
+      SDDS_DefineParameter(output, "DeletedVectors", "DeletedVectors", NULL,
+                           "list of vectors that were deleted", NULL, SDDS_STRING, NULL) < 0)
+    return 0;
+  return SDDS_WriteLayout(output);
+}
+
+/** @brief Copy original codes and dictionaries before replacing reconstructed numeric values. */
+static int32_t copyComplexReconstructionPage(SDDS_DATASET *output, SDDS_DATASET *input,
+                                            int32_t used, char *deleted) {
+  return SDDS_StartPage(output, SDDS_CountRowsOfInterest(input)) &&
+    SDDS_CopyParameters(output, input) && SDDS_CopyArrays(output, input) && SDDS_CopyColumns(output, input) &&
+    SDDS_SetParameters(output, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE,
+                        "NumberOfSingularValuesUsed", used, "DeletedVectors", deleted, NULL);
+}
+#endif
+
+#ifndef SDDS_COMPLEX_NAMES_TEST
+/**
+ * @brief Read owned STRING or ENUM labels and match weights to matrix names.
+ * @return An allocated weight vector, using 1 for names absent from the file.
+ */
+static double *readComplexWeightFile(char *filename, char *nameColumn, char *valueColumn,
+                                     char **targetNames, int32_t targetCount,
+                                     long verbose, long noWarnings) {
+  SDDS_DATASET weightsPage;
+  char **names = NULL;
+  double *values = NULL, *weights = NULL;
+  int64_t rows;
+  int32_t type, i;
+  long match;
+
+  if (!filename || !nameColumn || !valueColumn)
+    SDDS_Bomb("Weights require a filename, name column and value column");
+  if (verbose)
+    fprintf(stderr, "Reading file %s...\n", filename);
+  if (!SDDS_InitializeInput(&weightsPage, filename))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  type = SDDS_GetNamedColumnType(&weightsPage, nameColumn);
+  if (type != SDDS_STRING && type != SDDS_ENUM) {
+    SDDS_SetError("Weight name column must exist and have string or enum type");
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  }
+  if (SDDS_ReadPage(&weightsPage) <= 0) {
+    SDDS_SetError("Unable to read weights dataset");
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  }
+  if ((rows = SDDS_CountRowsOfInterest(&weightsPage)) <= 0 || rows > LONG_MAX)
+    SDDS_Bomb("Weights dataset must have between 1 and LONG_MAX rows");
+  if (!(names = SDDS_GetColumnInString(&weightsPage, nameColumn)) ||
+      !(values = SDDS_GetColumnInDoubles(&weightsPage, valueColumn)))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  /* Label copies remain valid after their dictionary and dataset are released. */
+  if (!SDDS_Terminate(&weightsPage))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  if (targetCount < 0 || (uint64_t)targetCount > SIZE_MAX / sizeof(*weights) ||
+      !(weights = SDDS_Malloc(sizeof(*weights) * targetCount)))
+    SDDS_Bomb("Unable to allocate weights");
+  for (i = 0; i < targetCount; i++) {
+    match = match_string(targetNames[i], names, (long)rows, EXACT_MATCH);
+    if (match < 0) {
+      if (!noWarnings)
+        fprintf(stderr, "Warning: Name %s doesn't exist in file %s.\n", targetNames[i], filename);
+      weights[i] = 1;
+    } else
+      weights[i] = values[match];
+  }
+  SDDS_FreeStringArray(names, rows);
+  free(names);
+  free(values);
+  return weights;
+}
+
+/** @brief Load the first-page BPM and corrector weight inputs without SVD dependencies. */
+static void readComplexWeightInputs(long ipage, long verbose, long noWarnings,
+                                     long includeWeights, char *weightsFile,
+                                     char *weightsNamesColumn, char *weightsValuesColumn,
+                                     long includeCorrWeights, char *corrWeightsFile,
+                                     char *corrWeightsNamesColumn, char *corrWeightsValuesColumn,
+                                     int32_t rows, char **rowNames,
+                                     int32_t columns, char **columnNames,
+                                     double **weights, double **corrWeights) {
+  if (ipage != 1)
+    return;
+  if (includeWeights)
+    *weights = readComplexWeightFile(weightsFile, weightsNamesColumn, weightsValuesColumn,
+                                    rowNames, rows, verbose, noWarnings);
+  if (includeCorrWeights)
+    *corrWeights = readComplexWeightFile(corrWeightsFile, corrWeightsNamesColumn, corrWeightsValuesColumn,
+                                        columnNames, columns, verbose, noWarnings);
+}
+#endif
+
+/* The named regression driver compiles the production readers without MKL. */
+#if !defined(SDDS_COMPLEX_WEIGHTS_TEST) && !defined(SDDS_COMPLEX_NAMES_TEST)
 #include "mkl_types.h"
 #include "mkl.h"
 /*#include "mkl_lapack.h" */
@@ -148,7 +336,7 @@ static char *USAGE3="root           use the string specified to generate column 
                names are formed with the root \"Real\" and \"Imag\".\n\
 digits         minimum number of digits used in the number appended to the root\n\
                part of the column names. Default is value 3.\n\
-newColumnNames use the column specified as the source for new column names.\n\
+newColumnNames use the specified STRING or ENUM column as the source for new column names.\n\
 sFile, uMatrix, vMatrix writes the u and v column-orthogonal matrices \n\
                and the singular values vector to files. \n\
                The SVD decomposition follows the convention A = u (SValues) v^T \n\
@@ -236,7 +424,7 @@ int main(int argc, char **argv)
   long nlargest,nsmallest;
   long NSVUsed;
   long ascii;
-  long digits, foundStringColumn=0, invertMultiply=0, strColIndex=-1;
+  long digits, invertMultiply=0, strColIndex=-1;
   unsigned long pipeFlags;
   long tmpfile_used, noWarnings;
   long ipage;
@@ -480,6 +668,8 @@ int main(int argc, char **argv)
   }
   InitializeInputAndGetColumnNames(&inputPage, inputfile, &numericalColumnName, &numericalColumns,
                                    &stringColumnName, &inputDescription, &inputContents);
+  if (newColumnNamesColumn && !checkComplexNameColumn(&inputPage, newColumnNamesColumn))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (verbose&FL_VERBOSE) {
     report_stats(stderr,"\nAfter initializing SDDS input.\n");
   }
@@ -520,7 +710,8 @@ int main(int argc, char **argv)
       free(imag); imag=NULL;
     }
     /* free data page memory as soon as possible */
-    SDDS_FreeDataPage( &inputPage);
+    if (!reconstructFile)
+      SDDS_FreeDataPage(&inputPage);
     if (verbose&FL_VERBOSE) 
       report_stats(stderr,"\nAfter filling R matrix with data.\n");
     if (includeWeights) {
@@ -812,12 +1003,7 @@ int main(int argc, char **argv)
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
     for(i=0;i<outputColumns;i++) {
-      sprintf(realcol, "Real%s", outputColumnName[i]);
-      sprintf(imagcol, "Imag%s", outputColumnName[i]);
-      if (!SDDS_SetColumn(&outputPage, SDDS_SET_BY_NAME | SDDS_PASS_BY_REFERENCE, 
-                          realData[i], numericalColumns, realcol ) ||
-          !SDDS_SetColumn(&outputPage, SDDS_SET_BY_NAME | SDDS_PASS_BY_REFERENCE, 
-                          imagData[i], numericalColumns, imagcol ))
+      if (!setComplexNamedColumn(&outputPage, outputColumnName[i], numericalColumns, realData[i], imagData[i]))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       free(realData[i]);
       free(imagData[i]);
@@ -866,20 +1052,9 @@ int main(int argc, char **argv)
       if (verbose&FL_VERYVERBOSE) {
         fprintf(stderr, "Reconstructed (tranposed)");
       }
-      if (!SDDS_StartPage(&reconstructPage, rows) ||
-          !SDDS_CopyParameters(&reconstructPage, &inputPage) ||
-          !SDDS_CopyArrays(&reconstructPage, &inputPage) ||
-          !SDDS_SetParameters(&reconstructPage, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE,
-                              "NumberOfSingularValuesUsed",NSVUsed,NULL) ||
-          !SDDS_SetParameters(&reconstructPage, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE,
-                              "DeletedVectors",deletedVector,NULL))
+      if (!copyComplexReconstructionPage(&reconstructPage, &inputPage, NSVUsed, deletedVector))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-      if (foundStringColumn) {
-        if (!SDDS_SetColumn(&reconstructPage, SDDS_SET_BY_NAME | SDDS_PASS_BY_REFERENCE,
-                            outputColumnName, rows,
-                            newColumnNamesColumn?newColumnNamesColumn:stringColumnName))
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      }
+      SDDS_FreeDataPage(&inputPage);
       for(i=0;i<numericalColumns;i++) {
         sprintf(realcol,"Real%s", numericalColumnName[i]);
         sprintf(imagcol,"Imag%s", numericalColumnName[i]);
@@ -974,6 +1149,8 @@ int main(int argc, char **argv)
       report_stats(stderr,"\nAt the end of the loop.\n");
     }
   } /*end of page reading loop */
+  if (ipage == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&inputPage) || !SDDS_Terminate(&outputPage))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (multiplyFile && !SDDS_Terminate(&multiplyPage))
@@ -1199,21 +1376,8 @@ void SetupOutputFiles(char *inputDescription, char *inputContents, char *outputf
     if ( 0 > SDDS_DefineColumn(outputPage, oldColumnNames?oldColumnNames:"OldColumnNames",
                                NULL, NULL, NULL, NULL, SDDS_STRING, 0))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    for(i=0;i<rows;i++) { 
-      sprintf(realcol, "Real%s", outputColumnName[i]);
-      sprintf(imagcol, "Imag%s", outputColumnName[i]);
-      if (Symbol) {
-        if (0>SDDS_DefineColumn(outputPage, realcol, Symbol, NULL, NULL, 
-                                NULL, SDDS_DOUBLE, 0) ||
-            0>SDDS_DefineColumn(outputPage, imagcol, Symbol, NULL, NULL, 
-                                NULL, SDDS_DOUBLE, 0))
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      } else {
-        if (!SDDS_DefineSimpleColumn(outputPage, realcol, NULL, SDDS_DOUBLE) ||
-            !SDDS_DefineSimpleColumn(outputPage, imagcol, NULL, SDDS_DOUBLE))
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      }
-    }
+    if (!defineComplexNamedColumns(outputPage, outputColumnName, rows, Symbol))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   } else {
     if (!invertMultiply) {
       if (!SDDS_DefineSimpleColumn(outputPage, "OldColumnNames", NULL, SDDS_STRING))
@@ -1225,13 +1389,8 @@ void SetupOutputFiles(char *inputDescription, char *inputContents, char *outputf
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       *strColIndex = 0;
     }
-    for (i=0; i<productCols; i++) {
-       sprintf(realcol, "Real%s", outputColumnName[i]);
-       sprintf(imagcol, "Imag%s", outputColumnName[i]);
-       if (!SDDS_DefineSimpleColumn(outputPage, realcol, NULL, SDDS_DOUBLE) ||
-           !SDDS_DefineSimpleColumn(outputPage, imagcol, NULL, SDDS_DOUBLE))
-         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    }
+    if (!defineComplexNamedColumns(outputPage, outputColumnName, productCols, NULL))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
   if (verbose&FL_VERBOSE) {
     report_stats(stderr,"\nAfter defining columns.\n");
@@ -1310,20 +1469,7 @@ void SetupOutputFiles(char *inputDescription, char *inputContents, char *outputf
   
   
   if (reconstructFile) {
-    if (!SDDS_InitializeCopy(reconstructPage, inputPage, reconstructFile, "w"))
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    if (newColumnNamesColumn && !SDDS_DefineSimpleColumn(reconstructPage, newColumnNamesColumn, NULL, SDDS_STRING))
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    if (!SDDS_FindParameter(inputPage,FIND_NUMERIC_TYPE,"NumberOfSingularValuesUsed", NULL))
-      if (0>SDDS_DefineParameter(reconstructPage, "NumberOfSingularValuesUsed", 
-                                 "NumberOfSingularValuesUsed", NULL, 
-                                 "largest singular value used", NULL, SDDS_LONG, NULL))
-        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    if (!SDDS_FindParameter(inputPage,FIND_ANY_TYPE, "DeletedVectors", NULL))
-      if (0>SDDS_DefineParameter(reconstructPage, "DeletedVectors", "DeletedVectors", NULL, 
-                                 "list of vectors that were deleted", NULL, SDDS_STRING, NULL))
-        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    if (!SDDS_WriteLayout(reconstructPage))
+    if (!initializeComplexReconstruction(reconstructPage, inputPage, reconstructFile))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
 }
@@ -1337,11 +1483,9 @@ void ReadOtherInputData(long verbose, long noWarnings, long ipage, SDDS_DATASET 
                         double **w, double **corrW)
 {
   char format[80], realcol[256], imagcol[256];
-  long i, j, row_match, foundStringColumn=0;
-  int32_t mpage, weightsColumns, weightsRows=0, corrWeightsColumns, corrWeightsRows;
-  double *real=NULL, *imag=NULL, *weights=NULL;
-  SDDS_DATASET weightsPage;
-  char **weightsColumnName=NULL, **corrWeightsColumnName, **corrWeightsName=NULL, **weightsName=NULL;
+  long i, j;
+  int32_t mpage;
+  double *real=NULL, *imag=NULL;
 
   if (verbose&FL_VERBOSE) {
     report_stats(stderr,"\nAfter reading page.\n");
@@ -1353,37 +1497,10 @@ void ReadOtherInputData(long verbose, long noWarnings, long ipage, SDDS_DATASET 
     if (verbose&FL_VERBOSE)
       fprintf(stderr, "Page %ld has %" PRId32 " rows.\n", ipage, *rows);
     *rowsFirstPage = *rows;
-    if ( !Root && stringColumnName ) {
-      /* use specified string column, or first string column encountered */
-      if (!newColumnNamesColumn) {
-        /* first string column encountered */
-        *outputColumnName = (char**) SDDS_GetColumn(inputPage, stringColumnName);
-        foundStringColumn = 1;
-      }
-      else {
-        /* use specified string column */
-        if (SDDS_CheckColumn(inputPage, newColumnNamesColumn, NULL, SDDS_STRING, stderr)
-            != SDDS_CHECK_OKAY)
-          SDDS_Bomb("column named with -newColumnNames does not exist in input");
-        *outputColumnName = (char**)SDDS_GetColumn(inputPage, newColumnNamesColumn);
-        foundStringColumn = 1;
-      }
-    }
-    else {
-      /* use command line options to produce column names in the output file */
-      foundStringColumn = 0;
-      *outputColumnName = (char**) malloc( *rows * sizeof(char*) );
-      digits = MAX(digits, log10(*rows) + 1);
-      if (!Root) {
-        Root = (char*) malloc( sizeof(char) * (strlen("Column")+1) );
-        strcpy(Root, "Column");
-      }
-      for( i=0; i<*rows; i++) {
-        (*outputColumnName)[i] = (char*) malloc( sizeof(char) * (strlen(Root) + digits + 1) );
-        sprintf( format, "%s%%0%ldld", Root, digits);
-        sprintf( (*outputColumnName)[i], format, i);
-      }
-    }
+    if (!Root && !newColumnNamesColumn && !stringColumnName)
+      Root = "Column";
+    if (!(*outputColumnName = getComplexOutputNames(inputPage, Root, stringColumnName, newColumnNamesColumn, digits)))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     *outputColumns = *rows;
   } else {
     if ( !(*rows = SDDS_CountRowsOfInterest(inputPage)) ) {
@@ -1397,7 +1514,10 @@ void ReadOtherInputData(long verbose, long noWarnings, long ipage, SDDS_DATASET 
   }
   /* ***** read multiply matrix file */
   if (multiplyFile) {
-    if ((mpage=SDDS_ReadPage(multiplyPage))>0) { 
+    mpage = SDDS_ReadPage(multiplyPage);
+    if (mpage == 0)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    if (mpage>0) {
       *multiplyRows = SDDS_CountRowsOfInterest(multiplyPage);
       if (mpage==1) {
         if (!invertMultiply) {
@@ -1420,14 +1540,11 @@ void ReadOtherInputData(long verbose, long noWarnings, long ipage, SDDS_DATASET 
           }
         } else {
           /*get the actutaor name from multiply matrix */
-          if (multiStringCol) {
-            *actuatorName = (char**) SDDS_GetColumn(multiplyPage, multiStringCol); 
+          if (multiStringCol || newColumnNamesColumn) {
+            if (!(*actuatorName = getComplexOutputNames(multiplyPage, NULL, multiStringCol,
+                                                        multiStringCol ? NULL : newColumnNamesColumn, digits)))
+              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
             *actuators = *multiplyRows;
-          } else if (newColumnNamesColumn) {
-            if (SDDS_CheckColumn(multiplyPage, newColumnNamesColumn, NULL, SDDS_STRING, NULL)==SDDS_CHECK_OK) {
-              *actuatorName = (char**)SDDS_GetColumn(multiplyPage, newColumnNamesColumn);
-              *actuators = *multiplyRows;
-            }
           }
           if (multiplyColumnName) 
             *freeMultiCol = 1;
@@ -1464,82 +1581,11 @@ void ReadOtherInputData(long verbose, long noWarnings, long ipage, SDDS_DATASET 
     }
   } /*end if multiplyFile */
   
-  /* ***************
-     read BPM  weights file
-     *************** */
-  if (includeWeights && ipage==1) {
-    if (verbose&FL_VERBOSE)
-      fprintf(stderr, "Reading file %s...\n", weightsFile);
-    if (!SDDS_InitializeInput(&weightsPage, weightsFile) ||
-        !(weightsColumnName=(char**)SDDS_GetColumnNames(&weightsPage, &weightsColumns)))
-      SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
-      if (0 < SDDS_ReadTable(&weightsPage))
-        SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      if ( !(weightsRows = SDDS_CountRowsOfInterest(&weightsPage)) )
-        SDDS_Bomb("No rows in weights dataset.");
-      /* check for the presence of the two columns */
-      if (!(weightsName = SDDS_GetColumn(&weightsPage, weightsNamesColumn)))
-        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-      if (!(weights = SDDS_GetColumnInDoubles(&weightsPage, weightsValuesColumn)))
-        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-      if (!SDDS_Terminate(&weightsPage))
-        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      *w = malloc(sizeof(**w) * (*rows));
-      for (i = 0; i< *rows; i++) {
-        if (0>(row_match = match_string( (*outputColumnName)[i], 
-                                         weightsName, 
-                                         weightsRows, EXACT_MATCH))) {
-          if (!noWarnings)
-            fprintf( stderr, "Warning: Name %s doesn't exist in file %s.\n", 
-                     (*outputColumnName)[i], weightsFile); 
-          (*w)[i] = 1.0;
-        }
-        else {
-          (*w)[i] = weights[row_match];
-        }
-      }
-      free(weights); weights=NULL;
-  } /*end if includeWeights */
-  
-  /* ***************
-     read corrector  weights file
-     *************** */
-  if (includeCorrWeights && ipage==1) {
-    if (verbose&FL_VERBOSE)
-      fprintf(stderr, "Reading file %s...\n", corrWeightsFile);
-    if (!SDDS_InitializeInput(&weightsPage, corrWeightsFile) ||
-        !(corrWeightsColumnName=(char**)SDDS_GetColumnNames(&weightsPage, &corrWeightsColumns)))
-      SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
-    if (0 < SDDS_ReadTable(&weightsPage))
-      SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    if ( !(corrWeightsRows = SDDS_CountRowsOfInterest(&weightsPage)) )
-      SDDS_Bomb("No rows in weights dataset.");
-    /* check for the presence of the two columns */
-    if (!(corrWeightsName = SDDS_GetColumn(&weightsPage, corrWeightsNamesColumn)))
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-    if (!(weights = SDDS_GetColumnInDoubles(&weightsPage, corrWeightsValuesColumn)))
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-    if (!SDDS_Terminate(&weightsPage))
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    /* sort through the names. The rows of the weights file must be matched with
-       the rows of the input matrix */
-    *corrW = malloc(sizeof(**corrW) * numericalColumns);
-    for (i = 0; i<numericalColumns; i++) {
-      if (0>(row_match = match_string( numericalColumnName[i], 
-                                       corrWeightsName, 
-                                       corrWeightsRows, EXACT_MATCH))) {
-        if (!noWarnings)
-          fprintf( stderr, "Warning: Name %s doesn't exist in file %s.\n", 
-                   numericalColumnName[i], weightsFile); 
-        (*corrW)[i] = 1.0;
-      }
-      else {
-        (*corrW)[i] = weights[row_match];
-      }
-    }
-    free(weights);
-    weights=NULL;
-  } /*end of read corrector weights */
+  readComplexWeightInputs(ipage, verbose & FL_VERBOSE, noWarnings,
+                          includeWeights, weightsFile, weightsNamesColumn, weightsValuesColumn,
+                          includeCorrWeights, corrWeightsFile, corrWeightsNamesColumn, corrWeightsValuesColumn,
+                          *rows, *outputColumnName, numericalColumns, numericalColumnName, w, corrW);
+
 }
 
 /* Auxiliary routine: printing a matrix */
@@ -1578,3 +1624,4 @@ int cprintmatrix( char *matname, int m, int n, MKL_Complex16 *A){
 
   return 0;
 }
+#endif

@@ -41,6 +41,7 @@ static void free_data_memory(double ****data, long output_columns, long pages, l
 
 int main(int argc, char **argv) {
   SDDS_DATASET sdds_orig, sdds_out1, sdds_out2;
+  int32_t readCode;
   int32_t i, j, k, row, str_len;
   SCANNED_ARG *s_arg;
   char *input_file, *output_root, output1[1024], output2[1024], tmp_col[256];
@@ -98,7 +99,7 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  while (SDDS_ReadPage(&sdds_orig) > 0) {
+  while ((readCode = SDDS_ReadPage(&sdds_orig)) > 0) {
     if (page == 0) {
       if (!SDDS_GetParameterAsDouble(&sdds_orig, "origin1", &xmin) ||
           !SDDS_GetParameterAsDouble(&sdds_orig, "max_ext1", &xmax) ||
@@ -150,6 +151,8 @@ int main(int argc, char **argv) {
     page++;
   }
 
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&sdds_orig)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     free_data_memory(data, output_columns, z_dim, y_dim);

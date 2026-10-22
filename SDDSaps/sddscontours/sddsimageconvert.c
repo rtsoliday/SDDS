@@ -300,6 +300,7 @@ long CheckForImageType(SDDS_DATASET *SDDS_orig, MULTICOLUMN_DATA *multicolumnDat
 }
 
 long ConvertSDDSmultiColumnImage(SDDS_DATASET *SDDS_orig, SDDS_DATASET *SDDS_dataset, MULTICOLUMN_DATA multicolumnData, SINGLECOLUMN_DATA singlecolumnData) {
+  int32_t readCode;
   double *indexData, *data = NULL, *lineData;
   long n, m, rows, xdim;
   double yinterval, xinterval, xmin, xmax;
@@ -359,7 +360,7 @@ long ConvertSDDSmultiColumnImage(SDDS_DATASET *SDDS_orig, SDDS_DATASET *SDDS_dat
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return (1);
   }
-  while (SDDS_ReadPage(SDDS_orig) > 0) {
+  while ((readCode = SDDS_ReadPage(SDDS_orig)) > 0) {
     if ((rows = SDDS_RowCount(SDDS_orig)) <= 0)
       continue;
     if (!(indexData = SDDS_GetColumnInDoubles(SDDS_orig, multicolumnData.indexName))) {
@@ -426,11 +427,16 @@ long ConvertSDDSmultiColumnImage(SDDS_DATASET *SDDS_orig, SDDS_DATASET *SDDS_dat
   for (n = 0; n < multicolumnData.ydim; n++)
     free(dataColumnNames[n]);
   free(dataColumnNames);
+  if (readCode == 0) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return 1;
+  }
 
   return (0);
 }
 
 long ConvertSDDSsingleColumnImage(SDDS_DATASET *SDDS_orig, SDDS_DATASET *SDDS_dataset, MULTICOLUMN_DATA multicolumnData, SINGLECOLUMN_DATA singlecolumnData) {
+  int32_t readCode;
   char **columnNames = NULL;
   char imageColumn[40], prefix[40];
   int32_t nColumns = 0;
@@ -467,7 +473,7 @@ long ConvertSDDSsingleColumnImage(SDDS_DATASET *SDDS_orig, SDDS_DATASET *SDDS_da
     sprintf(prefix, "%s", multicolumnData.prefix);
   }
 
-  while (SDDS_ReadPage(SDDS_orig) > 0) {
+  while ((readCode = SDDS_ReadPage(SDDS_orig)) > 0) {
     if ((rows = SDDS_RowCount(SDDS_orig)) <= 0)
       continue;
     if ((SDDS_GetParameterAsString(SDDS_orig, "Variable1Name", &var1Name) == NULL) ||
@@ -609,5 +615,9 @@ long ConvertSDDSsingleColumnImage(SDDS_DATASET *SDDS_orig, SDDS_DATASET *SDDS_da
     free(var1Name);
   if (var2Name)
     free(var2Name);
+  if (readCode == 0) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return 1;
+  }
   return (0);
 }

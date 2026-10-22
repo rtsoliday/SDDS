@@ -266,7 +266,10 @@ int main(int argc, char **argv) {
 
       /* Read stringData only in non-quad mode */
       if (strcmp(mode, "quad") != 0) {
-        if (!(stringData = SDDS_GetColumn(&inputPage, "BPMName"))) {
+        if (SDDS_GetNamedColumnType(&inputPage, "BPMName") != SDDS_STRING &&
+            SDDS_GetNamedColumnType(&inputPage, "BPMName") != SDDS_ENUM)
+          SDDS_Bomb("BPMName column must have string or enum type");
+        if (!(stringData = SDDS_GetColumnInString(&inputPage, "BPMName"))) {
           SDDS_SetError("Unable to read specified column: BPMName.");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
           return EXIT_FAILURE;
@@ -355,6 +358,12 @@ int main(int argc, char **argv) {
         SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
   }
+
+  if (ipage == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
+  if (ipage == -1 && !inputRows)
+    SDDS_Bomb("No data pages found in input");
 
   if (!SDDS_WriteTable(&outputPage))
     SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);

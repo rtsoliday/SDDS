@@ -82,6 +82,7 @@ static char *option[N_OPTIONS] = {
   "majorOrder"};
 
 int main(int argc, char **argv) {
+  int32_t readCode;
   double *meas_data = NULL, input_voltage = 0.2, z0 = 50;
   char *input = NULL, *output = NULL, *data_column = NULL, *input_vol_param = NULL;
   long i_arg, k;
@@ -177,7 +178,7 @@ int main(int argc, char **argv) {
   if (!SDDS_WriteLayout(&sdds_out))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-  while (SDDS_ReadPage(&sdds_in) > 0) {
+  while ((readCode = SDDS_ReadPage(&sdds_in)) > 0) {
     if ((rows = SDDS_CountRowsOfInterest(&sdds_in)) <= 0)
       continue;
     if (!SDDS_StartPage(&sdds_out, rows) || !SDDS_CopyPage(&sdds_out, &sdds_in))
@@ -245,6 +246,8 @@ int main(int argc, char **argv) {
     meas_data = NULL;
   }
 
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&sdds_in) || !SDDS_Terminate(&sdds_out)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(1);

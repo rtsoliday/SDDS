@@ -695,6 +695,8 @@ int main(int argc, char **argv) {
     if (!SDDS_WriteTable(&outputPage))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
+  if (ipage == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   if (residualFile) {
     if (!SDDS_Terminate(&residualPage))

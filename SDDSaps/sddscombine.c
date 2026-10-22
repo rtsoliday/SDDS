@@ -135,6 +135,9 @@ long keep_element(char *name, char **delete, long deletions, char **retain, long
 void *SDDS_GetParameterMod(SDDS_DATASET *SDDS_dataset, SDDS_DATASET *SDDS_output, char *parameter_name, void *memory);
 static void WriteStandardPage(SDDS_DATASET *SDDS_output, SDDS_DATASET *SDDS_input, char *inputfile, long inputfiles);
 static void CombineStandardInputThreaded(SDDS_DATASET *SDDS_output, char **inputfile, long inputfiles, long sparse, int32_t sparse_statistics, long nColumns, int threads);
+static int checkMetadataType(SDDS_DATASET *dataset, const char *name, int collapse, int32_t expectedType);
+static int checkFixedEnumParameters(SDDS_DATASET *output, SDDS_DATASET *input);
+static int checkEnumLayouts(SDDS_DATASET *output, SDDS_DATASET *input, int collapse);
 
 #define COLUMN_MODE 0
 #define PARAMETER_MODE 1
@@ -420,6 +423,22 @@ int main(int argc, char **argv) {
       if (!SDDS_InitializeAppend(&SDDS_output, inputfile[0]))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
+    if (SDDS_NumberOfErrors())
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    if (merge && param) {
+      if ((param_index = SDDS_GetParameterIndex(&SDDS_output, param)) < 0)
+        SDDS_Bomb("-merge parameter not in append destination");
+      if (SDDS_GetParameterType(&SDDS_output, param_index) == SDDS_ENUM) {
+        /* The existing last page participates in the first merge comparison. */
+        param_size = SDDS_GetTypeSize(param_type = SDDS_ENUM);
+        this_param = tmalloc(param_size);
+        last_param = tmalloc(param_size);
+        if (!(paramEnumDefinition = SDDS_CreateEnumDefinition(SDDS_output.layout.parameter_definition[param_index].enum_values)) ||
+            !SDDS_GetParameter(&SDDS_output, param, this_param))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+        memcpy(last_param, this_param, param_size);
+      }
+    }
     iFile = 1;
   } else {
     if (!SDDS_InitializeInput(&SDDS_input, inputfile[0]) ||
@@ -506,6 +525,10 @@ int main(int argc, char **argv) {
       }
       free(name);
     }
+    /* Merged pages may copy only rows, so parameter and array conflicts must
+     * also be checked before any output is written. */
+    if (!checkEnumLayouts(&SDDS_output, &SDDS_input, collapse))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if (inputfiles > 1 && !SDDS_Terminate(&SDDS_input))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
@@ -542,6 +565,10 @@ int main(int argc, char **argv) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
   }
+
+  if ((!merge && !checkMetadataType(&SDDS_output, "Filename", collapse, SDDS_STRING)) ||
+      !checkMetadataType(&SDDS_output, "NumberCombined", collapse, SDDS_LONG))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   if (collapse) {
     if (SDDS_GetColumnIndex(&SDDS_output, "PageNumber") < 0) {
@@ -605,6 +632,8 @@ int main(int argc, char **argv) {
           /* user doesn't want this page, or it can't be recovered */
           break;
       }
+      if (append && !checkFixedEnumParameters(&SDDS_output, &SDDS_input))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       if (param) {
         if (first_page) {
           if ((param_index = SDDS_GetParameterIndex(&SDDS_input, param)) < 0)
@@ -713,7 +742,7 @@ int main(int argc, char **argv) {
           }
         } else if (merge && !param) {
           if (nMerge > 0 && (page - 1) % nMerge == 0 && page != 1) {
-            if (!SDDS_WritePage(&SDDS_output)) {
+            if (!(append ? SDDS_UpdatePage(&SDDS_output, FLUSH_TABLE) : SDDS_WritePage(&SDDS_output))) {
               SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
               exit(EXIT_FAILURE);
             }
@@ -743,7 +772,7 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE);
               }
             }
-            if (!SDDS_WritePage(&SDDS_output)) {
+            if (!(append ? SDDS_UpdatePage(&SDDS_output, FLUSH_TABLE) : SDDS_WritePage(&SDDS_output))) {
               SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
               exit(EXIT_FAILURE);
             }
@@ -767,7 +796,15 @@ int main(int argc, char **argv) {
       }
       first_page = 0;
     }
-    if (!recovered && (retval == 0 || SDDS_NumberOfErrors() || !SDDS_Terminate(&SDDS_input))) {
+    if (recovered) {
+      fprintf(stderr, "warning: recovering data from %s\n", inputfile[iFile] ? inputfile[iFile] : "stdin");
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      SDDS_ClearErrors();
+    } else if (retval == 0 || SDDS_NumberOfErrors()) {
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      exit(EXIT_FAILURE);
+    }
+    if (!SDDS_Terminate(&SDDS_input)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
       exit(EXIT_FAILURE);
     }
@@ -806,8 +843,80 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
   SDDS_FreeEnumDefinition(paramEnumDefinition);
+  free(this_param);
+  free(last_param);
 
   return EXIT_SUCCESS;
+}
+
+/** @brief Validate dictionaries even for fields on pages omitted by merging. */
+static int checkEnumLayouts(SDDS_DATASET *output, SDDS_DATASET *input, int collapse) {
+  int32_t i, index;
+
+  if (!collapse)
+    return SDDS_CheckEnumCopy(output, input, COLUMN_MODE) &&
+      SDDS_CheckEnumCopy(output, input, PARAMETER_MODE) &&
+      SDDS_CheckEnumCopy(output, input, ARRAY_MODE);
+
+  for (i = 0; i < input->layout.n_parameters; i++) {
+    PARAMETER_DEFINITION *source = input->layout.parameter_definition + i;
+    COLUMN_DEFINITION *target;
+    char message[256];
+
+    if ((index = SDDS_GetColumnIndex(output, source->name)) < 0)
+      continue;
+    target = output->layout.column_definition + index;
+    if ((source->type == SDDS_ENUM || target->type == SDDS_ENUM) &&
+        (source->type != target->type ||
+         !SDDS_EnumDefinitionsEqual(source->enum_definition, target->enum_definition))) {
+      snprintf(message, sizeof(message), "Incompatible enum mappings for collapse parameter %.120s; use explicit remapping", source->name);
+      SDDS_SetError(message);
+      return 0;
+    }
+  }
+  return 1;
+}
+
+/** @brief Check types before assigning generated metadata through variadic setters. */
+static int checkMetadataType(SDDS_DATASET *dataset, const char *name, int collapse, int32_t expectedType) {
+  int32_t index, type;
+  char message[256];
+
+  index = collapse ? SDDS_GetColumnIndex(dataset, (char *)name) : SDDS_GetParameterIndex(dataset, (char *)name);
+  if (index < 0)
+    return 1;
+  type = collapse ? SDDS_GetColumnType(dataset, index) : SDDS_GetParameterType(dataset, index);
+  if (type == expectedType)
+    return 1;
+  snprintf(message, sizeof(message), "Reserved output %s %s must have type %s (found %s)",
+           collapse ? "column" : "parameter", name, SDDS_type_name[expectedType - 1], SDDS_type_name[type - 1]);
+  SDDS_SetError(message);
+  return 0;
+}
+
+/** @brief Reject incoming states that cannot be represented by a fixed enum header. */
+static int checkFixedEnumParameters(SDDS_DATASET *output, SDDS_DATASET *input) {
+  int32_t i, index, value;
+  char message[256];
+
+  for (i = 0; i < output->layout.n_parameters; i++) {
+    PARAMETER_DEFINITION *definition = output->layout.parameter_definition + i;
+    if (definition->type != SDDS_ENUM || !definition->fixed_value)
+      continue;
+    if ((index = SDDS_GetParameterIndex(input, definition->name)) < 0)
+      continue;
+    if (!SDDS_CheckEnumFieldCompatibility(output, input, PARAMETER_MODE, i, index) ||
+        !SDDS_GetParameter(input, definition->name, &value))
+      return 0;
+    /* Fixed enum codes have already been validated while reading the layout. */
+    if (value != (int32_t)strtol(definition->fixed_value, NULL, 10)) {
+      snprintf(message, sizeof(message), "Cannot append: fixed enum parameter %.120s has a different value; convert the destination to a varying parameter first",
+               definition->name);
+      SDDS_SetError(message);
+      return 0;
+    }
+  }
+  return 1;
 }
 
 static void WriteStandardPage(SDDS_DATASET *SDDS_output, SDDS_DATASET *SDDS_input, char *inputfile, long inputfiles) {

@@ -222,8 +222,8 @@ long perform_sddsplot_matching(SDDS_TABLE *table, MATCH_DEFINITION **match, long
   long n_rows;
   MATCH_TERM *match_term;
   MATCH_DEFINITION *match_ptr;
-  PARAMETER_DEFINITION *pardefptr;
-  static char s[SDDS_MAXLINE];
+  int32_t type;
+  char *value;
   static int32_t *rowFlag1 = NULL, *rowFlag2 = NULL;
   static long rowFlags = 0;
 
@@ -238,23 +238,16 @@ long perform_sddsplot_matching(SDDS_TABLE *table, MATCH_DEFINITION **match, long
       accept = 1;
       match_term = match_ptr->match_term;
       for (j=0; j<match_ptr->match_terms; j++) {
-        if (!(pardefptr=SDDS_GetParameterDefinition(table, match_term[j].name)) ||
-            !(pardefptr->type==SDDS_STRING || pardefptr->type==SDDS_CHARACTER)) {
+        type = SDDS_GetNamedParameterType(table, match_term[j].name);
+        if (!(type==SDDS_STRING || type==SDDS_CHARACTER || type==SDDS_ENUM)) {
           fprintf(stderr, "error: unknown or numeric parameter %s given for match\n",
                   match_term[j].name);
           exit(1);
         }
-        if (pardefptr->type==SDDS_STRING) {
-          char **ppc;
-          ppc = SDDS_GetParameter(table, match_term[j].name, NULL);
-          strcpy_ss(s, *ppc);
-        }
-        else {
-          char *pc;
-          pc = SDDS_GetParameter(table, match_term[j].name, NULL);
-          sprintf(s, "%c", *pc);
-        }
-        accept = SDDS_Logic(accept, wild_match(s, match_term[j].string), match_term[j].logic);
+        if (!(value=SDDS_GetParameterAsString(table, match_term[j].name, NULL)))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+        accept = SDDS_Logic(accept, wild_match(value, match_term[j].string), match_term[j].logic);
+        free(value);
       }
       if (!accept) {
         skip_table = 1;

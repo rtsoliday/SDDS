@@ -618,6 +618,7 @@ void ReadInputFile(char *inputFile, char *xCol, char *yCol, char **zColMatch, lo
                    char *stdCol, long *pages, long **rows, double ***x, double ***y, double ****z, double ***std, SDDS_DATASET *SDDS_in) {
   int64_t rows1 = 0;
   long i, pages0 = 0, std_exist = 0;
+  int32_t readCode;
 
   if (!SDDS_InitializeInput(SDDS_in, inputFile))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -652,7 +653,7 @@ void ReadInputFile(char *inputFile, char *xCol, char *yCol, char **zColMatch, lo
   if (SDDS_CheckColumn(SDDS_in, stdCol, NULL, SDDS_ANY_NUMERIC_TYPE, NULL) == SDDS_CHECK_OK)
     std_exist = 1;
 
-  while (SDDS_ReadPage(SDDS_in) > 0) {
+  while ((readCode = SDDS_ReadPage(SDDS_in)) > 0) {
     rows1 = SDDS_CountRowsOfInterest(SDDS_in);
     if (!rows1)
       continue;
@@ -694,6 +695,8 @@ void ReadInputFile(char *inputFile, char *xCol, char *yCol, char **zColMatch, lo
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     pages0++;
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   if (!pages0) {
     fprintf(stderr, "No data found in the input file.\n");
@@ -809,6 +812,7 @@ void ReadPointFile(char *inputFile, char *xCol, char *yCol, long *pages, OUT_POI
   long pages0 = 0;
   double *x, *y, xmin, xmax, firstx, firsty, ymin, ymax;
   int nx, ny, i;
+  int32_t readCode;
 
   if (!SDDS_InitializeInput(&SDDS_in, inputFile))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -820,7 +824,7 @@ void ReadPointFile(char *inputFile, char *xCol, char *yCol, long *pages, OUT_POI
     fprintf(stderr, "Y column - %s does not exist!\n", yCol);
     exit(EXIT_FAILURE);
   }
-  while (SDDS_ReadPage(&SDDS_in) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDS_in)) > 0) {
     rows1 = SDDS_CountRowsOfInterest(&SDDS_in);
     if (!rows1)
       continue;
@@ -873,6 +877,8 @@ void ReadPointFile(char *inputFile, char *xCol, char *yCol, long *pages, OUT_POI
       (*out_point)[pages0].dy = 0;
     pages0++;
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDS_in))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!pages0) {

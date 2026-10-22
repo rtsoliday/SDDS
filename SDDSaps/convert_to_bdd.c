@@ -660,20 +660,35 @@ ITE *bdd_ite_cal(ITE *ite1, ITE *ite2, short type) {
 }
 
 void load_data_base(char *filename) {
-  int32_t i, rows, pages, j, allbase, index;
+  int32_t i, rows, pages, j, allbase, index, type, logicalType, readCode;
   int32_t *id = NULL;
   double *prob = NULL;
   char **guid = NULL, **desc = NULL, **label = NULL;
+  char *labelColumns[] = {"Description", "Guidance", "Label"};
+  char *labelParameters[] = {"Description", "LogicalTypeDesc", "TreeName"};
   SDDS_DATASET table;
 
   if (!SDDS_InitializeInput(&table, filename))
-    SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
+  for (i = 0; i < 3; i++) {
+    type = SDDS_GetNamedColumnType(&table, labelColumns[i]);
+    if (type != SDDS_STRING && type != SDDS_ENUM) {
+      fprintf(stderr, "Error: column %s must have string or enum type\n", labelColumns[i]);
+      exit(EXIT_FAILURE);
+    }
+    type = SDDS_GetNamedParameterType(&table, labelParameters[i]);
+    if (type != SDDS_STRING && type != SDDS_ENUM) {
+      fprintf(stderr, "Error: parameter %s must have string or enum type\n", labelParameters[i]);
+      exit(EXIT_FAILURE);
+    }
+  }
 
   pages = 0;
   sub_tree = NULL;
   ite = NULL;
 
-  while (SDDS_ReadPage(&table) > 0) {
+  while ((readCode = SDDS_ReadPage(&table)) > 0) {
     if (!(rows = SDDS_CountRowsOfInterest(&table)))
       continue;
 
@@ -692,19 +707,20 @@ void load_data_base(char *filename) {
 
     sub_tree[pages].calculated = 0;
 
-    if (!SDDS_GetParameter(&table, "Description", &sub_tree[pages].description) ||
-        !SDDS_GetParameter(&table, "ID", &sub_tree[pages].ID) ||
-        !SDDS_GetParameter(&table, "LogicalType", &sub_tree[pages].type) ||
-        !SDDS_GetParameter(&table, "LogicalTypeDesc", &sub_tree[pages].typeDesc) ||
-        !SDDS_GetParameter(&table, "TreeName", &sub_tree[pages].tree_name))
-      SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    if (!(sub_tree[pages].description = SDDS_GetParameterAsString(&table, "Description", NULL)) ||
+        !SDDS_GetParameterAsLong(&table, "ID", &sub_tree[pages].ID) ||
+        !SDDS_GetParameterAsLong(&table, "LogicalType", &logicalType) ||
+        !(sub_tree[pages].typeDesc = SDDS_GetParameterAsString(&table, "LogicalTypeDesc", NULL)) ||
+        !(sub_tree[pages].tree_name = SDDS_GetParameterAsString(&table, "TreeName", NULL)))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    sub_tree[pages].type = logicalType;
 
-    if (!(id = SDDS_GetColumn(&table, "ID")) ||
-        !(prob = SDDS_GetColumn(&table, "Probability")) ||
-        !(desc = SDDS_GetColumn(&table, "Description")) ||
-        !(guid = SDDS_GetColumn(&table, "Guidance")) ||
-        !(label = SDDS_GetColumn(&table, "Label")))
-      SDDS_PrintErrors(stdout, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    if (!(id = SDDS_GetColumnInLong(&table, "ID")) ||
+        !(prob = SDDS_GetColumnInDoubles(&table, "Probability")) ||
+        !(desc = SDDS_GetColumnInString(&table, "Description")) ||
+        !(guid = SDDS_GetColumnInString(&table, "Guidance")) ||
+        !(label = SDDS_GetColumnInString(&table, "Label")))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
     allbase = 1;
     for (i = 0; i < rows; i++) {
@@ -829,6 +845,9 @@ void load_data_base(char *filename) {
 
     pages++;
   }
+
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   if (verbose)
     fprintf(stdout, "Total Bases: %ld, Total ITEs: %ld\n", bases, ites);

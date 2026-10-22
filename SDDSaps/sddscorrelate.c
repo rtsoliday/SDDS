@@ -237,6 +237,20 @@ int main(int argc, char **argv) {
   if (!SDDS_InitializeInput(&SDDSin, input))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
+  /* Wildcards select numeric fields, but explicit selections must not silently disappear. */
+  for (i = 0; i < columns; i++) {
+    if (has_wildcards(column[i]))
+      continue;
+    for (j = 0; j < excludeColumns; j++)
+      if (wild_match(column[i], excludeColumn[j]))
+        break;
+    if (j == excludeColumns &&
+        SDDS_CheckColumn(&SDDSin, column[i], NULL, SDDS_ANY_NUMERIC_TYPE, stderr) != SDDS_CHECK_OKAY)
+      SDDS_Bomb("Explicitly selected correlation columns must be numeric; convert enums with sddscast first.");
+  }
+  if (withOnly && SDDS_CheckColumn(&SDDSin, withOnly, NULL, SDDS_ANY_NUMERIC_TYPE, stderr) != SDDS_CHECK_OKAY)
+    SDDS_Bomb("-withOnly requires a numeric column; convert enums with sddscast first.");
+
   if (!columns)
     columns = appendToStringArray(&column, columns, "*");
   if (withOnly)
@@ -380,6 +394,10 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
 
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   free(data);
   free(correlationValue);
   free(significanceValue);

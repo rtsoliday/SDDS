@@ -132,6 +132,8 @@ char *USAGE =
   "  -sizeOfBins=<value>                           Set the size of each bin.\n"
   "  -regions=filename=<filename>,position=<columnName>,name=<columnName>\n"
   "                                                Define region-based histogramming.\n"
+  "                                                Names must have string or enum type.\n"
+  "                                                Output names are strings, including Beyond.\n"
   "  -lowerLimit=<value>                           Set the lower limit of the histogram.\n"
   "  -upperLimit=<value>                           Set the upper limit of the histogram.\n"
   "  -expand=<factor>                              Expand the range of the histogram by the given factor.\n"
@@ -194,7 +196,7 @@ int main(int argc, char **argv) {
   int64_t points;                          /* Number of data points after filtering */
   SCANNED_ARG *scanned;                    /* Scanned argument structure */
   char *inputfile, *outputfile;            /* Input and output filenames */
-  double dx;                               /* Spacing of bins in histogram */
+  double dx = 0;                           /* Spacing of bins; zero for irregular regions */
   int64_t i;                               /* Loop variable */
   long pointsBinned;                       /* Number of points in histogram */
   long normalizeMode, doSides, verbose, readCode;
@@ -527,12 +529,11 @@ int main(int argc, char **argv) {
     if (regionFlags) {
       if (!SDDS_StartPage(&outTable, bins) ||
           !SDDS_CopyParameters(&outTable, &inTable) ||
-          !SDDS_SetParameters(&outTable, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE, iBins, bins, iBinSize, dx, iPoints, pointsBinned, -1))
+          !SDDS_SetParameters(&outTable, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE, iBins, bins, iBinSize, dx, iPoints, pointsBinned, -1) ||
+          !SDDS_SetColumn(&outTable, SDDS_SET_BY_INDEX, regionPosition, bins, iIndep) ||
+          !SDDS_SetColumn(&outTable, SDDS_SET_BY_NAME, regionName, bins, regionNameColumn))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       if (points) {
-        if (!SDDS_SetColumn(&outTable, SDDS_SET_BY_INDEX, regionPosition, bins, iIndep) ||
-            !SDDS_SetColumn(&outTable, SDDS_SET_BY_NAME, regionName, bins, regionNameColumn))
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         if (!freOnly && !SDDS_SetColumn(&outTable, SDDS_SET_BY_INDEX, CDF, bins, iCdf))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         if (!cdfOnly && !SDDS_SetColumn(&outTable, SDDS_SET_BY_INDEX, hist, bins, iFreq))
@@ -572,6 +573,10 @@ int main(int argc, char **argv) {
     data = weightData = filterData = NULL;
   }
 
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (!SDDS_Terminate(&inTable)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);
@@ -579,6 +584,15 @@ int main(int argc, char **argv) {
   if (!SDDS_Terminate(&outTable)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);
+  }
+  if (regionFlags) {
+    if (!SDDS_Terminate(&SDDSregion)) {
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      return EXIT_FAILURE;
+    }
+    SDDS_FreeStringArray(regionName, bins);
+    free(regionName);
+    free(regionPosition);
   }
   return EXIT_SUCCESS;
 }
@@ -636,15 +650,20 @@ static long setupOutputFile(SDDS_DATASET *outTable, char *outputfile, SDDS_DATAS
 
   /* Define output columns */
   outputType = SDDS_DOUBLE;
-  outputFormat = NULL;
+  outputFormat = "%21.15e";
 
   if (!SDDS_TransferColumnDefinition(outTable, inTable, dataColumn, NULL) ||
       !SDDS_ChangeColumnInformation(outTable, "type", &outputType, SDDS_BY_NAME, dataColumn) ||
-      !SDDS_ChangeColumnInformation(outTable, "format_string", &outputFormat, SDDS_BY_NAME, dataColumn) ||
+      !SDDS_ChangeColumnInformation(outTable, "format_string", outputFormat, SDDS_BY_NAME, dataColumn) ||
       (iIndep = SDDS_GetColumnIndex(outTable, dataColumn)) < 0)
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-  if (regionNameColumn && !SDDS_TransferColumnDefinition(outTable, regionTable, regionNameColumn, NULL))
-    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  if (regionNameColumn) {
+    COLUMN_DEFINITION *definition = regionTable->layout.column_definition + SDDS_GetColumnIndex(regionTable, regionNameColumn);
+    /* Labels are projected to strings so the synthetic Beyond region is representable. */
+    if (SDDS_DefineColumn(outTable, regionNameColumn, definition->symbol, definition->units,
+                          definition->description, definition->format_string, SDDS_STRING, definition->field_length) < 0)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  }
   if (!cdfOnly) {
     switch (normalizeMode) {
     case NORMALIZE_PEAK:
@@ -735,10 +754,18 @@ static long setupOutputFile(SDDS_DATASET *outTable, char *outputfile, SDDS_DATAS
 
 int64_t readRegionFile(SDDS_DATASET *SDDSin, char *filename, char *positionColumn, char *nameColumn, double **regionPosition, char ***regionName) {
   int64_t i, rows = 0;
-  if (!SDDS_InitializeInput(SDDSin, filename) ||
-      SDDS_ReadPage(SDDSin) != 1 || (rows = SDDS_RowCount(SDDSin)) < 1 ||
-      !(*regionPosition = SDDS_GetColumnInDoubles(SDDSin, positionColumn)) ||
-      !(*regionName = (char **)SDDS_GetColumn(SDDSin, nameColumn)))
+  int32_t type;
+  if (!SDDS_InitializeInput(SDDSin, filename))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  type = SDDS_GetNamedColumnType(SDDSin, nameColumn);
+  if (type != SDDS_STRING && type != SDDS_ENUM)
+    SDDS_Bomb("region name column must exist and have string or enum type");
+  if (SDDS_ReadPage(SDDSin) != 1 || (rows = SDDS_RowCount(SDDSin)) < 1) {
+    SDDS_SetError("Unable to read nonempty region data page");
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  }
+  if (!(*regionPosition = SDDS_GetColumnInDoubles(SDDSin, positionColumn)) ||
+      !(*regionName = SDDS_GetColumnInString(SDDSin, nameColumn)))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   for (i = 1; i < rows; i++)
     if ((*regionPosition)[i] <= (*regionPosition)[i - 1]) {

@@ -472,11 +472,14 @@ int main(int argc, char **argv) {
   if (columnNameFile) {
     if (!SDDS_InitializeInput(&columnPage, columnNameFile))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    if (0 > SDDS_ReadPage(&columnPage))
+    if (SDDS_ReadPage(&columnPage) <= 0)
       SDDS_Bomb("Unable to read column file!");
     givenColumnNames = SDDS_CountRowsOfInterest(&columnPage);
     if (givenColumnNames) {
-      if (!(givenColumnName = (char **)SDDS_GetColumn(&columnPage, columnNameFileColumn)))
+      if (SDDS_GetNamedColumnType(&columnPage, columnNameFileColumn) != SDDS_STRING &&
+          SDDS_GetNamedColumnType(&columnPage, columnNameFileColumn) != SDDS_ENUM)
+        SDDS_Bomb("columnNames column must have string or enum type");
+      if (!(givenColumnName = SDDS_GetColumnInString(&columnPage, columnNameFileColumn)))
         SDDS_Bomb("Unable to get the ColumnName from column name file!");
     }
     if (!SDDS_Terminate(&columnPage))

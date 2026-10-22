@@ -278,6 +278,10 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (page_returned == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (!SDDS_Terminate(&in_set) || !SDDS_Terminate(&out_set)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(1);

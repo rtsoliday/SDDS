@@ -307,6 +307,10 @@ int main(int argc, char **argv) {
       outputChanges(change, changes, &outSet, rows, &inSet);
     lastRows = rows;
   }
+  if (code == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (!SDDS_Terminate(&inSet) || !SDDS_Terminate(&outSet)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

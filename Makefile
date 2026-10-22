@@ -224,4 +224,6 @@ distclean: clean
 test: all
 	$(MAKE) -C SDDSlib enum-test
 	$(MAKE) -C SDDSlib++ test
+	$(MAKE) -C SDDSaps/sddsplots array-test-driver
+	$(MAKE) -C SDDSaps/pseudoInverse enum-name-test-driver enum-weight-test-driver enum-complex-name-test-driver
 	$(PYTEST)

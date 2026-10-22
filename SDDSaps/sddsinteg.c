@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
   char *GMErrorTemplate[3] = {"%yNameIntegError", "Error estimate for integral w.r.t. %xSymbol of %ySymbol",
     "Error[$sI$e %ySymbol d%xSymbol]"};
   long i, iArg, yNames = 0, yExcludeNames = 0;
-  int32_t colMatches = 0;
+  int32_t colMatches = 0, readCode;
   int64_t rows;
   SDDS_DATASET SDDSin, SDDSout;
   SCANNED_ARG *scanned = NULL;
@@ -333,7 +333,7 @@ int main(int argc, char **argv) {
     SDDS_Bomb("Failed to set up output file.");
   }
 
-  while (SDDS_ReadPage(&SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     rows = SDDS_CountRowsOfInterest(&SDDSin);
     integral = SDDS_Realloc(integral, sizeof(*integral) * rows);
     integralError = SDDS_Realloc(integralError, sizeof(*integralError) * rows);
@@ -407,6 +407,8 @@ int main(int argc, char **argv) {
     xData = xError = NULL;
   }
 
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDSin) || !SDDS_Terminate(&SDDSout)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return EXIT_FAILURE;

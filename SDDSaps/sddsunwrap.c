@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
   SDDS_DATASET sdds_in, sdds_out;
   SCANNED_ARG *scanned;
   unsigned long pipe_flags = 0, major_order_flag = 0;
-  int32_t column_type, columns0 = 0;
+  int32_t column_type, columns0 = 0, readCode;
   int64_t j, k, rows;
   int32_t columns = 0, column_matches = 0;
   short column_major_order = -1, phase = 1, threshold_provided = 0;
@@ -217,7 +217,7 @@ int main(int argc, char **argv) {
   if (!SDDS_WriteLayout(&sdds_out))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-  while (SDDS_ReadPage(&sdds_in) > 0) {
+  while ((readCode = SDDS_ReadPage(&sdds_in)) > 0) {
     if ((rows = SDDS_CountRowsOfInterest(&sdds_in)) <= 0)
       continue;
     if (!SDDS_StartPage(&sdds_out, rows) || !SDDS_CopyPage(&sdds_out, &sdds_in))
@@ -257,6 +257,10 @@ int main(int argc, char **argv) {
     if (!SDDS_WritePage(&sdds_out))
       SDDS_PrintErrors(stderr,
                        SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  }
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
   }
   if (!SDDS_Terminate(&sdds_in) || !SDDS_Terminate(&sdds_out)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);

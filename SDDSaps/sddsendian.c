@@ -180,14 +180,14 @@ int main(int argc, char **argv) {
 
   // Process pages in the input file and write to the output file
   if (non_native) {
-    while ((page_number = SDDS_ReadNonNativePage(&SDDSin)) >= 0) {
+    while ((page_number = SDDS_ReadNonNativePage(&SDDSin)) > 0) {
       if (!SDDS_CopyPage(&SDDSout, &SDDSin) || !SDDS_WritePage(&SDDSout)) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
         exit(1);
       }
     }
   } else {
-    while ((page_number = SDDS_ReadPage(&SDDSin)) >= 0) {
+    while ((page_number = SDDS_ReadPage(&SDDSin)) > 0) {
       if (!SDDS_CopyPage(&SDDSout, &SDDSin) || !SDDS_WriteNonNativeBinaryPage(&SDDSout)) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
         exit(1);
@@ -196,6 +196,8 @@ int main(int argc, char **argv) {
   }
 
   // Terminate the input and output datasets
+  if (page_number == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDSin) || !SDDS_Terminate(&SDDSout)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(1);

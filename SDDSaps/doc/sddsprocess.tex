@@ -8,6 +8,15 @@
   data, definition of new parameters and columns in terms of existing ones, units conversions, scanning of
   string data to produce numeric data, composition of string data from other data types,
   statistical and waveform analyses, and other operations.
+
+  SDDS6 enum columns, parameters (including fixed parameters), and arrays retain their
+  dictionaries and codes when copied or retained during processing.  The \verb|-match|
+  option and the \verb|match| qualifier of \verb|-process| compare enum labels.
+  The \verb|-print| and \verb|-reprint| options display enum labels using string formats
+  such as \verb|%s|; RPN tests also access enum labels as strings.  Arithmetic, numeric
+  filters, statistics, and numeric expression destinations require numeric data.
+  Use \progref{sddscast} to convert enum values explicitly to \verb|long| codes or
+  \verb|string| labels before operations that require those types.
   \item \textbf{examples:}
   Compute the square-roots of the beta-functions, which are the beam-size envelopes:
 \begin{verbatim}

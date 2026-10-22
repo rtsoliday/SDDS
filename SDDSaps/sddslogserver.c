@@ -530,12 +530,12 @@ void updateChannelDescription(void) {
   }
 }
 
-int addValue(char *spec)
-/* spec is of the form <channel>,<value> */
-/* This routine is dangerous as there is no checking to ensure that <value> is valid.
- * Should read the .chd file, get the data type, then check for validity.
+/**
+ * @brief Append a channel sample, validating ENUM codes before updating the file.
+ * @param spec Mutable specification of the form <channel>,<value>.
+ * @return Zero on success, or a nonzero error code.
  */
-{
+int addValue(char *spec) {
   char *ptr;
   char buffer[BUFLEN];
   int32_t type;
@@ -571,8 +571,12 @@ int addValue(char *spec)
 
   if (type != SDDS_STRING)
     data = SDDS_Malloc(SDDS_type_size[type - 1]);
-  if (SDDS_ScanData(ptr, type, 0, data, 0, 0) == 0) {
+  if (SDDS_ScanData(ptr, type, 0, data, 0, 0) == 0 ||
+      (type == SDDS_ENUM && !SDDS_StringIsBlank(ptr))) {
+    if (type == SDDS_ENUM)
+      SDDS_SetError("Invalid enum code (addValue)");
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    free(data);
     SDDS_Terminate(&SDDSin);
     return 5;
   }
@@ -612,9 +616,12 @@ int addValue(char *spec)
       return 7;
     }
     break;
+  case SDDS_ENUM:
   case SDDS_LONG:
     if (!SDDS_SetRowValues(&SDDSin, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, rows, spec, *((int32_t *)data), NULL)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      free(data);
+      SDDS_Terminate(&SDDSin);
       return 7;
     }
     break;
@@ -625,7 +632,11 @@ int addValue(char *spec)
     }
     break;
   default:
-    break;
+    SDDS_SetError("Unsupported channel data type (addValue)");
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    free(data);
+    SDDS_Terminate(&SDDSin);
+    return 7;
   }
   printf("Set row value\n");
   fflush(stdout);

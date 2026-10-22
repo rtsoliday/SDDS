@@ -95,6 +95,7 @@ int main(int argc, char **argv) {
   long tmpfile_used = 0, columns = 0, no_warnings = 1;
   unsigned long pipe_flags;
   long i, i_arg, j;
+  int32_t readCode;
   SCANNED_ARG *s_arg;
   double *column_data = NULL, *pdf = NULL, *cdf = NULL;
   char buffer_pdf[1024], buffer_cdf[1024], buffer_pdf_units[1024];
@@ -209,7 +210,7 @@ int main(int argc, char **argv) {
   pdf = malloc(sizeof(*pdf) * n_test);
   cdf = malloc(sizeof(*cdf) * n_test);
 
-  while (SDDS_ReadPage(&sdds_in) >= 0) {
+  while ((readCode = SDDS_ReadPage(&sdds_in)) > 0) {
     if ((rows = SDDS_CountRowsOfInterest(&sdds_in))) {
       if (!SDDS_StartPage(&sdds_out, n_test)) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -265,6 +266,10 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   free(pdf);
   free(cdf);
 

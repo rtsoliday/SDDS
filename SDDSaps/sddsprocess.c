@@ -894,8 +894,6 @@ int main(int argc, char **argv) {
   if (!check_ifitems(&SDDS_input, &ifnot_item, 0, !nowarnings) ||
       !check_ifitems(&SDDS_input, &ifis_item, 1, !nowarnings))
     exit(EXIT_SUCCESS);
-  original_parameters = SDDS_input.layout.n_parameters;
-
   if (!description_text)
     SDDS_GetDescription(&SDDS_input, &description_text, &description_contents);
   if (!SDDS_InitializeOutput(&SDDS_output, SDDS_input.layout.data_mode.mode, 1, description_text, description_contents, outputfile)) {
@@ -987,6 +985,7 @@ int main(int argc, char **argv) {
   free(new_column_name);
   free(orig_column_name);
 
+  original_parameters = SDDS_output.layout.n_parameters;
   expandDefinitions(&definition, &definitions, &SDDS_output);
 
   for (i = 0; i < definitions; i++) {
@@ -1001,14 +1000,14 @@ int main(int argc, char **argv) {
         if (equation_ptr->equation[1] == '@') {
           /* parameter contains algebraic notation */
           if ((index = SDDS_GetParameterIndex(&SDDS_output, equation_ptr->equation + 2)) < 0 ||
-              SDDS_GetParameterType(&SDDS_input, index) != SDDS_STRING) {
+              SDDS_GetParameterType(&SDDS_output, index) != SDDS_STRING) {
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
             fprintf(stderr, "Error (sddsprocess): parameter %s does not exist or is not string type\n", equation_ptr->equation + 2);
             exit(EXIT_FAILURE);
           }
         } else {
           if ((index = SDDS_GetParameterIndex(&SDDS_output, equation_ptr->equation + 1)) < 0 ||
-              SDDS_GetParameterType(&SDDS_input, index) != SDDS_STRING) {
+              SDDS_GetParameterType(&SDDS_output, index) != SDDS_STRING) {
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
             fprintf(stderr, "Error (sddsprocess): parameter %s does not exist or is not string type\n", equation_ptr->equation + 1);
             exit(EXIT_FAILURE);
@@ -1060,6 +1059,11 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
           }
         }
+      }
+      index = equation_ptr->is_parameter ? SDDS_GetParameterIndex(&SDDS_output, equation_ptr->name) : SDDS_GetColumnIndex(&SDDS_output, equation_ptr->name);
+      if (!REDEFINABLE_TYPE(equation_ptr->is_parameter ? SDDS_GetParameterType(&SDDS_output, index) : SDDS_GetColumnType(&SDDS_output, index))) {
+        fprintf(stderr, "Can't compute non-numeric %s %s; explicit conversion is required (sddsprocess)\n", PARAMETER_OR_COLUMN(equation_ptr->is_parameter), equation_ptr->name);
+        exit(EXIT_FAILURE);
       }
       break;
     case IS_EDIT_DEFINITION:
@@ -1131,10 +1135,15 @@ int main(int argc, char **argv) {
       break;
     case IS_CONVERSION_DEFINITION:
       conversion_ptr = (CONVERSION_DEFINITION *)definition[i].structure;
+      index = conversion_ptr->is_parameter ? SDDS_GetParameterIndex(&SDDS_output, conversion_ptr->name) : SDDS_GetColumnIndex(&SDDS_output, conversion_ptr->name);
+      if (index < 0)
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      if (!SDDS_NUMERIC_TYPE(conversion_ptr->is_parameter ? SDDS_GetParameterType(&SDDS_output, index) : SDDS_GetColumnType(&SDDS_output, index))) {
+        fprintf(stderr, "Can't convert units of non-numeric %s %s; explicit conversion is required (sddsprocess)\n", PARAMETER_OR_COLUMN(conversion_ptr->is_parameter), conversion_ptr->name);
+        exit(EXIT_FAILURE);
+      }
       if (conversion_ptr->is_parameter) {
-        if ((j = SDDS_GetParameterIndex(&SDDS_output, conversion_ptr->name)) < 0)
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-        if (SDDS_CheckParameter(&SDDS_output, conversion_ptr->name, conversion_ptr->old_units, SDDS_GetParameterType(&SDDS_output, j), stderr) != SDDS_CHECK_OKAY)
+        if (SDDS_CheckParameter(&SDDS_output, conversion_ptr->name, conversion_ptr->old_units, SDDS_GetParameterType(&SDDS_output, index), stderr) != SDDS_CHECK_OKAY)
           exit(EXIT_FAILURE);
         if (!SDDS_ChangeParameterInformation(&SDDS_output, "units", conversion_ptr->new_units, SDDS_SET_BY_NAME, conversion_ptr->name)) {
           if (SDDS_NumberOfErrors())
@@ -1144,9 +1153,7 @@ int main(int argc, char **argv) {
           exit(EXIT_FAILURE);
         }
       } else {
-        if ((j = SDDS_GetColumnIndex(&SDDS_output, conversion_ptr->name)) < 0)
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-        if (SDDS_CheckColumn(&SDDS_output, conversion_ptr->name, conversion_ptr->old_units, SDDS_GetColumnType(&SDDS_output, j), stderr) != SDDS_CHECK_OKAY)
+        if (SDDS_CheckColumn(&SDDS_output, conversion_ptr->name, conversion_ptr->old_units, SDDS_GetColumnType(&SDDS_output, index), stderr) != SDDS_CHECK_OKAY)
           exit(EXIT_FAILURE);
         if (!SDDS_ChangeColumnInformation(&SDDS_output, "units", conversion_ptr->new_units, SDDS_SET_BY_NAME, conversion_ptr->name)) {
           if (SDDS_NumberOfErrors())
@@ -1201,6 +1208,11 @@ int main(int argc, char **argv) {
       }
       if (!(evaluate_ptr->is_parameter ? SDDS_ProcessParameterString(&SDDS_output, evaluate_ptr->text, SDDS_WRITEONLY_DEFINITION) : SDDS_ProcessColumnString(&SDDS_output, evaluate_ptr->text, SDDS_WRITEONLY_DEFINITION))) {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+        exit(EXIT_FAILURE);
+      }
+      index = evaluate_ptr->is_parameter ? SDDS_GetParameterIndex(&SDDS_output, evaluate_ptr->name) : SDDS_GetColumnIndex(&SDDS_output, evaluate_ptr->name);
+      if (!REDEFINABLE_TYPE(evaluate_ptr->is_parameter ? SDDS_GetParameterType(&SDDS_output, index) : SDDS_GetColumnType(&SDDS_output, index))) {
+        fprintf(stderr, "Can't evaluate non-numeric %s %s; explicit conversion is required (sddsprocess)\n", PARAMETER_OR_COLUMN(evaluate_ptr->is_parameter), evaluate_ptr->name);
         exit(EXIT_FAILURE);
       }
       break;
@@ -1355,7 +1367,14 @@ int main(int argc, char **argv) {
     if (verbose) {
       fprintf(stderr, "page number %ld read in, with %" PRId64 " rows of data\n", page_number, n_rows);
       for (i = 0; i < original_parameters; i++) {
-        SDDS_PrintTypedValue(SDDS_output.parameter[i], 0, SDDS_output.layout.parameter_definition[i].type, NULL, stderr, 0);
+        if (SDDS_output.layout.parameter_definition[i].type == SDDS_ENUM) {
+          char *label = SDDS_GetParameterAsString(&SDDS_output, SDDS_output.layout.parameter_definition[i].name, NULL);
+          if (!label)
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+          fputs(label, stderr);
+          free(label);
+        } else
+          SDDS_PrintTypedValue(SDDS_output.parameter[i], 0, SDDS_output.layout.parameter_definition[i].type, NULL, stderr, 0);
         fputc('\n', stderr);
       }
     }
@@ -1639,7 +1658,10 @@ int main(int argc, char **argv) {
       case IS_RPNTEST_DEFINITION:
         rpntest_ptr = (RPNTEST_DEFINITION *)definition[i].structure;
         rpn_lock();
-        SDDS_StoreParametersInRpnMemories(&SDDS_output);
+        if (!SDDS_StoreParametersInRpnMemories(&SDDS_output)) {
+          rpn_unlock();
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+        }
         if (rpntest_ptr->is_parameter) {
           rpn_clear();
           rpn(rpntest_ptr->expression);
@@ -1713,8 +1735,11 @@ int main(int argc, char **argv) {
         if (rpnexpression_ptr->repeat == -1)
           continue;
         rpn_lock();
-        SDDS_StoreParametersInRpnMemories(&SDDS_output);
-        SDDS_StoreColumnsInRpnArrays(&SDDS_output);
+        if (!SDDS_StoreParametersInRpnMemories(&SDDS_output) ||
+            !SDDS_StoreColumnsInRpnArrays(&SDDS_output)) {
+          rpn_unlock();
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+        }
         rpn(rpnexpression_ptr->expression);
         if (rpn_check_error()) {
           rpn_unlock();

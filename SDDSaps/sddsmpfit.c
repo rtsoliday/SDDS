@@ -306,6 +306,7 @@ static double (*basis_fn)(double xa, long ordera);
 static double (*basis_dfn)(double xa, long ordera);
 
 int main(int argc, char **argv) {
+  int32_t readCode;
   double **y = NULL, **sy = NULL, **diff = NULL;
   double *x = NULL, *sx = NULL;
   double xOffset, xScaleFactor;
@@ -619,7 +620,7 @@ int main(int argc, char **argv) {
   iCoefficientSigma = tmalloc(sizeof(long) * numYNames);
   iCoefficientUnits = tmalloc(sizeof(long) * numYNames);
 
-  while (SDDS_ReadPage(&SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     if ((points = SDDS_CountRowsOfInterest(&SDDSin)) < terms) {
       /* probably should emit an empty page here */
       continue;
@@ -1123,6 +1124,8 @@ int main(int argc, char **argv) {
         free(sy0[colIndex]);
     }
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   return (EXIT_SUCCESS);
 }
 

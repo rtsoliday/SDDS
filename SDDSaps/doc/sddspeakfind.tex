@@ -39,7 +39,7 @@ sddspeakfind [-pipe=[input][,output]] [inputFile] [outputFile]
         its two nearest neighbors.  For five-point mode, the candidate point's nearest neighbors must in turn
         be higher than their nearest neighbors on the side away from the candidate point.
       \item {\tt -threshold={\em value}} --- Specifies a minimum value that a peak value must exceed in order
-        to be included in the output.  By default, no threshold is applied.
+        to be included in the output. Use \verb|-threshold=@parameterName| to obtain the threshold from a numeric parameter on each page. ENUM parameters require explicit conversion with \progref{sddscast}. By default, no threshold is applied.
       \item {\tt -exclusionZone={\em fractionalInterval}} --- Specifies elimination of smaller peaks within a given interval
         around a larger peak.  {\em fractionalInterval} is the width of the interval in units of the length of the data table.
       \item {\tt -changeThreshold={\em fractionalChange}} --- Specifies elimination of peaks for which the fractional

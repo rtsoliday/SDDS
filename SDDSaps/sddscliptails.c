@@ -253,6 +253,10 @@ int main(int argc, char **argv) {
     if (!SDDS_WritePage(&sdds_out))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
+  if (read_code == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (SDDS_Terminate(&sdds_in) != 1) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return 1;

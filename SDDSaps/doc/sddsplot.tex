@@ -11,6 +11,22 @@ be tagged and sorted by multiple criteria.
 \verb|sddsplot| supports various flavors of Postscript, various windows options, and numerous graphics terminals.  For
 X-windows, a GUI interface is generated that supports zoom/pan, cursor readout, movie mode, and much more.
 
+SDDS6 enum columns may be plotted on either axis as enumerated categories, using their dictionary labels
+in the same way as string columns.  Categories from multiple files sharing a scale are merged by label.
+The other axis must be numeric; both axes cannot be categorical.  Numeric and categorical data cannot
+share the same scale.  Categorical axes do not support \verb|-transpose|; convert enum data to numeric
+codes first if transposition is required.
+Matching enum columns or parameters with \verb|-match| compares labels.  Enum values used for point labels,
+parameter labels, titles, legends, strings, and tags also display labels.  An explicit display format for an
+enum parameter must be a string format, such as \verb|%s|.
+The legacy text-edit options require display labels shorter than 1024 bytes;
+use a format such as \verb|%.100s| to shorten an enum parameter label before editing.
+
+Enum codes have no implicit numeric meaning.  Numeric selections, including error bars, sorting keys,
+filters, and \verb|-split=parameterChange| or \verb|-split=columnBin|, reject enums.  Enum parameter and array
+axes also require explicit conversion.  Use \progref{sddscast} to convert an enum to \verb|long| when its
+codes are intentionally needed as numeric data, or to \verb|string| for categorical column plotting.
+
   \item \textbf{examples:}
     Plot the horizontal beta function for the APS design:
     \begin{verbatim}
@@ -118,10 +134,11 @@ local switches.
 \item Initiating a plot request:\\
   \begin{itemize}
   \item {\tt -columnNames={\em xName},{\em yNameList}[,\{{\em y1NameList} | {\em x1Name},{\em y1NameList}\}] }---
-        Specifies the names of columns to be plotted.  {\em xName} may be the name of a numeric or string column,
+        Specifies the names of columns to be plotted.  {\em xName} may be the name of a numeric, string, or enum column,
         which is normally plotted against the horizontal or x axis.
-        {\em yNameList} gives the comma-separated, optionally wildcarded names of one or more columns of numeric
-        data.  Data for each item in {\em yNameList} will be paired with the x data for plotting.
+        {\em yNameList} gives the comma-separated, optionally wildcarded names of one or more columns.
+        Data for each item in {\em yNameList} will be paired with the x data for plotting.  One member of each
+        pair must be numeric; a string or enum member supplies enumerated labels for its axis.
 
         Some types of plotting require additional data, such as error bars or vector components.  These are
         specified with the {\em x1Name} and {\em y1NameList}.  Each item in {\em y1NameList} is paired with the

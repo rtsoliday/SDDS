@@ -645,9 +645,9 @@ int main(int argc, char **argv) {
     }
 
     take_RefData = trealloc(take_RefData, sizeof(*take_RefData) * (z + 1));
-    take_RefData[z].columns = 0;
+    memset(&take_RefData[z], 0, sizeof(take_RefData[z]));
     replace_RefData = trealloc(replace_RefData, sizeof(*replace_RefData) * (z + 1));
-    replace_RefData[z].columns = replace_RefData[z].parameters = replace_RefData[z].arrays = 0;
+    memset(&replace_RefData[z], 0, sizeof(replace_RefData[z]));
 
     add_newnames(&SDDS_ref[z], &new_data[z], rename_data, edit_column_request, edit_column_requests,
                  edit_parameter_request, edit_parameter_requests, edit_array_request, edit_array_requests, z + 1);
@@ -658,9 +658,8 @@ int main(int argc, char **argv) {
         SDDS_SetColumnFlags(&SDDS_ref[z], 0);
         for (i = 0; i < take_columns; i++) {
           if (!has_wildcards(take_column[i]) && SDDS_GetColumnIndex(&SDDS_ref[z], take_column[i]) < 0) {
-            sprintf(s, "error: column %s not found in file %s take_columns %ld SDDS_ref[z] %" PRId64 "\n", take_column[i], input2, take_columns, SDDS_ref[z].n_rows);
-            SDDS_SetError(s);
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+            fprintf(stderr, "error: column %s not found in file %s take_columns %ld SDDS_ref[z] %" PRId64 "\n", take_column[i], input2, take_columns, SDDS_ref[z].n_rows);
+            exit(EXIT_FAILURE);
           }
           if (!SDDS_SetColumnsOfInterest(&SDDS_ref[z], SDDS_MATCH_STRING, take_column[i], SDDS_OR))
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -690,9 +689,8 @@ int main(int argc, char **argv) {
         SDDS_SetColumnFlags(&SDDS_ref[z], 0);
         for (i = 0; i < replace_columns; i++) {
           if (!has_wildcards(replace_column[i]) && SDDS_GetColumnIndex(&SDDS_ref[z], replace_column[i]) < 0) {
-            sprintf(s, "error:  column %s not found in file %s replace_columns %ld SDDS_ref[z] %" PRId64 "\n", replace_column[i], input2, replace_columns, SDDS_ref[z].n_rows);
-            SDDS_SetError(s);
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+            fprintf(stderr, "error: column %s not found in file %s replace_columns %ld SDDS_ref[z] %" PRId64 "\n", replace_column[i], input2, replace_columns, SDDS_ref[z].n_rows);
+            exit(EXIT_FAILURE);
           }
           if (!SDDS_SetColumnsOfInterest(&SDDS_ref[z], SDDS_MATCH_STRING, replace_column[i], SDDS_OR))
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -705,29 +703,25 @@ int main(int argc, char **argv) {
       if (match_columns) {
         if ((j = SDDS_GetColumnIndex(&SDDS_1, match_column[0])) < 0 ||
             SDDS_GetColumnType(&SDDS_1, j) != SDDS_STRING) {
-          sprintf(s, "error: column %s not found or not string type in file %s", match_column[0], input1 ? input1 : "stdin");
-          SDDS_SetError(s);
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+          fprintf(stderr, "error: column %s not found or not string type in file %s\n", match_column[0], input1 ? input1 : "stdin");
+          exit(EXIT_FAILURE);
         }
         if ((j = SDDS_GetColumnIndex(&SDDS_ref[z], match_column[1])) < 0 ||
             SDDS_GetColumnType(&SDDS_ref[z], j) != SDDS_STRING) {
-          sprintf(s, "error: column %s not found or not string type in file %s", match_column[1], input2);
-          SDDS_SetError(s);
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+          fprintf(stderr, "error: column %s not found or not string type in file %s\n", match_column[1], input2);
+          exit(EXIT_FAILURE);
         }
       }
       if (equate_columns) {
         if ((j = SDDS_GetColumnIndex(&SDDS_1, equate_column[0])) < 0 ||
             !SDDS_NUMERIC_TYPE(SDDS_GetColumnType(&SDDS_1, j))) {
-          sprintf(s, "error: column %s not found or not numeric type in file %s", equate_column[0], input1 ? input1 : "stdin");
-          SDDS_SetError(s);
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+          fprintf(stderr, "error: column %s not found or not numeric type in file %s\n", equate_column[0], input1 ? input1 : "stdin");
+          exit(EXIT_FAILURE);
         }
         if ((j = SDDS_GetColumnIndex(&SDDS_ref[z], equate_column[1])) < 0 ||
             !SDDS_NUMERIC_TYPE(SDDS_GetColumnType(&SDDS_ref[z], j))) {
-          sprintf(s, "error: column %s not found or not numeric type in file %s", equate_column[1], input2);
-          SDDS_SetError(s);
-          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+          fprintf(stderr, "error: column %s not found or not numeric type in file %s\n", equate_column[1], input2);
+          exit(EXIT_FAILURE);
         }
       }
     } else {
@@ -807,6 +801,8 @@ int main(int argc, char **argv) {
         /* Check if column types are the same */
         j = SDDS_GetColumnIndex(&SDDS_ref[z], replace_RefData[z].orig_column[i]);
         k = SDDS_GetColumnIndex(&SDDS_output, replace_RefData[z].orig_column[i]);
+        if (!SDDS_CheckEnumFieldCompatibility(&SDDS_output, &SDDS_ref[z], COLUMN_MODE, k, j))
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         datatype1 = SDDS_GetColumnType(&SDDS_ref[z], j);
         datatype2 = SDDS_GetColumnType(&SDDS_output, k);
         if (datatype1 != datatype2 && (datatype1 == SDDS_STRING || datatype2 == SDDS_STRING)) {
@@ -902,7 +898,10 @@ int main(int argc, char **argv) {
     /* Check replace parameters and arrays, adding them to take_refData */
     if (replace_parameters) {
       for (i = 0; i < replace_parameters; i++) {
-        replace_RefData[z].parameters += SDDS_MatchParameters(&SDDS_ref[z], &replace_RefData[z].orig_parameter, SDDS_MATCH_STRING, FIND_ANY_TYPE, replace_parameter[i], SDDS_OR | SDDS_1_PREVIOUS);
+        SDDS_FreeStringArray(replace_RefData[z].orig_parameter, replace_RefData[z].parameters);
+        free(replace_RefData[z].orig_parameter);
+        if ((replace_RefData[z].parameters = SDDS_MatchParameters(&SDDS_ref[z], &replace_RefData[z].orig_parameter, SDDS_MATCH_STRING, FIND_ANY_TYPE, replace_parameter[i], SDDS_OR | (i ? 0 : SDDS_0_PREVIOUS))) < 0)
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       }
 
       /* Check if replace parameters exist in input1 */
@@ -915,6 +914,8 @@ int main(int argc, char **argv) {
           /* Check if parameter types are the same */
           j = SDDS_GetParameterIndex(&SDDS_ref[z], replace_RefData[z].orig_parameter[i]);
           k = SDDS_GetParameterIndex(&SDDS_output, replace_RefData[z].orig_parameter[i]);
+          if (!SDDS_CheckEnumFieldCompatibility(&SDDS_output, &SDDS_ref[z], PARAMETER_MODE, k, j))
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
           datatype1 = SDDS_GetParameterType(&SDDS_ref[z], j);
           datatype2 = SDDS_GetParameterType(&SDDS_output, k);
           if (datatype1 != datatype2 && (datatype1 == SDDS_STRING || datatype2 == SDDS_STRING)) {
@@ -944,51 +945,63 @@ int main(int argc, char **argv) {
         }
         free(replace_RefData[z].orig_parameter[i]);
       }
+    }
 
-      if (replace_arrays) {
-        for (i = 0; i < replace_arrays; i++) {
-          replace_RefData[z].arrays += SDDS_MatchArrays(&SDDS_ref[z], &replace_RefData[z].orig_array, SDDS_MATCH_STRING, FIND_ANY_TYPE, replace_array[i], SDDS_OR | SDDS_1_PREVIOUS);
-        }
-        /* Check if replace arrays exist in input1 */
-        for (i = 0; i < replace_RefData[z].arrays; i++) {
-          if (SDDS_GetArrayIndex(&SDDS_1, replace_RefData[z].orig_array[i]) < 0) {
+    if (replace_arrays) {
+      for (i = 0; i < replace_arrays; i++) {
+        SDDS_FreeStringArray(replace_RefData[z].orig_array, replace_RefData[z].arrays);
+        free(replace_RefData[z].orig_array);
+        if ((replace_RefData[z].arrays = SDDS_MatchArrays(&SDDS_ref[z], &replace_RefData[z].orig_array, SDDS_MATCH_STRING, FIND_ANY_TYPE, replace_array[i], SDDS_OR | (i ? 0 : SDDS_0_PREVIOUS))) < 0)
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      }
+      /* Check if replace arrays exist in input1 */
+      for (i = 0; i < replace_RefData[z].arrays; i++) {
+        if (SDDS_GetArrayIndex(&SDDS_1, replace_RefData[z].orig_array[i]) < 0) {
+          if (warnings) {
+            fprintf(stderr, "Warning, array %s replace array does not exist in the input, ignore.\n", replace_RefData[z].orig_array[i]);
+          }
+        } else {
+          /* Check if array types are the same */
+          j = SDDS_GetArrayIndex(&SDDS_ref[z], replace_RefData[z].orig_array[i]);
+          k = SDDS_GetArrayIndex(&SDDS_output, replace_RefData[z].orig_array[i]);
+          if (!SDDS_CheckEnumFieldCompatibility(&SDDS_output, &SDDS_ref[z], ARRAY_MODE, k, j))
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+          if (SDDS_output.layout.array_definition[k].dimensions != SDDS_ref[z].layout.array_definition[j].dimensions)
+            SDDS_Bomb("Can't replace arrays with different numbers of dimensions");
+          datatype1 = SDDS_GetArrayType(&SDDS_ref[z], j);
+          datatype2 = SDDS_GetArrayType(&SDDS_output, k);
+          if (datatype1 != datatype2 && (datatype1 == SDDS_STRING || datatype2 == SDDS_STRING)) {
             if (warnings) {
-              fprintf(stderr, "Warning, array %s replace array does not exist in the input, ignore.\n", replace_RefData[z].orig_array[i]);
+              if (datatype1 == SDDS_STRING)
+                fprintf(stderr, "Warning: cannot replace a numeric array with a string array, replace %s ignored.\n", replace_RefData[z].orig_array[i]);
+              if (datatype2 == SDDS_STRING)
+                fprintf(stderr, "Warning: cannot replace a string array with a numeric array, replace %s ignored.\n", replace_RefData[z].orig_array[i]);
             }
           } else {
-            /* Check if array types are the same */
-            j = SDDS_GetArrayIndex(&SDDS_ref[z], replace_RefData[z].orig_array[i]);
-            k = SDDS_GetArrayIndex(&SDDS_output, replace_RefData[z].orig_array[i]);
-            datatype1 = SDDS_GetArrayType(&SDDS_ref[z], j);
-            datatype2 = SDDS_GetArrayType(&SDDS_output, k);
-            if (datatype1 != datatype2 && (datatype1 == SDDS_STRING || datatype2 == SDDS_STRING)) {
-              if (warnings) {
-                if (datatype1 == SDDS_STRING)
-                  fprintf(stderr, "Warning: cannot replace a numeric array with a string array, replace %s ignored.\n", replace_RefData[z].orig_array[i]);
-                if (datatype2 == SDDS_STRING)
-                  fprintf(stderr, "Warning: cannot replace a string array with a numeric array, replace %s ignored.\n", replace_RefData[z].orig_array[i]);
+            if (datatype1 != datatype2) {
+              if (warnings)
+                fprintf(stderr, "Warning, replace array %s has different data type as the array in input1; redefining\n", replace_RefData[z].orig_array[i]);
+              if (!SDDS_ChangeArrayInformation(&SDDS_output, "type", SDDS_type_name[datatype1 - 1], SDDS_PASS_BY_STRING | SDDS_SET_BY_NAME, replace_RefData[z].orig_array[i])) {
+                fprintf(stderr, "Problem redefining array type for %s\n", replace_RefData[z].orig_array[i]);
+                exit(EXIT_FAILURE);
               }
-            } else {
-              if (datatype1 != datatype2) {
-                if (warnings)
-                  fprintf(stderr, "Warning, replace array %s has different data type as the array in input1; redefining\n", replace_RefData[z].orig_array[i]);
-                if (!SDDS_ChangeArrayInformation(&SDDS_output, "type", SDDS_type_name[datatype1 - 1], SDDS_PASS_BY_STRING | SDDS_SET_BY_NAME, replace_RefData[z].orig_array[i])) {
-                  fprintf(stderr, "Problem redefining array type for %s\n", replace_RefData[z].orig_array[i]);
-                  exit(EXIT_FAILURE);
-                }
-              }
-              /* Add replace_array to take_array, while the orig_name and new_name are the same */
-              take_RefData[z].orig_array = trealloc(take_RefData[z].orig_array, sizeof(*(take_RefData[z].orig_array)) * (take_RefData[z].arrays + 1));
-              SDDS_CopyString(&take_RefData[z].orig_array[take_RefData[z].arrays], replace_RefData[z].orig_array[i]);
-              SDDS_CopyString(&take_RefData[z].new_array[take_RefData[z].arrays], replace_RefData[z].orig_array[i]);
-              take_RefData[z].arrays++;
             }
+            /* Add replace_array to take_array, while the orig_name and new_name are the same */
+            take_RefData[z].orig_array = trealloc(take_RefData[z].orig_array, sizeof(*(take_RefData[z].orig_array)) * (take_RefData[z].arrays + 1));
+            take_RefData[z].new_array = trealloc(take_RefData[z].new_array, sizeof(*(take_RefData[z].new_array)) * (take_RefData[z].arrays + 1));
+            SDDS_CopyString(&take_RefData[z].orig_array[take_RefData[z].arrays], replace_RefData[z].orig_array[i]);
+            SDDS_CopyString(&take_RefData[z].new_array[take_RefData[z].arrays], replace_RefData[z].orig_array[i]);
+            take_RefData[z].arrays++;
           }
-          free(replace_RefData[z].orig_array[i]);
         }
+        free(replace_RefData[z].orig_array[i]);
       }
     }
   }
+
+  /* Replaced fixed parameters must be written from each reference page. */
+  if (replace_parameters && !SDDS_DeleteParameterFixedValues(&SDDS_output))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   if (!SDDS_WriteLayout(&SDDS_output))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -1024,8 +1037,21 @@ int main(int argc, char **argv) {
 
     if (!reusePage || retval1 == 1) {
 #pragma omp parallel for if (threads > 1 && referfiles > 1) num_threads(threads) schedule(dynamic)
-      for (z = 0; z < referfiles; z++)
+      for (z = 0; z < referfiles; z++) {
         refReadCode[z] = SDDS_ReadPage(&SDDS_ref[z]);
+        if (refReadCode[z] == 0) {
+          /* SDDS errors belong to the thread that read the reference page. */
+#pragma omp critical(sddsxref_read_error)
+          {
+            fprintf(stderr, "Error reading reference file %s\n", referfile[z]);
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+          }
+        }
+      }
+      for (z = 0; z < referfiles; z++) {
+        if (refReadCode[z] == 0)
+          exit(EXIT_FAILURE);
+      }
     } else {
       for (z = 0; z < referfiles; z++)
         refReadCode[z] = 1;
@@ -1423,6 +1449,12 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (retval1 == 0) {
+    fprintf(stderr, "Error reading input file %s\n", input1 ? input1 : "stdin");
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    exit(EXIT_FAILURE);
+  }
+
   for (z = 0; z < referfiles; z++) {
     free(referfile[z]);
 
@@ -1558,9 +1590,11 @@ long expandTransferRequests(char ***match, int32_t *matches, long type,
     exit(EXIT_FAILURE);
     break;
   }
-  first = 0;
+  first = 1;
   for (i = 0; i < transfers; i++) {
     if (transfer[i].type == type) {
+      SDDS_FreeStringArray(*match, *matches);
+      free(*match);
       if ((*matches = (*matchRoutine)(inSet, match, SDDS_MATCH_STRING, FIND_ANY_TYPE, transfer[i].name, SDDS_OR | (first ? SDDS_0_PREVIOUS : 0))) == -1) {
         return 0;
       }
@@ -1759,6 +1793,8 @@ char **process_editnames(char **orig_name, long **orig_flags, long orig_names, E
       free(edit_request[i].match_string);
       edit_request[i].match_string = ptr;
       if (wild_match(new_name[j], edit_request[i].match_string)) {
+        if (strlen(new_name[j]) >= sizeof(edit_buffer))
+          SDDS_Bomb("name too long for -editnames (maximum input length is 1023 bytes); use -rename instead");
         strcpy(edit_buffer, new_name[j]);
         if (!edit_string(edit_buffer, editstr[i]))
           SDDS_Bomb("error editing name");

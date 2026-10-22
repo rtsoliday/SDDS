@@ -223,6 +223,7 @@ MAT *mcopy_Nrow2(MAT *A, long row1, long nrow);
 long findICAModePairs(MAT **covR, long ntau, long *pair);
 
 int main(int argc, char **argv) {
+  int32_t readCode;
   SCANNED_ARG *s_arg;
   SDDS_TABLE inputPage, outputPageA, outputPageS, uPage, vPage, sPage;
 
@@ -577,7 +578,7 @@ int main(int argc, char **argv) {
     report_stats(stderr, "\nAfter initializing SDDS input.\n");
   }
   ipage = 0;
-  while (0 < SDDS_ReadTable(&inputPage)) {
+  while ((readCode = SDDS_ReadTable(&inputPage)) > 0) {
     ipage++;
     if (verbose & FL_VERBOSE) {
       report_stats(stderr, "\nAfter reading page.\n");
@@ -1500,6 +1501,8 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&inputPage) || !SDDS_Terminate(&outputPageA))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (tmpfile_used && !replaceFileAndBackUp(inputfile, outputfile))

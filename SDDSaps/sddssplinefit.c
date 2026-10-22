@@ -263,6 +263,7 @@ void makeEvaluationTable(EVAL_PARAMETERS *evalParameters, double *x, int64_t poi
                          gsl_matrix *cov, gsl_vector *c, char *xName, char **yName, long yNames, long iYName, long int order);
 
 int main(int argc, char **argv) {
+  int32_t readCode;
   double **y = NULL, **yFit = NULL, **sy = NULL, **diff = NULL;
   double *x = NULL, *sx = NULL;
   double xOffset, xScaleFactor;
@@ -539,7 +540,7 @@ int main(int argc, char **argv) {
   iCoefficientSigma = tmalloc(sizeof(long) * numYNames);
   iCoefficientUnits = tmalloc(sizeof(long) * numYNames);
 
-  while (SDDS_ReadPage(&SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     if ((points = SDDS_CountRowsOfInterest(&SDDSin)) < coeffs) {
       /* probably should emit an empty page here */
       continue;
@@ -902,6 +903,8 @@ int main(int argc, char **argv) {
     gsl_multifit_linear_free(mw);
   }
 
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (yFit)
     free(yFit);
   if (outputInitialized) {

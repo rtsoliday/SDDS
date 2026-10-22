@@ -320,6 +320,15 @@ int main(int argc, char **argv) {
       SDDS_Bomb("-hypervolume reference point must have one value per -column objective");
   }
 
+  /* Validate modes before opening output, even if no rows or key ties are read. */
+  for (i_arg = 0; i_arg < sort_requests; i_arg++) {
+    if (!(sort_request[i_arg].type = SDDS_GetNamedColumnType(&SDDS_input, sort_request[i_arg].name)))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    if (sort_request[i_arg].type == SDDS_ENUM &&
+        (sort_request[i_arg].absolute || non_dominate_sort))
+      SDDS_Bomb("absolute/numeric sorting is not supported for enums; explicitly cast to long first");
+  }
+
   if (SDDS_input.layout.popenUsed) {
     /* SDDS library has opened the file using a command on a pipe, usually for
      * decompression in the absence of the zlib library.
@@ -873,7 +882,7 @@ int SDDS_ComparePages(const void *vpage1, const void *vpage2) {
 long SDDS_SortAll(SDDS_DATASET *SDDS_inputx, SDDS_DATASET *SDDS_outputx, SORT_REQUEST *xsort_request,
                   long xsort_requests, SORT_REQUEST *xsort_parameter, long xsort_parameters, long uniqueRows,
                   long provideIdenticalCount, long xpipeFlags, long non_dominate_sort) {
-  long i, j, k, pages;
+  long i, j, k, pages, cachePages;
   int32_t *xsort_page_index;
   int32_t pageReadStatus;
   char s[1024];
@@ -885,6 +894,8 @@ long SDDS_SortAll(SDDS_DATASET *SDDS_inputx, SDDS_DATASET *SDDS_outputx, SORT_RE
   sort_parameters = xsort_parameters;
   sort_request = xsort_request;
   sort_requests = xsort_requests;
+  /* Compressed streams and pipes cannot be revisited with SDDS_GotoPage. */
+  cachePages = xpipeFlags || SDDS_sortpage->layout.gzipFile || SDDS_sortpage->layout.lzmaFile;
   xsort_page_index = NULL;
   pages = i = j = k = 0;
   for (i = 0; i < sort_parameters; i++) {
@@ -897,12 +908,12 @@ long SDDS_SortAll(SDDS_DATASET *SDDS_inputx, SDDS_DATASET *SDDS_outputx, SORT_RE
     sort_parameter[i].type = SDDS_GetParameterType(SDDS_sortpage, sort_parameter[i].index);
   }
   if (sort_parameters) {
-    if (xpipeFlags == 0 && !SDDS_sortpage->layout.gzipFile)
+    if (!cachePages)
       SDDS_SetDefaultIOBufferSize(0);
     for (i = 0; i < sort_parameters; i++)
       sort_parameter[i].data = NULL;
     while ((pageReadStatus = SDDS_ReadPage(SDDS_sortpage)) > 0) {
-      if (xpipeFlags || SDDS_sortpage->layout.gzipFile) {
+      if (cachePages) {
         /* copy each page of sortpage into tmp_datasets indexed by the pages, i.e.
          * tmp_datasets[pages] contains only one page */
         tmp_datasets = realloc(tmp_datasets, sizeof(*tmp_datasets) * (pages + 1));
@@ -940,7 +951,7 @@ long SDDS_SortAll(SDDS_DATASET *SDDS_inputx, SDDS_DATASET *SDDS_outputx, SORT_RE
     /* sort_page_index=xsort_page_index; */
     for (i = 0; i < pages; i++) {
       j = xsort_page_index[i];
-      if (xpipeFlags || SDDS_sortpage->layout.gzipFile) {
+      if (cachePages) {
         if (!SDDS_CopyPage(SDDS_outputx, &tmp_datasets[j])) {
           SDDS_SetError("Problem copying data from memory");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);

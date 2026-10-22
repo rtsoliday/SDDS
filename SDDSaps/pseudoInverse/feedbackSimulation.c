@@ -71,6 +71,8 @@ double apply_regulator(long turn, double *acoef, long acoefs, double *bcoef, lon
 void write_output_data(char *outputDir, char *rootname, double deltaT, int32_t data_rows, double **bpm_error, int32_t bpm_names, char **bpm_name,
                        int32_t corr_names, char **corr_name, int32_t corr_rows, double **corr_error, double **corr_drive, long bcoefs);
 
+/* The named unit-test target builds the name reader without the simulator. */
+#ifndef SDDS_FEEDBACK_NAMES_TEST
 int main(int argc, char **argv)
 {
   SCANNED_ARG *s_arg=NULL;
@@ -403,24 +405,40 @@ MAT *read_matrix(char *filename, long m, long n)
 }
 
 
+#endif
+
+/**
+ * @brief Read string or enum labels with ownership independent of the dataset.
+ * @param filename Input matrix file.
+ * @param columnname Name of the column containing names.
+ * @param names Receives the number of names, bounded by INT32_MAX.
+ * @return Independently allocated names; exits with a diagnostic on failure.
+ */
 char **get_names(char *filename, char *columnname, int32_t *names)
 {
   SDDS_DATASET matrixData;
-  char **name=NULL;
+  char **name = NULL;
+  int32_t type;
+  int64_t rows;
   
   *names = 0;
-  if (!SDDS_InitializeInput(&matrixData, filename) || !SDDS_ReadPage(&matrixData))
-    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-  
-  if (!(*names=SDDS_CountRowsOfInterest(&matrixData))) {
+  if (!SDDS_InitializeInput(&matrixData, filename) || SDDS_ReadPage(&matrixData) <= 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
+  type = SDDS_GetNamedColumnType(&matrixData, columnname);
+  if (type != SDDS_STRING && type != SDDS_ENUM)
+    SDDS_Bomb("Name column must have string or enum type");
+  if ((rows = SDDS_CountRowsOfInterest(&matrixData)) <= 0 || rows > INT32_MAX) {
     fprintf(stderr, "No data found in matrix file %s\n", filename);
     exit(1);
   }
-  if (!(name = (char**)SDDS_GetColumn(&matrixData, columnname)) || !SDDS_Terminate(&matrixData))
-    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  *names = (int32_t)rows;
+  if (!(name = SDDS_GetColumnInString(&matrixData, columnname)) || !SDDS_Terminate(&matrixData))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   return name;
 }
 
+#ifndef SDDS_FEEDBACK_NAMES_TEST
 double **read_bpm_data(char *inputDir, long bpm_names, char **bpm_name, int32_t *rows)
 {
   SDDS_DATASET bpmData;
@@ -431,7 +449,7 @@ double **read_bpm_data(char *inputDir, long bpm_names, char **bpm_name, int32_t 
   
   *rows=0;
   sprintf(filename,"%s/%s_computed.sdds", inputDir, bpm_name[0]);
-  if (!SDDS_InitializeInput(&bpmData, filename) || !SDDS_ReadPage(&bpmData))
+  if (!SDDS_InitializeInput(&bpmData, filename) || SDDS_ReadPage(&bpmData) <= 0)
      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
   if (!(*rows=SDDS_CountRowsOfInterest(&bpmData))) {
     fprintf(stderr, "bpm data%s is empty.\n", filename);
@@ -528,4 +546,5 @@ void write_output_data(char *outputDir, char *rootname, double deltaT, int32_t d
   free(time);
   return;
 }
+#endif
 

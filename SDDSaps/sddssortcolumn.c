@@ -197,7 +197,7 @@ int main(int argc, char **argv) {
   int64_t i, sort_lists = 0, rows, count;
   SCANNED_ARG *s_arg;
   long tmpfile_used = 0;
-  int32_t parameters = 0;
+  int32_t parameters = 0, readCode;
   unsigned long pipe_flags = 0, dummyflags;
 
   SDDS_RegisterProgramName(argv[0]);
@@ -300,8 +300,9 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
 
-    if (SDDS_ReadPage(&sdds_sort) < 0) {
+    if (SDDS_ReadPage(&sdds_sort) <= 0) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      SDDS_Bomb("Unable to read sortWith file");
     }
 
     if (!(sort_lists = SDDS_CountRowsOfInterest(&sdds_sort))) {
@@ -309,7 +310,10 @@ int main(int argc, char **argv) {
       return EXIT_FAILURE;
     }
 
-    if (!(sort_list = (char **)SDDS_GetColumn(&sdds_sort, sort_column))) {
+    if (SDDS_GetNamedColumnType(&sdds_sort, sort_column) != SDDS_STRING &&
+        SDDS_GetNamedColumnType(&sdds_sort, sort_column) != SDDS_ENUM)
+      SDDS_Bomb("sortWith column must have string or enum type");
+    if (!(sort_list = SDDS_GetColumnInString(&sdds_sort, sort_column))) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
 
@@ -353,7 +357,7 @@ int main(int argc, char **argv) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
   }
 
-  while (SDDS_ReadPage(&sdds_input) > 0) {
+  while ((readCode = SDDS_ReadPage(&sdds_input)) > 0) {
     rows = SDDS_CountRowsOfInterest(&sdds_input);
     if (!SDDS_StartPage(&sdds_output, rows)) {
       fprintf(stderr, "Problem starting output page\n");
@@ -372,6 +376,9 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
   }
+
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   if (!SDDS_Terminate(&sdds_input) || !SDDS_Terminate(&sdds_output)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);

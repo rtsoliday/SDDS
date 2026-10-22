@@ -120,6 +120,7 @@ int main(int argc, char **argv) {
   unsigned long pipeFlags;
   SCANNED_ARG *scanned;
   SDDS_DATASET SDDSin, SDDSout;
+  int32_t readCode;
   COLUMN_TO_SNAP *column;
   long nColumns;
   double *data;
@@ -219,7 +220,7 @@ int main(int argc, char **argv) {
   if (!SDDS_WriteLayout(&SDDSout))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-  while (SDDS_ReadPage(&SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     rows = SDDS_CountRowsOfInterest(&SDDSin);
     if (!SDDS_CopyPage(&SDDSout, &SDDSin))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -237,6 +238,10 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
 
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (!SDDS_Terminate(&SDDSin)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

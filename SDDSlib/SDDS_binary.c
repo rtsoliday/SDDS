@@ -4610,10 +4610,11 @@ int32_t SDDS_ReadNonNativeBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t
   if ((sparse_interval <= 1) && (sparse_offset == 0)) {
     for (j = 0; j < n_rows; j++) {
       if (!SDDS_ReadNonNativeBinaryRow(SDDS_dataset, j, 0)) {
-        SDDS_dataset->n_rows = j - 1;
+        SDDS_dataset->n_rows = j;
+        /* Both automatic and caller-requested recovery expose these rows. */
+        SDDS_SwapEndsColumnData(SDDS_dataset);
         if (SDDS_dataset->autoRecover) {
           SDDS_ClearErrors();
-          SDDS_SwapEndsColumnData(SDDS_dataset);
           return (SDDS_dataset->page_number);
         }
         SDDS_SetError("Unable to read page--error reading data row (SDDS_ReadNonNativeBinaryPage)");
@@ -4628,9 +4629,9 @@ int32_t SDDS_ReadNonNativeBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t
     for (j = 0; j < sparse_offset; j++) {
       if (!SDDS_ReadNonNativeBinaryRow(SDDS_dataset, 0, 1)) {
         SDDS_dataset->n_rows = 0;
+        SDDS_SwapEndsColumnData(SDDS_dataset);
         if (SDDS_dataset->autoRecover) {
           SDDS_ClearErrors();
-          SDDS_SwapEndsColumnData(SDDS_dataset);
           return (SDDS_dataset->page_number);
         }
         SDDS_SetError("Unable to read page--error reading data row (SDDS_ReadNonNativeBinaryPage)");
@@ -4641,10 +4642,10 @@ int32_t SDDS_ReadNonNativeBinaryPageDetailed(SDDS_DATASET *SDDS_dataset, int64_t
     n_rows -= sparse_offset;
     for (j = k = 0; j < n_rows; j++) {
       if (!SDDS_ReadNonNativeBinaryRow(SDDS_dataset, k, mod = j % sparse_interval)) {
-        SDDS_dataset->n_rows = k - 1;
+        SDDS_dataset->n_rows = k;
+        SDDS_SwapEndsColumnData(SDDS_dataset);
         if (SDDS_dataset->autoRecover) {
           SDDS_ClearErrors();
-          SDDS_SwapEndsColumnData(SDDS_dataset);
           return (SDDS_dataset->page_number);
         }
         SDDS_SetError("Unable to read page--error reading data row (SDDS_ReadNonNativeBinaryPage)");

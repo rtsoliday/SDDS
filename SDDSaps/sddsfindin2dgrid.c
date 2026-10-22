@@ -145,6 +145,7 @@ int main(int argc, char **argv) {
   double *atValue[2] = {NULL, NULL}, value[2] = {0.0, 0.0};
   short interpolate = 0, restarted = 0, needPage = 0, presorted = 0, inverse = 0, verbose = 0;
   unsigned long mode = MODE_ALL;
+  int32_t readCode;
 
   SDDS_RegisterProgramName(argv[0]);
 
@@ -261,7 +262,9 @@ int main(int argc, char **argv) {
     if (!SDDS_InitializeInput(&SDDSvalues, fileForValues)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
-    if (SDDS_ReadPage(&SDDSvalues) <= 0) {
+    if ((readCode = SDDS_ReadPage(&SDDSvalues)) <= 0) {
+      if (readCode == 0)
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       SDDS_Bomb("Unable to read values file.\n");
     }
     if ((atValues = SDDS_RowCount(&SDDSvalues)) > 0) {
@@ -283,7 +286,10 @@ int main(int argc, char **argv) {
         }
       }
     }
-    if (SDDS_ReadPage(&SDDSvalues) > 0) {
+    readCode = SDDS_ReadPage(&SDDSvalues);
+    if (readCode == 0)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    if (readCode > 0) {
       SDDS_Bomb("Values file contains multiple pages, which is not supported.\n");
     }
     SDDS_Terminate(&SDDSvalues);
@@ -328,17 +334,23 @@ int main(int argc, char **argv) {
       if (iv == atValues) {
         needPage = 1;
         iv = 0;
-        restarted = 1; /* Signals that SDDS_ReadPage <= 0 is acceptable */
+        restarted = 1; /* End-of-file is acceptable after a complete set of requests. */
       }
     }
 
     if (needPage) {
-      if (SDDS_ReadPage(&SDDSin) <= 0) {
+      readCode = SDDS_ReadPage(&SDDSin);
+      if (readCode == 0)
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      if (readCode < 0) {
         if (!restarted) {
           SDDS_Bomb("Too few pages in input file for number of location requests.\n");
         }
         break;
       }
+      /* The single output page retains parameters from the first grid page. */
+      if (irow == 0 && !SDDS_CopyParameters(&SDDSout, &SDDSin))
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
       if (gridValue[0]) {
         free(gridValue[0]);
         free(gridValue[1]);

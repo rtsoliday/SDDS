@@ -1,6 +1,14 @@
 \begin{sddsprog}{sddsconvert}
   \item \textbf{description:} \verb|sddsconvert| converts SDDS files between ASCII and binary and allows wildcard-based filtering out of unwanted columns and/or rows, as well as renaming of columns. N.B.: it is \emph{not} recommended to use \verb|sddsconvert| to convert a binary SDDS file to ASCII, then strip the header off and read the ASCII file. This completely bypasses the self-describing aspects of the SDDS file and is not robust. If the program that creates the SDDS file is changed so that the columns are created in a different order, the program that reads the ASCII file will produce unexpected results. Use \progref{sdds2plaindata}, \progref{sddsprintout}, or \progref{sdds2stream} for conversion to non-self-describing files. In this way, you can assure the order of the data is fixed.
 
+  SDDS6 enum columns, parameters, and arrays retain their code-to-label dictionaries and
+  codes during format conversion, selection, and renaming. Fixed enum parameter values
+  are copied into each output page. ASCII output stores enum codes; use
+  \progref{sdds2stream} for label output or \progref{sddscast} for an explicit conversion
+  to strings or numeric codes. Enum fields cannot be used with \verb|-convertUnits|.
+  Output files with \verb|.xz| or \verb|.lzma| extensions use binary data, even when
+  \verb|-ascii| is requested.
+
   \item \textbf{examples:}
   Convert \verb|APS.twi| to binary:
   \begin{verbatim}
@@ -34,7 +42,7 @@
     \item {\tt toPage=\emph{number}} --- Specifies the last page of the file that will appear in the output. By default, the output ends with the last data page in the file.
     \item {\tt -delete=\{columns | parameters | arrays\},\emph{matchingString}[,\emph{matchingString}...]}, {\tt -retain=\{columns | parameters | arrays\},\emph{matchingString}[,\emph{matchingString}...]} --- These options specify wildcard strings to be used to select entities (i.e., columns, parameters, or arrays) that will respectively be deleted or retained (i.e., that will not or will appear in the output). The selection is performed by determining which input entities have names matching any of the strings. If \verb|retain| is given but \verb|delete| is not, only those entities matching one of the strings given with \verb|retain| are retained. If both \verb|delete| and \verb|retain| are given, then all entities are retained except those that match a \verb|delete| string without matching any of the \verb|retain| strings.
     \item {\tt -rename=\{columns | parameters | arrays\},\emph{oldname}=\emph{newname}[,\emph{oldname}=\emph{newname}...]} --- Specifies new names for entities in the output data set. The entities must still be referred to by their old names in the other commandline options.
-    \item {\tt -editNames=\{columns | parameters | arrays\},\emph{matchingString},\emph{editString}} --- Specifies creation of new names for entities of the specified type with names matching the specified wildcard string. Editing is performed using commands reminiscent of \verb|emacs| keystrokes. For details on editing commands, see \progref{SDDS editing}.
+    \item {\tt -editNames=\{columns | parameters | arrays\},\emph{matchingString},\emph{editString}} --- Specifies creation of new names for entities of the specified type with names matching the specified wildcard string. Editing is performed using commands reminiscent of \verb|emacs| keystrokes. Input names, intermediate edits, and resulting names are limited to 255 bytes; use \verb|-rename| for longer names. For details on editing commands, see \progref{SDDS editing}.
     \item {\tt -description=\emph{text},\emph{contents}} --- Sets the description fields for the output.
     \item {\tt -recover[=clip]} --- Asks for attempted recovery of corrupted data. If the qualifier is given, then all data from a corrupted page is ignored. Otherwise, \verb|sddsconvert| tries to save as much data from the corrupted page as it can; typically, it is able to save part of the tabular data and all of the array and parameter data.
     \item {\tt -linesPerRow=\rm number} --- Sets the number of lines of text output per row of the tabular data, for ASCII output only.
@@ -47,6 +55,7 @@
     \begin{itemize}
     \item \hyperref[exampleData]{Data for Examples}
     \item \progref{sddsprocess}
+    \item \progref{sddscast}
     \item \progref{SDDS editing}
     \end{itemize}
 

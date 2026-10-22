@@ -302,7 +302,7 @@ int main(int argc, char **argv) {
       exit(EXIT_FAILURE);
     }
     ca[i].type = ardef->type;
-    if (SDDS_DefineColumn(&SDDS_dataset, ca[i].new_name, ardef->symbol, ardef->units, ardef->description, ardef->format_string, ardef->type, ardef->field_length) < 0) {
+    if (!SDDS_DefineColumnLikeArray(&SDDS_dataset, &SDDS_orig, ca[i].name, ca[i].new_name)) {
       SDDS_FreeArrayDefinition(ardef);
       fprintf(stderr, "Error: Unable to define new column '%s'.\n", ca[i].new_name);
       exit(EXIT_FAILURE);
@@ -327,7 +327,8 @@ int main(int argc, char **argv) {
     if (pageNumber == 0) {
       fprintf(stderr, "Error: SDDS data garbled.\n");
       fprintf(stderr, "Warning: One or more data pages may be missing.\n");
-      break;
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      return EXIT_FAILURE;
     }
     rows = SDDS_RowCount(&SDDS_orig);
     if (rows < 0) {
@@ -512,6 +513,7 @@ int main(int argc, char **argv) {
           }
           break;
 
+        case SDDS_ENUM:
         case SDDS_LONG:
           ca[i].data = malloc(sizeof(int32_t) * vrows);
           if (ca[i].dims[1] == 0) {

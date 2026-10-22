@@ -19,6 +19,7 @@
 #include "table.h"
 #include "SDDS.h"
 #include "sddsplot.h"
+#include "sddsplot3d.h"
 #include <ctype.h>
 #include <string.h>
 #if defined(_WIN32)
@@ -169,10 +170,11 @@ static int handle3DScatter(int argc, char **argv, const TICK_SETTINGS *tickSetti
   SDDS_DATASET SDDSin;
   if (!SDDS_InitializeInput(&SDDSin, filename))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-  if (SDDS_ReadPage(&SDDSin) <= 0)
+  if (SDDS_ReadPage(&SDDSin) <= 0) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     SDDS_Bomb("unable to read page for -3d plot");
+  }
   double *xData = NULL, *yData = NULL, *zData = NULL, *iData = NULL;
-  SDDS_ARRAY *xArr = NULL, *yArr = NULL, *zArr = NULL, *iArr = NULL;
   long n = 0;
   char *xUnits = NULL, *yUnits = NULL, *zUnits = NULL;
   char xLabel[256], yLabel[256], zLabel[256];
@@ -192,24 +194,19 @@ static int handle3DScatter(int argc, char **argv, const TICK_SETTINGS *tickSetti
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
   } else {
-    xArr = SDDS_GetArray(&SDDSin, xname, NULL);
-    yArr = SDDS_GetArray(&SDDSin, yname, NULL);
-    zArr = SDDS_GetArray(&SDDSin, zname, NULL);
-    if (!xArr || !yArr || !zArr)
+    char *names[4] = {xname, yname, zname, iname};
+    double *data[4] = {NULL, NULL, NULL, NULL};
+    int32_t elements;
+    if (!read3DPlotArrays(&SDDSin, names, iname ? 4 : 3, data, &elements))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-    n = xArr->elements;
-    xData = (double *)xArr->data;
-    yData = (double *)yArr->data;
-    zData = (double *)zArr->data;
+    n = elements;
+    xData = data[0];
+    yData = data[1];
+    zData = data[2];
+    iData = data[3];
     SDDS_GetArrayInformation(&SDDSin, "units", &xUnits, SDDS_GET_BY_NAME, xname);
     SDDS_GetArrayInformation(&SDDSin, "units", &yUnits, SDDS_GET_BY_NAME, yname);
     SDDS_GetArrayInformation(&SDDSin, "units", &zUnits, SDDS_GET_BY_NAME, zname);
-    if (iname) {
-      iArr = SDDS_GetArray(&SDDSin, iname, NULL);
-      if (!iArr)
-        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
-      iData = (double *)iArr->data;
-    }
   }
   if (xUnits && xUnits[0])
     snprintf(xLabel, sizeof(xLabel), "%s (%s)", xname, xUnits);
@@ -251,19 +248,10 @@ static int handle3DScatter(int argc, char **argv, const TICK_SETTINGS *tickSetti
       fprintf(fp, "%g %g %g\n", xData[j], yData[j], zData[j]);
   }
   fclose(fp);
-  if (mode == 1) {
-    free(xData);
-    free(yData);
-    free(zData);
-    if (iData)
-      free(iData);
-  } else {
-    SDDS_FreeArray(xArr);
-    SDDS_FreeArray(yArr);
-    SDDS_FreeArray(zArr);
-    if (iArr)
-      SDDS_FreeArray(iArr);
-  }
+  free(xData);
+  free(yData);
+  free(zData);
+  free(iData);
   SDDS_Terminate(&SDDSin);
   char command[4096];
   snprintf(command, sizeof(command), "mpl_qt -3d=scatter %s", tmpName);

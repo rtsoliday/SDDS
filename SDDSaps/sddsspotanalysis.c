@@ -618,6 +618,8 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
   }
+  if (readStatus == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_WritePage(&SDDSout) || !SDDS_Terminate(&SDDSout) || !SDDS_Terminate(&SDDSin))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (spotImageFile && !SDDS_Terminate(&SDDSspim))

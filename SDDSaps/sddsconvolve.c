@@ -312,6 +312,8 @@ int main(int argc, char **argv) {
     if (reuse) {
       if (code2 == -1) {
         if ((code2 = SDDS_ReadPage(&SDDS2)) <= 0) {
+          if (code2 == 0)
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
           fprintf(stderr, "Error (sddsconvolve): Couldn't read data from response file.\n");
           exit(EXIT_FAILURE);
         }
@@ -321,7 +323,9 @@ int main(int argc, char **argv) {
         }
       }
     } else {
-      if ((code2 = SDDS_ReadPage(&SDDS2)) <= 0)
+      if ((code2 = SDDS_ReadPage(&SDDS2)) == 0)
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+      if (code2 < 0)
         break;
       rows2 = SDDS_RowCount(&SDDS2);
     }
@@ -465,6 +469,9 @@ int main(int argc, char **argv) {
     free(indep2);
     signal1 = indep1 = signal2 = indep2 = NULL;
   }
+
+  if (code1 == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
   if (!SDDS_Terminate(&SDDS1) || !SDDS_Terminate(&SDDS2) || !SDDS_Terminate(&SDDSout)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);

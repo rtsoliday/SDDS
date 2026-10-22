@@ -735,6 +735,10 @@ int main(int argc, char **argv) {
     if (!SDDS_WritePage(&outData))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
+  if (code == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   free_scanargs(&scanned, argc);
   for (iStat = 0; iStat < stats; iStat++) {
     if (stat[iStat].positionColumn)

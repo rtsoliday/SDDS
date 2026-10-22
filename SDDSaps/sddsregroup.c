@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
   char *InputDescription, *InputContents;
   char *OutputDescription, *OutputContents;
   char **InputParameters, **InputColumns, **ColToParNames, **ParToColNames;
-  int32_t NInputParameters, NInputColumns;
+  int32_t NInputParameters, NInputColumns, readCode;
   long NColToPar, NParToCol, NColToCol;
   int64_t NInputRows, NOutputRows;
   long NInputPages, NOutputPages;
@@ -203,8 +203,10 @@ int main(int argc, char **argv) {
 
   if (!SDDS_InitializeInput(&inputPage, inputfile))
     SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
-  if (0 < SDDS_ReadTable(&inputPage))
-    SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
+  if ((readCode = SDDS_ReadTable(&inputPage)) <= 0) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Bomb("Unable to read first input page");
+  }
   InputColumns = (char **)SDDS_GetColumnNames(&inputPage, &NInputColumns);
   InputParameters = (char **)SDDS_GetParameterNames(&inputPage, &NInputParameters);
   InputDescription = InputContents = NULL;
@@ -265,7 +267,12 @@ int main(int argc, char **argv) {
     }
 
     NInputPages++;
-  } while (0 < SDDS_ReadTable(&inputPage));
+  } while ((readCode = SDDS_ReadTable(&inputPage)) > 0);
+
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
 
   if (!SDDS_Terminate(&inputPage))
     SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
@@ -274,14 +281,14 @@ int main(int argc, char **argv) {
     OutputDescription = (char *)malloc((strlen(InputDescription) + strlen(",  regrouped") + 1) * sizeof(char));
     OutputDescription = strcat(strcpy(OutputDescription, InputDescription), ",  regrouped");
   } else {
-    OutputDescription = (char *)malloc((strlen("File regrouped") + strlen(inputfile ? inputfile : "from pipe") + 1) * sizeof(char));
+    OutputDescription = (char *)malloc((strlen("File  regrouped") + strlen(inputfile ? inputfile : "from pipe") + 1) * sizeof(char));
     sprintf(OutputDescription, "File %s regrouped", inputfile ? inputfile : "from pipe");
   }
   if (InputContents) {
     OutputContents = (char *)malloc((strlen(InputContents) + strlen(",  regrouped") + 1) * sizeof(char));
     OutputContents = strcat(strcpy(OutputContents, InputContents), ",  regrouped");
   } else {
-    OutputContents = (char *)malloc((strlen("File regrouped") + strlen(inputfile ? inputfile : "from pipe") + 1) * sizeof(char));
+    OutputContents = (char *)malloc((strlen("File  regrouped") + strlen(inputfile ? inputfile : "from pipe") + 1) * sizeof(char));
     sprintf(OutputContents, "File %s regrouped", inputfile ? inputfile : "from pipe");
   }
   if (!SDDS_InitializeOutput(&outputPage, SDDS_BINARY, 0, OutputDescription, OutputContents, outputfile))

@@ -546,8 +546,7 @@ void assign_enumerate_values(PLOT_SPEC *plspec)
         if (dataset[set]->enumerate && dataset[set]->enumPlane==plane) {
           enumsFound[group] += 1;
           enumPoints[group] += dataset[set]->points;
-        } else if (set && enumsFound[group])
-          SDDS_Bomb("enumerated and non-enumerated values requested for same scales in same plane");
+        }
       }
         
       /* Analyze the enumerated data for each group.  Assign common indices
@@ -556,6 +555,8 @@ void assign_enumerate_values(PLOT_SPEC *plspec)
       for (group=0; group<plspec->scalesGroups[plane]; group++) {
         if (!enumsFound[group])
           continue;
+        if (enumsFound[group] != datasetsFound[group])
+          SDDS_Bomb("enumerated and non-enumerated values requested for same scales in same plane");
         if (!(enumData=SDDS_Malloc(sizeof(*enumData)*enumPoints[group])))
           SDDS_Bomb("Memory allocation failure (assign_enumerate_values)");
         enums = 0;
@@ -573,7 +574,7 @@ void assign_enumerate_values(PLOT_SPEC *plspec)
           for (point=0; point<dataset[set]->points; point++) {
             enumData[enums+point].string = dataset[set]->enumerate[point];
             enumData[enums+point].indexData = plane?dataset[set]->y+point:dataset[set]->x+point;
-            enumData[enums+point].originalIndex = point;
+            enumData[enums+point].originalIndex = enums+point;
           }
           enums += dataset[set]->points;
         }
@@ -991,6 +992,10 @@ void perform_dataset_transpositions(PLOT_SPEC *plspec)
     plreq = plspec->plot_request + ireq;
     if (!(plreq->flags&PLREQ_TRANSPOSE)) 
       continue;
+    for (iset=0; iset<plspec->datasets; iset++) {
+      if (plspec->dataset[iset].request_index==ireq && plspec->dataset[iset].enumerate)
+        SDDS_Bomb("cannot transpose categorical axes; convert enum data with sddscast first");
+    }
     for (i1rset=0; i1rset<plspec->datasets; i1rset++)
       if (plspec->dataset[i1rset].request_index==ireq)
         break;

@@ -462,6 +462,9 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }
 
+  if (retval == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+
   if (SDDS_Terminate(&InputTable) != 1) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return EXIT_FAILURE;

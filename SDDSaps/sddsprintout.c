@@ -1764,18 +1764,34 @@ htab *readTranslationTable(char *TranslationFile) {
   htab *ht;
   SDDS_DATASET SDDSin;
   char **oldName, **newName;
-  int64_t rows;
+  char *names[2] = {"OldName", "NewName"};
+  int32_t i, type;
+  int64_t rows = 0;
   ht = hcreate(12);
-  if (!SDDS_InitializeInput(&SDDSin, TranslationFile) ||
-      SDDS_ReadPage(&SDDSin) < 0 ||
-      (rows = SDDS_RowCount(&SDDSin)) <= 0 ||
-      !(oldName = SDDS_GetColumn(&SDDSin, "OldName")) ||
-      !(newName = SDDS_GetColumn(&SDDSin, "NewName"))) {
-    SDDS_Bomb("Problem with translation file");
-  } else {
-    while (--rows >= 0)
-      hadd(ht, (ub1 *)oldName[rows], (ub4)strlen(oldName[rows]), newName[rows]);
+  if (!SDDS_InitializeInput(&SDDSin, TranslationFile))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  for (i = 0; i < 2; i++) {
+    type = SDDS_GetNamedColumnType(&SDDSin, names[i]);
+    if (type != SDDS_STRING && type != SDDS_ENUM) {
+      fprintf(stderr, "Translation column %s must have string or enum type\n", names[i]);
+      exit(EXIT_FAILURE);
+    }
   }
+  if (SDDS_ReadPage(&SDDSin) <= 0 || SDDS_NumberOfErrors() ||
+      (rows = SDDS_RowCount(&SDDSin)) <= 0) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    SDDS_Bomb("Problem with translation file");
+  }
+  if (!(oldName = SDDS_GetColumnInString(&SDDSin, "OldName")) ||
+      !(newName = SDDS_GetColumnInString(&SDDSin, "NewName")))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  while (--rows >= 0)
+    hadd(ht, (ub1 *)oldName[rows], (ub4)strlen(oldName[rows]), newName[rows]);
+  /* The hash table retains the decoded strings for subsequent page printing. */
+  free(oldName);
+  free(newName);
+  if (!SDDS_Terminate(&SDDSin))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   return ht;
 #endif
 }

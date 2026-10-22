@@ -1,5 +1,6 @@
 \begin{sddsprog}{sddsarray2column}
   \item \textbf{description:} \verb|sddsarray2column| converts one or more arrays in an SDDS file into columns. The number of elements in the converted arrays must match the number of rows in existing columns or the number of elements in other converted arrays.
+  ENUM arrays retain their codes and dictionaries in the converted columns, including when dimension qualifiers select a subset of elements.
   \item \textbf{examples:}
     \begin{verbatim}
     sddsarray2column in.sdds out.sdds -convert=A,A_out

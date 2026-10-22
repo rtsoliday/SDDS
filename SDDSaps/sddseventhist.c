@@ -176,6 +176,7 @@ int main(int argc, char **argv) {
   long normalizeMode, doSides, verbose = 0, readCode;
   unsigned long pipeFlags, majorOrderFlag;
   long eventIDIndex, eventIDType;
+  long outputInitialized = 0;
   int64_t eventRefIDs = 0;
   EVENT_DATA *eventRefData = NULL;
   /*char **eventID; */
@@ -329,6 +330,7 @@ int main(int argc, char **argv) {
 
     if (!setupOutputFile(&outTable, outputfile, &inTable, inputfile, dataColumn, eventIDColumn, overlapEventID, &eventRefData, &eventRefIDs, &data, bins, binSize, normalizeMode, columnMajorOrder))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+    outputInitialized = 1;
 
     if (!lowerLimitGiven) {
       lowerLimit = 0;
@@ -456,6 +458,11 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     free(eventRefData);
   }
+
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  if (!outputInitialized)
+    SDDS_Bomb("No data pages found in input");
 
   if (!SDDS_Terminate(&inTable)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);

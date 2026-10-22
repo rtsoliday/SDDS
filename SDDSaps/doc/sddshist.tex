@@ -9,7 +9,8 @@ sddshist par.bpm par.bpmhis -data=P1P1x -bins=20
   \item \textbf{synopsis:}
     \begin{verbatim}
 sddshist [-pipe=[input][,output]] [inputFile] [outputFile] \
-  -dataColumn=columnName [-bins=number | -sizeOfBins=value] \
+  -dataColumn=columnName [-bins=number | -sizeOfBins=value | \
+  -regions=filename=file,position=columnName,name=columnName] \
   [-lowerLimit=value] [-upperLimit=value] [-filter=columnName,lowerLimit,upperLimit] \
   [-weightColumn=columnName] [-sides] [-normalize={sum | area | peak}] \
   [-statistics] [-threads=number] [-verbose]
@@ -24,6 +25,7 @@ sddshist [-pipe=[input][,output]] [inputFile] [outputFile] \
       \item \verb|-dataColumn=columnName| --- Specifies the name of the data column to be histogrammed.
       \item \verb|-bins=number| --- Specifies the number of bins to use. The default is 20.
       \item \verb|-sizeOfBins=value| --- Specifies the size of bins to use. The number of bins is computed from the range of the data.
+      \item \verb|-regions=filename=file,position=columnName,name=columnName| --- Uses the numeric positions in the named file as region boundaries. Region names must have STRING or ENUM type; ENUM dictionary labels supply the names. Output region names have STRING type and include the added \verb|Beyond| region. The symbol, units, and description of the name column are retained.
       \item \verb|-lowerLimit=value| --- Specifies the lower limit of the histogram. By default, the lower limit is the minimum value in the data.
       \item \verb|-upperLimit=value| --- Specifies the upper limit of the histogram. By default, the upper limit is the maximum value in the data.
       \item \verb|-filter=columnName,lowerLimit,upperLimit| --- Specifies the name of a column by which to filter the input rows. Rows for which the named data is outside the specified interval are discarded. Alternatively, one can use \progref{sddsprocess} to winnow data and pipe it into \verb|sddshist|.

@@ -388,13 +388,31 @@ long DoDereferencing(SDDS_DATASET *outSet, DEREF_REQUEST *deref, long derefs, un
   return 1;
 }
 
+/** @brief Supply the legacy zero/blank fallback without inventing an enum code. */
+static int32_t dereferenceDefault(void *data, int32_t type, SDDS_ENUM_DEFINITION *definition) {
+  int32_t zeroValue = 0;
+  static char *blankString = "";
+
+  if (type == SDDS_STRING) {
+    memcpy(data, &blankString, sizeof(blankString));
+  } else if (type == SDDS_ENUM) {
+    if (!SDDS_EnumCodeToLabel(definition, 0)) {
+      SDDS_SetError("Out-of-bounds enum dereference requires a mapping for fallback code 0");
+      return 0;
+    }
+    memcpy(data, &zeroValue, sizeof(zeroValue));
+  } else if (!SDDS_CastValue(&zeroValue, 0, SDDS_LONG, type, data)) {
+    SDDS_SetError("Unable to supply an out-of-bounds dereference fallback");
+    return 0;
+  }
+  return 1;
+}
+
 long DereferenceColumnWithParameter(SDDS_DATASET *outSet, DEREF_REQUEST *deref, unsigned long outOfBounds) {
   double data[4];
   long offset, type;
   int64_t rows;
   double value;
-  int32_t zeroValue = 0;
-  static char *blankString = "";
 
   if (!(rows = outSet->n_rows))
     return 1;
@@ -412,10 +430,8 @@ long DereferenceColumnWithParameter(SDDS_DATASET *outSet, DEREF_REQUEST *deref, 
       sprintf(s, "column index out of bounds: column %s, length %" PRId64 ", offset %ld\n  %s=%ld", deref->source, rows, offset, deref->indexElement[0], offset);
       SDDS_Bomb(s);
     }
-    if (type == SDDS_STRING)
-      memcpy((char *)data, (char *)&blankString, sizeof(blankString));
-    else
-      SDDS_CastValue((void *)&zeroValue, 0, SDDS_LONG, type, (void *)data);
+    if (!dereferenceDefault(data, type, outSet->layout.column_definition[deref->sourceIndex].enum_definition))
+      return 0;
   } else {
     if (!SDDS_GetValueByAbsIndex(outSet, deref->sourceIndex, offset, (void *)data)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
@@ -434,8 +450,6 @@ long DereferenceArrayWithParameter(SDDS_DATASET *outSet, DEREF_REQUEST *deref, u
   SDDS_ARRAY *array;
   long i, j, offset, size;
   double value;
-  int32_t zeroValue = 0;
-  static char *blankString = "";
   double data[4];
 
   if (!(array = SDDS_GetArray(outSet, deref->source, NULL))) {
@@ -466,10 +480,10 @@ long DereferenceArrayWithParameter(SDDS_DATASET *outSet, DEREF_REQUEST *deref, u
       sprintf(s, "array index out of bounds: array %s, length %" PRId32 ", offset %ld\n  %s=%ld", deref->source, array->elements, offset, deref->indexElement[0], offset);
       SDDS_Bomb(s);
     }
-    if (array->definition->type == SDDS_STRING)
-      memcpy((char *)data, (char *)&blankString, sizeof(blankString));
-    else
-      SDDS_CastValue((void *)&zeroValue, 0, SDDS_LONG, array->definition->type, (void *)data);
+    if (!dereferenceDefault(data, array->definition->type, array->definition->enum_definition)) {
+      SDDS_FreeArray(array);
+      return 0;
+    }
     if (!SDDS_SetParameters(outSet, SDDS_SET_BY_INDEX | SDDS_PASS_BY_REFERENCE, deref->targetIndex, (void *)data, -1)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
       return 0;
@@ -549,13 +563,13 @@ long DereferenceColumnWithColumn(SDDS_DATASET *outSet, DEREF_REQUEST *deref, uns
   double data[4];
   long offset;
   int64_t rows, row;
-  long *indexData;
+  int32_t *indexData;
 
   if (!(rows = outSet->n_rows)) {
     return 1;
   }
   offset = 0;
-  if (!(indexData = (long *)SDDS_GetNumericColumn(outSet, deref->indexElement[0], SDDS_LONG))) {
+  if (!(indexData = (int32_t *)SDDS_GetNumericColumn(outSet, deref->indexElement[0], SDDS_LONG))) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return 0;
   }

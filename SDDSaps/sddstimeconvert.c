@@ -426,6 +426,7 @@ static const char *parseDateTime(const char *input, const char *format, struct t
 #endif
 
 int main(int argc, char **argv) {
+  int32_t readCode;
   SDDS_DATASET SDDSin, SDDSout;
   long i_arg, iconv;
   SCANNED_ARG *s_arg;
@@ -584,7 +585,7 @@ int main(int argc, char **argv) {
 
   InitializeOutput(&SDDSout, output, conversion, conversions, &SDDSin, columnMajorOrder);
 
-  while (SDDS_ReadPage(&SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     if (!SDDS_CopyPage(&SDDSout, &SDDSin)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
       exit(EXIT_FAILURE);
@@ -613,6 +614,8 @@ int main(int argc, char **argv) {
       exit(EXIT_FAILURE);
     }
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDSin) || !SDDS_Terminate(&SDDSout)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

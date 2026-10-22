@@ -302,6 +302,8 @@ int main(int argc, char **argv) {
   while ((retval1 = SDDS_ReadPage(&SDDS_1)) > 0) {
     if (!reusePage) {
       if ((retval2 = SDDS_ReadPage(&SDDS_2)) <= 0) {
+        if (retval2 == 0 || SDDS_NumberOfErrors())
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         if (warnings)
           fprintf(stderr, "warning: <input2> ends before <input1>\n");
         if (invert) {
@@ -315,8 +317,11 @@ int main(int argc, char **argv) {
           break;
       }
     } else {
-      if (retval1 == 1 && (retval2 = SDDS_ReadPage(&SDDS_2)) <= 0)
+      if (retval1 == 1 && (retval2 = SDDS_ReadPage(&SDDS_2)) <= 0) {
+        if (retval2 == 0 || SDDS_NumberOfErrors())
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
         SDDS_Bomb("<input2> has no data");
+      }
       SDDS_SetRowFlags(&SDDS_2, 1);
     }
     rows1 = SDDS_CountRowsOfInterest(&SDDS_1);
@@ -477,6 +482,8 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (retval1 == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDS_1) || !SDDS_Terminate(&SDDS_2) || !SDDS_Terminate(&SDDS_output)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

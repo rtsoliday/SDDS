@@ -2366,6 +2366,7 @@ long SDDS_RedefineColumn(SDDS_DATASET *SDDS_dataset, char *column, char **argv, 
 }
 
 long add_sddsfile_arguments(SCANNED_ARG **scanned, int argc) {
+  int32_t readCode = -1;
   long iarg, j, datacode, index, argc_got;
   SDDS_DATASET dataset;
   static char *choice[2] = {"column", "parameter"};
@@ -2402,7 +2403,7 @@ long add_sddsfile_arguments(SCANNED_ARG **scanned, int argc) {
     argc_got = 0;
     switch (datacode) {
     case 0:
-      while (SDDS_ReadPage(&dataset) > 0) {
+      while ((readCode = SDDS_ReadPage(&dataset)) > 0) {
         char **column;
         long rows;
         if ((rows = SDDS_CountRowsOfInterest(&dataset)) <= 0)
@@ -2419,7 +2420,7 @@ long add_sddsfile_arguments(SCANNED_ARG **scanned, int argc) {
       }
       break;
     case 1:
-      while (SDDS_ReadPage(&dataset) > 0) {
+      while ((readCode = SDDS_ReadPage(&dataset)) > 0) {
         char *parameter;
         if (!SDDS_GetParameter(&dataset, dataname, &parameter))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -2431,6 +2432,8 @@ long add_sddsfile_arguments(SCANNED_ARG **scanned, int argc) {
     default:
       break;
     }
+    if (readCode == 0)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     SDDS_Terminate(&dataset);
     argc_got = scanargsg(&sa_got, argc_got, argv_got);
     *scanned = trealloc(*scanned, sizeof(**scanned) * (argc + argc_got));

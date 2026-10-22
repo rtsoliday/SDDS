@@ -264,6 +264,8 @@ int main(int argc, char **argv) {
     free(xData);
     free(yData);
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDSin) || !SDDS_Terminate(&SDDSout))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   return 0;
@@ -272,13 +274,14 @@ int main(int argc, char **argv) {
 long read_boundary_data(char *boundaryInput, char *bxColumn, char *byColumn, double ***xBoundary, double ***yBoundary, int64_t **nValues) {
   SDDS_DATASET SDDSin;
   long nSets = 0;
+  int32_t readCode;
 
   if (!SDDS_InitializeInput(&SDDSin, boundaryInput) ||
       SDDS_CheckColumn(&SDDSin, bxColumn, NULL, SDDS_ANY_NUMERIC_TYPE, stderr) != SDDS_CHECK_OK ||
       SDDS_CheckColumn(&SDDSin, byColumn, NULL, SDDS_ANY_NUMERIC_TYPE, stderr) != SDDS_CHECK_OK)
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
 
-  while (SDDS_ReadPage(&SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     if (SDDS_RowCount(&SDDSin) == 0)
       continue;
     *xBoundary = SDDS_Realloc(*xBoundary, sizeof(**xBoundary) * (nSets + 1));
@@ -290,6 +293,10 @@ long read_boundary_data(char *boundaryInput, char *bxColumn, char *byColumn, dou
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     nSets++;
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+  if (!SDDS_Terminate(&SDDSin))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   return nSets;
 }
 

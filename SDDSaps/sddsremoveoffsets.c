@@ -106,6 +106,7 @@ static long pattern_length = 4;
 long resolve_column_names(SDDS_DATASET *sdds_in, char ***column, int32_t *columns);
 
 int main(int argc, char **argv) {
+  int32_t readCode;
   SCANNED_ARG *s_arg;
   SDDS_DATASET sdds_in, sdds_out;
   unsigned long major_order_flag;
@@ -212,7 +213,7 @@ int main(int argc, char **argv) {
   if (!SDDS_WriteLayout(&sdds_out))
     SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
 
-  while (SDDS_ReadPage(&sdds_in) > 0) {
+  while ((readCode = SDDS_ReadPage(&sdds_in)) > 0) {
     if (!SDDS_CopyPage(&sdds_out, &sdds_in))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if ((rows = SDDS_CountRowsOfInterest(&sdds_in))) {
@@ -277,6 +278,8 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
   }
 
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&sdds_in) || !SDDS_Terminate(&sdds_out))
     SDDS_PrintErrors(stdout, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
 

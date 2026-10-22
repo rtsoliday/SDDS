@@ -709,6 +709,10 @@ int main(int argc, char **argv) {
       free(inputData);
     }
   }
+  if (code == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (pages == 0)
     SDDS_Bomb("no pages in input");
   for (iStat = 0; iStat < stats; iStat++) {

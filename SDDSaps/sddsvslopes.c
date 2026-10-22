@@ -146,6 +146,7 @@ int main(int argc, char **argv) {
   unsigned long pipeFlags, majorOrderFlag;
   long tmpfile_used, noWarnings;
   long generateIndex;
+  int32_t readCode;
   short columnMajorOrder = -1;
 
   copiedPage = NULL;
@@ -244,9 +245,10 @@ int main(int argc, char **argv) {
 
   if (verbose)
     fprintf(stderr, "Reading file %s.\n", inputfile);
-  SDDS_InitializeInput(&inputPage, inputfile);
+  if (!SDDS_InitializeInput(&inputPage, inputfile))
+    SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
   copiedPages = 0;
-  while (SDDS_ReadTable(&inputPage) > 0) {
+  while ((readCode = SDDS_ReadTable(&inputPage)) > 0) {
     if (!copiedPages) {
       copiedPage = (SDDS_TABLE *)malloc(sizeof(SDDS_TABLE));
       rows = SDDS_CountRowsOfInterest(&inputPage);
@@ -259,6 +261,8 @@ int main(int argc, char **argv) {
       SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
     copiedPages++;
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors | SDDS_VERBOSE_PrintErrors);
   if (copiedPages < 2) {
     fprintf(stderr, "Insufficient data (i.e., number of data pages) to fit a straight line.\n");
     exit(EXIT_FAILURE);

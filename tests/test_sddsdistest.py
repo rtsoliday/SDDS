@@ -73,7 +73,7 @@ def write_input(path):
 &column name=studentSigma, type=double, &end
 &data mode=ascii, &end
 4
-5
+4
 -1.3 -2.0 -2.2 1.0
 -0.2 -0.5 -0.6 1.0
 0.1 0.5 0.4 1.0
@@ -120,6 +120,7 @@ def test_ks_gaussian_and_exclude_output(tmp_path):
   assert b"gaussian" in data
   assert b"distestTest" in data
   assert b"ks" in data
+  assert stream_parameter(output, "Count") == "4"
 
 
 def test_student_distribution_sigma_and_dof_parameter(tmp_path):
@@ -207,5 +208,17 @@ def test_chisquared_test_reports_unimplemented(tmp_path):
     capture_output=True,
     text=True,
   )
-  assert result.returncode == 0
-  assert (tmp_path / "chi.sdds").exists()
+  assert result.returncode > 0
+  assert "Chi-squared distribution test not implemented" in result.stderr
+
+
+def test_truncated_page_reports_read_error(tmp_path):
+  input_file = write_input(tmp_path / "input.sdds")
+  input_file.write_text(input_file.read_text().replace("\n4\n4\n", "\n4\n5\n", 1))
+  result = subprocess.run(
+    [str(SDDSDISTEST), str(input_file), str(tmp_path / "out.sdds"), "-column=gaussLike", "-gaussian"],
+    capture_output=True,
+    text=True,
+  )
+  assert result.returncode > 0
+  assert "Unable to read page" in result.stderr

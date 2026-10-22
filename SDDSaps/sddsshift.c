@@ -118,6 +118,7 @@ int main(int argc, char *argv[]) {
   short column_major_order = -1;
   char **input_col_names = NULL;
   int32_t n_input_col_names = 0;
+  int32_t readCode;
 
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&s_arg, argc, argv);
@@ -255,7 +256,7 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  while ((SDDS_ReadPage(&SDDS_input)) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDS_input)) > 0) {
     if (!SDDS_CopyPage(&SDDS_output, &SDDS_input)) {
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     }
@@ -312,6 +313,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  if (readCode == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (!SDDS_Terminate(&SDDS_input) || !SDDS_Terminate(&SDDS_output)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   }

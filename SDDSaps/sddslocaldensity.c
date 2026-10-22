@@ -591,6 +591,8 @@ int main(int argc, char **argv) {
         }
       }
     }
+    if (readCode == 0 || SDDS_NumberOfErrors())
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     if (kdeFlags & KDE_SPAN_PAGES && pass != 3) {
       if (verbose)
         fprintf(stderr, "Closing input file %s and reopening for second pass\n", input);

@@ -316,6 +316,7 @@ static double (*basis_fn)(double xa, long ordera);
 static double (*basis_dfn)(double xa, long ordera);
 
 int main(int argc, char **argv) {
+  int32_t readCode;
   double *x = NULL, *y = NULL, *sy = NULL, *sx = NULL, *diff = NULL, xOffset,
     xScaleFactor;
   double *xOrig = NULL, *yOrig = NULL, *sxOrig, *syOrig, *sy0 = NULL;
@@ -646,7 +647,7 @@ int main(int argc, char **argv) {
   else
     SDDSout.layout.data_mode.column_major =
       SDDSin.layout.data_mode.column_major;
-  while (SDDS_ReadPage(&SDDSin) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDSin)) > 0) {
     //npages++;
     invalid = 0;
     if ((points = SDDS_CountRowsOfInterest(&SDDSin)) < terms) {
@@ -1020,6 +1021,8 @@ int main(int argc, char **argv) {
       free(sy0);
     }
   }
+  if (readCode == 0 || SDDS_NumberOfErrors())
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDSin) || !SDDS_Terminate(&SDDSout)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     exit(EXIT_FAILURE);

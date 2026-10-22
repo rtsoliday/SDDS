@@ -20,7 +20,9 @@
 
 #include "mdb.h"
 #include <ctype.h>
+#include <limits.h>
 long edit_string(char *text, char *edit);
+static long editStringWithCapacity(char *text, size_t capacity, char *edit);
 
 #define DEBUG 0
 
@@ -77,6 +79,34 @@ typedef struct {
  * @return Returns 1 on successful editing, or 0 if an error occurs (e.g., memory allocation failure).
  */
 long edit_string(char *text, char *edit0) {
+  return editStringWithCapacity(text, (size_t)-1, edit0);
+}
+
+/**
+ * @brief Edits text while checking destination and editor scratch buffer bounds.
+ * @param text Text to edit in place. A failed edit may leave partial changes.
+ * @param capacity Size of text in bytes, including its terminating NUL.
+ * @param edit Edit commands, as for edit_string.
+ * @return 1 on success, or 0 for invalid commands or insufficient capacity.
+ */
+long edit_string_bounded(char *text, size_t capacity, char *edit) {
+  if (!text || !edit || !capacity || strlen(text) >= capacity)
+    return 0;
+  return editStringWithCapacity(text, capacity, edit);
+}
+
+/** @brief Appends killed text without overrunning the editor's kill buffer. */
+static int appendKilledText(char *kill, size_t capacity, const char *text, size_t length) {
+  size_t used = strlen(kill);
+  if (length >= capacity - used)
+    return 0;
+  memcpy(kill + used, text, length);
+  kill[used + length] = 0;
+  return 1;
+}
+
+/** @brief Implements the legacy editor with an optional caller capacity. */
+static long editStringWithCapacity(char *text, size_t capacity, char *edit0) {
   short count, new_kill;
   char *ptr, *text_start, delimiter, *ptr1, *ptr2, *ptr3;
   char *delimLoc, *editNext, *charList;
@@ -84,9 +114,10 @@ long edit_string(char *text, char *edit0) {
   char *orig, *repl;
   int global, conditional, conditionalReturn, here, i;
   char *edit, cSave;
-  EDIT_SEQUENCE *editSeq;
+  EDIT_SEQUENCE *editSeq, *newEditSeq;
   int stackLevel, stackDepth, doPush, parenCount, invert;
-  size_t j;
+  size_t j, length, available;
+  long result = 0;
 
 #if DEBUG
   printf("text = %s\nedit = %s\n", text, edit0);
@@ -120,8 +151,11 @@ long edit_string(char *text, char *edit0) {
       edit = editSeq[stackLevel].editPtr;
       while (*(editSeq[stackLevel].editPtr = edit)) {
         count = 0;
-        while (isdigit(*edit))
+        while (isdigit((unsigned char)*edit)) {
+          if (count > (SHRT_MAX - (*edit - '0')) / 10)
+            goto edit_done;
           count = count * 10 + (*edit++ - '0');
+        }
         if (!count)
           count = 1;
         if (!*edit)
@@ -151,12 +185,15 @@ long edit_string(char *text, char *edit0) {
             editSeq[stackLevel].pending = 1;
             editSeq[stackLevel].editPtr = NULL;
           }
-          if (stackLevel >= stackDepth &&
-              !(editSeq = realloc(editSeq, sizeof(*editSeq) * (stackDepth += 10)))) {
-            fprintf(stderr, "memory allocation failure (edit_string)");
-            return 0;
+          if (stackLevel + 1 >= stackDepth) {
+            newEditSeq = realloc(editSeq, sizeof(*editSeq) * (stackDepth + 10));
+            if (!newEditSeq)
+              goto edit_done;
+            editSeq = newEditSeq;
+            stackDepth += 10;
           }
           stackLevel++;
+          editSeq[stackLevel].pending = 0;
           editSeq[stackLevel].count = count;
           cSave = *edit;
           *edit = 0;
@@ -189,8 +226,10 @@ long edit_string(char *text, char *edit0) {
           break;
         case 'b':
           /* move backward N chars */
-          if ((text -= count) < text_start)
+          if (count > text - text_start)
             text = text_start;
+          else
+            text -= count;
           new_kill = 1;
           break;
         case 'u':
@@ -281,7 +320,8 @@ long edit_string(char *text, char *edit0) {
           break;
         case 'i':
           /* insert characters */
-          delimiter = *++edit;
+          if (!(delimiter = *++edit))
+            goto edit_done;
           ptr1 = NULL;
           if ((ptr = strchr(++edit, delimiter))) {
             ptr1 = ptr;
@@ -293,6 +333,8 @@ long edit_string(char *text, char *edit0) {
           printf("insert string = >%s<\n", edit);
 #endif
           while (count--) {
+            if (strlen(edit) >= capacity - strlen(text_start))
+              goto edit_done;
             insert(text, edit);
             text += strlen(edit);
           }
@@ -305,13 +347,13 @@ long edit_string(char *text, char *edit0) {
           /* kill anything in the given string */
           delimiter = *++edit;
           if (!*edit)
-            break;
+            goto edit_done;
           invert = 0;
           if (delimiter == '-') {
             invert = 1;
             delimiter = *++edit;
             if (!*edit)
-              break;
+              goto edit_done;
           }
           delimLoc = NULL;
           if ((editNext = strchr(++edit, delimiter))) {
@@ -337,7 +379,8 @@ long edit_string(char *text, char *edit0) {
           if (invert) {
             /* kill anything up to a character in the string */
             if ((ptr = strpbrk(text, charList))) {
-              strncat(kill, text, ptr - text);
+              if (!appendKilledText(kill, sizeof(kill), text, ptr - text))
+                goto edit_done;
               strcpy_ss(text, ptr);
             } else
               /* no occurrence, kill whole string */
@@ -359,7 +402,8 @@ long edit_string(char *text, char *edit0) {
               }
             }
             if (ptr != text) {
-              strncat(kill, text, ptr - text);
+              if (!appendKilledText(kill, sizeof(kill), text, ptr - text))
+                goto edit_done;
               strcpy_ss(text, ptr);
             }
           }
@@ -554,7 +598,10 @@ long edit_string(char *text, char *edit0) {
           /* kill N characters */
           if (new_kill)
             kill[0] = 0;
-          strncat(kill, text, count);
+          if (count > (long)strlen(text))
+            count = strlen(text);
+          if (!appendKilledText(kill, sizeof(kill), text, count))
+            goto edit_done;
           strcpy_ss(text, text + count);
           new_kill = 0;
 #if DEBUG
@@ -568,7 +615,8 @@ long edit_string(char *text, char *edit0) {
           while (count-- && (ptr = strpbrk(text, " \t_-"))) {
             while (IS_WORD_END(*ptr))
               ptr++;
-            strncat(kill, text, ptr - text);
+            if (!appendKilledText(kill, sizeof(kill), text, ptr - text))
+              goto edit_done;
             strcpy_ss(text, ptr);
           }
           if (count >= 0)
@@ -589,7 +637,8 @@ long edit_string(char *text, char *edit0) {
             if ((ptr = strchr(text, delimiter))) {
               if (*(edit - 1) == 'Z')
                 ptr++; /* delete delimiter */
-              strncat(kill, text, ptr - text);
+              if (!appendKilledText(kill, sizeof(kill), text, ptr - text))
+                goto edit_done;
               strcpy_ss(text, ptr);
             }
             new_kill = 0;
@@ -606,6 +655,8 @@ long edit_string(char *text, char *edit0) {
           printf("yank string = >%s<\n", kill);
 #endif
           while (count--) {
+            if (strlen(kill) >= capacity - strlen(text_start))
+              goto edit_done;
             insert(text, kill);
             text += strlen(kill);
           }
@@ -627,12 +678,34 @@ long edit_string(char *text, char *edit0) {
           printf("delimiter = %c\n", delimiter);
 #endif
           orig = edit + 1;
-          if (!(repl = strchr(orig + 1, delimiter)))
-            return (0);
+          if (!*orig || *orig == delimiter || !(repl = strchr(orig + 1, delimiter)))
+            goto edit_done;
           *repl++ = 0;
           if (!(ptr = strchr(repl, delimiter)))
             return (0);
           *ptr = 0;
+          /* Check both the caller's remaining space and replacement scratch space. */
+          available = capacity - (text - text_start);
+          if (available > sizeof(buffer))
+            available = sizeof(buffer);
+          length = strlen(text);
+          ptr1 = text;
+          i = 0;
+          while ((global || i < count) && (ptr2 = str_in(ptr1, orig))) {
+            if (here && ptr2 != ptr1)
+              break;
+            if (strlen(repl) > strlen(orig)) {
+              size_t growth = strlen(repl) - strlen(orig);
+              if (length >= available || growth >= available - length)
+                goto edit_done;
+              length += growth;
+            } else
+              length -= strlen(orig) - strlen(repl);
+            ptr1 = ptr2 + strlen(orig);
+            i++;
+          }
+          if (length >= available)
+            goto edit_done;
 #if DEBUG
           printf("orig: >%s<   repl: >%s<\n", orig, repl);
 #endif
@@ -666,6 +739,12 @@ long edit_string(char *text, char *edit0) {
   }
   free(editSeq);
   return 1;
+
+edit_done:
+  while (stackLevel >= 0)
+    free(editSeq[stackLevel--].editText);
+  free(editSeq);
+  return result;
 }
 
 /**

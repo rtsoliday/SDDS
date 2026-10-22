@@ -3083,6 +3083,7 @@ long print_parameter_value(SDDS_DATASET *SDDS_dataset, char *target, char **sour
   char *print_pos, **ptr, *fptr1, *fptr2 = NULL, *fptr3, *cptr;
   long source_type, source_index, target_index, target_type;
   long i, use_info;
+  int printed;
   static char s[SDDS_MAXLINE];
   static char *info = NULL;
 
@@ -3117,7 +3118,7 @@ long print_parameter_value(SDDS_DATASET *SDDS_dataset, char *target, char **sour
         if (strcmp(cptr + 1, "type") == 0) {
           if (source_type != SDDS_LONG)
             return bombre("internal error: type of data-type information is not long", NULL, 0);
-          SDDS_CopyString((char **)info, SDDS_type_name[*(long *)info - 1]);
+          SDDS_CopyString((char **)info, SDDS_type_name[*(int32_t *)info - 1]);
           source_type = SDDS_STRING;
         }
         *cptr = '.';
@@ -3157,47 +3158,62 @@ long print_parameter_value(SDDS_DATASET *SDDS_dataset, char *target, char **sour
       *fptr2 = 0;
     else
       fptr2 = NULL;
+    printed = 0;
     switch (source_type) {
     case SDDS_DOUBLE:
-      sprintf(print_pos, fptr1, *(double *)ptr);
+      printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(double *)ptr);
       break;
     case SDDS_FLOAT:
-      sprintf(print_pos, fptr1, *(float *)ptr);
+      printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(float *)ptr);
       break;
     case SDDS_LONG64:
-      sprintf(print_pos, fptr1, *(int64_t *)ptr);
+      printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(int64_t *)ptr);
       break;
     case SDDS_ULONG64:
-      sprintf(print_pos, fptr1, *(uint64_t *)ptr);
+      printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(uint64_t *)ptr);
       break;
     case SDDS_LONG:
-      sprintf(print_pos, fptr1, *(int32_t *)ptr);
+      printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(int32_t *)ptr);
       break;
     case SDDS_ULONG:
-      sprintf(print_pos, fptr1, *(uint32_t *)ptr);
+      printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(uint32_t *)ptr);
       break;
     case SDDS_SHORT:
-      sprintf(print_pos, fptr1, *(short *)ptr);
+      printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(short *)ptr);
       break;
     case SDDS_USHORT:
-      sprintf(print_pos, fptr1, *(unsigned short *)ptr);
+      printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(unsigned short *)ptr);
       break;
     case SDDS_CHARACTER:
-      sprintf(print_pos, fptr1, *(char *)ptr);
+      printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(char *)ptr);
+      break;
+    case SDDS_ENUM:
+      if (!SDDS_SprintEnumValue(SDDS_dataset->layout.parameter_definition[source_index].enum_definition,
+                                (int32_t *)ptr, 0, fptr1, print_pos, sizeof(s) - (print_pos - s),
+                                SDDS_PRINT_NOQUOTES, 1, 0)) {
+        free(ptr);
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+        return 0;
+      }
       break;
     case SDDS_STRING:
-      sprintf(print_pos, fptr1, *(char **)ptr);
+      printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(char **)ptr);
       free(*ptr);
       break;
     default:
       SDDS_Bomb("error: unknown type encountered--this shouldn't happen (print_parameter_value)");
       break;
     }
+    if (!use_info)
+      free(ptr);
+    if (printed < 0 || (size_t)printed >= sizeof(s) - (print_pos - s)) {
+      SDDS_SetError("Print output buffer too small (print_parameter_value)");
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      return 0;
+    }
     if (!(fptr1 = fptr2))
       break;
     *fptr1 = '%';
-    if (!use_info)
-      free(ptr);
   }
   if ((target_type == SDDS_STRING &&
        !SDDS_SetParameters(SDDS_dataset, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE, target_index, s, -1)) ||
@@ -3213,6 +3229,9 @@ long print_column_value(SDDS_DATASET *SDDS_dataset, char *target, char **source,
   char *print_pos, **ptr, *fptr1, *fptr2 = NULL, *fptr3, *cptr;
   long target_index, target_type;
   long i;
+  int printed;
+  int32_t fieldType;
+  void *information;
   int64_t j, rows;
   static char s[SDDS_MAXLINE];
   static long firstCall = 1;
@@ -3253,11 +3272,12 @@ long print_column_value(SDDS_DATASET *SDDS_dataset, char *target, char **source,
       sourceData[i].is_parameter = 1;
     else if ((cptr = strrchr(source[i], '.'))) {
       *cptr = 0;
+      information = strcmp(cptr + 1, "type") == 0 ? (void *)&fieldType : (void *)&sourceData[i].info;
       if ((sourceData[i].source_type =
-             SDDS_GetParameterInformation(SDDS_dataset, cptr + 1, &sourceData[i].info, SDDS_GET_BY_NAME, source[i])))
+             SDDS_GetParameterInformation(SDDS_dataset, cptr + 1, information, SDDS_GET_BY_NAME, source[i])))
         sourceData[i].is_parameter = 1;
       else if ((sourceData[i].source_type =
-                  SDDS_GetColumnInformation(SDDS_dataset, cptr + 1, &sourceData[i].info, SDDS_GET_BY_NAME, source[i])))
+                  SDDS_GetColumnInformation(SDDS_dataset, cptr + 1, information, SDDS_GET_BY_NAME, source[i])))
         sourceData[i].is_column = 1;
       else {
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
@@ -3266,7 +3286,8 @@ long print_column_value(SDDS_DATASET *SDDS_dataset, char *target, char **source,
       if (strcmp(cptr + 1, "type") == 0) {
         if (sourceData[i].source_type != SDDS_LONG)
           return bombre("internal error: type of data-type information is not long", NULL, 0);
-        SDDS_CopyString((char **)sourceData[i].info, SDDS_type_name[*(long *)sourceData[i].info - 1]);
+        if (!SDDS_CopyString(&sourceData[i].info, SDDS_type_name[fieldType - 1]))
+          return 0;
         sourceData[i].source_type = SDDS_STRING;
       }
       *cptr = '.';
@@ -3295,7 +3316,7 @@ long print_column_value(SDDS_DATASET *SDDS_dataset, char *target, char **source,
           return (0);
         }
         if (!j && firstCall && SDDS_GetParameterIndex(SDDS_dataset, source[i]) >= 0) {
-          if (*ptr == NULL) {
+          if (sourceData[i].source_type == SDDS_STRING && *ptr == NULL) {
             fprintf(stderr, "error: -print option for column %s uses source %s which is defined\n",
                     target, source[i]);
             fprintf(stderr, "as both a column and a parameter\n");
@@ -3337,36 +3358,49 @@ long print_column_value(SDDS_DATASET *SDDS_dataset, char *target, char **source,
         *fptr2 = 0;
       else
         fptr2 = NULL;
+      printed = 0;
       switch (sourceData[i].source_type) {
       case SDDS_DOUBLE:
-        sprintf(print_pos, fptr1, *(double *)ptr);
+        printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(double *)ptr);
         break;
       case SDDS_FLOAT:
-        sprintf(print_pos, fptr1, *(float *)ptr);
+        printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(float *)ptr);
         break;
       case SDDS_LONG64:
-        sprintf(print_pos, fptr1, *(int64_t *)ptr);
+        printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(int64_t *)ptr);
         break;
       case SDDS_ULONG64:
-        sprintf(print_pos, fptr1, *(uint64_t *)ptr);
+        printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(uint64_t *)ptr);
         break;
       case SDDS_LONG:
-        sprintf(print_pos, fptr1, *(int32_t *)ptr);
+        printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(int32_t *)ptr);
         break;
       case SDDS_ULONG:
-        sprintf(print_pos, fptr1, *(uint32_t *)ptr);
+        printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(uint32_t *)ptr);
         break;
       case SDDS_SHORT:
-        sprintf(print_pos, fptr1, *(short *)ptr);
+        printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(short *)ptr);
         break;
       case SDDS_USHORT:
-        sprintf(print_pos, fptr1, *(unsigned short *)ptr);
+        printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(unsigned short *)ptr);
         break;
       case SDDS_CHARACTER:
-        sprintf(print_pos, fptr1, *(char *)ptr);
+        printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(char *)ptr);
+        break;
+      case SDDS_ENUM:
+        if (!SDDS_SprintEnumValue(sourceData[i].is_column ?
+                                  SDDS_dataset->layout.column_definition[sourceData[i].source_index].enum_definition :
+                                  SDDS_dataset->layout.parameter_definition[sourceData[i].source_index].enum_definition,
+                                  (int32_t *)ptr, 0, fptr1, print_pos, sizeof(s) - (print_pos - s),
+                                  SDDS_PRINT_NOQUOTES, 1, 0)) {
+          free(ptr);
+          SDDS_Free(sourceData);
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+          return 0;
+        }
         break;
       case SDDS_STRING:
-        sprintf(print_pos, fptr1, *(char **)ptr);
+        printed = snprintf(print_pos, sizeof(s) - (print_pos - s), fptr1, *(char **)ptr);
         if (!sourceData[i].use_info)
           free(*ptr);
         break;
@@ -3376,6 +3410,12 @@ long print_column_value(SDDS_DATASET *SDDS_dataset, char *target, char **source,
       }
       if (!sourceData[i].use_info)
         free(ptr);
+      if (printed < 0 || (size_t)printed >= sizeof(s) - (print_pos - s)) {
+        SDDS_Free(sourceData);
+        SDDS_SetError("Print output buffer too small (print_column_value)");
+        SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+        return 0;
+      }
       if (!(fptr1 = fptr2))
         break;
       *fptr1 = '%';
@@ -3916,6 +3956,7 @@ long SDDS_RedefineColumnCL(SDDS_DATASET *SDDS_dataset, char *column, char **argv
 }
 
 long add_sddsfile_arguments(SCANNED_ARG **scanned, int argc) {
+  int32_t readCode = -1;
   long iarg, datacode, index, argc_got;
   int64_t j;
   SDDS_DATASET dataset;
@@ -3954,7 +3995,7 @@ long add_sddsfile_arguments(SCANNED_ARG **scanned, int argc) {
     argc_got = 0;
     switch (datacode) {
     case 0:
-      while (SDDS_ReadPage(&dataset) > 0) {
+      while ((readCode = SDDS_ReadPage(&dataset)) > 0) {
         char **column;
         int64_t rows;
         if ((rows = SDDS_CountRowsOfInterest(&dataset)) <= 0)
@@ -3971,7 +4012,7 @@ long add_sddsfile_arguments(SCANNED_ARG **scanned, int argc) {
       }
       break;
     case 1:
-      while (SDDS_ReadPage(&dataset) > 0) {
+      while ((readCode = SDDS_ReadPage(&dataset)) > 0) {
         char *parameter;
         if (!SDDS_GetParameter(&dataset, dataname, &parameter))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
@@ -3983,6 +4024,8 @@ long add_sddsfile_arguments(SCANNED_ARG **scanned, int argc) {
     default:
       break;
     }
+    if (readCode == 0)
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
     SDDS_Terminate(&dataset);
     argc_got = scanargsg(&sa_got, argc_got, argv_got);
     *scanned = trealloc(*scanned, sizeof(**scanned) * (argc + argc_got));

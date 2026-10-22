@@ -9,6 +9,7 @@ sddsplot_SRC = SDDSaps.c \
                 put_link_date.c \
                 sddsplot.c \
                 sddsplotAP.c \
+                sddsplot3d.c \
                 sddsplotConvert.c \
                 sddsplotFilter.c \
                 sddsplotLabels.c \
@@ -62,3 +63,14 @@ $(OBJ_DIR)/sddsplot$(EXEEXT): $(sddsplot_OBJS) $(LIBRARY) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsplot_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 
 .NOTPARALLEL: $(LIBRARY)
+
+# The test driver exercises production extraction without a GUI or process wrapper.
+ARRAY_TEST_DRIVER = $(OBJ_DIR)/test_sddsplot3d$(EXEEXT)
+ARRAY_TEST_OBJS = $(OBJ_DIR)/test_sddsplot3d.$(OBJEXT) $(OBJ_DIR)/sddsplot3d.$(OBJEXT)
+$(ARRAY_TEST_DRIVER): $(ARRAY_TEST_OBJS) $(LIBRARY) $(PROD_DEPS)
+	$(LINKEXE) $(OUTPUTEXE) $(ARRAY_TEST_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+
+.PHONY: array-test-driver
+array-test-driver: $(ARRAY_TEST_DRIVER)
+
+-include $(ARRAY_TEST_OBJS:.$(OBJEXT)=.d)

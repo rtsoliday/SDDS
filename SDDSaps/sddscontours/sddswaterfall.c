@@ -1972,6 +1972,7 @@ void prepare_multi_page_grid_data() {
     // Load SDDS data
 void load_sdds_data(char *filename, char *xcol, char *ycol, char *zcol) {
   SDDS_DATASET SDDS_table;
+  int32_t readCode;
   int n_rows;
   
   if (!SDDS_InitializeInput(&SDDS_table, filename)) {
@@ -1981,7 +1982,7 @@ void load_sdds_data(char *filename, char *xcol, char *ycol, char *zcol) {
   
   // Count pages first
   n_pages = 0;
-  while (SDDS_ReadPage(&SDDS_table) > 0) {
+  while ((readCode = SDDS_ReadPage(&SDDS_table)) > 0) {
     n_rows = SDDS_CountRowsOfInterest(&SDDS_table);
     if (n_rows == 0) continue;
     n_pages++;
@@ -2022,6 +2023,8 @@ void load_sdds_data(char *filename, char *xcol, char *ycol, char *zcol) {
       break;
     }
   }
+  if (readCode == 0)
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
   if (!SDDS_Terminate(&SDDS_table)) {
     fprintf(stderr, "Error: Failed to terminate SDDS input\n");
     exit(1);

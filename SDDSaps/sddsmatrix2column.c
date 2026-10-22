@@ -342,6 +342,10 @@ int main(int argc, char **argv) {
       rowName = NULL;
     }
   }
+  if (page == 0 || SDDS_NumberOfErrors()) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+    return EXIT_FAILURE;
+  }
   if (!SDDS_Terminate(&SDDS_orig) || !SDDS_Terminate(&SDDS_dataset)) {
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
     return 1;
