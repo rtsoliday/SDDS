@@ -62,6 +62,7 @@ int32_t SDDS_ValidateEnumLayout(SDDS_DATASET *dataset);
 int32_t SDDS_ValidateEnumReadPage(SDDS_DATASET *dataset);
 int32_t SDDS_ValidateFixedEnumValue(const SDDS_ENUM_DEFINITION *definition, const char *text);
 int32_t SDDS_ParseEnumCode(const char *text, int32_t *code);
+int32_t SDDS_RequiresSDDS6Layout(const SDDS_LAYOUT *layout);
 int32_t SDDS6_GetNamelist(SDDS_DATASET *dataset, void *stream, int32_t compression);
 int32_t SDDS_FindFieldIndex(char *tag, SDDS_FIELD_INFORMATION *fields, int32_t count);
 int32_t SDDS_MatchEnum(char *value, SDDS_ENUM_PAIR *pairs);

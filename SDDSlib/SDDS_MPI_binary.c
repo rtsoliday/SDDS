@@ -2057,7 +2057,7 @@ int32_t SDDS_MPI_BroadcastTitleData(SDDS_DATASET *SDDS_dataset) {
       for (i = 0; i < layout->n_parameters; i++) {
         type = layout->parameter_definition[i].type;
         if (type == SDDS_STRING)
-          data_len[i + 1] = strlen(*((char **)SDDS_dataset->parameter[i])) * sizeof(char);
+          data_len[i + 1] = *((char **)SDDS_dataset->parameter[i]) ? strlen(*((char **)SDDS_dataset->parameter[i])) : 0;
         else
           data_len[i + 1] = SDDS_type_size[type - 1];
         ;
@@ -2067,8 +2067,10 @@ int32_t SDDS_MPI_BroadcastTitleData(SDDS_DATASET *SDDS_dataset) {
       memcpy((char *)par_data, &(MPI_dataset->total_rows), data_len[0]);
       count = data_len[0];
       for (i = 0; i < layout->n_parameters; i++) {
-        if (layout->parameter_definition[i].type == SDDS_STRING)
-          memcpy((char *)par_data + count, *(char **)SDDS_dataset->parameter[i], data_len[i + 1]);
+        if (layout->parameter_definition[i].type == SDDS_STRING) {
+          if (data_len[i + 1])
+            memcpy((char *)par_data + count, *(char **)SDDS_dataset->parameter[i], data_len[i + 1]);
+        }
         else
           memcpy((char *)par_data + count, (char *)SDDS_dataset->parameter[i], data_len[i + 1]);
         count += data_len[i + 1];

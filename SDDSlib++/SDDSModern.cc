@@ -1437,9 +1437,16 @@ std::optional<Namelist> readNamelist6(BufferedStream &stream, const ReaderOption
     const char c = static_cast<char>(*byte);
     if (!c) throwFormat("NUL in SDDS6 header", path);
     if (inComment) {
-      if (c == '\n') { specialComment(); comment.clear(); inComment = false; }
-      else if (comment.size() < 255) comment.push_back(c);
-      continue;
+      if (c == '\n') {
+        specialComment();
+        comment.clear();
+        inComment = false;
+        // The newline ending an inline comment still separates attributes.
+        if (!started) continue;
+      } else {
+        if (comment.size() < 255) comment.push_back(c);
+        continue;
+      }
     }
     if (!quoted && c == '!') { inComment = true; continue; }
     if (!started) {
@@ -1529,6 +1536,75 @@ std::optional<Namelist> readNamelist(BufferedStream &stream, const ReaderOptions
   }
 }
 
+std::string fieldTags(const FieldMetadata &field);
+
+/** @brief Whether a decoded SDDS6 layout can be emitted losslessly by the legacy writer. */
+bool requiresSdds6Grammar(const Layout &layout) {
+  auto textNeedsEscapes = [](std::string_view text) {
+    return std::any_of(text.begin(), text.end(), [](unsigned char c) {
+      return c < 32 || c == 127 || c == '\\' || c == '"' || c == '!';
+    });
+  };
+  auto optionalNeedsEscapes = [&](const std::optional<std::string> &text) {
+    return text && textNeedsEscapes(*text);
+  };
+  auto fieldNeedsEscapes = [&](const FieldMetadata &field) {
+    return field.type == Type::Enum || textNeedsEscapes(field.name) ||
+        optionalNeedsEscapes(field.symbol) || optionalNeedsEscapes(field.units) ||
+        optionalNeedsEscapes(field.description) || optionalNeedsEscapes(field.format);
+  };
+  auto fieldBytes = [](std::string_view name, const std::optional<std::string> &text) {
+    return text ? name.size() + 3 + quote(text).size() : std::size_t{0};
+  };
+  // The C legacy header reader has a 1024-byte command buffer.
+  constexpr std::size_t legacyCommandBytes = 1024;
+  if (optionalNeedsEscapes(layout.description) || optionalNeedsEscapes(layout.contents) ||
+      std::string_view("&description &end\n").size() + fieldBytes("text", layout.description) +
+          fieldBytes("contents", layout.contents) >= legacyCommandBytes)
+    return true;
+  for (const auto &field : layout.parameters) {
+    if (fieldNeedsEscapes(field)) return true;
+    if (field.fixedValue) {
+      const auto &fixed = *field.fixedValue;
+      if (field.type == Type::String || field.type == Type::Character) {
+        const auto quoted = quoteRequired(fixed);
+        const auto legacyFixed = quoted.substr(1, quoted.size() - 2);
+        if ((!legacyFixed.empty() && legacyFixed.back() == '\\') ||
+            scanFixedText(legacyFixed, field.type) != fixed)
+          return true;
+      } else if (textNeedsEscapes(fixed)) {
+        return true;
+      }
+    }
+    if (std::string_view("&parameter &end\n").size() + fieldTags(field).size() +
+        fieldBytes("fixed_value", field.fixedValue) >= legacyCommandBytes)
+      return true;
+  }
+  for (const auto &field : layout.columns) {
+    if (fieldNeedsEscapes(field)) return true;
+    const auto length = field.fieldLength ? std::string_view("field_length=, ").size() + std::to_string(field.fieldLength).size() : 0;
+    if (std::string_view("&column &end\n").size() + fieldTags(field).size() + length >= legacyCommandBytes) return true;
+  }
+  for (const auto &field : layout.arrays) {
+    if (fieldNeedsEscapes(field) || optionalNeedsEscapes(field.groupName)) return true;
+    const auto length = field.fieldLength ? std::string_view("field_length=, ").size() + std::to_string(field.fieldLength).size() : 0;
+    if (std::string_view("&array &end\n").size() + fieldTags(field).size() + fieldBytes("group_name", field.groupName) + length +
+        std::string_view("dimensions=, ").size() + std::to_string(field.dimensions).size() >= legacyCommandBytes)
+      return true;
+  }
+  for (const auto &field : layout.associates) {
+    if (textNeedsEscapes(field.name) || optionalNeedsEscapes(field.filename) ||
+        optionalNeedsEscapes(field.path) || optionalNeedsEscapes(field.description) ||
+        optionalNeedsEscapes(field.contents))
+      return true;
+    if (std::string_view("&associate sdds=1, &end\n").size() + fieldBytes("name", field.name) + fieldBytes("filename", field.filename) +
+        fieldBytes("path", field.path) + fieldBytes("description", field.description) +
+        fieldBytes("contents", field.contents) >= legacyCommandBytes)
+      return true;
+  }
+  return false;
+}
+
 void validateLayout(Layout &layout) {
   std::unordered_set<std::string> names;
   auto validateFields = [&](auto &definitions, const char *kind) {
@@ -1569,7 +1645,9 @@ void validateLayout(Layout &layout) {
     if (definition.type == Type::Enum && definition.fieldLength) throwFormat("enum field_length must be zero");
   for (const auto &definition : layout.arrays)
     if (definition.type == Type::Enum && definition.fieldLength) throwFormat("enum field_length must be zero");
-  std::int32_t version = 1;
+  // Keep SDDS6 only when decoded metadata cannot survive legacy serialization.
+  // Safe enum-to-primitive conversions still select the minimum legacy version.
+  std::int32_t version = layout.version == 6 && requiresSdds6Grammar(layout) ? 6 : 1;
   auto consider = [&](Type type) {
     if (type == Type::UInt16 || type == Type::UInt32) version = std::max(version, 2);
     if (type == Type::LongDouble) version = std::max(version, 4);
@@ -1620,6 +1698,10 @@ void parseLayoutStream(BufferedStream &stream, Layout &layout, const ReaderOptio
   }
 
   while (auto command = readNamelist(stream, options, path, commentOrder, fixedRowComment, layout.version == 6)) {
+    auto definitionInteger = [&](const std::string &value, const char *what) {
+      return layout.version == 6 ? parseSdds6Integer(value, INT32_MIN, INT32_MAX, what, path)
+                                 : parseInteger<std::int32_t>(value, what);
+    };
     if (layout.version == 6) {
       std::unordered_set<std::string> seen;
       std::string allowed;
@@ -1648,15 +1730,15 @@ void parseLayoutStream(BufferedStream &stream, Layout &layout, const ReaderOptio
       ColumnDefinition definition;
       static_cast<FieldMetadata &>(definition) = fieldFrom(command->tags, layout.version, options.limits);
       if (auto value = tag(command->tags, "field_length"))
-        definition.fieldLength = parseInteger<std::int32_t>(*value, "field_length");
+        definition.fieldLength = definitionInteger(*value, "field_length");
       layout.columns.push_back(std::move(definition));
     } else if (command->name == "array") {
       ArrayDefinition definition;
       static_cast<FieldMetadata &>(definition) = fieldFrom(command->tags, layout.version, options.limits);
       if (auto value = tag(command->tags, "field_length"))
-        definition.fieldLength = parseInteger<std::int32_t>(*value, "field_length");
+        definition.fieldLength = definitionInteger(*value, "field_length");
       if (auto value = tag(command->tags, "dimensions"))
-        definition.dimensions = parseInteger<std::int32_t>(*value, "array dimensions");
+        definition.dimensions = definitionInteger(*value, "array dimensions");
       else
         definition.dimensions = 1;
       definition.groupName = tag(command->tags, "group_name");
@@ -2415,7 +2497,7 @@ void writeLayout(BufferedStream &stream, Layout &layout, const WriterOptions &op
   validateLayout(layout);
   layout.version = std::max(layout.version, options.minimumVersion);
   if (layout.version < 1 || layout.version > 6)
-    throwState("minimum SDDS version must be in the range 1 through 5");
+    throwState("minimum SDDS version must be in the range 1 through 6");
   stream.write("SDDS" + std::to_string(layout.version) + "\n");
   if (layout.data.mode == DataMode::Binary) {
     stream.write(resolvedOrder(layout.data.byteOrder) == ByteOrder::Big

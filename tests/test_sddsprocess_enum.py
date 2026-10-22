@@ -59,7 +59,8 @@ def test_enum_fields_survive_processing_and_deletion(tmp_path, storage, suffix):
   run("sddsconvert", original, source, *options)
   run("sddsprocess", source, output, "-delete=column,expr",
       "-delete=parameter,expression",
-      "-define=column,twice,x 2 *", "-process=x,average,mean")
+      "-define=column,twice,x 2 *", "-process=x,average,xMean",
+      "-define=column,centered,x xMean -")
   assert run("sddscheck", output).stdout.strip() == "ok"
   assert stream(output, "-column=state", True) == [
     "-1", "2147483647", "-2147483648", "10", "-1"]
@@ -69,7 +70,8 @@ def test_enum_fields_survive_processing_and_deletion(tmp_path, storage, suffix):
   assert stream(output, "-array=states", True) == [
     "-1", "2147483647", "-2147483648", "10", "-1"]
   assert list(map(float, stream(output, "-column=twice"))) == [2, 4, 6, 8, 10]
-  assert list(map(float, stream(output, "-parameter=mean"))) == [2, 4.5]
+  assert list(map(float, stream(output, "-parameter=xMean"))) == [2, 4.5]
+  assert list(map(float, stream(output, "-column=centered"))) == [-1, 0, 1, -0.5, 0.5]
   ascii_output = tmp_path / "ascii.sdds"
   run("sddsconvert", output, ascii_output, "-ascii")
   text = ascii_output.read_text(encoding="utf8")

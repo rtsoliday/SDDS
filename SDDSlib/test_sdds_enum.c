@@ -1512,6 +1512,43 @@ static void rejectedArrayAssignmentTests(void) {
   row1[1] = -1;
   CHECK(SDDS_SetArrayVararg(&dataset, "grid", SDDS_POINTER_ARRAY, rows, 2, 2));
   CHECK(((int32_t *)dataset.array[1].data)[0] == 10 && ((int32_t *)dataset.array[1].data)[3] == -1);
+  {
+    int32_t negative[] = {2, -1}, oversized[] = {INT32_MAX, INT32_MAX};
+    CHECK(!SDDS_SetArray(&dataset, "grid", SDDS_CONTIGUOUS_DATA, good, negative)); SDDS_ClearErrors();
+    CHECK(dataset.array[1].elements == 4 && dataset.array[1].dimension[0] == 2 && dataset.array[1].dimension[1] == 2);
+    CHECK(!SDDS_SetArrayVararg(&dataset, "grid", SDDS_CONTIGUOUS_DATA, good, 2, -1)); SDDS_ClearErrors();
+    CHECK(dataset.array[1].elements == 4 && dataset.array[1].dimension[1] == 2);
+    CHECK(!SDDS_SetArray(&dataset, "grid", SDDS_CONTIGUOUS_DATA, NULL, shape)); SDDS_ClearErrors();
+    CHECK(dataset.array[1].elements == 4 && dataset.array[1].dimension[1] == 2);
+    CHECK(!SDDS_SetArrayVararg(&dataset, "grid", SDDS_CONTIGUOUS_DATA, NULL, 2, 2)); SDDS_ClearErrors();
+    CHECK(!SDDS_SetArray(&dataset, "grid", SDDS_CONTIGUOUS_DATA, good, oversized)); SDDS_ClearErrors();
+    CHECK(!SDDS_SetArrayVararg(&dataset, "grid", SDDS_CONTIGUOUS_DATA, good, INT32_MAX, INT32_MAX)); SDDS_ClearErrors();
+    CHECK(dataset.array[1].elements == 4 && dataset.array[1].dimension[0] == 2 && dataset.array[1].dimension[1] == 2);
+    CHECK(((int32_t *)dataset.array[1].data)[0] == 10 && ((int32_t *)dataset.array[1].data)[3] == -1);
+  }
+  CHECK(SDDS_Terminate(&dataset));
+}
+
+/** @brief Pointer-array counters depend on rank, including shapes with only one element. */
+static void singletonPointerArrayTests(void) {
+  SDDS_DATASET dataset = {0};
+  int32_t code = 10, *row[] = {&code}, **plane[] = {row}, ***cube[] = {plane};
+  int32_t shape[] = {1, 1, 1, 1}, empty[] = {1, 0, 1, 1};
+  CHECK(SDDS_InitializeOutput(&dataset, SDDS_BINARY, 1, NULL, NULL, NULL));
+  CHECK(SDDS_DefineEnumArray(&dataset, "singleton", NULL, NULL, NULL, NULL, mapping, 0, 4, NULL) == 0);
+  CHECK(SDDS_SaveLayout(&dataset) && SDDS_StartPage(&dataset, 1));
+  CHECK(SDDS_SetArray(&dataset, "singleton", SDDS_POINTER_ARRAY, cube, shape));
+  CHECK(dataset.array[0].elements == 1 && *(int32_t *)dataset.array[0].data == 10);
+  CHECK(SDDS_SetArrayVararg(&dataset, "singleton", SDDS_POINTER_ARRAY, cube, 1, 1, 1, 1));
+  CHECK(dataset.array[0].elements == 1 && *(int32_t *)dataset.array[0].data == 10);
+  plane[0] = NULL;
+  CHECK(!SDDS_SetArray(&dataset, "singleton", SDDS_POINTER_ARRAY, cube, shape)); SDDS_ClearErrors();
+  CHECK(!SDDS_SetArrayVararg(&dataset, "singleton", SDDS_POINTER_ARRAY, cube, 1, 1, 1, 1)); SDDS_ClearErrors();
+  CHECK(dataset.array[0].elements == 1 && *(int32_t *)dataset.array[0].data == 10);
+  CHECK(SDDS_SetArray(&dataset, "singleton", SDDS_CONTIGUOUS_DATA, NULL, empty));
+  CHECK(dataset.array[0].elements == 0);
+  CHECK(SDDS_SetArrayVararg(&dataset, "singleton", SDDS_CONTIGUOUS_DATA, NULL, 1, 0, 1, 1));
+  CHECK(dataset.array[0].elements == 0);
   CHECK(SDDS_Terminate(&dataset));
 }
 
@@ -1563,6 +1600,14 @@ static void lateParameterDefinitionTests(void) {
   CHECK(*(double *)dataset.parameter[1] == 2.5 && !strcmp(*(char **)dataset.parameter[2], "value"));
   CHECK((text = SDDS_GetParameterAsFormattedString(&dataset, "late", NULL, NULL)) != NULL);
   free(text);
+  CHECK(SDDS_Terminate(&dataset));
+  memset(&dataset, 0, sizeof(dataset));
+  CHECK(SDDS_InitializeOutput(&dataset, SDDS_ASCII, 1, NULL, NULL, NULL));
+  CHECK(SDDS_SaveLayout(&dataset) && SDDS_StartPage(&dataset, 1));
+  CHECK(SDDS_ProcessParameterString(&dataset, "&parameter name=firstLate, type=double &end", SDDS_WRITEONLY_DEFINITION));
+  CHECK(dataset.parameter && dataset.parameter[0] && *(double *)dataset.parameter[0] == 0);
+  CHECK(SDDS_SetParameter(&dataset, SDDS_SET_BY_INDEX | SDDS_PASS_BY_VALUE, 0, 2.5));
+  CHECK(*(double *)dataset.parameter[0] == 2.5);
   CHECK(SDDS_Terminate(&dataset));
 }
 
@@ -1625,6 +1670,7 @@ int main(int argc, char **argv) {
   stringFormatTests();
   enumPresentationQuotingTests();
   rejectedArrayAssignmentTests();
+  singletonPointerArrayTests();
   stringRpnTargetTests();
   integerPrintingTests();
   columnLikeArrayTests();

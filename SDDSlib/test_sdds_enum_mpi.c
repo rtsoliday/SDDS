@@ -330,12 +330,14 @@ static void testWriteOnlyDefinitions(const char *directory, int rank, int ranks)
       SDDS_DeferSavingLayout(&reader, 1);
       CHECK(SDDS_ProcessColumnString(&reader, "&column name=writeOnlyOutputColumn,type=enum,enum_values=\"10:ON\" &end", SDDS_WRITEONLY_DEFINITION));
       CHECK(SDDS_ProcessParameterString(&reader, "&parameter name=writeOnlyOutputParameter,type=enum,enum_values=\"10:ON\" &end", SDDS_WRITEONLY_DEFINITION));
+      CHECK(SDDS_ProcessParameterString(&reader, "&parameter name=writeOnlyOutputText,type=string &end", SDDS_WRITEONLY_DEFINITION));
       SDDS_DeferSavingLayout(&reader, 0);
       CHECK(SDDS_SaveLayout(&reader));
       for (page = 0; page < 2; page++) {
         int64_t row, start;
         CHECK((masterReader ? SDDS_Master_ReadPage(&reader) : SDDS_ReadPage(&reader)) == page + 1);
         CHECK(*(int32_t *)reader.parameter[0] == 10 && *(int32_t *)reader.parameter[1] == 0);
+        CHECK(!*(char **)reader.parameter[2] || !**(char **)reader.parameter[2]);
         start = masterReader ? 0 : reader.MPI_dataset->start_row;
         CHECK(reader.n_rows == (masterReader ? 4 : 4 / ranks + (rank < 4 % ranks)));
         for (row = 0; row < reader.n_rows; row++) {
@@ -636,6 +638,37 @@ static void testStringRows(const char *directory, int rank, int ranks) {
   }
 }
 
+/** @brief Primitive layouts still need SDDS6 when their metadata exceeds legacy escaping/buffers. */
+static void testPrimitiveMetadata(const char *directory, int rank, int ranks) {
+  int major;
+  char path[2048], description[4097];
+  memset(description, 'x', sizeof(description) - 1);
+  memcpy(description, "line one\nstate! ", 16);
+  description[sizeof(description) - 1] = 0;
+  for (major = 0; major < 2; major++) {
+    SDDS_DATASET writer = {0}, reader = {0};
+    int32_t value = rank;
+    snprintf(path, sizeof(path), "%s/primitive-metadata-%d.sdds", directory, major);
+    SDDS_MPI_Setup(&writer, 1, ranks, rank, MPI_COMM_WORLD, 0);
+    CHECK(SDDS_MPI_InitializeOutput(&writer, NULL, NULL, path, SDDS_MPI_WRITE_ONLY, (short)major));
+    CHECK(MPI_File_set_size(writer.MPI_dataset->MPI_file, 0) == MPI_SUCCESS);
+    CHECK(SDDS_DefineColumn(&writer, "value", NULL, NULL, description, NULL, SDDS_LONG, 0) == 0);
+    CHECK(SDDS_MPI_WriteLayout(&writer) && writer.layout.version == 6);
+    CHECK(SDDS_StartPage(&writer, 1));
+    CHECK(SDDS_SetColumn(&writer, SDDS_SET_BY_INDEX, &value, 1, 0));
+    CHECK(SDDS_WritePage(&writer));
+    CHECK(SDDS_Terminate(&writer));
+    MPI_Barrier(MPI_COMM_WORLD);
+    SDDS_MPI_Setup(&reader, 1, ranks, rank, MPI_COMM_WORLD, 1);
+    CHECK(SDDS_MPI_InitializeInput(&reader, path));
+    CHECK(reader.layout.version == 6 && !strcmp(reader.layout.column_definition[0].description, description));
+    CHECK(SDDS_ReadPage(&reader) == 1 && reader.n_rows == 1);
+    CHECK(((int32_t *)reader.data[0])[0] == rank);
+    CHECK(SDDS_ReadPage(&reader) == -1);
+    CHECK(SDDS_Terminate(&reader));
+  }
+}
+
 /** @brief Keep accepting *.gz MPI output names, written uncompressed, and reject *.xz. */
 static void testCompressedOutputNames(const char *directory, int rank, int ranks) {
   char path[2048];
@@ -786,6 +819,7 @@ int main(int argc, char **argv) {
   RUN(testLegacyLayoutAndTruncation);
   RUN(testSelectedRowMajorRows);
   RUN(testStringRows);
+  RUN(testPrimitiveMetadata);
   RUN(testCompressedOutputNames);
   if (!rank) puts(only ? "Selected SDDS MPI test passed" : "SDDS6 MPI enum tests passed");
   MPI_Finalize();

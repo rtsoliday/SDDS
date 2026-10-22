@@ -161,6 +161,8 @@ static int configureCast(SDDS_DATASET *output, CAST_NAME *casts, int32_t kind, E
         if (mapping) SDDS_Bomb("duplicate -enumValues definition");
         mapping = targets[j].mapping; targets[j].used = 1;
       }
+    if (mapping && newType != SDDS_ENUM)
+      SDDS_Bomb("-enumValues requires an enum cast target");
     if (oldType == SDDS_ENUM || newType == SDDS_ENUM) {
       if (!SDDS_ConfigureEnumConversion(output, kind, index, newType, mapping))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);

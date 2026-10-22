@@ -1681,8 +1681,19 @@ public:
       const QString path = root + (ascii ? "/long-definitions-ascii.sdds" : "/long-definitions-binary.sdds");
       putFile(path, "original file");
       editor.dirty = true;
-      check(!editor.writeFile(path) && readFile(path) == "original file" && editor.dirty,
-            "an unreadable oversized layout cannot replace the destination or mark the document saved");
+      const bool saved = editor.writeFile(path);
+      check(saved && readFile(path).startsWith("SDDS6\n") && !editor.dirty,
+            "oversized primitive metadata saves using the lossless SDDS6 header grammar");
+      if (saved) {
+        SDDSEditor loaded;
+        check(loaded.loadFile(path) && loaded.dataset.layout.version == 6 &&
+                  loaded.pages[0].parameters[0] == edited &&
+                  QString::fromLocal8Bit(loaded.dataset.layout.parameter_definition[0].description) == text &&
+                  QString::fromLocal8Bit(loaded.dataset.layout.column_definition[0].description) == edited &&
+                  QString::fromLocal8Bit(loaded.dataset.layout.array_definition[0].description) == text &&
+                  QString::fromLocal8Bit(loaded.dataset.layout.array_definition[0].group_name) == edited,
+              "long fixed values and metadata round-trip completely through ASCII and binary SDDS6");
+      }
     }
     require(failures == 0, "long definition text regressions");
   }

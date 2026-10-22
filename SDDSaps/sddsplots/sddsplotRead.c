@@ -45,24 +45,6 @@ static void edit_plot_strings(char **strings, long count, char *buffer, size_t b
   }
 }
 
-/** @brief Give a parameter defined on an already-loaded page zeroed value storage.
- *
- * Unlike SDDS_DefineColumn, SDDS_DefineParameter does not extend the value storage of
- * a page that is already in memory, so computing the new parameter would dereference
- * a missing slot. The definition is saved in the layout, so later pages keep the slot. */
-static void add_defined_parameter_storage(SDDS_TABLE *table, int32_t index)
-{
-  void **parameter;
-
-  if (index < 0 || index != table->layout.n_parameters - 1)
-    SDDS_Bomb("unexpected parameter index for -define (add_defined_parameter_storage)");
-  if (!(parameter = SDDS_Realloc(table->parameter, sizeof(*parameter) * table->layout.n_parameters)))
-    SDDS_Bomb("memory allocation failure (add_defined_parameter_storage)");
-  table->parameter = parameter;
-  if (!(parameter[index] = calloc(1, SDDS_type_size[table->layout.parameter_definition[index].type - 1])))
-    SDDS_Bomb("memory allocation failure (add_defined_parameter_storage)");
-}
-
 static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq)
 {
   long i;
@@ -78,7 +60,6 @@ static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq)
         if (!SDDS_ProcessParameterString(table, def->text, SDDS_WRITEONLY_DEFINITION))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         index = SDDS_GetParameterIndex(table, def->name);
-        add_defined_parameter_storage(table, index);
       } else if (def->argc) {
         if (!SDDS_RedefineParameter(table, def->name, def->argv, def->argc))
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);

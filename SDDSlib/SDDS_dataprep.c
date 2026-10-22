@@ -1167,8 +1167,8 @@ int32_t SDDS_SetRowValues(SDDS_DATASET *SDDS_dataset, int32_t mode, int64_t row,
 /**
  * @brief Validate the codes of an enum array source before any stored array state changes.
  *
- * Walks the caller's data with the same layout rules used by SDDS_SetArray(). Problems other
- * than invalid codes (negative dimensions, missing data) are left to the caller's existing checks.
+ * Checks the shape before walking the caller's data with the layout rules used by
+ * SDDS_SetArray(). Invalid shapes and missing data must not change the stored array either.
  *
  * @return Returns 1 if every code is mapped (or there is nothing to check), otherwise 0 with an error recorded.
  */
@@ -1177,12 +1177,23 @@ static int32_t validateEnumArraySource(ARRAY_DEFINITION *definition, int32_t mod
   int64_t elements = 1;
   void *ptr;
   for (i = 0; i < definition->dimensions; i++) {
-    if (dimension[i] < 0)
-      return 1;
+    if (dimension[i] < 0) {
+      SDDS_SetError("Unable to set enum array--negative dimension");
+      return 0;
+    }
+    /* SDDS_ARRAY.elements is int32_t, even on platforms with 64-bit size_t. */
+    if (dimension[i] && elements > INT32_MAX / dimension[i]) {
+      SDDS_SetError("Unable to set enum array--dimension product exceeds INT32_MAX");
+      return 0;
+    }
     elements *= dimension[i];
   }
-  if (!elements || !data_pointer)
+  if (!elements)
     return 1;
+  if (!data_pointer || (uint64_t)elements > SIZE_MAX / sizeof(int32_t)) {
+    SDDS_SetError("Unable to set enum array--missing data or allocation size overflow");
+    return 0;
+  }
   if (definition->dimensions == 1 || mode & SDDS_CONTIGUOUS_DATA)
     return SDDS_ValidateEnumData(definition->enum_definition, data_pointer, elements);
   if (!(counter = calloc((size_t)definition->dimensions - 1, sizeof(*counter)))) {
@@ -1191,8 +1202,14 @@ static int32_t validateEnumArraySource(ARRAY_DEFINITION *definition, int32_t mod
   }
   do {
     ptr = data_pointer;
-    for (i = 0; i < definition->dimensions - 1; i++)
+    for (i = 0; i < definition->dimensions - 1; i++) {
+      if (!ptr) {
+        SDDS_SetError("Unable to set enum array--NULL pointer in source array");
+        free(counter);
+        return 0;
+      }
       ptr = ((void **)ptr)[counter[i]];
+    }
     if (!SDDS_ValidateEnumData(definition->enum_definition, ptr, dimension[i]))
       result = 0;
   } while (result && SDDS_AdvanceCounter(counter, dimension, definition->dimensions - 1) != -1);
@@ -1297,7 +1314,7 @@ int32_t SDDS_SetArrayVararg(SDDS_DATASET *SDDS_dataset, char *array_name, int32_
   }
 
   size = SDDS_type_size[array->definition->type - 1];
-  if (!(array->data = SDDS_Realloc(array->data, size * array->elements))) {
+  if (!(array->data = SDDS_Realloc(array->data, (size_t)size * array->elements))) {
     SDDS_SetError("Unable to set array--allocation failure (SDDS_SetArrayVararg");
     return (0);
   }
@@ -1305,7 +1322,7 @@ int32_t SDDS_SetArrayVararg(SDDS_DATASET *SDDS_dataset, char *array_name, int32_
   /* handle 1-d arrays and contiguous data as a special case */
   if (array->definition->dimensions == 1 || mode & SDDS_CONTIGUOUS_DATA) {
     if (array->definition->type != SDDS_STRING)
-      memcpy(array->data, data_pointer, size * array->elements);
+      memcpy(array->data, data_pointer, (size_t)size * array->elements);
     else if (!SDDS_CopyStringArray(array->data, data_pointer, array->elements)) {
       SDDS_SetError("Unable to set array--string copy failure (SDDS_SetArrayVararg");
       return (0);
@@ -1313,18 +1330,18 @@ int32_t SDDS_SetArrayVararg(SDDS_DATASET *SDDS_dataset, char *array_name, int32_
     return (1);
   }
 
-  if (!(counter = SDDS_Realloc(counter, sizeof(*counter) * (array->elements - 1)))) {
+  if (!(counter = SDDS_Realloc(counter, sizeof(*counter) * (array->definition->dimensions - 1)))) {
     SDDS_SetError("Unable to set array--allocation failure (SDDS_SetArrayVararg");
     return (0);
   }
-  SDDS_ZeroMemory(counter, sizeof(*counter) * (array->elements - 1));
+  SDDS_ZeroMemory(counter, sizeof(*counter) * (array->definition->dimensions - 1));
   index = 0;
   do {
     ptr = data_pointer;
     for (i = 0; i < array->definition->dimensions - 1; i++)
       ptr = ((void **)ptr)[counter[i]];
     if (array->definition->type != SDDS_STRING)
-      memcpy((char *)array->data + size * index, ptr, size * array->dimension[i]);
+      memcpy((char *)array->data + (size_t)size * index, ptr, (size_t)size * array->dimension[i]);
     else if (!SDDS_CopyStringArray(((char **)array->data) + index, ptr, array->dimension[i])) {
       SDDS_SetError("Unable to set array--string copy failure (SDDS_SetArrayVararg");
       return (0);
@@ -1405,16 +1422,16 @@ int32_t SDDS_SetArray(SDDS_DATASET *SDDS_dataset, char *array_name, int32_t mode
       return (0);
     }
     array->elements *= dimension[i];
-    if (array->elements && !data_pointer) {
-      SDDS_SetError("Unable to set array--data pointer is NULL (SDDS_SetArray)");
-      return (0);
-    }
   }
   if (!array->elements)
     return (1);
+  if (!data_pointer) {
+    SDDS_SetError("Unable to set array--data pointer is NULL (SDDS_SetArray)");
+    return (0);
+  }
 
   size = SDDS_type_size[array->definition->type - 1];
-  if (!(array->data = SDDS_Realloc(array->data, size * array->elements))) {
+  if (!(array->data = SDDS_Realloc(array->data, (size_t)size * array->elements))) {
     SDDS_SetError("Unable to set array--allocation failure (SDDS_SetArray)");
     return (0);
   }
@@ -1422,7 +1439,7 @@ int32_t SDDS_SetArray(SDDS_DATASET *SDDS_dataset, char *array_name, int32_t mode
   /* handle 1-d arrays and contiguous data as a special case */
   if (array->definition->dimensions == 1 || mode & SDDS_CONTIGUOUS_DATA) {
     if (array->definition->type != SDDS_STRING)
-      memcpy(array->data, data_pointer, size * array->elements);
+      memcpy(array->data, data_pointer, (size_t)size * array->elements);
     else if (!SDDS_CopyStringArray(array->data, data_pointer, array->elements)) {
       SDDS_SetError("Unable to set array--string copy failure (SDDS_SetArrayVararg");
       return (0);
@@ -1430,18 +1447,18 @@ int32_t SDDS_SetArray(SDDS_DATASET *SDDS_dataset, char *array_name, int32_t mode
     return (1);
   }
 
-  if (!(counter = SDDS_Realloc(counter, sizeof(*counter) * (array->elements - 1)))) {
+  if (!(counter = SDDS_Realloc(counter, sizeof(*counter) * (array->definition->dimensions - 1)))) {
     SDDS_SetError("Unable to set array--allocation failure (SDDS_SetArray)");
     return (0);
   }
-  SDDS_ZeroMemory(counter, sizeof(*counter) * (array->elements - 1));
+  SDDS_ZeroMemory(counter, sizeof(*counter) * (array->definition->dimensions - 1));
   index = 0;
   do {
     ptr = data_pointer;
     for (i = 0; i < array->definition->dimensions - 1; i++)
       ptr = ((void **)ptr)[counter[i]];
     if (array->definition->type != SDDS_STRING)
-      memcpy((char *)array->data + size * index, ptr, size * array->dimension[i]);
+      memcpy((char *)array->data + (size_t)size * index, ptr, (size_t)size * array->dimension[i]);
     else if (!SDDS_CopyStringArray(((char **)array->data) + index, ptr, array->dimension[i])) {
       SDDS_SetError("Unable to set array--string copy failure (SDDS_SetArray)");
       return (0);

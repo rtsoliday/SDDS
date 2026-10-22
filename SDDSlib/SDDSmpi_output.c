@@ -478,7 +478,7 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
   MPI_DATASET *MPI_dataset;
   SDDS_LAYOUT *layout;
   char buf[2048], *field = NULL;
-  int32_t i, data_mode;
+  int32_t i, data_mode, preserveSDDS6;
   char *outputEndianess = NULL;
   SDDS_FILEBUFFER *fBuffer = NULL;
 
@@ -526,6 +526,9 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
       fBuffer->data[0] = 0;
     }
   }
+  preserveSDDS6 = SDDS_RequiresSDDS6Layout(layout);
+  /* All ranks must select the same serializer and header collective sequence. */
+  MPI_Allreduce(MPI_IN_PLACE, &preserveSDDS6, 1, MPI_INT32_T, MPI_MAX, MPI_dataset->comm);
   layout->version = 1;
   for (i = 0; i < layout->n_parameters; i++) {
     if ((layout->parameter_definition[i].type == SDDS_ULONG) || (layout->parameter_definition[i].type == SDDS_USHORT)) {
@@ -595,6 +598,7 @@ int32_t SDDS_MPI_WriteLayout(SDDS_DATASET *SDDS_dataset) {
   for (i = 0; i < layout->n_arrays; i++)
     if (layout->array_definition[i].type == SDDS_ENUM) layout->version = 6;
 
+  if (preserveSDDS6) layout->version = 6;
   if (layout->version == 6) layout->data_mode.endian = (int32_t)layout->byteOrderDeclared;
 
   // force layout version 5 because the row and column indexes are now 64bit long integers

@@ -240,7 +240,7 @@ struct Layout {
   std::vector<ColumnDefinition> columns;        /**< Column definitions in file order. */
   std::vector<AssociateDefinition> associates; /**< Associate definitions in file order. */
   DataOptions data;                       /**< Page encoding options. */
-  std::int32_t version = 1;               /**< SDDS protocol version, from 1 through 5. */
+  std::int32_t version = 1;               /**< SDDS protocol version, from 1 through 6. */
 
   /** @brief Finds a parameter by name. @param name Parameter name. @return Zero-based index. */
   std::size_t parameterIndex(std::string_view name) const;

@@ -270,9 +270,11 @@ int main(int argc, char **argv) {
     }
 
     if (ipage1 > 0) {
-      if (Input1Rows != SDDS_CountRowsOfInterest(&input1Page))
-        fprintf(stderr, "Number of rows in page %ld of file %s changed.\n", ipage, inputfile1 ? inputfile1 : "stdin");
-      /* R1 exists only when the first page has rows and numeric columns. */
+      Input1Rows = SDDS_CountRowsOfInterest(&input1Page);
+      if (Input1DoubleColumns && Input1Rows)
+        m_alloc1(&R1, Input1DoubleColumns, Input1Rows);
+      else
+        m_free(&R1);
       for (col = 0; R1 && col < Input1DoubleColumns; col++) {
         free(R1->a[col]);
         if (!(R1->a[col] = (double *)SDDS_GetColumnInDoubles(&input1Page, Input1DoubleColumn[col])))
@@ -319,8 +321,11 @@ int main(int argc, char **argv) {
     }
 
     if (ipage2 > 0) {
-      if (Input2Rows != SDDS_CountRowsOfInterest(&input2Page))
-        fprintf(stderr, "Number of rows in page %ld of file %s changed.\n", ipage, inputfile2);
+      Input2Rows = SDDS_CountRowsOfInterest(&input2Page);
+      if (Input2DoubleColumns && Input2Rows)
+        m_alloc1(&R2, Input2DoubleColumns, Input2Rows);
+      else
+        m_free(&R2);
       for (col = 0; R2 && col < Input2DoubleColumns; col++) {
         free(R2->a[col]);
         if (!(R2->a[col] = (double *)SDDS_GetColumnInDoubles(&input2Page, Input2DoubleColumn[col])))
@@ -342,23 +347,20 @@ int main(int argc, char **argv) {
     }
 
     /* Define output table */
-    if (ipage == 1) {
-      OutputRows = Input1Rows;
-      OutputDoubleColumns = Input2DoubleColumns;
-      if (Input1DoubleColumns != Input2Rows) {
-        fprintf(stderr, "Error: Dimension mismatch in files.\n");
-        fprintf(stderr, "Right-hand matrix (%s) is %ldx%ld.\n",
-                inputfile2 ? inputfile2 : "stdin", Input2Rows, Input2DoubleColumns);
-        fprintf(stderr, "Left-hand matrix (%s) is %ldx%ld.\n",
-                inputfile1 ? inputfile1 : "stdin", Input1Rows, Input1DoubleColumns);
-        exit(EXIT_FAILURE);
-      }
+    OutputRows = Input1Rows;
+    OutputDoubleColumns = Input2DoubleColumns;
+    if (Input1DoubleColumns != Input2Rows) {
+      fprintf(stderr, "Error: Dimension mismatch in files.\n");
+      fprintf(stderr, "Right-hand matrix (%s) is %ldx%ld.\n",
+              inputfile2 ? inputfile2 : "stdin", Input2Rows, Input2DoubleColumns);
+      fprintf(stderr, "Left-hand matrix (%s) is %ldx%ld.\n",
+              inputfile1 ? inputfile1 : "stdin", Input1Rows, Input1DoubleColumns);
+      exit(EXIT_FAILURE);
     }
 
     /* Perform matrix multiplication */
     if (OutputRows && OutputDoubleColumns) {
-      if (ipage == 1)
-        m_alloc(&R3, OutputDoubleColumns, OutputRows);
+      m_alloc1(&R3, OutputDoubleColumns, OutputRows);
       /* With a zero inner dimension, R1 and R2 are empty and the zeroed R3 is the product. */
       if (R1 && R2) {
         if (verbose)

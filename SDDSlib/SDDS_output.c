@@ -909,6 +909,7 @@ int32_t SDDS_WriteLayout(SDDS_DATASET *SDDS_dataset) {
   FILE *fp;
   struct lzmafile *lzmafp;
   int64_t i;
+  int32_t preserveSDDS6;
   char *outputEndianess = NULL;
 
 #if SDDS_MPI_IO
@@ -945,6 +946,7 @@ int32_t SDDS_WriteLayout(SDDS_DATASET *SDDS_dataset) {
   if (!layout->byteOrderDeclared)
     layout->byteOrderDeclared = SDDS_IsBigEndianMachine() ? SDDS_BIGENDIAN : SDDS_LITTLEENDIAN;
 
+  preserveSDDS6 = SDDS_RequiresSDDS6Layout(layout);
   layout->version = 1;
   for (i = 0; i < layout->n_parameters; i++) {
     if ((layout->parameter_definition[i].type == SDDS_ULONG) || (layout->parameter_definition[i].type == SDDS_USHORT)) {
@@ -1018,6 +1020,7 @@ int32_t SDDS_WriteLayout(SDDS_DATASET *SDDS_dataset) {
   for (i = 0; i < layout->n_arrays; i++)
     if (layout->array_definition[i].type == SDDS_ENUM) layout->version = 6;
 
+  if (preserveSDDS6) layout->version = 6;
   if (layout->version == 6)
     layout->data_mode.endian = (int32_t)layout->byteOrderDeclared;
   /* Keep the saved layout on the written version so SDDS_StartPage() does not restore a stale one. */
@@ -1567,8 +1570,8 @@ int32_t SDDS_DefineParameter(SDDS_DATASET *SDDS_dataset, const char *name, const
     SDDS_SetError("Couldn't copy fixed_value string (SDDS_DefineParameter)");
     return (-1);
   }
-  if (SDDS_dataset->parameter) {
-    /* page storage already exists--grow it for the new parameter, as SDDS_DefineColumn does for columns */
+  if (SDDS_dataset->parameter || SDDS_dataset->page_started) {
+    /* A loaded page needs storage even when this is its first parameter. */
     void **parameter;
     if (!(parameter = SDDS_Realloc(SDDS_dataset->parameter, sizeof(*parameter) * (layout->n_parameters + 1)))) {
       SDDS_SetError("Memory allocation failure (SDDS_DefineParameter)");

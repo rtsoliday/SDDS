@@ -876,15 +876,17 @@ long CompareData(SDDS_DATASET *dataset1, SDDS_DATASET *dataset2, char *file1, ch
             fprintf(stderr, "Unknown data type for rowlabel.\n");
             exit(EXIT_FAILURE);
           }
-          snprintf(fFormat, sizeof(fFormat), "%s%s%s%s\n", labelFormat, floatFormat, floatFormat, floatFormat);
-          snprintf(dFormat, sizeof(dFormat), "%s%s%s%s\n", labelFormat, doubleFormat, doubleFormat, doubleFormat);
-          snprintf(ldFormat, sizeof(ldFormat), "%s%s%s%s\n", labelFormat, ldoubleFormat, ldoubleFormat, ldoubleFormat);
-          snprintf(strFormat, sizeof(strFormat), "%s%s%s%%25ld\n", labelFormat, stringFormat, stringFormat);
-          snprintf(lFormat, sizeof(lFormat), "%s%%25ld%%25ld%%25ld\n", labelFormat);
-          snprintf(ulFormat, sizeof(ulFormat), "%s%%25lu%%25lu%%25ld\n", labelFormat);
-          snprintf(shortFormat, sizeof(shortFormat), "%s%%25hd%%25hd%%25hd\n", labelFormat);
-          snprintf(ushortFormat, sizeof(ushortFormat), "%s%%25hu%%25hu%%25hd\n", labelFormat);
-          snprintf(cFormat, sizeof(cFormat), "%s%%25c%%25c%%25d\n", labelFormat);
+          /* Labels are data: a percent byte in a string or enum label must not
+           * become part of the format used to print the compared values. */
+          snprintf(fFormat, sizeof(fFormat), "%%s%s%s%s\n", floatFormat, floatFormat, floatFormat);
+          snprintf(dFormat, sizeof(dFormat), "%%s%s%s%s\n", doubleFormat, doubleFormat, doubleFormat);
+          snprintf(ldFormat, sizeof(ldFormat), "%%s%s%s%s\n", ldoubleFormat, ldoubleFormat, ldoubleFormat);
+          snprintf(strFormat, sizeof(strFormat), "%%s%s%s%%25ld\n", stringFormat, stringFormat);
+          snprintf(lFormat, sizeof(lFormat), "%%s%%25ld%%25ld%%25ld\n");
+          snprintf(ulFormat, sizeof(ulFormat), "%%s%%25lu%%25lu%%25ld\n");
+          snprintf(shortFormat, sizeof(shortFormat), "%%s%%25hd%%25hd%%25hd\n");
+          snprintf(ushortFormat, sizeof(ushortFormat), "%%s%%25hu%%25hu%%25hd\n");
+          snprintf(cFormat, sizeof(cFormat), "%%s%%25c%%25c%%25d\n");
         }
         if (compare_two_data(data1, data2, j, dataType[i], first, SDDS_COLUMN_TYPE, name[i], page, tolerance, relativeTolerance, precisionTolerance, fFormat, dFormat, ldFormat, strFormat, lFormat, ulFormat, shortFormat, ushortFormat, cFormat, absolute, 0, rowLabelColumn, rowLabel ? labelFormat : NULL) != 0) {
           diff++;
@@ -1045,7 +1047,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName) {
-        fprintf(stdout, stringFormat, str1, str2, returnValue);
+        fprintf(stdout, stringFormat, rowLabelValue, str1, str2, returnValue);
       } else
         fprintf(stdout, stringFormat, printIndex, str1, str2, returnValue);
     }
@@ -1088,7 +1090,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, ldoubleFormat, ldval1, ldval2, lddiff);
+        fprintf(stdout, ldoubleFormat, rowLabelValue, ldval1, ldval2, lddiff);
       else
         fprintf(stdout, ldoubleFormat, printIndex, ldval1, ldval2, lddiff);
     }
@@ -1131,7 +1133,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, doubleFormat, dval1, dval2, ddiff);
+        fprintf(stdout, doubleFormat, rowLabelValue, dval1, dval2, ddiff);
       else
         fprintf(stdout, doubleFormat, printIndex, dval1, dval2, ddiff);
     }
@@ -1174,7 +1176,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, floatFormat, fval1, fval2, fdiff);
+        fprintf(stdout, floatFormat, rowLabelValue, fval1, fval2, fdiff);
       else
         fprintf(stdout, floatFormat, printIndex, fval1, fval2, fdiff);
     }
@@ -1189,7 +1191,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, ulongFormat, ullval1, ullval2, ulldiff);
+        fprintf(stdout, ulongFormat, rowLabelValue, ullval1, ullval2, ulldiff);
       else
         fprintf(stdout, ulongFormat, printIndex, ullval1, ullval2, ulldiff);
     }
@@ -1211,7 +1213,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, longFormat, llval1, llval2, lldiff);
+        fprintf(stdout, longFormat, rowLabelValue, llval1, llval2, lldiff);
       else
         fprintf(stdout, longFormat, printIndex, llval1, llval2, lldiff);
     }
@@ -1226,7 +1228,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, ulongFormat, ulval1, ulval2, uldiff);
+        fprintf(stdout, ulongFormat, rowLabelValue, ulval1, ulval2, uldiff);
       else
         fprintf(stdout, ulongFormat, printIndex, ulval1, ulval2, uldiff);
     }
@@ -1248,7 +1250,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, longFormat, lval1, lval2, ldiff);
+        fprintf(stdout, longFormat, rowLabelValue, lval1, lval2, ldiff);
       else
         fprintf(stdout, longFormat, printIndex, lval1, lval2, ldiff);
     }
@@ -1270,7 +1272,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, shortFormat, sval1, sval2, sdiff);
+        fprintf(stdout, shortFormat, rowLabelValue, sval1, sval2, sdiff);
       else
         fprintf(stdout, shortFormat, printIndex, sval1, sval2, sdiff);
     }
@@ -1285,7 +1287,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, ushortFormat, usval1, usval2, usdiff);
+        fprintf(stdout, ushortFormat, rowLabelValue, usval1, usval2, usdiff);
       else
         fprintf(stdout, ushortFormat, printIndex, usval1, usval2, usdiff);
     }
@@ -1298,7 +1300,7 @@ long compare_two_data(void *data1, void *data2, long index, long datatype,
       if (first)
         printTitle(flags, name, page, absolute, labelName);
       if (labelName)
-        fprintf(stdout, charFormat, cval1, cval2, cval1 - cval2);
+        fprintf(stdout, charFormat, rowLabelValue, cval1, cval2, cval1 - cval2);
       else
         fprintf(stdout, charFormat, printIndex, cval1, cval2, cval1 - cval2);
     }

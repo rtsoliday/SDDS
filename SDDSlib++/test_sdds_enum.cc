@@ -715,6 +715,127 @@ static void testSdds6DataAndAssociateValues(const std::filesystem::path &outputD
   assert(associates[2].isSdds && !associates[3].isSdds);
 }
 
+/** @brief Inline comments and definition integers use the same SDDS6 grammar in both readers. */
+static void testSdds6DefinitionGrammar(const std::filesystem::path &outputDirectory) {
+  const auto directory = outputDirectory / "definition-grammar";
+  std::filesystem::create_directories(directory);
+  const std::vector<std::tuple<std::string, std::string, bool>> cases = {
+      {"&column name=state! comment separates the next attribute\ntype=enum, enum_values=\"0:OFF\", &end\n", "1\n0\n", true},
+      {"&column name=state, type=enum, enum_values=\"0:OFF\", field_length=+0, &end\n", "1\n0\n", true},
+      {"&column name=state, type=enum, enum_values=\"0:OFF\", field_length=\" 0\", &end\n", "1\n0\n", true},
+      {"&column name=state, type=enum, enum_values=\"0:OFF\", field_length=\"0 \", &end\n", "1\n0\n", false},
+      {"&array name=state, type=enum, enum_values=\"0:OFF\", dimensions=+1, field_length=+0, &end\n", "1\n0\n", true},
+      {"&array name=state, type=enum, enum_values=\"0:OFF\", dimensions=\"1 \", &end\n", "1\n0\n", false},
+  };
+  bool matched = true;
+  for (std::size_t i = 0; i < cases.size(); ++i) {
+    const auto &[definition, data, valid] = cases[i];
+    const auto path = directory / ("case" + std::to_string(i) + ".sdds");
+    writeText(path, "SDDS6\n" + definition + "&data mode=ascii, &end\n" + data);
+    const bool c = cReadsFirstPage(path), cpp = cppReadsFirstPage(path);
+    if (c != valid || cpp != valid) {
+      std::cerr << "Unexpected SDDS6 definition grammar result for case " << i
+                << ": C=" << c << " C++=" << cpp << " expected=" << valid << '\n';
+      matched = false;
+    }
+  }
+  assert(matched);
+}
+
+/** @brief Rewriting an SDDS6 layout with primitive fields preserves decoded fixed text. */
+static void testSdds6PrimitiveRewrite(const std::filesystem::path &outputDirectory) {
+  const auto directory = outputDirectory / "primitive-rewrite";
+  std::filesystem::create_directories(directory);
+  const auto source = directory / "source.sdds";
+  writeText(source, R"(SDDS6
+&parameter name=text, type=string, fixed_value="a\\\\bc", &end
+&parameter name=blank, type=character, fixed_value="\\040", &end
+&column name=value, type=long, &end
+&data mode=ascii, &end
+1
+7
+)");
+  const std::vector<std::pair<sdds::Type, std::string>> expected = {
+      {sdds::Type::String, "a\\bc"}, {sdds::Type::Character, " "}};
+  checkFixedTextValues(source, expected);
+  for (const auto mode : {sdds::DataMode::Ascii, sdds::DataMode::Binary}) {
+    auto reader = sdds::Reader::open(source);
+    const auto page = reader.next();
+    assert(page);
+    auto layout = reader.layout();
+    layout.data.mode = mode;
+    const auto output = directory / (mode == sdds::DataMode::Ascii ? "ascii.sdds" : "binary.sdds");
+    auto writer = sdds::Writer::create(output, layout);
+    writer.write(*page);
+    writer.close();
+    // Check the actual value before checking the output grammar version.
+    SDDS_DATASET dataset{};
+    auto filename = output.string();
+    assert(SDDS_InitializeInput(&dataset, filename.data()) && SDDS_ReadPage(&dataset) > 0);
+    assert(*static_cast<char **>(dataset.parameter[0]) == expected[0].second);
+    assert(SDDS_Terminate(&dataset));
+    checkFixedTextValues(output, expected);
+  }
+}
+
+/** @brief Explicit enum-to-primitive exports keep minimum-version selection when their headers fit. */
+static void testEnumPrimitiveDowngrade(const std::filesystem::path &outputDirectory) {
+  using namespace sdds;
+  ColumnDefinition state;
+  state.name = "state";
+  state.type = Type::Enum;
+  state.enumDefinition = std::make_shared<const EnumDefinition>("0:OFF,10:ON");
+  ParameterDefinition text;
+  text.name = "text";
+  text.type = Type::String;
+  text.fixedValue = "fixed text";
+  const auto source = LayoutBuilder().addColumn(state).addParameter(text).build();
+  auto primitive = source;
+  primitive.columns[0].type = Type::Int32;
+  primitive.columns[0].enumDefinition.reset();
+  primitive = LayoutBuilder(primitive).build();
+  assert(primitive.version == 1);
+  const auto converted = convertEnumValues(std::vector<EnumValue>{{0}, {10}}, Type::Int32, state.enumDefinition.get());
+  for (const auto mode : {DataMode::Ascii, DataMode::Binary}) {
+    for (const auto minimum : {1, 6}) {
+      primitive.data.mode = mode;
+      WriterOptions options;
+      options.minimumVersion = minimum;
+      const auto output = outputDirectory / (std::string("primitive-downgrade-") +
+          (mode == DataMode::Ascii ? "ascii-" : "binary-") + std::to_string(minimum) + ".sdds");
+      auto writer = Writer::create(output, primitive, options);
+      writer.beginPage(2);
+      writer.setColumn("state", converted);
+      writer.commitPage();
+      writer.close();
+      SDDS_DATASET dataset{};
+      auto filename = output.string();
+      assert(SDDS_InitializeInput(&dataset, filename.data()) && dataset.layout.version == minimum);
+      assert(SDDS_ReadPage(&dataset) > 0 && dataset.n_rows == 2);
+      assert(static_cast<std::int32_t *>(dataset.data[0])[1] == 10);
+      assert(*static_cast<char **>(dataset.parameter[0]) == std::string("fixed text"));
+      assert(SDDS_Terminate(&dataset));
+    }
+  }
+  // A decoded SDDS6 description still needs its escaping and command-size support.
+  for (const auto &description : {std::string("first\nsecond"), std::string(1200, 'x')}) {
+    primitive.version = 6;
+    primitive.description = description;
+    assert(LayoutBuilder(primitive).build().version == 6);
+    const auto output = outputDirectory / (description.size() > 1000 ? "primitive-long-description.sdds" : "primitive-newline-description.sdds");
+    auto writer = Writer::create(output, primitive);
+    writer.beginPage(2);
+    writer.setColumn("state", converted);
+    writer.commitPage();
+    writer.close();
+    SDDS_DATASET dataset{};
+    auto filename = output.string();
+    assert(SDDS_InitializeInput(&dataset, filename.data()) && dataset.layout.version == 6);
+    assert(dataset.layout.description == description);
+    assert(SDDS_ReadPage(&dataset) > 0 && SDDS_Terminate(&dataset));
+  }
+}
+
 /** @brief New ReaderLimits members follow the pre-SDDS6 ones, keeping positional initializers. */
 static void testReaderLimitsOrder() {
   const sdds::ReaderLimits limits{5, 6, 7, 8};
@@ -737,6 +858,9 @@ int main(int argc, char **argv) try {
   testEnumBulkConversions();
   testSdds6FixedTextParity(outputDirectory);
   testSdds6DataAndAssociateValues(outputDirectory);
+  testSdds6DefinitionGrammar(outputDirectory);
+  testSdds6PrimitiveRewrite(outputDirectory);
+  testEnumPrimitiveDowngrade(outputDirectory);
   testReaderLimitsOrder();
   const EnumDefinition a("0:OFF,10:ON,-1:FAULT"), b("-1:FAULT,0:OFF,10:ON"), c("7:OFF,8:ON,9:FAULT");
   assert(a == b && a != c && a.code("FAULT") == -1);

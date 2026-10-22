@@ -599,7 +599,7 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
   if (SDDS_dataset->layout.version < 1 || SDDS_dataset->layout.version > SDDS_VERSION) {
     SDDS_SetError("Unsupported SDDS protocol version"); return 0;
   }
-  while (SDDS_dataset->layout.version == 6 ? SDDS6_GetNamelist(SDDS_dataset, fp, 0) : SDDS_GetNamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, fp)) {
+  while ((retval = (SDDS_dataset->layout.version == 6 ? SDDS6_GetNamelist(SDDS_dataset, fp, 0) : SDDS_GetNamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, fp))) > 0) {
 #if DEBUG
     snprintf(buffer, sizeof(buffer), "%.*s", (int)sizeof(buffer) - 1, SDDS_dataset->layout.s);
 #endif
@@ -710,7 +710,11 @@ int32_t SDDS_ReadLayout(SDDS_DATASET *SDDS_dataset, FILE *fp) {
       return (0);
     }
   }
-  /* on recursive calls, it's okay to hit EOF */
+  if (retval < 0) {
+    closeLayoutFile(SDDS_dataset, fp);
+    return 0;
+  }
+  /* On recursive calls only a clean EOF may finish the included definitions. */
   if ((feof(fp) && SDDS_dataset->layout.depth != 0) || SDDS_dataset->layout.data_command_seen)
     return (1);
   return (0);
@@ -770,7 +774,7 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
   if (SDDS_dataset->layout.version < 1 || SDDS_dataset->layout.version > SDDS_VERSION) {
     SDDS_SetError("Unsupported SDDS protocol version"); return 0;
   }
-  while (SDDS_dataset->layout.version == 6 ? SDDS6_GetNamelist(SDDS_dataset, lzmafp, 2) : SDDS_GetLZMANamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, lzmafp)) {
+  while ((retval = (SDDS_dataset->layout.version == 6 ? SDDS6_GetNamelist(SDDS_dataset, lzmafp, 2) : SDDS_GetLZMANamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, lzmafp))) > 0) {
 #if DEBUG
     snprintf(buffer, sizeof(buffer), "%.*s", (int)sizeof(buffer) - 1, SDDS_dataset->layout.s);
 #endif
@@ -881,7 +885,11 @@ int32_t SDDS_LZMAReadLayout(SDDS_DATASET *SDDS_dataset, struct lzmafile *lzmafp)
       return (0);
     }
   }
-  /* on recursive calls, it's okay to hit EOF */
+  if (retval < 0) {
+    closeLzmaLayoutFile(SDDS_dataset, lzmafp);
+    return 0;
+  }
+  /* On recursive calls only a clean EOF may finish the included definitions. */
   if ((lzma_eof(lzmafp) && SDDS_dataset->layout.depth != 0) || SDDS_dataset->layout.data_command_seen)
     return (1);
   return (0);
@@ -941,7 +949,7 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
   if (SDDS_dataset->layout.version < 1 || SDDS_dataset->layout.version > SDDS_VERSION) {
     SDDS_SetError("Unsupported SDDS protocol version"); return 0;
   }
-  while (SDDS_dataset->layout.version == 6 ? SDDS6_GetNamelist(SDDS_dataset, gzfp, 1) : SDDS_GetGZipNamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, gzfp)) {
+  while ((retval = (SDDS_dataset->layout.version == 6 ? SDDS6_GetNamelist(SDDS_dataset, gzfp, 1) : SDDS_GetGZipNamelist(SDDS_dataset, SDDS_dataset->layout.s, SDDS_MAXLINE, gzfp))) > 0) {
 #  if DEBUG
     snprintf(buffer, sizeof(buffer), "%.*s", (int)sizeof(buffer) - 1, SDDS_dataset->layout.s);
 #  endif
@@ -1052,7 +1060,11 @@ int32_t SDDS_GZipReadLayout(SDDS_DATASET *SDDS_dataset, gzFile gzfp) {
       return (0);
     }
   }
-  /* on recursive calls, it's okay to hit EOF */
+  if (retval < 0) {
+    closeGzipLayoutFile(SDDS_dataset, gzfp);
+    return 0;
+  }
+  /* On recursive calls only a clean EOF may finish the included definitions. */
   if ((gzeof(gzfp) && SDDS_dataset->layout.depth != 0) || SDDS_dataset->layout.data_command_seen)
     return (1);
   return (0);
