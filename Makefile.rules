@@ -379,11 +379,28 @@ endif
 EPICS_SEARCH_PATHS ?= /usr/local/oag/base $(RULES_DIR)epics-base $(RULES_DIR)../epics-base $(RULES_DIR)../../../base $(HOME)/epics/base $(HOME)/epics/base-7.0
 EPICS_BASE ?= $(firstword $(foreach b,$(EPICS_SEARCH_PATHS),$(if $(wildcard $(b)/include/cadef.h),$(b))))
 ifneq ($(strip $(EPICS_BASE)),)
+ifeq ($(OS),Windows)
+# MSVC needs drive-letter paths.  Cygwin make returns POSIX paths from
+# abspath and treats C:/ paths as relative, so keep drive-letter paths and
+# convert POSIX ones with cygpath when it is available.
+EPICS_BASE := $(subst \,/,$(EPICS_BASE))
+EPICS_BASE := $(if $(findstring :,$(firstword $(subst /, ,$(EPICS_BASE)))),$(EPICS_BASE),$(abspath $(EPICS_BASE)))
+ifneq ($(filter /%,$(EPICS_BASE)),)
+EPICS_BASE := $(or $(shell cygpath -m '$(EPICS_BASE)' 2>/dev/null),$(EPICS_BASE))
+endif
+else
 EPICS_BASE := $(abspath $(EPICS_BASE))
+endif
 HAVE_EPICS := $(if $(wildcard $(EPICS_BASE)/include/cadef.h),1)
 EPICS_HOST_ARCH_SCRIPT := $(call find_epics_host_arch,$(EPICS_BASE))
 EPICS_HOST_ARCH ?= $(if $(filter Windows,$(OS)),windows-x64,$(if $(EPICS_HOST_ARCH_SCRIPT),$(shell perl "$(EPICS_HOST_ARCH_SCRIPT)")))
 EPICS_HOST_ARCH := $(EPICS_HOST_ARCH)
+# Components spell Base directories as EPICS_HOST-EPICS_ARCH; derive both
+# from the architecture of the Base found here, as for an explicit Base.
+ifneq ($(strip $(EPICS_HOST_ARCH)),)
+  EPICS_HOST := $(firstword $(subst -, ,$(EPICS_HOST_ARCH)))
+  EPICS_ARCH := $(patsubst $(EPICS_HOST)-%,%,$(EPICS_HOST_ARCH))
+endif
 endif
 EPICS_BASE_LIB_DIR ?= $(EPICS_BASE)/lib/$(EPICS_HOST_ARCH)
 EPICS_COMPILER ?= $(if $(filter Darwin,$(OS)),clang,$(if $(filter Windows,$(OS)),msvc,gcc))

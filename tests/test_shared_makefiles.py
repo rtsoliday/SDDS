@@ -829,6 +829,41 @@ def test_shared_rules_do_not_require_epics(build_tree, repository, scenario):
     assert result.returncode == 0
 
 
+@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("windows", (False, True), ids=("native", "windows"))
+@pytest.mark.parametrize("explicit", (False, True), ids=("discovered", "environment"))
+def test_epics_base_discovery_paths_and_architecture(build_tree, repository, windows, explicit, monkeypatch):
+    """Discovered Base paths and component architecture names describe the same SDK."""
+    source = shared_source(repository)
+    if not (source / "Makefile.rules").is_file():
+        pytest.skip(f"Sibling repository {repository} is not available")
+    for name in ("EPICS_BASE", "EPICS_HOST", "EPICS_ARCH", "EPICS_HOST_ARCH", "EPICS_SEARCH_PATHS"):
+        monkeypatch.delenv(name, raising=False)
+    tree = build_tree
+    base_name = "C:/EPICS/base" if windows else str(tree / "epics-base")
+    base = tree / base_name
+    (base / "include").mkdir(parents=True)
+    (base / "include" / "cadef.h").touch()
+    if explicit:
+        monkeypatch.setenv("EPICS_BASE", base_name)
+    makefile = tree / "Makefile"
+    makefile.write_text(makefile.read_text().replace(str(ROOT), str(source)))
+    host_arch = "windows-sdk-arch" if windows else "linux-sdk-arch"
+    values = query_make_variables(
+        tree, ("EPICS_BASE", "HAVE_EPICS", "EPICS_HOST", "EPICS_ARCH", "EPICS_BASE_LIB_DIR"),
+        f"OS={'Windows' if windows else 'Linux'}", "ARCH=x86_64",
+        f"EPICS_SEARCH_PATHS={base_name}", f"EPICS_HOST_ARCH={host_arch}",
+        "EPICS_REQUIRED_LIBS=", "EPICS_OPTIONAL_LIBS=ca",
+    )
+    assert values == {
+        "EPICS_BASE": base_name,
+        "HAVE_EPICS": "1",
+        "EPICS_HOST": "windows" if windows else "linux",
+        "EPICS_ARCH": "sdk-arch",
+        "EPICS_BASE_LIB_DIR": f"{base_name}/lib/{host_arch}",
+    }
+
+
 @pytest.mark.parametrize("component,required", (
     ("StripTool/striptool", "ca Com"),
     ("StripTool/qtstriptool", "ca Com"),
