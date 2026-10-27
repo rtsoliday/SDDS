@@ -18,6 +18,10 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPOSITORIES = (
+    "StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm",
+    "elegant", "shield", "clinchor", "spiffe", "adt", "oag-src", "SDDS-Python-module",
+)
 pytestmark = pytest.mark.skipif(
     platform.system() not in ("Linux", "Darwin"), reason="Native Unix build checks"
 )
@@ -168,7 +172,7 @@ def test_mixed_library_sources_and_header_rebuild(build_tree):
     assert subprocess.run([str(program)]).returncode == 1
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("kind", ("dll", "static", "python"))
 def test_windows_library_objects_and_install_recipes(build_tree, repository, kind):
     """Library object names, MSVC links and DLL installation retain their modes."""
@@ -285,7 +289,7 @@ def test_custom_link_and_target_flags(build_tree):
     assert "overriding recipe" not in (tree / "build.log").read_text()
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("architecture", ("x86_64", "aarch64", "arm64"))
 def test_linux_architecture_flags(build_tree, repository, architecture):
     """ARM compilation, linking and Fortran must not inherit Intel options."""
@@ -308,7 +312,7 @@ def test_linux_architecture_flags(build_tree, repository, architecture):
         assert ("-mcpu=cortex-a72" in flags) == (architecture != "x86_64")
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("development", (False, True), ids=("release", "development"))
 @pytest.mark.parametrize("local_override", (False, True), ids=("shared-qt-flags", "local-qt-flags"))
 def test_windows_qt_flags(build_tree, repository, development, local_override):
@@ -363,7 +367,7 @@ def test_local_flags_after_rules_in_development_build(build_tree):
     assert "-O3 -DLOCAL_COMPONENT_FLAGS" not in log
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 def test_discovered_dependency_headers(build_tree, repository):
     """A real compile can use discovered dependency headers in every repository."""
     source = shared_source(repository)
@@ -395,7 +399,7 @@ def test_discovered_dependency_headers(build_tree, repository):
     subprocess.run([str(tree / "bin" / "sample")], check=True)
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("windows", (False, True), ids=("native-metadata", "windows-metadata"))
 def test_python_metadata(build_tree, repository, windows):
     """The real interpreter supplies native and Windows extension metadata."""
@@ -426,7 +430,7 @@ def test_python_metadata(build_tree, repository, windows):
     assert values["PYTHON_INCLUDE_DIRS"].split() == includes
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 def test_windows_mpi_discovery_without_python(build_tree, repository):
     """Windows SDK discovery does not need to run a Python interpreter."""
     source = shared_source(repository)
@@ -452,7 +456,7 @@ def test_windows_mpi_discovery_without_python(build_tree, repository):
     assert values["WIN_MPI_LIB"] == "C:/MicrosoftMPI/Lib/x64/msmpi.lib"
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("layout", ("runtime-only", "default-sdk", "sdk-environment", "missing-sdk-header"))
 def test_windows_mpi_sdk_discovery(build_tree, repository, layout, monkeypatch):
     """MS-MPI needs SDK headers; SDK paths with spaces stay single arguments."""
@@ -492,7 +496,7 @@ def test_windows_mpi_sdk_discovery(build_tree, repository, layout, monkeypatch):
     assert values["WIN_MPI_LIB"] == f'"{root}/Lib/x64/msmpi.lib"'
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 def test_environment_compiler_settings_are_ignored(build_tree, repository, monkeypatch):
     """Ambient compiler settings (for example Conda's) cannot replace the defaults."""
     source = shared_source(repository)
@@ -529,7 +533,7 @@ def test_environment_compiler_settings_are_ignored(build_tree, repository, monke
     assert values["LDLIBS"] == ""
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 def test_dry_run_and_question_mode_after_build(build_tree, repository):
     """An unchanged configuration leaves objects, archives and links current."""
     source = shared_source(repository)
@@ -552,7 +556,7 @@ def test_dry_run_and_question_mode_after_build(build_tree, repository):
     assert run_make(tree, "-q", *outputs, "VALUE=43", *arguments, expect_success=False).returncode == 1
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("track_makefiles", (True, False), ids=("default", "opt-out"))
 def test_makefile_changes_rebuild_custom_outputs(build_tree, repository, track_makefiles):
     """Recipe edits rebuild custom objects/generated headers without flag changes."""
@@ -618,7 +622,7 @@ def test_makefile_changes_rebuild_custom_outputs(build_tree, repository, track_m
 
 
 @pytest.mark.skipif(platform.system() != "Linux", reason="ELF runtime path check")
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 def test_gsl_link_helper_keeps_missing_deployment_path(build_tree, repository):
     """GSL consumers retain the deployment runtime path without a local copy."""
     inspector = shutil.which("readelf")
@@ -654,7 +658,7 @@ def test_gsl_link_helper_keeps_missing_deployment_path(build_tree, repository):
 
 
 @pytest.mark.skipif(platform.system() != "Linux", reason="ELF runtime path check")
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("helper", ("OPENSSL_LINK_LIBS", "OPENSSL_CRYPTO_LINK_LIBS"))
 def test_openssl_link_helpers_keep_missing_deployment_path(build_tree, repository, helper):
     """Both OpenSSL link modes retain the runtime path without installed copies."""
@@ -693,7 +697,7 @@ def test_openssl_link_helpers_keep_missing_deployment_path(build_tree, repositor
     subprocess.run([str(program)], check=True)
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 def test_motif_extension_first_lookup(build_tree, repository):
     """Motif and static-Motif dependencies prefer shared libraries across directories."""
     source = shared_source(repository)
@@ -731,7 +735,7 @@ def test_motif_extension_first_lookup(build_tree, repository):
     assert "static-deps=" + str(dependency) in result.stdout
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("redirect_install", (False, True), ids=("default", "site-override"))
 def test_configured_extensions_install(build_tree, repository, redirect_install):
     """Every repository installs native outputs using the extensions configuration."""
@@ -809,7 +813,7 @@ def test_configured_extensions_install(build_tree, repository, redirect_install)
     assert [path.stat().st_mtime_ns for path in outputs[:2]] == times[:2]
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("scenario", ("missing-base", "missing-libraries", "clean"))
 def test_shared_rules_do_not_require_epics(build_tree, repository, scenario):
     """Shared defaults do not impose EPICS on callers that declare no dependency."""
@@ -829,7 +833,7 @@ def test_shared_rules_do_not_require_epics(build_tree, repository, scenario):
     assert result.returncode == 0
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("windows", (False, True), ids=("native", "windows"))
 @pytest.mark.parametrize("explicit", (False, True), ids=("discovered", "environment"))
 def test_epics_base_discovery_paths_and_architecture(build_tree, repository, windows, explicit, monkeypatch):
@@ -1029,7 +1033,7 @@ def test_darwin_openmp_extension_runtime_install(build_tree, goal):
     assert f"cp -f {tree}/lib/LICENSE.libomp.txt {destination}/LICENSE.libomp.txt" in result.stdout
 
 
-@pytest.mark.parametrize("repository", ("StripTool", "probe", "qtalh", "SDDS", "SDDS-EPICS", "medm"))
+@pytest.mark.parametrize("repository", REPOSITORIES)
 @pytest.mark.parametrize("environment,mounted,overrides,expected", (
     ("", False, {}, ("0", "0")),
     ("/site/improv.sh", False, {}, ("1", "0")),
