@@ -2174,8 +2174,10 @@ int main(int argc, char **argv) {
     SDDS_FreeStringArray(multiplyColumnName, multiplyColumns);
     free(multiplyColumnName);
   }
+#if defined(CLAPACK) || defined(LAPACK) || defined(MKL)
   if (Multi)
     t_free(Multi);
+#endif
   if (multiStringCol)
     free(multiStringCol);
   if (inputDescription)
