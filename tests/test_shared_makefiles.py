@@ -111,6 +111,26 @@ def query_make_variables(tree, variables, *arguments):
     return values
 
 
+
+def test_qt_opengl_headers_without_ambient_include_paths(build_tree, monkeypatch):
+    """A Qt consumer can include OpenGL headers without shell include exports."""
+    for name in ("CPATH", "CPLUS_INCLUDE_PATH", "C_INCLUDE_PATH", "PKG_CONFIG_PATH"):
+        monkeypatch.delenv(name, raising=False)
+    makefile = build_tree / "Makefile"
+    contents = "QT_MODULES := Gui OpenGL\n" + makefile.read_text()
+    contents = contents.replace(
+        f"include {ROOT}/Makefile.build",
+        f"CPPFLAGS += $(QT_CFLAGS)\ninclude {ROOT}/Makefile.build",
+    )
+    makefile.write_text(contents)
+    values = query_make_variables(build_tree, ("HAVE_QT",))
+    if values["HAVE_QT"] != "1":
+        pytest.skip("Qt Gui/OpenGL development modules are not available")
+    source = build_tree / "main.cc"
+    source.write_text("#include <QOpenGLFunctions>\n" + source.read_text())
+    run_make(build_tree, "O.test/main.o")
+
+
 def test_product_library_order_and_install_restoration(build_tree):
     """A clean parallel link waits for the local archive's installed copy."""
     tree = build_tree
@@ -1059,8 +1079,7 @@ def test_shared_linux_site_selection(build_tree, monkeypatch, repository, enviro
     source = shared_source(repository)
     if not (source / "Makefile.rules").is_file():
         pytest.skip(f"Sibling repository {repository} is not available")
-    if {"SLURM_CLUSTER_NAME", "LCRC_CLUSTER"} & set(overrides):
-        require_current_shared_rules(source, repository)
+    require_current_shared_rules(source, repository)
     for name in ("IMPROV_BUILD", "SWING_BUILD", "MPI_BIN", "IOMP5_LIB", "IOMP5_LIB_DIR",
                  "SLURM_CLUSTER_NAME", "LCRC_CLUSTER"):
         monkeypatch.delenv(name, raising=False)
@@ -1073,12 +1092,13 @@ def test_shared_linux_site_selection(build_tree, monkeypatch, repository, enviro
     values = query_make_variables(
         tree, ("IMPROV_BUILD", "SWING_BUILD", "MPI_BIN", "IOMP5_LIB", "LAPACK_LIB",
                "LZMA_LIB", "HDF5_LIB", "TIFF_LIB", "GD_LIB", "JPEG_LIB", "FFTW3_LIB",
-               "PNG_LIB", "EXTRA_INC_DIRS", "PROD_SYS_LIBS"),
+               "PNG_LIB", "GSL_LIB", "EXTRA_INC_DIRS", "PROD_SYS_LIBS"),
         "OS=Linux", "ARCH=x86_64", f"BASH_ENV={environment}", f"LCRC_SPACK={site}",
         f"LIB_DIRS={tree}/no-system-libraries", "MKLROOT=",
         *(f"{name}={value}" for name, value in overrides.items()),
     )
     assert (values["IMPROV_BUILD"], values["SWING_BUILD"]) == expected
+    assert "-I-Wl" not in values["EXTRA_INC_DIRS"]
     libraries = {
         "LZMA_LIB": "gcc-13.2.0/xz-5.4.6-3zhah5p/lib/liblzma.so",
         "HDF5_LIB": "gcc-13.2.0/hdf5-1.14.3-o6prqns/lib/libhdf5.so",
@@ -1087,17 +1107,27 @@ def test_shared_linux_site_selection(build_tree, monkeypatch, repository, enviro
         "JPEG_LIB": "gcc-12.3.0/libjpeg-turbo-3.0.0-v7a5c5g/lib64/libjpeg.so",
         "FFTW3_LIB": "gcc-13.2.0/fftw-3.3.10-x5237xr/lib/libfftw3.so",
     }
-    active = "1" in expected
+    swing_libraries = {
+        "LZMA_LIB": "/soft/xz/5.2.2/lib/liblzma.so",
+        "HDF5_LIB": "/soft/hdf5/1.14.2/gcc-10.3/serial/lib/libhdf5.so",
+        "TIFF_LIB": "/soft/libtiff/4.5.1/swing/gcc10.3/lib/libtiff.so",
+        "GD_LIB": "/lib/x86_64-linux-gnu/libgd.so.3",
+        "JPEG_LIB": "/lib/x86_64-linux-gnu/libjpeg.so.8",
+        "FFTW3_LIB": "/soft/fftw/3.3.10/swing-gcc-9.4.0/lib/libfftw3.a",
+    }
     for name, suffix in libraries.items():
-        if active:
+        if expected[0] == "1":
             assert values[name].split()[-1] == str(site / suffix)
+        elif expected[1] == "1":
+            assert values[name] == swing_libraries[name]
         else:
             assert values[name] == ""
-    if active:
+    if expected[0] == "1":
         assert f"-I{site}/aocc-4.1.0/xz-5.4.1-gju4bpk/include" in values["EXTRA_INC_DIRS"]
     else:
         assert str(site) not in values["EXTRA_INC_DIRS"]
-        assert values["MPI_BIN"] == ""
+        if expected[1] != "1":
+            assert values["MPI_BIN"] == ""
     if expected[0] == "1":
         assert values["MPI_BIN"] == str(site / "aocc-4.1.0/openmpi-5.0.1-jk5bu46/bin")
         assert "/libiomp5.so" in values["IOMP5_LIB"]
@@ -1110,7 +1140,39 @@ def test_shared_linux_site_selection(build_tree, monkeypatch, repository, enviro
         assert values["LAPACK_LIB"] == "-llapack -lblas"
     if expected[1] == "1":
         assert values["MPI_BIN"] == "/soft/openmpi/4.1.1/swing/bin"
-        assert values["PNG_LIB"] == str(site / "gcc-12.3.0/libpng-1.6.39-hsjzalf/lib64/libpng.so")
+        assert "-Wl,-rpath,/soft/gsl/2.7.1/gcc11.3/lib" in values["GSL_LIB"]
+        assert values["PNG_LIB"] == "/soft/libpng/1.6.41.git/swing/lib/libpng.so"
+        assert "-I/home/soliday/swing/build-deps/usr/include" in values["EXTRA_INC_DIRS"]
+        assert "-I/soft/libtiff/4.5.1/swing/gcc10.3/include" in values["EXTRA_INC_DIRS"]
+
+
+@pytest.mark.parametrize("environment,arguments,expected", (
+    (None, (), "default"),
+    ("", (), "default"),
+    ("/site/custom-mkl", (), "/site/custom-mkl"),
+    (None, ("MKLROOT=/command/custom-mkl",), "/command/custom-mkl"),
+    (None, ("MKLROOT=",), ""),
+))
+def test_swing_mkl_default_and_overrides(build_tree, monkeypatch, environment, arguments, expected):
+    """Swing builds without the MKL module and retains explicit backend choices."""
+    monkeypatch.delenv("MKLROOT", raising=False)
+    if environment is not None:
+        monkeypatch.setenv("MKLROOT", environment)
+    (build_tree / "Makefile").write_text(f"include {ROOT}/Makefile.rules\n")
+    values = query_make_variables(
+        build_tree, ("MKLROOT", "SWING_MKL_DIR", "MKL_CFLAG", "MKL_INCLUDE", "MKL_LIB", "LAPACK_CFLAG"),
+        "OS=Linux", "IMPROV_BUILD=0", "SWING_BUILD=1", *arguments,
+    )
+    expected_root = values["SWING_MKL_DIR"] if expected == "default" else expected
+    assert values["MKLROOT"] == expected_root
+    if expected_root:
+        assert values["MKL_CFLAG"] == "-DMKL"
+        assert f'{expected_root}/include/' in values["MKL_INCLUDE"]
+        assert f"{expected_root}/lib/intel64/libmkl_gnu_thread.a" in values["MKL_LIB"]
+        assert values["LAPACK_CFLAG"] == ""
+    else:
+        assert values["MKL_CFLAG"] == values["MKL_LIB"] == ""
+        assert values["LAPACK_CFLAG"] == "-DLAPACK"
 
 
 @pytest.mark.parametrize("os", ("Darwin", "Windows"))
