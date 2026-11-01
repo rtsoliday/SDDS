@@ -554,8 +554,8 @@ private:
     QMatrix4x4 rotation;
     rotation.rotate(camera->yRotation(), 0.0f, 1.0f, 0.0f);
     rotation.rotate(camera->xRotation(), 1.0f, 0.0f, 0.0f);
-    QVector3D forward = rotation * QVector3D(0.0f, 0.0f, -1.0f);
-    QVector3D up = rotation * QVector3D(0.0f, 1.0f, 0.0f);
+    QVector3D forward = rotation.map(QVector3D(0.0f, 0.0f, -1.0f));
+    QVector3D up = rotation.map(QVector3D(0.0f, 1.0f, 0.0f));
     QVector3D right = QVector3D::crossProduct(forward, up).normalized();
     up = QVector3D::crossProduct(right, forward).normalized();
 
