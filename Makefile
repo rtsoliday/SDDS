@@ -36,10 +36,8 @@ endif
 
 ifeq ($(OS), Linux)
   GSL_LOCAL = $(wildcard gsl)
-  ifneq ($(IMPROV_BUILD),1)
-    ifneq ($(SWING_BUILD),1)
-      HDF5_LOCAL = $(wildcard hdf5)
-    endif
+  ifeq ($(BUILD_LOCAL_HDF5),1)
+    HDF5_LOCAL = $(wildcard hdf5)
   endif
 endif
 

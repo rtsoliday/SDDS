@@ -31,13 +31,10 @@ LIBRARY_SRC = binary.c \
           user.c \
           utility.c
 
-CFLAGS += -DWL=32 -DFORTRANUNDERSCORE -DOPTIMIZE -I. -I../include
+CFLAGS += -DWL=32 -DFORTRANUNDERSCORE -DOPTIMIZE -I. -I../include $(PGAPACK_CFLAGS)
 
 ifeq ($(OS), Linux)
   CC = $(MPI_CC)
-  ifneq ($(IMPROV_BUILD),1)
-    CFLAGS += -Wno-maybe-uninitialized
-  endif
 endif
 
 ifeq ($(OS), Darwin)
