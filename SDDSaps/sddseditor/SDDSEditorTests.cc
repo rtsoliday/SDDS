@@ -23,7 +23,13 @@ extern "C" {
 #include <clocale>
 #ifndef _WIN32
 #include <cerrno>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
+#include <unistd.h>
+#endif
+#ifdef __GLIBC__
+#include <malloc.h>
 #endif
 
 /** Fail with a named assertion that is attributable to this test program. */
@@ -76,6 +82,44 @@ static bool makeSymbolicLink(const QString &target, const QString &link) {
   return QFile::link(target, link);
 #endif
 }
+
+/** Failed save checks; counted so that one run reports every one of them. */
+static int saveCheckFailures = 0;
+
+/** Report a save check without ending the run; main fails if any did not pass. */
+static void checkSave(bool ok, const char *label) {
+  fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", label);
+  if (!ok)
+    ++saveCheckFailures;
+}
+
+#ifndef _WIN32
+/** The text a symbolic link holds, read from the system rather than through Qt. */
+static QByteArray linkTextOnDisk(const QString &link) {
+  char text[4096];
+  const ssize_t length = ::readlink(QFile::encodeName(link).constData(), text, sizeof(text));
+  return length < 0 ? QByteArray() : QByteArray(text, static_cast<int>(length));
+}
+
+/** The status of a fixture, which must exist. */
+static struct stat fileStatus(const QString &path) {
+  struct stat status;
+  require(::stat(QFile::encodeName(path).constData(), &status) == 0, "read fixture status");
+  return status;
+}
+
+/** A group this account may give files other than its default group. */
+static bool otherOwnGroup(gid_t *group) {
+  gid_t groups[256];
+  const int count = ::getgroups(256, groups);
+  for (int i = 0; i < count; ++i)
+    if (groups[i] != ::getegid()) {
+      *group = groups[i];
+      return true;
+    }
+  return false;
+}
+#endif
 
 /** Accepts warnings so unattended tests never block; a test that answers a prompt itself pauses it. */
 static QTimer *messageBoxAccepter = nullptr;
@@ -467,6 +511,28 @@ public:
   }
 
   /** Cells the editor creates in enum fields start in a declared state, or Save names the cell. */
+  /** The mapping syntax that Help documents, through the call the Attributes dialog makes. */
+  static void enumMappingSyntax() {
+    fprintf(stdout, "sddseditor_tests: documented enum mapping syntax\n");
+    SDDSEditor editor;
+    setup(editor);
+    require(SDDS_DefineEnumColumn(&editor.dataset, "State", nullptr, nullptr, nullptr, nullptr,
+                                  "0:OFF,10:ON,-1:FAULT", 0) == 1,
+            "define mapping-syntax enum column");
+    require(SDDS_SaveLayout(&editor.dataset), "save mapping-syntax layout");
+    editor.pages[0].columns.append({"OFF", "ON", "FAULT"});
+    editor.populateModels();
+    require(editor.replaceEnumMapping(0, 1, "7:OFF,8:ON,9:FAULT,5:a\\,b\\:c\\\\d"),
+            "a mapping with escaped delimiters is accepted");
+    const SDDS_ENUM_DEFINITION *definition = editor.dataset.layout.column_definition[1].enum_definition;
+    require(QString::fromUtf8(SDDS_EnumCodeToLabel(definition, 5)) == "a,b:c\\d",
+            "escapes write a comma, colon and backslash in a label");
+    require(editor.pages[0].columns[1] == QVector<QString>({"OFF", "ON", "FAULT"}) &&
+                QString::fromUtf8(SDDS_EnumCodeToLabel(definition, 8)) == "ON",
+            "renumbering the states keeps each value's label");
+    fprintf(stdout, "PASS the documented enum mapping syntax\n");
+  }
+
   static void enumCreatedCells(const QString &root) {
     fprintf(stdout, "sddseditor_tests: enum cells created by the editor\n");
     SDDSEditor editor;
@@ -3390,6 +3456,290 @@ public:
     fprintf(stdout, "PASS transactional saves, compression, version collisions\n");
   }
 
+#ifndef _WIN32
+  /**
+   * A link's ".." means the parent of the folder the link is really in, which a
+   * symbolic link to that folder hides.  Each file of the same spelled path below
+   * is what removing ".." from the text would wrongly name.
+   */
+  static void saveThroughSymlinkedFolder(const QString &root) {
+    SDDSEditor editor;
+    setup(editor);
+    const QString base = root + "/symlinked-folder";
+    const QByteArray unrelated = "unrelated bytes";
+    require(QDir().mkpath(base + "/real/sub/deep"), "create symlinked folder fixture");
+    require(makeSymbolicLink(base + "/real/sub/deep", base + "/folder"), "link a folder");
+
+    putFile(base + "/target.sdds", unrelated);
+    putFile(base + "/real/sub/target.sdds", "intended bytes");
+    require(makeSymbolicLink("../target.sdds", base + "/real/sub/deep/linked.sdds"), "create relative link");
+    const QFileInfo throughFolder(base + "/folder/linked.sdds");
+    fprintf(stdout, "  link text %s; Qt symLinkTarget %s; system resolves %s\n",
+            linkTextOnDisk(throughFolder.filePath()).constData(), qPrintable(throughFolder.symLinkTarget()),
+            qPrintable(throughFolder.canonicalFilePath()));
+    require(editor.writeFile(base + "/folder/linked.sdds"), "save through relative link");
+    checkSave(readFile(base + "/target.sdds") == unrelated,
+              "save through a relative link in a symlinked folder leaves the same spelled path alone");
+    checkSave(readFile(base + "/real/sub/target.sdds").startsWith("SDDS"),
+              "save through a relative link in a symlinked folder replaces the file it really names");
+    checkSave(QFileInfo(base + "/real/sub/deep/linked.sdds").isSymLink(), "that save keeps the link");
+
+    putFile(base + "/chained.sdds", unrelated);
+    putFile(base + "/real/sub/chained.sdds", "intended bytes");
+    require(makeSymbolicLink("../chained.sdds", base + "/real/sub/deep/second.sdds"), "create second link");
+    require(makeSymbolicLink("second.sdds", base + "/real/sub/deep/first.sdds"), "create first link");
+    require(editor.writeFile(base + "/folder/first.sdds"), "save through chained links");
+    checkSave(readFile(base + "/chained.sdds") == unrelated &&
+                  readFile(base + "/real/sub/chained.sdds").startsWith("SDDS"),
+              "every link of a chain is resolved the way the system resolves it");
+
+    putFile(base + "/plain.sdds", unrelated);
+    putFile(base + "/real/sub/plain.sdds", "intended bytes");
+    require(editor.writeFile(base + "/folder/../plain.sdds"), "save through a path containing ..");
+    checkSave(readFile(base + "/plain.sdds") == unrelated &&
+                  readFile(base + "/real/sub/plain.sdds").startsWith("SDDS"),
+              "a typed .. after a symlinked folder saves where the system would open that path");
+
+    putFile(base + "/target.csv", unrelated);
+    putFile(base + "/real/sub/target.csv", "intended bytes");
+    require(makeSymbolicLink("../target.csv", base + "/real/sub/deep/linked.csv"), "create CSV link");
+    require(editor.writeCSV(base + "/folder/linked.csv"), "export CSV through relative link");
+    checkSave(readFile(base + "/target.csv") == unrelated && readFile(base + "/real/sub/target.csv") != "intended bytes",
+              "CSV export through a relative link in a symlinked folder replaces the file it really names");
+
+    putFile(base + "/target.h5", unrelated);
+    putFile(base + "/real/sub/target.h5", "intended bytes");
+    require(makeSymbolicLink("../target.h5", base + "/real/sub/deep/linked.h5"), "create HDF link");
+    require(editor.writeHDF(base + "/folder/linked.h5"), "export HDF through relative link");
+    checkSave(readFile(base + "/target.h5") == unrelated && readFile(base + "/real/sub/target.h5") != "intended bytes",
+              "HDF export through a relative link in a symlinked folder replaces the file it really names");
+
+    putFile(base + "/real/sub/run.001", "version one");
+    require(makeSymbolicLink("../run.001", base + "/real/sub/deep/current"), "create versioned link");
+    require(editor.writeFile(base + "/folder/current"), "save a version through a symlinked folder");
+    checkSave(QFileInfo::exists(base + "/real/sub/run.002") && !QFileInfo::exists(base + "/run.002"),
+              "a new version goes beside the version the link really names");
+    checkSave(readFile(base + "/real/sub/run.001") == "version one", "and leaves that version alone");
+    checkSave(readFile(base + "/folder/current").startsWith("SDDS"), "and the link reaches the new version");
+
+    require(makeSymbolicLink("loop-b", base + "/loop-a") && makeSymbolicLink("loop-a", base + "/loop-b"), "create a loop of links");
+    checkSave(!editor.writeFile(base + "/loop-a") && !editor.writeCSV(base + "/loop-a") && !editor.writeHDF(base + "/loop-a"),
+              "a loop of links is refused");
+    checkSave(QFileInfo(base + "/loop-a").isSymLink() && QFileInfo(base + "/loop-b").isSymLink(), "and left in place");
+
+    require(makeSymbolicLink("../made.sdds", base + "/real/sub/deep/dangling.sdds"), "create dangling link");
+    require(editor.writeFile(base + "/folder/dangling.sdds"), "save through a dangling link");
+    checkSave(readFile(base + "/real/sub/made.sdds").startsWith("SDDS") && !QFileInfo::exists(base + "/made.sdds"),
+              "a save through a dangling link creates the file it really names");
+
+    checkSave(!editor.writeFile(base + "/no-such-folder/x.sdds"), "a save into a missing folder fails");
+
+    // folder/../out is real/sub/out to the system, which does not exist; without the "..", the text names out.
+    require(QDir().mkpath(base + "/out"), "create the folder the path names with .. removed");
+    putFile(base + "/out/x.sdds", unrelated);
+    putFile(base + "/out/x.csv", unrelated);
+    putFile(base + "/out/x.h5", unrelated);
+    checkSave(!editor.writeFile(base + "/folder/../out/x.sdds") && !editor.writeCSV(base + "/folder/../out/x.csv") &&
+                  !editor.writeHDF(base + "/folder/../out/x.h5"),
+              "a save into a folder the system cannot find fails, as opening that path would");
+    require(makeSymbolicLink("folder/../out/x.sdds", base + "/through-dotdot.sdds"), "create a link into that folder");
+    checkSave(!editor.writeFile(base + "/through-dotdot.sdds"), "a save through a link into that folder fails");
+    checkSave(readFile(base + "/out/x.sdds") == unrelated && readFile(base + "/out/x.csv") == unrelated &&
+                  readFile(base + "/out/x.h5") == unrelated && !QFileInfo::exists(base + "/real/sub/out"),
+              "and those saves leave the files named with .. removed alone");
+    const QString previousFolder = QDir::currentPath();
+    QDir::setCurrent(base + "/real/sub");
+    require(editor.writeFile("relative.sdds"), "save to a relative path");
+    QDir::setCurrent(previousFolder);
+    checkSave(readFile(base + "/real/sub/relative.sdds").startsWith("SDDS"), "a relative path saves in the current folder");
+  }
+
+  /** A new version is no more open than the version it follows. */
+  static void versionAccess(const QString &root) {
+    SDDSEditor editor;
+    setup(editor);
+    const QString base = root + "/version-access";
+    require(QDir().mkpath(base), "create version access fixture");
+    for (mode_t mode : {mode_t(0600), mode_t(0640), mode_t(0664), mode_t(0444)}) {
+      const QString stem = base + "/mode" + QString::number(mode, 8);
+      putFile(stem + ".001", "version one");
+      require(::chmod(QFile::encodeName(stem + ".001").constData(), mode) == 0, "set version mode");
+      require(makeSymbolicLink(stem + ".001", stem), "create version access link");
+      require(editor.writeFile(stem), "save a version with a given mode");
+      fprintf(stdout, "  version with mode %o gave mode %o\n", static_cast<unsigned>(mode),
+              static_cast<unsigned>(fileStatus(stem + ".002").st_mode & 0777));
+      checkSave((fileStatus(stem + ".002").st_mode & 0777) == mode, "a new version keeps the mode of the previous one");
+      checkSave(readFile(stem + ".002").startsWith("SDDS"), "and holds the document");
+    }
+
+    // A loose umask must not open a new version, and a strict one must not close it.
+    const mode_t savedMask = ::umask(0);
+    putFile(base + "/masked.001", "version one");
+    require(::chmod(QFile::encodeName(base + "/masked.001").constData(), 0640) == 0, "set masked version mode");
+    require(makeSymbolicLink(base + "/masked.001", base + "/masked"), "create masked version link");
+    const bool savedOpen = editor.writeFile(base + "/masked");
+    ::umask(0077);
+    const bool savedStrict = editor.writeFile(base + "/masked");
+    ::umask(savedMask);
+    checkSave(savedOpen && (fileStatus(base + "/masked.002").st_mode & 0777) == 0640 &&
+                  savedStrict && (fileStatus(base + "/masked.003").st_mode & 0777) == 0640,
+              "a new version keeps the previous mode under any umask");
+
+    // With no previous version to follow, the umask decides as for any new file.
+    require(makeSymbolicLink(base + "/gone.001", base + "/gone"), "create link to a missing version");
+    require(editor.writeFile(base + "/gone"), "save a version after a missing one");
+    const mode_t defaultMode = 0666 & ~savedMask;
+    checkSave((fileStatus(base + "/gone.002").st_mode & 0777) == defaultMode,
+              "a version after a missing one gets the default mode");
+
+    // A version made between the scan and the save must survive: exclusive creation fails.
+    QFile existing(base + "/taken.001");
+    require(existing.open(QIODevice::WriteOnly) && existing.write("taken") == 5, "write existing version");
+    existing.close();
+    QFile again(base + "/taken.001");
+    checkSave(!createVersionFile(again, base + "/taken.000") && readFile(base + "/taken.001") == "taken",
+              "creating a version that appeared after the scan fails and leaves it alone");
+  }
+
+  /** Replacing a file keeps its group, for saves, exports and new versions. */
+  static void saveKeepsGroup(const QString &root) {
+    gid_t group;
+    if (!otherOwnGroup(&group)) {
+      fprintf(stdout, "SKIP group preservation: this account belongs to only one group\n");
+      return;
+    }
+    SDDSEditor editor;
+    setup(editor);
+    const QString base = root + "/group-access";
+    require(QDir().mkpath(base), "create group fixture");
+    auto replaced = [&](const QString &name) {
+      const QString path = base + "/" + name;
+      putFile(path, "old bytes");
+      require(::chown(QFile::encodeName(path).constData(), static_cast<uid_t>(-1), group) == 0, "give fixture a group");
+      require(::chmod(QFile::encodeName(path).constData(), 0660) == 0, "give fixture a mode");
+      return path;
+    };
+    auto kept = [&](const QString &path) {
+      const struct stat status = fileStatus(path);
+      fprintf(stdout, "  %s: group %u (fixture group %u, own group %u), mode %o\n", qPrintable(QFileInfo(path).fileName()),
+              static_cast<unsigned>(status.st_gid), static_cast<unsigned>(group), static_cast<unsigned>(::getegid()),
+              static_cast<unsigned>(status.st_mode & 0777));
+      return status.st_gid == group && (status.st_mode & 0777) == 0660;
+    };
+    const QString saved = replaced("saved.sdds");
+    require(editor.writeFile(saved), "save over a file of another group");
+    checkSave(kept(saved) && readFile(saved).startsWith("SDDS"), "a save keeps the file's group and mode");
+    const QString csv = replaced("exported.csv");
+    require(editor.writeCSV(csv), "export CSV over a file of another group");
+    checkSave(kept(csv) && readFile(csv) != "old bytes", "a CSV export keeps the file's group and mode");
+    const QString hdf = replaced("exported.h5");
+    require(editor.writeHDF(hdf), "export HDF over a file of another group");
+    checkSave(kept(hdf) && readFile(hdf) != "old bytes", "an HDF export keeps the file's group and mode");
+    const QString previous = replaced("run.001");
+    require(makeSymbolicLink(previous, base + "/run"), "create version link in another group");
+    require(editor.writeFile(base + "/run"), "save a version in another group");
+    checkSave(kept(base + "/run.002"), "a new version keeps the previous version's group and mode");
+
+    // A group this account does not belong to cannot be kept, as when a file's
+    // group is one its owner has left; the new group must gain nothing from that.
+    gid_t foreign = 1;
+    gid_t groups[256];
+    const int count = ::getgroups(256, groups);
+    while (foreign == ::getegid() || std::find(groups, groups + std::max(count, 0), foreign) != groups + std::max(count, 0))
+      ++foreign;
+    if (::geteuid() == 0) {
+      fprintf(stdout, "SKIP a group that cannot be kept: root can use any group\n");
+    } else {
+      const QString replacement = base + "/replacement";
+      putFile(replacement, "");
+      const int descriptor = ::open(QFile::encodeName(replacement).constData(), O_RDWR);
+      require(descriptor >= 0, "open replacement fixture");
+      struct stat previousStatus = fileStatus(replacement);
+      const gid_t ownGroup = previousStatus.st_gid;
+      previousStatus.st_gid = foreign;
+      previousStatus.st_mode = S_IFREG | 0664;
+      const bool groupKept = copyFileAccess(descriptor, previousStatus);
+      ::close(descriptor);
+      const struct stat status = fileStatus(replacement);
+      checkSave(!groupKept && status.st_gid == ownGroup && (status.st_mode & 0777) == 0644,
+                "a group that cannot be kept is reported and its replacement gets only what others had");
+    }
+  }
+
+  /** A relative versioned link keeps its spelling, so it survives moving its folder. */
+  static void relativeVersionLinks(const QString &root) {
+    SDDSEditor editor;
+    setup(editor);
+    const QString base = root + "/relative-links";
+    require(QDir().mkpath(base + "/tree/data/links"), "create relative link fixture");
+    putFile(base + "/tree/data/near.001", "version one");
+    require(makeSymbolicLink("near.001", base + "/tree/data/near"), "create adjacent link");
+    require(editor.writeFile(base + "/tree/data/near"), "save through an adjacent link");
+    fprintf(stdout, "  adjacent link now holds %s\n", linkTextOnDisk(base + "/tree/data/near").constData());
+    checkSave(linkTextOnDisk(base + "/tree/data/near") == "near.002", "an adjacent versioned link stays relative");
+
+    putFile(base + "/tree/data/far-01", "version one");
+    require(makeSymbolicLink("../far-01", base + "/tree/data/links/far"), "create parent link");
+    require(editor.writeFile(base + "/tree/data/links/far"), "save through a parent link");
+    fprintf(stdout, "  parent link now holds %s\n", linkTextOnDisk(base + "/tree/data/links/far").constData());
+    checkSave(linkTextOnDisk(base + "/tree/data/links/far") == "../far-02", "a versioned link through .. keeps its spelling");
+
+    require(QFile::rename(base + "/tree", base + "/moved"), "move the linked folder");
+    checkSave(QFileInfo::exists(base + "/moved/data/near") && readFile(base + "/moved/data/links/far").startsWith("SDDS"),
+              "relative versioned links still work after their folder moves");
+
+    putFile(base + "/moved/data/whole.001", "version one");
+    require(makeSymbolicLink(base + "/moved/data/whole.001", base + "/moved/data/whole"), "create absolute link");
+    require(editor.writeFile(base + "/moved/data/whole"), "save through an absolute link");
+    checkSave(linkTextOnDisk(base + "/moved/data/whole") == QFile::encodeName(base + "/moved/data/whole.002"),
+              "an absolute versioned link stays absolute");
+  }
+
+  /**
+   * A save that cannot keep the replaced file's group says so in its Saved message,
+   * which would otherwise replace a separate warning at once.  An account cannot own
+   * a file in a group it is not in, so the access step runs against /etc/passwd.
+   */
+  static void accessWarningShown(const QString &root) {
+    SDDSEditor editor;
+    setup(editor);
+    const QString foreign = QStringLiteral("/etc/passwd");
+    bool usable = QFileInfo::exists(foreign);
+    if (usable) {
+      const struct stat foreignStatus = fileStatus(foreign);
+      gid_t groups[256];
+      const int count = ::getgroups(256, groups);
+      usable = foreignStatus.st_gid != ::getegid() && (foreignStatus.st_mode & 0111) == 0;
+      for (int i = 0; i < count; ++i)
+        usable = usable && groups[i] != foreignStatus.st_gid;
+    }
+    if (!usable) {
+      fprintf(stdout, "SKIP the access warning check needs /etc/passwd in a group this account is not in\n");
+      return;
+    }
+    const QString scratch = root + "/access-warning-scratch.sdds";
+    putFile(scratch, "scratch");
+    {
+      QFile file(scratch);
+      require(file.open(QIODevice::ReadWrite), "open the access warning scratch file");
+      editor.keepFileAccess(file.handle(), foreign);
+    }
+    checkSave(editor.accessNotKept == foreign, "an access step that cannot keep the group records the file");
+    const QString saved = root + "/access-warning.sdds";
+    editor.reportSaved(saved);
+    checkSave(editor.statusMessageLabel->text() ==
+                  QString("Saved %1, but could not keep the group and permissions of %2").arg(saved, foreign),
+              "the Saved message says that the group and permissions could not be kept");
+    checkSave(editor.accessNotKept.isEmpty(), "and that note is reported once");
+
+    editor.accessNotKept = foreign; // As if left by an earlier save that failed.
+    require(editor.writeFile(root + "/access-kept.sdds"), "save a new file after the note");
+    checkSave(editor.statusMessageLabel->text().startsWith("Saved ") &&
+                  !editor.statusMessageLabel->text().contains("could not keep"),
+              "a later save that keeps access reports only that it saved");
+  }
+#endif
+
   /** The insertion dialog's fixed value must survive commits and reloads. */
   static void fixedParameter(const QString &root) {
     SDDSEditor editor;
@@ -3687,15 +4037,16 @@ public:
     const QByteArray oldPath = qgetenv("PATH");
     qputenv("PATH", QFile::encodeName(QCoreApplication::applicationDirPath() + "/test-bin") + QDir::listSeparator().toLatin1() + oldPath);
     qputenv("SDDSEDITOR_PLOT_CAPTURE", QFile::encodeName(capture));
-    editor.plotColumn(0);
-    QElapsedTimer timer;
-    timer.start();
-    while (!editor.findChildren<QProcess *>().isEmpty() && timer.elapsed() < 10000) {
-      QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    }
-    qputenv("PATH", oldPath);
-    qunsetenv("SDDSEDITOR_PLOT_CAPTURE");
+    auto plotAndWait = [](SDDSEditor &plotting) {
+      plotting.plotColumn(0);
+      QElapsedTimer timer;
+      timer.start();
+      while (!plotting.findChildren<QProcess *>().isEmpty() && timer.elapsed() < 10000) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      }
+    };
+    plotAndWait(editor);
     require(QFileInfo::exists(capture), "plot helper captures snapshot");
     require(editor.dirty, "plot preserves dirty state");
     SDDSEditor snapshot, disk;
@@ -3706,10 +4057,67 @@ public:
     require(disk.pages[0].columns[0][0] == "3", "plot does not save document");
     const auto arguments = readFile(capture + ".args").split('\n');
     require(arguments.contains("-col=Renamed"), "plot arguments use current column name");
+    QString snapshotFile;
     for (const QByteArray &argument : arguments)
       if (argument.endsWith("plot.sdds"))
-        require(!QFileInfo::exists(QString::fromUtf8(argument)), "plot snapshot cleaned after process exits");
-    fprintf(stdout, "PASS plotting unsaved snapshot and cleanup\n");
+        snapshotFile = QString::fromUtf8(argument);
+    require(!snapshotFile.isEmpty(), "plot names its snapshot");
+    // sddsplot hands the plot to a detached mpl_qt, which rereads this file to zoom.
+    checkSave(QFileInfo::exists(snapshotFile), "a plot snapshot outlives the plotting process");
+    checkSave(editor.plotSnapshots.size() == 1, "and the editor keeps it");
+#ifndef _WIN32
+    {
+      QProcess reader;
+      reader.start(QStringLiteral("tail"), {QStringLiteral("-f"), snapshotFile});
+      require(reader.waitForStarted(), "start a program naming the snapshot");
+      editor.sweepPlotSnapshots();
+      checkSave(QFileInfo::exists(snapshotFile), "a snapshot that a running program names stays");
+      reader.kill();
+      require(reader.waitForFinished(), "stop the program naming the snapshot");
+    }
+    editor.sweepPlotSnapshots();
+    checkSave(!QFileInfo::exists(QFileInfo(snapshotFile).path()) && editor.plotSnapshots.isEmpty(),
+              "and goes once nothing names it");
+
+    plotAndWait(editor);
+    require(editor.plotSnapshots.size() == 1, "a further plot keeps its snapshot");
+    const QString earlierFolder = editor.plotSnapshots.first()->path();
+    plotAndWait(editor);
+    checkSave(!QFileInfo::exists(earlierFolder) && editor.plotSnapshots.size() == 1,
+              "the next plot deletes a snapshot nothing names");
+#endif
+    QString lastFolder;
+    {
+      SDDSEditor closing;
+      setup(closing);
+      plotAndWait(closing);
+      require(!closing.plotSnapshots.isEmpty(), "plot before closing the editor");
+      lastFolder = closing.plotSnapshots.last()->path();
+      checkSave(QFileInfo::exists(lastFolder), "a snapshot exists until the editor closes");
+    }
+    checkSave(!QFileInfo::exists(lastFolder), "closing the editor deletes its snapshots");
+
+    {
+      SDDSEditor invalid;
+      setup(invalid);
+      require(replaceSharedLayoutString(&invalid.dataset.layout.column_definition[0].format_string,
+                                        &invalid.dataset.original_layout.column_definition[0].format_string,
+                                        "%s"), "install a format that cannot be written");
+      plotAndWait(invalid);
+      checkSave(invalid.plotSnapshots.isEmpty(), "a document that cannot be written keeps no snapshot");
+    }
+    const QString noPrograms = root + "/plot-no-programs";
+    require(QDir().mkpath(noPrograms), "create a folder without sddsplot");
+    qputenv("PATH", QFile::encodeName(noPrograms));
+    {
+      SDDSEditor unstarted;
+      setup(unstarted);
+      plotAndWait(unstarted);
+      checkSave(unstarted.plotSnapshots.isEmpty(), "a plot that cannot start keeps no snapshot");
+    }
+    qputenv("PATH", oldPath);
+    qunsetenv("SDDSEDITOR_PLOT_CAPTURE");
+    fprintf(stdout, "PASS plotting unsaved snapshot and its lifetime\n");
   }
 
   /** Plot toolbar follows the active table; arrays retain their shapes and pending edits. */
@@ -3768,7 +4176,7 @@ public:
                 "array Plot preserves unsaved state and binary save choice");
         for (const QByteArray &argument : arguments)
           if (argument.endsWith("plot.sdds"))
-            require(!QFileInfo::exists(QString::fromUtf8(argument)), "array plot snapshot is cleaned after process exit");
+            require(QFileInfo::exists(QString::fromUtf8(argument)), "array plot snapshot outlives the plotting process");
       };
       QWidget *plotButton = editor.mainToolBar->widgetForAction(editor.plotAction);
       require(plotButton, "Plot has a toolbar button");
@@ -4468,6 +4876,103 @@ public:
     fprintf(stdout, "PASS parameter grid wrapping, clipboard, undo, reordering and outline\n");
   }
 
+  /**
+   * An editor destroyed while visible (Restart quits without closing it in Qt 5)
+   * must hide its window before its documents are gone: hiding runs the tables'
+   * models and the message dock's handler, which read them.
+   */
+  static void visibleTeardown() {
+    struct HideWatcher : QObject {
+      int hides = 0;
+      int afterEditor = 0;
+      bool eventFilter(QObject *watched, QEvent *event) override {
+        if (event->type() == QEvent::Hide) {
+          ++hides;
+          // Inside ~QWidget the window is no longer an SDDSEditor.
+          QWidget *widget = qobject_cast<QWidget *>(watched);
+          if (!widget || !qobject_cast<SDDSEditor *>(widget->window()))
+            ++afterEditor;
+        }
+        return false;
+      }
+    } watcher;
+    SDDSEditor *editor = new SDDSEditor;
+    setup(*editor);
+    editor->show();
+    editor->consoleDock->setVisible(true);
+    QCoreApplication::processEvents();
+    for (QObject *object : {static_cast<QObject *>(editor), static_cast<QObject *>(editor->paramView),
+                            static_cast<QObject *>(editor->columnView), static_cast<QObject *>(editor->arrayView),
+                            static_cast<QObject *>(editor->consoleDock)})
+      object->installEventFilter(&watcher);
+    delete editor;
+    require(watcher.hides > 0, "a visible editor is hidden when it is destroyed");
+    require(watcher.afterEditor == 0, "a visible editor is hidden before its documents are destroyed");
+    fprintf(stdout, "PASS a visible editor hides before its documents are destroyed (%d hide events)\n", watcher.hides);
+  }
+
+  /**
+   * The search dialog pointer follows the open dialog: a replaced dialog must not
+   * clear it when it is destroyed, and a closed one must leave it null.  Under the
+   * sanitizer build this also checks that destruction casts nothing.
+   */
+  static void searchDialogPointer() {
+    SDDSEditor editor;
+    setup(editor);
+    editor.show();
+    editor.searchColumn(0);
+    QPointer<QDialog> first = editor.searchColumnDialog.data();
+    editor.searchColumn(0); // Closes the first dialog and opens another.
+    QDialog *second = editor.searchColumnDialog.data();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    require(first.isNull() && second && editor.searchColumnDialog.data() == second,
+            "the open search dialog stays current when a replaced one is destroyed");
+    second->close();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    require(editor.searchColumnDialog.isNull(), "a closed search dialog leaves no pointer behind");
+    fprintf(stdout, "PASS the search dialog pointer follows the open dialog\n");
+  }
+
+  /** SDDS_GetTypeName returns a copy the caller frees; type names shown while painting and updating must not leak. */
+  static void typeNamesFreed() {
+#if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 33))
+    SDDSEditor editor;
+    setup(editor);
+    require(SDDS_DefineParameter(&editor.dataset, "P", nullptr, nullptr, nullptr, nullptr, SDDS_DOUBLE, nullptr) >= 0,
+            "define type-name parameter");
+    require(SDDS_SaveLayout(&editor.dataset), "save type-name layout");
+    editor.pages[0].parameters = {"1"};
+    editor.populateModels();
+    editor.resize(1200, 800);
+    editor.show();
+    QCoreApplication::processEvents();
+    editor.columnView->setCurrentIndex(editor.columnModel->index(0, 0));
+    editor.lastCellView = editor.columnView;
+    auto showTypeNames = [&editor]() {
+      (void)editor.paramModel->data(editor.paramModel->index(0, ParameterPageModel::TypeColumn), Qt::DisplayRole);
+      (void)editor.columnModel->headerData(0, Qt::Horizontal, HeaderSubtitleRole);
+      (void)editor.columnModel->headerData(0, Qt::Horizontal, Qt::ToolTipRole);
+      (void)editor.arrayModel->headerData(0, Qt::Horizontal, HeaderSubtitleRole);
+      editor.updateStatusBar();
+      editor.layoutParameterGrid();
+      editor.rebuildOutline();
+      (void)editor.paramView->viewport()->grab();
+      (void)editor.columnView->horizontalHeader()->grab();
+    };
+    for (int i = 0; i < 20; ++i)
+      showTypeNames(); // Let Qt fill its caches first.
+    const size_t before = mallinfo2().uordblks;
+    for (int i = 0; i < 500; ++i)
+      showTypeNames();
+    const long long growth = static_cast<long long>(mallinfo2().uordblks) - static_cast<long long>(before);
+    fprintf(stdout, "  heap growth over 500 rounds of type names: %lld bytes\n", growth);
+    require(growth < 16384, "type names shown while painting and updating are freed");
+    fprintf(stdout, "PASS type names shown while painting and updating are freed\n");
+#else
+    fprintf(stdout, "SKIP type-name heap check needs glibc 2.33 or later\n");
+#endif
+  }
+
   /** Toolbar, panel headers, filter chip, status bar and themes reflect editor state. */
   static void interfaceChrome(const QString &root) {
     SDDSEditor editor;
@@ -4589,6 +5094,9 @@ public:
     require(text.contains(QKeySequence("Ctrl+Shift+E").toString(QKeySequence::NativeText)) &&
                 text.contains("Apply Numerical Expression"),
             "help text shows the formula shortcuts");
+    require(text.contains("Enum values") && text.contains("Enum mapping") && text.contains("ON (10)") &&
+                text.contains("\\,") && text.contains("sddscast"),
+            "help describes enum values, the mapping syntax and conversion");
     const QString html = browser->toHtml();
     for (const EditorHelpTopic &topic : editorHelpTopics())
       require(html.contains(QString("name=\"%1\"").arg(topic.anchor)), "every help topic has an anchor");
@@ -5452,6 +5960,7 @@ int main(int argc, char **argv) {
   SDDSEditorTests::enumFiltering(artifacts.path());
   SDDSEditorTests::enumPendingEdits(artifacts.path());
   SDDSEditorTests::enumCreatedCells(artifacts.path());
+  SDDSEditorTests::enumMappingSyntax();
   SDDSEditorTests::enumEditorText();
   SDDSEditorTests::timeDisplay(artifacts.path());
   SDDSEditorTests::timeDisplayLifetime();
@@ -5486,6 +5995,13 @@ int main(int argc, char **argv) {
   SDDSEditorTests::arrayHeatmap(artifacts.path());
   SDDSEditorTests::arrayHeatmapRangeText();
   SDDSEditorTests::safeSave(artifacts.path());
+#ifndef _WIN32
+  SDDSEditorTests::saveThroughSymlinkedFolder(artifacts.path());
+  SDDSEditorTests::versionAccess(artifacts.path());
+  SDDSEditorTests::saveKeepsGroup(artifacts.path());
+  SDDSEditorTests::relativeVersionLinks(artifacts.path());
+  SDDSEditorTests::accessWarningShown(artifacts.path());
+#endif
   SDDSEditorTests::fixedParameter(artifacts.path());
   SDDSEditorTests::undo();
   SDDSEditorTests::emptyArrays(artifacts.path());
@@ -5497,6 +6013,9 @@ int main(int argc, char **argv) {
   SDDSEditorTests::sparseClipboard();
   SDDSEditorTests::parameterGrid(artifacts.path());
   SDDSEditorTests::interfaceChrome(artifacts.path());
+  SDDSEditorTests::visibleTeardown();
+  SDDSEditorTests::typeNamesFreed();
+  SDDSEditorTests::searchDialogPointer();
   SDDSEditorTests::helpWindow(artifacts.path());
   SDDSEditorTests::aboutDialog(artifacts.path());
   SDDSEditorTests::menuAndTextFixes();
@@ -5506,6 +6025,7 @@ int main(int argc, char **argv) {
   SDDSEditorTests::longTextAndArrayActions(artifacts.path());
   SDDSEditorTests::fixedTextAndDefinitions(artifacts.path());
   SDDSEditorTests::shapeFilterAndRowFixes();
+  require(saveCheckFailures == 0, "save and plot snapshot regressions");
   fprintf(stdout, "PASS all sddseditor regressions\n");
   return 0;
 }

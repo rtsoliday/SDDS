@@ -6,9 +6,10 @@
   \verb|Ctrl+S| for saving, \verb|Ctrl+C| and
   \verb|Ctrl+V| for copy and paste, and \verb|Ctrl+Z|/\verb|Ctrl+Shift+Z| for
   undo and redo are provided. Additional actions are available from context menus
-  on the column and array headers including plotting and sorting columns with
-  \progref{sddsplot}, plus searching and resizing arrays. Files may also be
-  exported to HDF format using \verb|Ctrl+Shift+H|.
+  on the column and array headers, including sorting columns, plotting with
+  \progref{sddsplot}, and searching and resizing arrays. Files may also be
+  exported as comma-separated values using \verb|Ctrl+Shift+C| and to HDF format
+  using \verb|Ctrl+Shift+H|.
 
   Choose \verb|File > New...| or the \verb|New| toolbar button to create a file,
   even while another file is open. The setup dialog lists parameters, columns
@@ -20,6 +21,26 @@
   one page. Removing all definitions creates an empty file. Unsaved changes in
   the current document are protected by a Save/Discard/Cancel prompt, and saving
   the new file asks for a filename.
+
+  \verb|Edit > Column Rows > Filter/View...| (\verb|Ctrl+Shift+R|) shows only the
+  column rows that match an expression such as \verb|X > 0 && Status == "OK"|. No
+  data is deleted, and copy, paste, delete, search/replace and the formula tools
+  then change only the visible rows. The \verb|Edit > Formula / Fill| menu sets
+  the selected cells to a series (\verb|Ctrl+Shift+F|), the value of a numerical
+  expression such as \verb|x * 2| (\verb|Ctrl+Shift+E|), or a text template such
+  as \verb|run_${i}| (\verb|Ctrl+Shift+M|). Multidimensional arrays can be browsed
+  one slice at a time with \verb|Edit > Array > Open Array Viewer...|. Numeric
+  columns whose names contain \verb|Time| and whose units are seconds or blank can
+  show their values as local or UTC dates from the \verb|Time display| context
+  menu; this changes only the display, not the saved data.
+
+  SDDS6 enum parameters, columns and arrays are shown as \verb|label (code)|, and
+  their values are chosen from the declared labels. The element's \verb|Attributes|
+  dialog edits its code-to-label mapping, such as \verb|0:OFF,10:ON,-1:FAULT|. The
+  editor does not create enum elements or change their type; use
+  \progref{sddsmakedataset} and \progref{sddscast} for that, and convert enums with
+  \progref{sddscast} before exporting to CSV or HDF. \verb|Info > Help| describes
+  these features in more detail.
 
   \item \textbf{examples:}
     \begin{verbatim}
@@ -36,7 +57,8 @@
     \begin{itemize}
       \item \progref{sddsplot}
       \item \progref{sddsprocess}
-      \item \progref{SDDS editing}
+      \item \progref{sddscast}
+      \item \progref{sddsmakedataset}
     \end{itemize}
   \item \textbf{author:} R. Soliday, ANL/APS.
 \end{sddsprog}

@@ -22,7 +22,7 @@ Qt 6 builds enable C++17. Changing Qt installations rebuilds the editor's
 objects and generated header automatically.
 
 On Windows, use the MSVC environment initialized by `build-windows.bat`.
-The default kit is `C:/Qt/6.8.2/msvc2022_64`. To build the editor with a
+The default kit is `C:/Qt/6.12.0/msvc2022_64`. To build the editor with a
 different Qt 5 or Qt 6 MSVC kit, pass its root directory:
 
 ```sh
@@ -62,6 +62,10 @@ undo/redo history.
 Further checks cover copying pending edits, stable sorting of numerically equal
 values, consistent placement of invalid numeric cells, refreshing row filters
 after column type/name changes, and exact long-double result formatting.
+Enum checks cover `label (code)` display, state choices, rejected edits leaving
+Undo unchanged, clipboard labels, label sorting and filtering, pending edits,
+cells the editor creates, mapping changes and the documented mapping syntax, and
+ASCII and binary save/reopen.
 
 Additional regressions cover pending main-table and array-viewer edits, filtered
 search/replace and formula operations, all 256 character bytes and Unicode strings
@@ -164,16 +168,43 @@ The test prints each result and its fixture directory. Fixtures are retained in
 them with the object directory. Versioned symlink checks run on Unix platforms,
 and on Windows when the account can create symbolic links (Developer Mode or an
 elevated prompt); otherwise they are reported as skipped.
+Checks of saving and exporting through symbolic links, relative versioned links,
+and kept groups and modes run on Unix only. They cover links in symlinked folders,
+chains and loops of links, dangling links, a typed `..`, a `..` that leads to a
+folder the system cannot find, new versions under different umasks, and the Saved
+message when a group cannot be kept. Group checks need an account in a second
+group, and the Saved message check needs `/etc/passwd` in a group the account is
+not in; otherwise they are reported as skipped. The plot snapshot checks run on
+every platform except for the part that looks for running programs with `ps`,
+which runs on Unix only; there `tail` stands in for a plot window that names a
+snapshot. Three checks cover teardown and memory: an editor destroyed while still
+visible must hide before its documents are destroyed, a replaced or closed search
+dialog must leave the editor's pointer to it correct, and type names shown while
+painting and updating must be freed. The memory check reads glibc's heap counters,
+so it is reported as skipped without glibc 2.33 or later.
 
 The editor stages SDDS saves, CSV exports and HDF exports beside the destination before
-replacing it. Failed saves and exports preserve the existing file. Versioned
-symlink saves select an unused version
-and create it exclusively before replacing the link. On Windows the replacement
-is a native symbolic link (not a `.lnk` shortcut), which needs the same permission.
+replacing it. Failed saves and exports preserve the existing file. A replacement
+keeps the group and mode of the file it replaces. If the group cannot be kept, as
+when the file's group is one its owner has left, the Saved message says so and the
+new group gets only what others had. On Unix, destinations are resolved the way the
+system resolves them, so `..` in a link or a typed path means the parent of the
+real folder, even when that folder was reached through a symbolic link. A loop of
+links is refused, and so is a destination whose folder the system cannot find,
+rather than guessing a folder by removing `..` from the text. Versioned symlink
+saves select an unused version and create it exclusively before replacing the
+link. The new version keeps the previous version's group and mode, and the link
+keeps its spelling, so a relative link stays relative. On Windows the replacement is a native symbolic link (not a `.lnk`
+shortcut), which needs the same permission and holds an absolute path; the Unix
+resolution and access rules above have not been applied or tested there.
 Plot uses an ASCII snapshot of the current unsaved data, independently of the
 selected save format. This supports longdouble fields on platforms with 64-bit
-native long doubles. Snapshots use a private temporary directory retained until
-the plotting process ends.
+native long doubles. Snapshots use a private temporary directory. `sddsplot` hands
+its plot to a detached `mpl_qt` and exits, and `mpl_qt` runs `sddsplot` on the
+snapshot again to zoom, so a snapshot stays until a later Plot finds no running
+program naming it (found with `ps`; on Windows it is not looked for) or the editor
+closes. A plot window left open after the editor closes can still be viewed, but
+can no longer zoom.
 Select a cell in a column or numeric array and click **Plot**. The toolbar follows
 the last active table; arrays also have **Plot** in their right-click menu.
 Arrays plot values against the zero-based flat element index, with the last
@@ -233,7 +264,7 @@ contain the typed text, and clicking an entry shows that definition in its
 panel. The entry for the current cell is highlighted. **View → Outline**
 (Ctrl+Shift+O) hides or shows the sidebar.
 
-Types appear as colored badges: blue for integer types, green for
+Types appear as colored badges: blue for integer and enum types, green for
 floating-point types and amber for string and character. Column and array
 headers show the name above the type badge, a shape chip for arrays (`4×2`)
 and the units. The header band spans the whole table, and the selected
@@ -421,3 +452,36 @@ scales, exact cell text, Min/Max text matching double, float and long double
 cells, edits/undo, empty and nonfinite data, extreme numbers, page changes, and
 numeric type gating. Viewer and heatmap screenshots are retained
 in the test artifact directory.
+
+## Enum values
+
+SDDS6 files can declare parameters, columns and arrays of type `enum`. Each one
+has its own mapping of signed 32-bit codes to labels, such as
+`0:OFF,10:ON,-1:FAULT`. The file stores codes; the editor shows and edits
+labels. `SDDSlib/doc/enums.md` describes the format and the toolkit commands.
+
+Cells show the label and its code, such as `ON (10)`, and editing a cell offers
+the declared states in mapping order. Typed, pasted, replaced and formula values
+must match a declared label exactly, including case; a value that does not is
+rejected without changing the data or the Undo history. Copy copies labels.
+Delete leaves enum cells unchanged. Rows, pages and array elements the editor
+adds start at the state of code 0; when the mapping has no code 0 they stay blank
+and Save names the first cell that still needs a state. Sorting compares labels
+in UTF-8 byte order, not codes. Row filters compare labels as text and never use
+codes, so `State == "ON"` matches and the labels `01` and `1` stay distinct.
+Plot shows an enum column's labels as categories; enum arrays cannot be plotted.
+
+To change a mapping, edit **Enum mapping** in the element's **Attributes**: a
+comma-separated list of `code:label` pairs with unique codes and unique labels,
+where `\,`, `\:` and `\\` write a comma, colon or backslash in a label. Values
+keep their labels, so `7:OFF,8:ON,9:FAULT` renumbers the states above without
+changing the data. A mapping that drops a label still used on any page is
+refused, and the message names the first value that uses it. A fixed value must
+be one of the labels. The editor does not create enum elements or change their
+type: File → New and the Insert dialogs offer no enum type, and type changes are
+refused for enums. Use `sddsmakedataset -enumValues` to create them and
+`sddscast` to convert them to and from other types.
+
+A file with any enum is saved as SDDS6, which SDDS readers older than version 6
+cannot read. CSV and HDF export refuse enum elements; convert them with
+`sddscast` first.

@@ -111,6 +111,11 @@
 #include <QDateTime>
 #include <QTimeZone>
 #include <QActionGroup>
+#ifndef _WIN32
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 /*
  * On Windows, some headers define min/max as macros, which breaks code like
@@ -749,6 +754,14 @@ static bool definitionTextMatches(const char *stored, const QString &text) {
   return QString::fromLocal8Bit(stored ? stored : "") == text;
 }
 
+/** The name of an SDDS type.  SDDS_GetTypeName returns a copy, which the caller must free. */
+static QString sddsTypeName(int32_t type) {
+  char *name = SDDS_GetTypeName(type);
+  const QString text = QString::fromLocal8Bit(name ? name : "");
+  SDDS_Free(name);
+  return text;
+}
+
 static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
                                  int pageIndex, QString *errorText) {
   const int pcount = layout.n_parameters;
@@ -781,7 +794,7 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
                          .arg(pageIndex + 1)
                          .arg(QString::fromLocal8Bit(pdef.name))
                          .arg(truncateForMessage(val))
-                         .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+                         .arg(sddsTypeName(type));
       }
       return false;
     }
@@ -827,7 +840,7 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
                              .arg(QString::fromLocal8Bit(name))
                              .arg(r + 1)
                              .arg(truncateForMessage(cell))
-                             .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+                             .arg(sddsTypeName(type));
           }
           return false;
         }
@@ -886,7 +899,7 @@ static bool validatePageForWrite(const SDDS_LAYOUT &layout, const PageStore &pd,
                              .arg(QString::fromLocal8Bit(adef.name))
                              .arg(i + 1)
                              .arg(truncateForMessage(cell))
-                             .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+                             .arg(sddsTypeName(type));
           }
           return false;
         }
@@ -3108,8 +3121,8 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "tools treat parameters as one list in order. Right-click a parameter and choose "
       "<b>Move Up</b> or <b>Move Down</b> to reorder parameters.</p>"
       "<h3>Columns and arrays</h3>"
-      "<p>Each header shows the name with a colored type badge (blue for integers, green for "
-      "floating point, amber for text), the units and, for arrays, the shape. Hatched cells lie "
+      "<p>Each header shows the name with a colored type badge (blue for integers and enums, green "
+      "for floating point, amber for text), the units and, for arrays, the shape. Hatched cells lie "
       "past the end of an array shorter than the longest one. "
       "Double-click a header to change the type, drag it to reorder, or right-click it for more "
       "actions (see <a href=\"#menus\">Right-click menus</a>).</p>"
@@ -3261,6 +3274,41 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "</ul>")
       .arg(helpKey(QKeySequence::Save))});
 
+  topics.append({QStringLiteral("enums"), SDDSEditor::tr("Enum values"), SDDSEditor::tr(
+      "<p>SDDS6 files can declare parameters, columns and arrays of type <b>enum</b>. Each has "
+      "its own mapping of integer codes to labels, such as <code>0:OFF,10:ON,-1:FAULT</code>. "
+      "The file stores the codes; the editor shows and edits the labels.</p>"
+      "<ul>"
+      "<li>Cells show the label and its code, such as <code>ON (10)</code>. Editing a cell "
+      "offers a list of the declared states in mapping order.</li>"
+      "<li>Typed, pasted, replaced and formula values must match a declared label exactly, "
+      "including case; otherwise nothing changes. <b>Copy</b> copies the labels.</li>"
+      "<li><b>Delete</b> leaves enum cells unchanged, since each value must be one of its "
+      "states. Rows, pages and array elements the editor adds start at the state of code 0. "
+      "If the mapping has no code 0 they stay blank, and <b>Save</b> names the first cell that "
+      "still needs a state.</li>"
+      "<li>Sorting orders labels by their UTF-8 bytes, not by code. A row filter compares labels "
+      "as text, never codes: <code>State == \"ON\"</code> matches, and <code>\"01\"</code> and "
+      "<code>\"1\"</code> are different states.</li>"
+      "<li>Plot shows an enum column's labels as categories, as for a text column. Enum arrays "
+      "cannot be plotted.</li>"
+      "</ul>"
+      "<h3>Changing the mapping</h3>"
+      "<p>Open the element's <b>Attributes</b> and edit <b>Enum mapping</b>, a comma-separated "
+      "list of <code>code:label</code> pairs with unique codes and unique labels. Write a comma, "
+      "colon or backslash in a label as <code>\\,</code>, <code>\\:</code> or <code>\\\\</code>. "
+      "Values keep their labels, so <code>7:OFF,8:ON,9:FAULT</code> renumbers the states above "
+      "without changing the data. A mapping that drops a label still in use on any page is "
+      "refused, and the message names the first value that uses it. A fixed value must be one "
+      "of the labels.</p>"
+      "<p>The editor does not create enum elements or change their type: the New and Insert "
+      "dialogs offer no enum type, and an enum's type cannot be changed. Create them with "
+      "<code>sddsmakedataset -enumValues</code> and convert them to and from other types with "
+      "<code>sddscast</code>.</p>"
+      "<p class=\"note\">A file with any enum is saved as SDDS6, which SDDS readers older than "
+      "version 6 cannot read. CSV and HDF export refuse enum elements; convert them with "
+      "<code>sddscast</code> first.</p>")});
+
   topics.append({QStringLiteral("export"), SDDSEditor::tr("Plotting and export"), SDDSEditor::tr(
       "<h3>Plotting</h3>"
       "<p>Select a cell in a column or numeric array and click <b>Plot</b> on the toolbar. "
@@ -3269,7 +3317,9 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "<code>sddsplot</code> must be on the PATH. For columns, a <code>Time</code> column, "
       "if present, is used for the horizontal axis. Arrays are plotted against the zero-based "
       "element index; multidimensional arrays use their stored order, with the last dimension "
-      "varying fastest. Each page is plotted separately. Unsaved edits are included.</p>"
+      "varying fastest. Each page is plotted separately. Unsaved edits are included. "
+      "A plot window zooms by rereading a temporary copy of the document, so it can zoom until "
+      "you close the editor; after that it can still be viewed.</p>"
       "<h3>Export</h3>"
       "<ul>"
       "<li><b>File &#8250; Export CSV</b> %1 writes the data as comma-separated values.</li>"
@@ -3277,7 +3327,12 @@ static QVector<EditorHelpTopic> editorHelpTopics() {
       "with /, the characters / and &#37; in names are written as &#37;2F and &#37;25.</li>"
       "</ul>"
       "<p class=\"note\">Saves and exports are written to a temporary file first, so a failure "
-      "leaves the existing file unchanged. Exporting does not mark the document as saved.</p>")
+      "leaves the existing file unchanged. Exporting does not mark the document as saved.</p>"
+      "<p class=\"note\">Saving or exporting through a symbolic link replaces the file it points to. "
+      "If a link points to a file whose name ends in a version number, such as run.003, a save "
+      "creates run.004 instead and moves the link to it. On Linux and macOS, a replaced file or new "
+      "version keeps the permissions and group of the file before it, a relative link stays "
+      "relative, and a save into a folder the system cannot find is refused.</p>")
       .arg(helpKey("Ctrl+Shift+C"), helpKey("Ctrl+Shift+H"))});
 
   topics.append({QStringLiteral("status"), SDDSEditor::tr("Status bar and messages"), SDDSEditor::tr(
@@ -4290,7 +4345,7 @@ private:
         parts.append({DetailText, subtitle, 0});
       return parts;
     }
-    parts.append({DetailBadge, QString::fromLocal8Bit(SDDS_GetTypeName(type.toInt())), type.toInt()});
+    parts.append({DetailBadge, sddsTypeName(type.toInt()), type.toInt()});
     const QString shape = model()->headerData(logicalIndex, orientation(), HeaderShapeRole).toString();
     if (!shape.isEmpty())
       parts.append({DetailShape, shape, 0});
@@ -4415,7 +4470,7 @@ public:
       if (role != Qt::DisplayRole)
         return QVariant();
       if (index.column() == TypeColumn)
-        return QString::fromLocal8Bit(SDDS_GetTypeName(def.type));
+        return sddsTypeName(def.type);
       if (index.column() == UnitsColumn)
         return def.units ? QString::fromLocal8Bit(def.units) : QString();
       return def.description ? QString::fromLocal8Bit(def.description) : QString();
@@ -4745,7 +4800,7 @@ static QString definitionToolTip(const char *name, int32_t type, const char *uni
                                  const char *description) {
   QStringList lines;
   lines << QString("%1 (%2)").arg(QString::fromLocal8Bit(name ? name : ""),
-                                  QString::fromLocal8Bit(SDDS_GetTypeName(type)));
+                                  sddsTypeName(type));
   if (units && *units)
     lines << QObject::tr("Units: %1").arg(QString::fromLocal8Bit(units));
   if (description && *description)
@@ -4891,7 +4946,7 @@ public:
       case Qt::DisplayRole:
         return QString::fromLocal8Bit(def.name);
       case HeaderSubtitleRole:
-        return joinSubtitle({QString::fromLocal8Bit(SDDS_GetTypeName(def.type)),
+        return joinSubtitle({sddsTypeName(def.type),
                              displayUnits(section)});
       case HeaderTypeRole:
         return def.type;
@@ -5135,7 +5190,7 @@ public:
       case Qt::DisplayRole:
         return QString::fromLocal8Bit(def.name);
       case HeaderSubtitleRole:
-        return joinSubtitle({QString::fromLocal8Bit(SDDS_GetTypeName(def.type)),
+        return joinSubtitle({sddsTypeName(def.type),
                              shapeText(section),
                              def.units ? QString::fromLocal8Bit(def.units) : QString()});
       case HeaderTypeRole:
@@ -5303,7 +5358,7 @@ public:
       typeBadgeColors(theme, type, &bg, &fg);
       // Badges use the interface font, as in the column headers.
       const QFont font = badgeFont(QApplication::font());
-      const QString text = QString::fromLocal8Bit(SDDS_GetTypeName(type));
+      const QString text = sddsTypeName(type);
       const QSize size = badgeSize(font, text);
       paintBadge(painter, QPoint(option.rect.left() + 8, option.rect.center().y() - size.height() / 2 + 1),
                  text, font, bg, fg);
@@ -6107,6 +6162,12 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
 }
 
 SDDSEditor::~SDDSEditor() {
+  /*
+   * ~QWidget hides a window that is still visible (Restart quits without closing
+   * it in Qt 5).  Hiding runs the tables' models and the message dock's handler,
+   * which read the pages and dataset, so hide while those members still exist.
+   */
+  hide();
   clearDataset();
 }
 
@@ -6371,17 +6432,17 @@ void SDDSEditor::updateStatusBar() {
     if (view == paramView && parameter >= 0 && parameter < pcount) {
       const PARAMETER_DEFINITION &def = dataset.layout.parameter_definition[parameter];
       cell = tr("Parameter %1 %2 %3").arg(QString::fromLocal8Bit(def.name), middleDot(),
-                                         QString::fromLocal8Bit(SDDS_GetTypeName(def.type)));
+                                         sddsTypeName(def.type));
     } else if (view == columnView && current.column() < ccount) {
       const COLUMN_DEFINITION &def = dataset.layout.column_definition[current.column()];
       cell = tr("Row %1 %2 %3 %2 %4").arg(locale.toString(current.row() + 1), middleDot(),
                                          QString::fromLocal8Bit(def.name),
-                                         QString::fromLocal8Bit(SDDS_GetTypeName(def.type)));
+                                         sddsTypeName(def.type));
     } else if (view == arrayView && current.column() < acount) {
       const ARRAY_DEFINITION &def = dataset.layout.array_definition[current.column()];
       cell = tr("Element %1 %2 %3 %2 %4").arg(locale.toString(current.row() + 1), middleDot(),
                                              QString::fromLocal8Bit(def.name),
-                                             QString::fromLocal8Bit(SDDS_GetTypeName(def.type)));
+                                             sddsTypeName(def.type));
     }
   }
   cellStatusLabel->setText(cell);
@@ -6520,7 +6581,7 @@ void SDDSEditor::layoutParameterGrid() {
     if (i >= scanned)
       continue;
     nameWidth = std::max(nameWidth, textAdvance(nameFm, QString::fromLocal8Bit(def.name ? def.name : "")));
-    typeWidth = std::max(typeWidth, badgeSize(typeFont, QString::fromLocal8Bit(SDDS_GetTypeName(def.type))).width());
+    typeWidth = std::max(typeWidth, badgeSize(typeFont, sddsTypeName(def.type)).width());
     if (def.units && *def.units) {
       anyUnits = true;
       unitsWidth = std::max(unitsWidth, textAdvance(nameFm, QString::fromLocal8Bit(def.units)));
@@ -6790,7 +6851,7 @@ void SDDSEditor::rebuildOutline() {
                            : kind == 1 ? dataset.layout.column_definition[i].type
                                        : dataset.layout.array_definition[i].type;
       QTreeWidgetItem *item = new QTreeWidgetItem(QStringList{QString::fromLocal8Bit(name ? name : ""),
-                                                              QString::fromLocal8Bit(SDDS_GetTypeName(type))});
+                                                              sddsTypeName(type)});
       item->setIcon(0, dotFor(type));
       item->setForeground(1, t.muted);
       setOutlineAlignment(item, 1, Qt::AlignRight | Qt::AlignVCenter);
@@ -7861,7 +7922,7 @@ private:
     row.type->setObjectName("newFileType");
     for (int id : {SDDS_SHORT, SDDS_USHORT, SDDS_LONG, SDDS_ULONG, SDDS_LONG64, SDDS_ULONG64,
                    SDDS_FLOAT, SDDS_DOUBLE, SDDS_LONGDOUBLE, SDDS_STRING, SDDS_CHARACTER})
-      row.type->addItem(QString::fromLocal8Bit(SDDS_GetTypeName(id)), id);
+      row.type->addItem(sddsTypeName(id), id);
     row.type->setCurrentIndex(row.type->findData(kind == ParameterKind ? SDDS_STRING : SDDS_DOUBLE));
     row.units = makeField(section.body, "newFileUnits");
     row.detail = nullptr;
@@ -8059,7 +8120,7 @@ private:
           mark(row.detail, validateTextForType(row.detail->text(), type, false)
                                ? QString()
                                : SDDSEditor::tr("“%1” is not a valid %2 value for “%3”")
-                                     .arg(row.detail->text(), QString::fromLocal8Bit(SDDS_GetTypeName(type)), name));
+                                     .arg(row.detail->text(), sddsTypeName(type), name));
         } else if (kind == ArrayKind) {
           QVector<int> dims;
           QString shapeProblem;
@@ -8423,15 +8484,163 @@ static bool replaceSymbolicLink(const QString &linkPath, const QString &target,
 #endif
 }
 
+#ifndef _WIN32
+/** The text a symbolic link holds, exactly as stored. */
+static QString symbolicLinkText(const QString &link) {
+  char text[4096];
+  const ssize_t length = ::readlink(QFile::encodeName(link).constData(), text, sizeof(text));
+  return length > 0 && length < static_cast<ssize_t>(sizeof(text)) ?
+      QFile::decodeName(QByteArray(text, static_cast<int>(length))) : QString();
+}
+#endif
+
+/**
+ * Spell a path with its folder resolved by the system and its last component
+ * not followed.  QFileInfo::absoluteFilePath and symLinkTarget remove ".." from
+ * the text, which names another file when the folder before the ".." is itself
+ * a symbolic link.  Empty when the system cannot find the folder, since the text
+ * without its ".." may still name an unrelated folder that exists.  (Windows
+ * removes ".." from the text of a path itself.)
+ */
+static QString physicalPath(const QString &path) {
+#ifdef _WIN32
+  return QFileInfo(path).absoluteFilePath();
+#else
+  const int slash = path.lastIndexOf('/');
+  const QString folder = slash < 0 ? QStringLiteral(".") : slash == 0 ? QStringLiteral("/") : path.left(slash);
+  const QString real = QFileInfo(folder).canonicalFilePath();
+  if (real.isEmpty())
+    return QString();
+  return (real.endsWith('/') ? real : real + '/') + path.mid(slash + 1);
+#endif
+}
+
+/** Where the symbolic link at a physical path points, as a physical path. */
+static QString linkTargetPath(const QString &link) {
+#ifdef _WIN32
+  return QFileInfo(link).symLinkTarget();
+#else
+  const QString text = symbolicLinkText(link);
+  if (text.isEmpty())
+    return QString();
+  return physicalPath(text.startsWith('/') ? text : QFileInfo(link).path() + '/' + text);
+#endif
+}
+
+/**
+ * The file a write to path must replace, after every symbolic link.  Resolved
+ * here because QSaveFile follows links with symLinkTarget.  Empty for a loop of
+ * links, or when the system cannot find the folder of the path or of a link's target.
+ */
+static QString saveDestination(const QString &path) {
+  QString destination = physicalPath(path);
+  for (int links = 0; links < 40 && !destination.isEmpty(); ++links) {
+    if (!QFileInfo(destination).isSymLink())
+      return destination;
+    destination = linkTargetPath(destination);
+  }
+  return QString();
+}
+
+/** Why no file to write could be found for path. */
+static QString unresolvedDestinationText(const QString &path) {
+  return physicalPath(path).isEmpty()
+             ? SDDSEditor::tr("Cannot save %1: the system cannot find its folder").arg(path)
+             : SDDSEditor::tr("Cannot resolve the symbolic links of %1").arg(path);
+}
+
+/** What a versioned link holds to reach a new version beside the old one: the same spelling, so a relative link stays relative. */
+static QString nextVersionLinkText(const QString &link, const QString &newVersion) {
+#ifdef _WIN32
+  Q_UNUSED(link);
+  return newVersion; // Qt returns only an absolute target here, so a link's own spelling is not known.
+#else
+  const QString text = symbolicLinkText(link);
+  return text.left(text.lastIndexOf('/') + 1) + QFileInfo(newVersion).fileName();
+#endif
+}
+
+#ifndef _WIN32
+/**
+ * Give an open file, still empty, the group and mode of the file it replaces.
+ * If that group cannot be kept, the new group gets only what everyone else had,
+ * so it gains nothing the old group had.
+ * @return false if the group or mode could not be kept.
+ */
+static bool copyFileAccess(int descriptor, const struct stat &previous) {
+  struct stat replacement;
+  const bool keptGroup = (::fstat(descriptor, &replacement) == 0 && replacement.st_gid == previous.st_gid) ||
+                         ::fchown(descriptor, static_cast<uid_t>(-1), previous.st_gid) == 0;
+  mode_t mode = previous.st_mode & 0777;
+  if (!keptGroup)
+    mode = (mode & 0707) | ((mode & 0007) << 3);
+  return ::fchmod(descriptor, mode) == 0 && keptGroup;
+}
+#endif
+
+/**
+ * Apply the access of the file at previous, if there is one, to an open replacement.
+ * QSaveFile copies only the mode.  A failure is reported with the Saved message, which
+ * would otherwise replace a separate message at once.
+ */
+void SDDSEditor::keepFileAccess(int descriptor, const QString &previous) {
+#ifdef _WIN32
+  Q_UNUSED(descriptor);
+  Q_UNUSED(previous);
+#else
+  struct stat status;
+  if (::stat(QFile::encodeName(previous).constData(), &status) == 0 && !copyFileAccess(descriptor, status))
+    accessNotKept = previous;
+#endif
+}
+
+void SDDSEditor::reportSaved(const QString &path) {
+  if (accessNotKept.isEmpty())
+    message(tr("Saved %1").arg(path));
+  else
+    message(tr("Saved %1, but could not keep the group and permissions of %2").arg(path, accessNotKept));
+  accessNotKept.clear();
+}
+
+/**
+ * Create a new version exclusively, so a version made after the caller's scan is
+ * not overwritten.  It starts private when keepFileAccess will open it up to match
+ * the previous version, whatever the umask allows; QFile cannot choose a mode before Qt 6.3.
+ */
+static bool createVersionFile(QFile &version, const QString &previous) {
+#ifdef _WIN32
+  Q_UNUSED(previous);
+  return version.open(QIODevice::WriteOnly | QIODevice::NewOnly);
+#else
+  const QByteArray name = QFile::encodeName(version.fileName());
+  const int descriptor = ::open(name.constData(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
+                                QFileInfo::exists(previous) ? 0600 : 0666);
+  if (descriptor < 0)
+    return false;
+  if (version.open(descriptor, QIODevice::WriteOnly, QFileDevice::AutoCloseHandle))
+    return true;
+  ::close(descriptor);
+  ::unlink(name.constData());
+  return false;
+#endif
+}
+
 bool SDDSEditor::writeFile(const QString &path) {
   if (!datasetLoaded)
     return false;
+  accessNotKept.clear();
   commitModels();
 
-  QFileInfo fi(path);
-  QString finalPath = fi.isSymLink() ? fi.symLinkTarget() : fi.absoluteFilePath();
+  const QString linkPath = physicalPath(path);
+  if (linkPath.isEmpty()) {
+    QMessageBox::warning(this, tr("SDDS"), unresolvedDestinationText(path));
+    return false;
+  }
+  const bool throughLink = QFileInfo(linkPath).isSymLink();
+  QString finalPath = throughLink ? linkTargetPath(linkPath) : linkPath;
+  const QString previousVersion = finalPath;
   bool updateSymlink = false;
-  if (fi.isSymLink()) {
+  if (throughLink) {
     QRegularExpression re("(.*?)([.-])(\\d+)$");
     QRegularExpressionMatch match = re.match(finalPath);
     if (match.hasMatch()) {
@@ -8452,6 +8661,12 @@ bool SDDSEditor::writeFile(const QString &path) {
       updateSymlink = true;
     }
   }
+  if (!updateSymlink && !finalPath.isEmpty())
+    finalPath = saveDestination(finalPath);
+  if (finalPath.isEmpty()) {
+    QMessageBox::warning(this, tr("SDDS"), unresolvedDestinationText(path));
+    return false;
+  }
 
   if (SDDS_FileIsLocked(QFile::encodeName(finalPath).constData())) {
     QMessageBox::warning(this, tr("SDDS"), tr("Output file is locked"));
@@ -8469,14 +8684,13 @@ bool SDDSEditor::writeFile(const QString &path) {
     return false;
 
   if (updateSymlink) {
-    // Exclusive creation also protects a version created after our scan.
     QFile input(stagedPath);
     QFile version(finalPath);
-    if (!input.open(QIODevice::ReadOnly) ||
-        !version.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
+    if (!input.open(QIODevice::ReadOnly) || !createVersionFile(version, previousVersion)) {
       QMessageBox::warning(this, tr("SDDS"), tr("Failed to create new file version"));
       return false;
     }
+    keepFileAccess(version.handle(), previousVersion);
     bool copied = true;
     while (!input.atEnd()) {
       QByteArray chunk = input.read(1024 * 1024);
@@ -8488,14 +8702,14 @@ bool SDDSEditor::writeFile(const QString &path) {
     copied = version.flush() && copied;
     version.close();
     if (!copied || version.error() != QFileDevice::NoError) {
-      version.remove();
+      QFile::remove(finalPath); // A QFile opened on a descriptor has no name to remove.
       QMessageBox::warning(this, tr("SDDS"), tr("Failed to write new file version"));
       return false;
     }
     // Rename the replacement link over the old one; never remove it first.
-    QTemporaryDir links(fi.absolutePath() + "/.sddseditor-link-XXXXXX");
-    const QString linkPath = links.filePath("link");
-    if (!links.isValid() || !replaceSymbolicLink(fi.absoluteFilePath(), finalPath, linkPath)) {
+    QTemporaryDir links(QFileInfo(linkPath).path() + "/.sddseditor-link-XXXXXX");
+    if (!links.isValid() ||
+        !replaceSymbolicLink(linkPath, nextVersionLinkText(linkPath, finalPath), links.filePath("link"))) {
       QMessageBox::warning(this, tr("SDDS"),
                            tr("Saved %1, but could not update the original symlink").arg(finalPath));
       return false;
@@ -8508,6 +8722,7 @@ bool SDDSEditor::writeFile(const QString &path) {
       QMessageBox::warning(this, tr("SDDS"), tr("Failed to prepare output replacement"));
       return false;
     }
+    keepFileAccess(output.handle(), finalPath);
     while (!input.atEnd()) {
       QByteArray chunk = input.read(1024 * 1024);
       if (input.error() != QFileDevice::NoError || output.write(chunk) != chunk.size()) {
@@ -8522,7 +8737,7 @@ bool SDDSEditor::writeFile(const QString &path) {
   }
   dirty = false;
   updateWindowTitle();
-  message(tr("Saved %1").arg(finalPath));
+  reportSaved(finalPath);
   return true;
 }
 
@@ -9134,7 +9349,7 @@ bool SDDSEditor::writeDatasetFile(const QString &path, bool forceAscii) {
           QMessageBox::warning(this, tr("SDDS"), tr("Page %1: array '%2' contains a value that is invalid for type %3")
                                                  .arg(pg + 1)
                                                  .arg(QString::fromLocal8Bit(name))
-                                                 .arg(QString::fromLocal8Bit(SDDS_GetTypeName(type))));
+                                                 .arg(sddsTypeName(type)));
           SDDS_Terminate(&out);
           return false;
         }
@@ -9178,6 +9393,7 @@ bool SDDSEditor::writeDatasetFile(const QString &path, bool forceAscii) {
 bool SDDSEditor::writeHDF(const QString &path) {
   if (!datasetLoaded)
     return false;
+  accessNotKept.clear();
   for (int kind = 0; kind < 3; ++kind) {
     const int count = kind == 0 ? dataset.layout.n_columns : kind == 1 ? dataset.layout.n_parameters : dataset.layout.n_arrays;
     for (int i = 0; i < count; ++i) {
@@ -9198,8 +9414,11 @@ bool SDDSEditor::writeHDF(const QString &path) {
     }
   }
 
-  const QFileInfo destination(path);
-  const QString finalPath = destination.isSymLink() ? destination.symLinkTarget() : destination.absoluteFilePath();
+  const QString finalPath = saveDestination(path);
+  if (finalPath.isEmpty()) {
+    QMessageBox::warning(this, tr("SDDS"), unresolvedDestinationText(path));
+    return false;
+  }
   QTemporaryDir staging(QFileInfo(finalPath).absolutePath() + "/.sddseditor-hdf-XXXXXX");
   if (!staging.isValid()) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to create HDF staging directory"));
@@ -9666,6 +9885,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to prepare HDF output replacement"));
     return false;
   }
+  keepFileAccess(output.handle(), finalPath);
   while (!input.atEnd()) {
     const QByteArray chunk = input.read(1024 * 1024);
     if (input.error() != QFileDevice::NoError || output.write(chunk) != chunk.size()) {
@@ -9684,6 +9904,7 @@ bool SDDSEditor::writeHDF(const QString &path) {
 bool SDDSEditor::writeCSV(const QString &path) {
   if (!datasetLoaded)
     return false;
+  accessNotKept.clear();
   for (int kind = 0; kind < 3; ++kind) {
     const int count = kind == 0 ? dataset.layout.n_columns : kind == 1 ? dataset.layout.n_parameters : dataset.layout.n_arrays;
     for (int i = 0; i < count; ++i) {
@@ -9704,8 +9925,11 @@ bool SDDSEditor::writeCSV(const QString &path) {
     }
   }
 
-  const QFileInfo destination(path);
-  const QString finalPath = destination.isSymLink() ? destination.symLinkTarget() : destination.absoluteFilePath();
+  const QString finalPath = saveDestination(path);
+  if (finalPath.isEmpty()) {
+    QMessageBox::warning(this, tr("SDDS"), unresolvedDestinationText(path));
+    return false;
+  }
   QSaveFile file(finalPath);
   file.setDirectWriteFallback(false);
   // Not QIODevice::Text: on Windows it would rewrite newlines inside quoted text values as CRLF.
@@ -9713,6 +9937,7 @@ bool SDDSEditor::writeCSV(const QString &path) {
     QMessageBox::warning(this, tr("SDDS"), tr("Failed to open output"));
     return false;
   }
+  keepFileAccess(file.handle(), finalPath);
 
   QTextStream out(&file);
   // Write the local 8-bit encoding used for SDDS text, as Qt 5 streams do by
@@ -9861,7 +10086,7 @@ void SDDSEditor::saveFileAsHDF() {
   if (path.isEmpty())
     return;
   if (writeHDF(path))
-    message(tr("Saved %1").arg(path));
+    reportSaved(path);
 }
 
 void SDDSEditor::exportCSV() {
@@ -9871,7 +10096,7 @@ void SDDSEditor::exportCSV() {
   if (path.isEmpty())
     return;
   if (writeCSV(path))
-    message(tr("Saved %1").arg(path));
+    reportSaved(path);
 }
 
 void SDDSEditor::pageChanged(int value) {
@@ -10435,7 +10660,7 @@ void SDDSEditor::editParameterAttributes() {
       !validateTextForType(fixed.text(), tval, false)) {
     QMessageBox::warning(this, tr("SDDS"),
                          tr("Fixed value is invalid for type %1")
-                             .arg(QString::fromLocal8Bit(SDDS_GetTypeName(tval))));
+                             .arg(sddsTypeName(tval)));
     return;
   }
 
@@ -10897,7 +11122,7 @@ void SDDSEditor::changeParameterType(int row) {
     QMessageBox::information(this, tr("Enum"), tr("Edit the enum mapping in Attributes. Convert enum values explicitly before changing their type."));
     return;
   }
-  QString current = SDDS_GetTypeName(dataset.layout.parameter_definition[row].type);
+  QString current = sddsTypeName(dataset.layout.parameter_definition[row].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Parameter Type"), tr("Type"), types,
                                          types.indexOf(current), false, &ok);
@@ -10983,7 +11208,7 @@ void SDDSEditor::changeColumnType(int column) {
     QMessageBox::information(this, tr("Enum"), tr("Edit the enum mapping in Attributes. Convert enum values explicitly before changing their type."));
     return;
   }
-  QString current = SDDS_GetTypeName(dataset.layout.column_definition[column].type);
+  QString current = sddsTypeName(dataset.layout.column_definition[column].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Column Type"), tr("Type"), types,
                                          types.indexOf(current), false, &ok);
@@ -11283,6 +11508,25 @@ void SDDSEditor::plotArray(int column) {
   plotData(column, true);
 }
 
+/**
+ * Delete the plot snapshots that no running program names.  Programs cannot be
+ * listed this way on Windows or if ps fails, so there a snapshot stays until the editor closes.
+ */
+void SDDSEditor::sweepPlotSnapshots() {
+#ifndef _WIN32
+  if (plotSnapshots.isEmpty())
+    return;
+  QProcess programs;
+  programs.start(QStringLiteral("ps"), {QStringLiteral("-A"), QStringLiteral("-ww"), QStringLiteral("-o"), QStringLiteral("args=")});
+  if (!programs.waitForFinished(5000) || programs.exitStatus() != QProcess::NormalExit || programs.exitCode() != 0)
+    return;
+  const QByteArray running = programs.readAllStandardOutput();
+  for (int i = plotSnapshots.size() - 1; i >= 0; --i)
+    if (!running.contains(QFile::encodeName(plotSnapshots[i]->path())))
+      plotSnapshots.removeAt(i);
+#endif
+}
+
 /** Launch sddsplot with a portable snapshot of the current unsaved document. */
 void SDDSEditor::plotData(int index, bool array) {
   if (!datasetLoaded || index < 0 || index >= (array ? dataset.layout.n_arrays : dataset.layout.n_columns))
@@ -11291,11 +11535,15 @@ void SDDSEditor::plotData(int index, bool array) {
     message(tr("Select a numeric array to plot"));
     return;
   }
+  sweepPlotSnapshots();
   auto snapshot = std::make_shared<QTemporaryDir>();
   // Text snapshots can be read by sddsplot regardless of its native longdouble
   // representation or the document's selected binary save format.
   if (!snapshot->isValid() || !writeDatasetFile(snapshot->filePath("plot.sdds"), true))
     return;
+  // sddsplot hands its plot to a detached mpl_qt and exits; mpl_qt runs sddsplot
+  // on this file again to zoom, so the file must outlast the process started here.
+  plotSnapshots.append(snapshot);
 
   const QString name = QString::fromLocal8Bit(array ? dataset.layout.array_definition[index].name :
                                                      dataset.layout.column_definition[index].name);
@@ -11328,12 +11576,13 @@ void SDDSEditor::plotData(int index, bool array) {
 
   QProcess *process = new QProcess(this);
   connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-          process, [process, snapshot](int, QProcess::ExitStatus) {
+          process, [process](int, QProcess::ExitStatus) {
             process->deleteLater();
           });
   connect(process, &QProcess::errorOccurred, this,
           [this, process, snapshot](QProcess::ProcessError error) {
             if (error == QProcess::FailedToStart) {
+              plotSnapshots.removeOne(snapshot);
               QMessageBox::warning(this, tr("SDDS"), tr("Failed to start sddsplot"));
               process->deleteLater();
             }
@@ -11783,11 +12032,11 @@ void SDDSEditor::searchColumn(int column) {
     state->activeEditor = QModelIndex();
   });
 
-  QObject::connect(dlg, &QDialog::destroyed, this, [this, state, dlg]() {
+  // searchColumnDialog is a QPointer and clears itself.  Comparing it here would
+  // cast a dialog whose QDialog part ~QWidget has already destroyed.
+  QObject::connect(dlg, &QDialog::destroyed, this, [this, state]() {
     if (state->activeEditor.isValid())
       columnView->closePersistentEditor(state->activeEditor);
-    if (searchColumnDialog == dlg)
-      searchColumnDialog = nullptr;
   });
 
   dlg->show();
@@ -12069,7 +12318,7 @@ void SDDSEditor::changeArrayType(int column) {
     QMessageBox::information(this, tr("Enum"), tr("Edit the enum mapping in Attributes. Convert enum values explicitly before changing their type."));
     return;
   }
-  QString current = SDDS_GetTypeName(dataset.layout.array_definition[column].type);
+  QString current = sddsTypeName(dataset.layout.array_definition[column].type);
   bool ok = false;
   QString newType = QInputDialog::getItem(this, tr("Array Type"), tr("Type"), types,
                                          types.indexOf(current), false, &ok);
@@ -12375,7 +12624,7 @@ void SDDSEditor::insertParameter() {
       !validateTextForType(fixed.text(), typeGroup.checkedId(), false)) {
     QMessageBox::warning(this, tr("SDDS"),
                          tr("Fixed value is invalid for type %1")
-                             .arg(QString::fromLocal8Bit(SDDS_GetTypeName(typeGroup.checkedId()))));
+                             .arg(sddsTypeName(typeGroup.checkedId())));
     return;
   }
 

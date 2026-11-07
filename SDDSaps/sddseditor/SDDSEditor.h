@@ -24,6 +24,7 @@
 #include <QPointer>
 #include <QCloseEvent>
 
+class QTemporaryDir;
 class QTimer;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -185,9 +186,13 @@ private:
   /** Ensures a dataset is initialized, creating an empty one if needed. */
   bool ensureDataset();
   bool writeFile(const QString &path);
+  void keepFileAccess(int descriptor, const QString &previous);
+  /** Post the message for a finished save or export, including access its replacement could not keep. */
+  void reportSaved(const QString &path);
   /** Serialize current data without changing the document saved state. */
   bool writeDatasetFile(const QString &path, bool forceAscii = false);
   void plotData(int index, bool array);
+  void sweepPlotSnapshots();
   void clearColumnSelection();
   bool writeHDF(const QString &path);
   bool writeCSV(const QString &path);
@@ -300,6 +305,8 @@ private:
   QVector<PageStore> pages;
   int currentPage;
   QString currentFilename;
+  /** The file whose group and permissions the current save or export could not keep. */
+  QString accessNotKept;
   int lastRowAddCount;
   QString lastSearchPattern;
   QString lastReplaceText;
@@ -331,6 +338,8 @@ private:
   QVector<int> lastArraySelectionColumns;
   QVector<int> pendingColumnHeaderColumns;
   QVector<int> pendingArrayHeaderColumns;
+  /** Copies of the document that open plot windows reread to zoom. */
+  QVector<std::shared_ptr<QTemporaryDir>> plotSnapshots;
 };
 
 #endif // SDDSEDITOR_H
