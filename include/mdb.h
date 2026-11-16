@@ -555,6 +555,8 @@ epicsShareFuncMDBMTH extern short inhibitRandomSeedPermutation(short state);
 epicsShareFuncMDBMTH extern long permuteSeedBitOrder(long iseed);
 epicsShareFuncMDBMTH extern double random_1(long iseed);
 epicsShareFuncMDBMTH extern double random_2(long iseed);
+epicsShareFuncMDBMTH extern unsigned long long random_2_get_state(void);
+epicsShareFuncMDBMTH extern void random_2_set_state(unsigned long long state);
 epicsShareFuncMDBMTH extern double random_3(long iseed);
 epicsShareFuncMDBMTH extern double random_4(long iseed);
 epicsShareFuncMDBMTH extern double random_5(long iseed);

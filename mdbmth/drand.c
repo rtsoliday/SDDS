@@ -253,6 +253,9 @@ double random_1(long iseed) {
   return dlaran_(seed);
 }
 
+static MDB_THREAD_LOCAL short random2Initialized = 0;
+static MDB_THREAD_LOCAL integer random2Seed[4] = {0, 0, 0, 0};
+
 /**
  * @brief Similar to random_1(), provides a separate random sequence with its own seed handling.
  *
@@ -260,23 +263,52 @@ double random_1(long iseed) {
  * @return A random double in [0,1].
  */
 double random_2(long iseed) {
-  static MDB_THREAD_LOCAL short initialized = 0;
-  static MDB_THREAD_LOCAL integer seed[4] = {0, 0, 0, 0};
-
-  if (!initialized || iseed < 0) {
+  if (!random2Initialized || iseed < 0) {
     if (iseed < 0)
       iseed = -iseed;
     iseed = permuteSeedBitOrder(iseed);
-    seed[3] = ((iseed & 4095) / 2) * 2 + 1;
-    seed[2] = (iseed >>= 12) & 4095;
-    seed[1] = (iseed >>= 12) & 4095;
-    seed[0] = (iseed >>= 12) & 4095;
-    initialized = 1;
+    random2Seed[3] = ((iseed & 4095) / 2) * 2 + 1;
+    random2Seed[2] = (iseed >>= 12) & 4095;
+    random2Seed[1] = (iseed >>= 12) & 4095;
+    random2Seed[0] = (iseed >>= 12) & 4095;
+    random2Initialized = 1;
   }
-  if (!initialized)
+  if (!random2Initialized)
     bomb("random_2 not properly initialized", NULL);
 
-  return dlaran_(seed);
+  return dlaran_(random2Seed);
+}
+
+/**
+ * @brief Returns the state of random_2() without drawing from it.
+ *
+ * The state is dlaran's 48-bit seed.  random_2() multiplies it by 33952834046453 modulo 2^48 and
+ * returns the result over 2^48, so a caller that generates the same sequence elsewhere can start
+ * from here.
+ *
+ * @return The state, from 0 to 2^48-1.
+ */
+unsigned long long random_2_get_state(void) {
+  if (!random2Initialized)
+    bomb("random_2 not properly initialized", NULL);
+  return ((unsigned long long)random2Seed[0] << 36) | ((unsigned long long)random2Seed[1] << 24) |
+    ((unsigned long long)random2Seed[2] << 12) | (unsigned long long)random2Seed[3];
+}
+
+/**
+ * @brief Sets the state of random_2(), as returned by random_2_get_state().
+ *
+ * Lets a caller that used numbers of the same sequence elsewhere move random_2() past them.
+ *
+ * @param[in] state The state, from 0 to 2^48-1.
+ */
+void random_2_set_state(unsigned long long state) {
+  if (!random2Initialized)
+    bomb("random_2 not properly initialized", NULL);
+  random2Seed[3] = state & 4095;
+  random2Seed[2] = (state >> 12) & 4095;
+  random2Seed[1] = (state >> 24) & 4095;
+  random2Seed[0] = (state >> 36) & 4095;
 }
 
 /**
