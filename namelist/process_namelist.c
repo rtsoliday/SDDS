@@ -134,8 +134,9 @@ long process_entity(
   char **ptr_string, *ptr_char;
   char *namelist_str=NULL;
   int len;
-  
-  if ((i_item = match_string(nl_t->entity[i_entity], item_name, n_items, 
+  long capacity, offset, n_given;
+
+  if ((i_item = match_string(nl_t->entity[i_entity], item_name, n_items,
                              EXACT_MATCH))<0) {
     printf("error: unknown variable %s used in namelist %s\n", 
            nl_t->entity[i_entity], nl_t->group_name);
@@ -150,7 +151,26 @@ long process_entity(
            nl_t->entity[i_entity], nl_t->group_name);
     return NAMELIST_ERROR;
   }
-    
+
+  /* The per-type loops below walk a bare pointer over n_values*repeat entries, so a
+   * repeat count larger than the declared dimension would silently overwrite whatever
+   * the compiler placed after the array.  Passing an element size of 1 makes
+   * get_address() return the starting subscript as a plain element offset.
+   */
+  for (capacity=1, value=0; value<item[i_item].n_subscripts; value++)
+    capacity *= item[i_item].dimensions[value];
+  if (!(ptr_char = get_address(item[i_item].root, item[i_item].n_subscripts,
+                               nl_t->subscript[i_entity], item[i_item].dimensions, 1)))
+    return NAMELIST_ERROR;
+  offset = ptr_char - item[i_item].root;
+  for (n_given=0, value=0; value<nl_t->n_values[i_entity]; value++)
+    n_given += nl_t->repeat[i_entity][value];
+  if (offset+n_given>capacity) {
+    printf("error: %ld values given for variable %s in namelist %s, but only %ld fit at the given subscript (declared size %ld)\n",
+           n_given, nl_t->entity[i_entity], nl_t->group_name, capacity-offset, capacity);
+    return NAMELIST_ERROR;
+  }
+
   switch (item[i_item].type) {
   case TYPE_SHORT:         /* short integer */
     if (!(ptr_short = (short *)get_address(item[i_item].root, 
