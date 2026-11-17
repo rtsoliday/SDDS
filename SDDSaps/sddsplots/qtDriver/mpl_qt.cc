@@ -1702,6 +1702,8 @@ static QWidget *run3d(const char *filename, const char *xlabel,
  */
 static void makeWindowVisible(QMainWindow *window) {
 #ifdef _WIN32
+  // Startup also uses this helper: update Qt's visibility and layout before native activation.
+  window->showNormal();
   HWND hwnd = (HWND)window->winId();
   if (IsIconic(hwnd))
     ShowWindow(hwnd, SW_RESTORE);

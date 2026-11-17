@@ -7,7 +7,8 @@ ENABLE_OPENMP := 1
 BUNDLE_OPENMP := 1
 include ../../Makefile.rules
 .DEFAULT_GOAL := all
-QT_MAJOR = $(QT_VERSION)
+# Freeze the legacy alias: Windows keeps QT_VERSION recursively expanded.
+QT_MAJOR := $(QT_VERSION)
 PROD = sddseditor
 sddseditor_SRC = main.cc SDDSEditor.cc ArrayViewer.cc
 HDF5_INCLUDE ?= /usr/include/hdf5/serial

@@ -141,6 +141,15 @@ static void acceptDialog(const QString &title, std::function<void(QDialog *)> co
 
 class SDDSEditorTests {
 public:
+  /** A nonmodal popup may outlive the window used for its queued placement. */
+  static void popupOwnerLifetime() {
+    QWidget *owner = new QWidget;
+    QDialog popup;
+    configureEditorPopupDialog(&popup, owner, Qt::NonModal);
+    delete owner;
+    QCoreApplication::processEvents();
+    fprintf(stdout, "PASS popup placement after owner destruction\n");
+  }
   /** Verify categorical editing, dictionary replacement and exact persistence. */
   static void enums(const QString &root) {
     fprintf(stdout, "sddseditor_tests: SDDS6 enums\n");
@@ -6022,6 +6031,7 @@ int main(int argc, char **argv) {
   });
   warnings.start(10);
   messageBoxAccepter = &warnings;
+  SDDSEditorTests::popupOwnerLifetime();
   SDDSEditorTests::enums(artifacts.path());
   SDDSEditorTests::enumClipboard();
   SDDSEditorTests::enumRejectedEdits();

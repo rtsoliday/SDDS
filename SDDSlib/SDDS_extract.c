@@ -2863,8 +2863,12 @@ char *SDDS_GetParameterAsString(SDDS_DATASET *SDDS_dataset, char *parameter_name
     return (NULL);
   }
   value = SDDS_dataset->parameter[index];
-  if (type == SDDS_ENUM) {
-    const char *label = SDDS_EnumCodeToLabel(SDDS_dataset->layout.parameter_definition[index].enum_definition, *(int32_t *)value);
+  if (type == SDDS_ENUM || type == SDDS_STRING) {
+    /* String parameters and enum labels can exceed SDDS_MAXLINE. Copy their
+     * owned result directly instead of staging it through the numeric buffer. */
+    const char *label = type == SDDS_ENUM ?
+      SDDS_EnumCodeToLabel(SDDS_dataset->layout.parameter_definition[index].enum_definition, *(int32_t *)value) :
+      *(char **)value;
     if (!label || !SDDS_CopyString(&parValue, label)) return NULL;
     if (memory) *memory = parValue;
     return parValue;
@@ -2903,9 +2907,6 @@ char *SDDS_GetParameterAsString(SDDS_DATASET *SDDS_dataset, char *parameter_name
     break;
   case SDDS_CHARACTER:
     sprintf(buffer, "%c", *(char *)value);
-    break;
-  case SDDS_STRING:
-    sprintf(buffer, "%s", *(char **)value);
     break;
   default:
     SDDS_SetError("Unknown data type of parameter (SDDS_GetParameterAsString)");

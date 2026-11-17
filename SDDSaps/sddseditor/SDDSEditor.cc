@@ -163,10 +163,12 @@ static void configureEditorPopupDialog(QDialog *dialog, const QWidget *owner,
   flags &= ~Qt::Sheet;
   dialog->setParent(nullptr, flags);
 
-  auto placeDialog = [dialog, owner]() {
+  // Parentless tool windows can outlive their owner before the queued placement runs.
+  const QPointer<const QWidget> guardedOwner(owner);
+  auto placeDialog = [dialog, guardedOwner]() {
     if (!dialog)
       return;
-    const QWidget *anchor = owner ? owner->window() : nullptr;
+    const QWidget *anchor = guardedOwner ? guardedOwner->window() : nullptr;
     if (!anchor)
       anchor = QApplication::activeWindow();
     if (!anchor)
