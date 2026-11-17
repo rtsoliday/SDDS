@@ -1,5 +1,7 @@
 #ifndef MPL_QT_H
 #define MPL_QT_H
+#include <QStringList>
+extern QStringList sddsplotCommandArguments;
 
 #include <QApplication>
 #include <QScreen>

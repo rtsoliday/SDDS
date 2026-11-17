@@ -100,6 +100,25 @@ requires_plot_tools = pytest.mark.skipif(
 )
 
 
+@requires_plot_tools
+@pytest.mark.parametrize("contents,diagnostic", [
+  ("not json", "Invalid plot command argument array"),
+  ("[]", "Invalid plot command argument array"),
+  ('["sddsplot", 1]', "Plot command arguments must be strings"),
+  ('[""]', "Plot command executable must not be empty"),
+])
+def test_mpl_qt_rejects_invalid_command_file(tmp_path, contents, diagnostic):
+  command_file = tmp_path / "plot command.json"
+  command_file.write_text(contents)
+  env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+  result = subprocess.run(
+    [str(TOOLCHAINS[0].mpl_qt), "-commandFile", str(command_file)],
+    stdin=subprocess.DEVNULL, capture_output=True, text=True, env=env, timeout=15,
+  )
+  assert result.returncode == 1
+  assert diagnostic in result.stderr
+
+
 def _run(command, **kwargs):
   return subprocess.run(command, check=True, **kwargs)
 

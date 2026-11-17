@@ -70,6 +70,9 @@ $(OBJ_DIR)/test-bin/sddsplot$(EXEEXT): $(OBJ_DIR)/PlotSnapshotProbe.$(OBJEXT)
 	mkdir -p $(OBJ_DIR)/test-bin
 	$(LINKEXE) $(OUTPUTEXE) $< $(LDFLAGS)
 
+$(OBJ_DIR)/test-bin/mpl_qt$(EXEEXT): $(OBJ_DIR)/test-bin/sddsplot$(EXEEXT)
+	cp $< $@
+
 .PHONY: tests
-tests: all $(OBJ_DIR)/sddseditor_tests$(EXEEXT) $(OBJ_DIR)/test-bin/sddsplot$(EXEEXT)
+tests: all $(OBJ_DIR)/sddseditor_tests$(EXEEXT) $(OBJ_DIR)/test-bin/sddsplot$(EXEEXT) $(OBJ_DIR)/test-bin/mpl_qt$(EXEEXT)
 	QT_QPA_PLATFORM=offscreen ./$(OBJ_DIR)/sddseditor_tests$(EXEEXT)

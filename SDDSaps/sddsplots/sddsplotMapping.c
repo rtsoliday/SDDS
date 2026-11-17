@@ -277,6 +277,20 @@ void determine_panel_limits(PLOT_SPEC *plspec, long panel)
         }
       }
     }
+    /* An empty scales group has no data-derived limits. Set a usable range
+     * before zooming can overflow the DBL_MAX sentinels. Explicit limits
+     * are restored by determine_limits after the panel ranges are built. */
+    for (scalesGroup=0; scalesGroup<plspec->scalesGroups[plane]; scalesGroup++) {
+      if (plspec->scalesGroupData[plane][scalesGroup].panel!=panel)
+        continue;
+      if (!(plspec->scalesGroupData[plane][scalesGroup].limitFlags &
+            (LIMIT0_SET | LIMIT1_SET))) {
+        limit = plspec->scalesGroupData[plane][scalesGroup].limit;
+        limit[0] = -1;
+        limit[1] = 1;
+        plspec->scalesGroupData[plane][scalesGroup].limitFlags |= LIMIT0_SET | LIMIT1_SET;
+      }
+    }
     if (!scalesGroupsUsed)
       SDDS_Bomb("No scales groups used (determine_panel_limit)");
     plspec->panel[panel].scalesUsed[plane] = scalesGroupsUsed;

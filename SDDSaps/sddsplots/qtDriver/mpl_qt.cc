@@ -57,6 +57,8 @@ static bool isEqualAspectArgument(const char *arg) {
 #include <QCursor>
 #include <QColor>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonArray>
 #include <QTextStream>
 #include <QByteArray>
 #include <QVector3D>
@@ -160,6 +162,7 @@ int currentPlot = 1;
 FILE *ifp = NULL;
 class StdinReader;
 StdinReader *stdinReader = NULL;
+QStringList sddsplotCommandArguments;
 bool replotZoom = true;
 bool tracking = false;
 bool domovie = false;
@@ -3019,7 +3022,7 @@ int main(int argc, char *argv[]) {
     surfaceGraph = surfaceGraphs[0];
     surfaceContainer = surfaceContainers[0];
     setup_shortcuts(&mainWindow, true);
-    mainWindow.show();
+    makeWindowVisible(&mainWindow);
     return app.exec();
   }
 #endif
@@ -3029,7 +3032,33 @@ int main(int argc, char *argv[]) {
     if (argv[i][0] == '-' || argv[i][0] == '/') {
       switch (argv[i][1]) {
       case 'c': /* sddsplot Commandline */
-        if (!strcmp("command", argv[i] + 1)) {
+        if (!strcmp("commandFile", argv[i] + 1)) {
+          if (++i >= argc) {
+            fprintf(stderr, "-commandFile requires a JSON argument file\n");
+            return 1;
+          }
+          QFile commandFile(QCoreApplication::arguments().at(i));
+          if (!commandFile.open(QIODevice::ReadOnly)) {
+            fprintf(stderr, "Unable to open plot command file\n");
+            return 1;
+          }
+          const auto document = QJsonDocument::fromJson(commandFile.readAll());
+          if (!document.isArray() || document.array().isEmpty()) {
+            fprintf(stderr, "Invalid plot command argument array\n");
+            return 1;
+          }
+          for (const auto &argument : document.array()) {
+            if (!argument.isString()) {
+              fprintf(stderr, "Plot command arguments must be strings\n");
+              return 1;
+            }
+            sddsplotCommandArguments.append(argument.toString());
+          }
+          if (sddsplotCommandArguments.first().isEmpty()) {
+            fprintf(stderr, "Plot command executable must not be empty\n");
+            return 1;
+          }
+        } else if (!strcmp("command", argv[i] + 1)) {
           sddsplotCommandline2 = argv[++i];
         } else {
           fprintf(stderr, "Invalid option %s\n", argv[i]);
@@ -3063,6 +3092,7 @@ int main(int argc, char *argv[]) {
         break;
       case 'h': /* Put usage here */
         fprintf(stdout, "Usage: mpl_qt [-h]\n"
+                        "              [-commandFile <JSON argument file>]\n"
                         "              [-dashes 1]\n"
                         "              [-linetype <filename>]\n"
                         "              [-movie 1 [-interval 1]]\n"
@@ -3202,7 +3232,7 @@ int main(int argc, char *argv[]) {
   mainWindow.setCentralWidget(centralWidget);
 
   mainWindow.resize(WIDTH + 20, HEIGHT + 40);
-  mainWindow.show();
+  makeWindowVisible(&mainWindow);
 
   setup_shortcuts(&mainWindow);
 

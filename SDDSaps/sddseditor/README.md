@@ -149,10 +149,13 @@ compare fractional and scientific decimal thresholds exactly against adjacent
 64-bit integers, including signed values, zero and nonfinite comparisons.
 
 Executables are built under the platform object directory (`O.Linux-x86_64` on
-Linux). The plotting probe is named `test-bin/sddsplot` there; only the test
-process prepends that directory to its PATH. It copies the plot input and records
-arguments, so the test verifies the real process launch without opening a plot
-window. It does not replace the installed `sddsplot`.
+Linux). The plotting probes are named `test-bin/sddsplot` and `test-bin/mpl_qt`;
+only the test process prepends that directory to its PATH. They copy the plot
+input and record arguments, verifying both launches without opening a window.
+They do not replace installed programs. Lifetime checks keep the viewer open
+after the renderer exits and verify that closing the viewer or editor removes
+the snapshot.
+Separate checks exercise renderer/viewer failures and missing helpers.
 
 Plot checks clear `SDDS_LONGDOUBLE_64BITS` and include longdouble parameters,
 arrays and columns with both ASCII and Binary selected for saving. They verify
@@ -174,14 +177,10 @@ chains and loops of links, dangling links, a typed `..`, a `..` that leads to a
 folder the system cannot find, new versions under different umasks, and the Saved
 message when a group cannot be kept. Group checks need an account in a second
 group, and the Saved message check needs `/etc/passwd` in a group the account is
-not in; otherwise they are reported as skipped. The plot snapshot checks run on
-every platform except for the part that looks for running programs with `ps`,
-which runs on Unix only; there `tail` stands in for a plot window that names a
-snapshot. Three checks cover teardown and memory: an editor destroyed while still
-visible must hide before its documents are destroyed, a replaced or closed search
-dialog must leave the editor's pointer to it correct, and type names shown while
-painting and updating must be freed. The memory check reads glibc's heap counters,
-so it is reported as skipped without glibc 2.33 or later.
+not in; otherwise they are reported as skipped. Teardown checks cover hiding a
+visible editor before destroying its documents and clearing its pointer when a
+search dialog closes. The type-name allocation check uses glibc's heap counters
+and requires glibc 2.33 or later.
 
 The editor stages SDDS saves, CSV exports and HDF exports beside the destination before
 replacing it. Failed saves and exports preserve the existing file. A replacement
@@ -199,12 +198,16 @@ shortcut), which needs the same permission and holds an absolute path; the Unix
 resolution and access rules above have not been applied or tested there.
 Plot uses an ASCII snapshot of the current unsaved data, independently of the
 selected save format. This supports longdouble fields on platforms with 64-bit
-native long doubles. Snapshots use a private temporary directory. `sddsplot` hands
-its plot to a detached `mpl_qt` and exits, and `mpl_qt` runs `sddsplot` on the
-snapshot again to zoom, so a snapshot stays until a later Plot finds no running
-program naming it (found with `ps`; on Windows it is not looked for) or the editor
-closes. A plot window left open after the editor closes can still be viewed, but
-can no longer zoom.
+native long doubles. The editor looks for `sddsplot` and `mpl_qt` beside the
+editor, then on PATH. When it finds `mpl_qt`, the editor generates a Qt plot
+stream, starts the viewer directly, and keeps the snapshot until the viewer or
+editor closes. Zoom and replot pass arguments through JSON and QProcess,
+preserving names and paths without shell interpretation. If `mpl_qt` is
+unavailable or an older viewer rejects the command-file option, `sddsplot` uses
+its default device, typically the Motif viewer on Windows. When `SDDS_DEVICE`
+or `MPL_DEVICE` is set, `sddsplot` handles device selection directly. In those
+cases the editor keeps the snapshot until it closes. Helper failures appear in
+Messages.
 Select a cell in a column or numeric array and click **Plot**. The toolbar follows
 the last active table; arrays also have **Plot** in their right-click menu.
 Arrays plot values against the zero-based flat element index, with the last

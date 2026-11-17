@@ -17,6 +17,7 @@
 #include <QRegularExpressionValidator>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStringList>
@@ -133,13 +134,14 @@ static void storeBelyPasswordInKeyring(const QString &belyUrl,
 }
 
 static QString commandLineMetadata() {
-  if (sddsplotCommandline2 && sddsplotCommandline2[0]) {
-    QString command = QString::fromUtf8(sddsplotCommandline2);
-    if (command.size() > kMaxMetadataLength)
-      command.truncate(kMaxMetadataLength);
-    return command;
+  QString command = QStringLiteral("mpl_qt");
+  if (!sddsplotCommandArguments.isEmpty()) {
+    const QJsonDocument arguments(QJsonArray::fromStringList(sddsplotCommandArguments));
+    command = QString::fromUtf8(arguments.toJson(QJsonDocument::Compact));
+  } else if (sddsplotCommandline2 && sddsplotCommandline2[0]) {
+    command = QString::fromUtf8(sddsplotCommandline2);
   }
-  return QStringLiteral("mpl_qt");
+  return command.left(kMaxMetadataLength);
 }
 
 static QString cwdMetadata() {

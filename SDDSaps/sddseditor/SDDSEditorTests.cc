@@ -4062,40 +4062,7 @@ public:
       if (argument.endsWith("plot.sdds"))
         snapshotFile = QString::fromUtf8(argument);
     require(!snapshotFile.isEmpty(), "plot names its snapshot");
-    // sddsplot hands the plot to a detached mpl_qt, which rereads this file to zoom.
-    checkSave(QFileInfo::exists(snapshotFile), "a plot snapshot outlives the plotting process");
-    checkSave(editor.plotSnapshots.size() == 1, "and the editor keeps it");
-#ifndef _WIN32
-    {
-      QProcess reader;
-      reader.start(QStringLiteral("tail"), {QStringLiteral("-f"), snapshotFile});
-      require(reader.waitForStarted(), "start a program naming the snapshot");
-      editor.sweepPlotSnapshots();
-      checkSave(QFileInfo::exists(snapshotFile), "a snapshot that a running program names stays");
-      reader.kill();
-      require(reader.waitForFinished(), "stop the program naming the snapshot");
-    }
-    editor.sweepPlotSnapshots();
-    checkSave(!QFileInfo::exists(QFileInfo(snapshotFile).path()) && editor.plotSnapshots.isEmpty(),
-              "and goes once nothing names it");
-
-    plotAndWait(editor);
-    require(editor.plotSnapshots.size() == 1, "a further plot keeps its snapshot");
-    const QString earlierFolder = editor.plotSnapshots.first()->path();
-    plotAndWait(editor);
-    checkSave(!QFileInfo::exists(earlierFolder) && editor.plotSnapshots.size() == 1,
-              "the next plot deletes a snapshot nothing names");
-#endif
-    QString lastFolder;
-    {
-      SDDSEditor closing;
-      setup(closing);
-      plotAndWait(closing);
-      require(!closing.plotSnapshots.isEmpty(), "plot before closing the editor");
-      lastFolder = closing.plotSnapshots.last()->path();
-      checkSave(QFileInfo::exists(lastFolder), "a snapshot exists until the editor closes");
-    }
-    checkSave(!QFileInfo::exists(lastFolder), "closing the editor deletes its snapshots");
+    checkSave(!QFileInfo::exists(QFileInfo(snapshotFile).path()), "a finished plot removes its snapshot directory");
 
     {
       SDDSEditor invalid;
@@ -4103,21 +4070,123 @@ public:
       require(replaceSharedLayoutString(&invalid.dataset.layout.column_definition[0].format_string,
                                         &invalid.dataset.original_layout.column_definition[0].format_string,
                                         "%s"), "install a format that cannot be written");
-      plotAndWait(invalid);
-      checkSave(invalid.plotSnapshots.isEmpty(), "a document that cannot be written keeps no snapshot");
-    }
-    const QString noPrograms = root + "/plot-no-programs";
-    require(QDir().mkpath(noPrograms), "create a folder without sddsplot");
-    qputenv("PATH", QFile::encodeName(noPrograms));
-    {
-      SDDSEditor unstarted;
-      setup(unstarted);
-      plotAndWait(unstarted);
-      checkSave(unstarted.plotSnapshots.isEmpty(), "a plot that cannot start keeps no snapshot");
+      invalid.plotColumn(0);
+      checkSave(invalid.findChildren<QProcess *>().isEmpty(), "a document that cannot be written starts no plot helper");
     }
     qputenv("PATH", oldPath);
     qunsetenv("SDDSEDITOR_PLOT_CAPTURE");
     fprintf(stdout, "PASS plotting unsaved snapshot and its lifetime\n");
+  }
+
+  /** A live viewer owns the snapshot; either helper's failures are visible. */
+  static void plotLifecycle(const QString &root) {
+    SDDSEditor editor;
+    setup(editor);
+    const QByteArray oldPath = qgetenv("PATH");
+    qputenv("PATH", QFile::encodeName(QCoreApplication::applicationDirPath() + "/test-bin"));
+    const QString capture = root + "/plot-lifetime.sdds";
+    qputenv("SDDSEDITOR_PLOT_CAPTURE", QFile::encodeName(capture));
+    qputenv("SDDSEDITOR_PLOT_VIEWER_HOLD", "1");
+    auto wait = [&](const std::function<bool()> &ready) {
+      QElapsedTimer timer;
+      timer.start();
+      while (!ready() && timer.elapsed() < 10000) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      }
+      require(ready(), "plot helper completes within timeout");
+    };
+    editor.plotColumn(0);
+    wait([&]() { return QFileInfo(capture + ".viewer").size() > 0; });
+    auto snapshotPath = [](const QJsonArray &command) {
+      for (const auto &arg : command)
+        if (arg.toString().endsWith("plot.sdds"))
+          return arg.toString();
+      return QString();
+    };
+    const auto command = QJsonDocument::fromJson(readFile(capture + ".viewer")).array();
+    const QString snapshot = snapshotPath(command);
+    require(!snapshot.isEmpty() && QFileInfo::exists(snapshot), "snapshot survives renderer exit while viewer remains open");
+    require(command.contains(QJsonValue("-device=qt")), "editor explicitly selects the interactive Qt device");
+    putFile(capture + ".release", "release");
+    wait([&]() { return editor.findChildren<QProcess *>().isEmpty(); });
+    require(!QFileInfo::exists(snapshot), "viewer exit cleans the snapshot");
+
+    const QString closingCapture = root + "/plot-editor-closes.sdds";
+    qputenv("SDDSEDITOR_PLOT_CAPTURE", QFile::encodeName(closingCapture));
+    QString closingSnapshot;
+    {
+      SDDSEditor closing;
+      setup(closing);
+      closing.plotColumn(0);
+      wait([&]() { return QFileInfo(closingCapture + ".viewer").size() > 0; });
+      closingSnapshot = snapshotPath(QJsonDocument::fromJson(readFile(closingCapture + ".viewer")).array());
+      require(!closingSnapshot.isEmpty() && QFileInfo::exists(closingSnapshot), "snapshot exists with the viewer still running");
+    }
+    require(!QFileInfo::exists(QFileInfo(closingSnapshot).path()), "closing the editor stops the viewer and removes its snapshot");
+    qunsetenv("SDDSEDITOR_PLOT_VIEWER_HOLD");
+    for (const QByteArray &failure : {QByteArray("SDDSEDITOR_PLOT_RENDER_FAIL"), QByteArray("SDDSEDITOR_PLOT_VIEWER_FAIL")}) {
+      const QString failedCapture = root + "/" + QString::fromLatin1(failure) + ".sdds";
+      qputenv("SDDSEDITOR_PLOT_CAPTURE", QFile::encodeName(failedCapture));
+      qputenv(failure.constData(), "1");
+      editor.plotColumn(0);
+      wait([&]() { return editor.findChildren<QProcess *>().isEmpty(); });
+      require(editor.consoleEdit->toPlainText().contains(failure.contains("RENDER") ? "renderer regression failure" : "viewer regression failure"),
+              "plot helper nonzero exit includes its diagnostic in Messages");
+      qunsetenv(failure.constData());
+    }
+
+    auto checkDefaultDevice = [&](const QString &capture) {
+      qputenv("SDDSEDITOR_PLOT_CAPTURE", QFile::encodeName(capture));
+      QString fallbackSnapshot;
+      {
+        SDDSEditor fallback;
+        setup(fallback);
+        fallback.plotColumn(0);
+        wait([&]() { return fallback.findChildren<QProcess *>().isEmpty(); });
+        for (const QByteArray &arg : readFile(capture + ".args").split('\n')) {
+          require(!arg.startsWith("-device=") && !arg.startsWith("-output="), "sddsplot chooses its default device");
+          if (arg.endsWith("plot.sdds"))
+            fallbackSnapshot = QString::fromUtf8(arg);
+        }
+        require(!fallbackSnapshot.isEmpty() && QFileInfo::exists(fallbackSnapshot), "default viewer keeps its snapshot after sddsplot exits");
+      }
+      require(!QFileInfo::exists(QFileInfo(fallbackSnapshot).path()), "closing the editor cleans up the default viewer snapshot");
+    };
+
+    const QString legacyCapture = root + "/plot-legacy-viewer.sdds";
+    qputenv("SDDSEDITOR_PLOT_LEGACY_VIEWER", "1");
+    checkDefaultDevice(legacyCapture);
+    require(QFileInfo::exists(legacyCapture + ".qt.args"), "an older viewer falls back after the command-file launch");
+    qunsetenv("SDDSEDITOR_PLOT_LEGACY_VIEWER");
+
+    for (const char *variable : {"SDDS_DEVICE", "MPL_DEVICE"}) {
+      qputenv(variable, "motif");
+      const QString configuredCapture = root + "/plot-" + QString::fromLatin1(variable) + ".sdds";
+      checkDefaultDevice(configuredCapture);
+      require(!QFileInfo::exists(configuredCapture + ".viewer"), "an explicit device setting bypasses the direct Qt viewer launch");
+      qunsetenv(variable);
+    }
+
+    // Model a standard Windows install with sddsplot and its default viewer.
+    const QString rendererOnly = root + "/plot-renderer-only";
+    require(QDir().mkpath(rendererOnly), "create renderer-only helper directory");
+    QString rendererName = "sddsplot";
+#ifdef Q_OS_WIN
+    rendererName += ".exe";
+#endif
+    require(QFile::copy(QCoreApplication::applicationDirPath() + "/test-bin/" + rendererName,
+                        rendererOnly + "/" + rendererName), "install renderer probe without mpl_qt");
+    qputenv("PATH", QFile::encodeName(rendererOnly));
+    checkDefaultDevice(root + "/plot-default-device.sdds");
+
+    qputenv("PATH", "");
+    editor.plotColumn(0);
+    require(editor.consoleEdit->toPlainText().contains("Plot requires sddsplot beside the editor or on PATH"), "missing sddsplot produces a useful message");
+    require(editor.findChildren<QProcess *>().isEmpty(), "missing sddsplot starts no process");
+    qputenv("PATH", oldPath);
+    qunsetenv("SDDSEDITOR_PLOT_CAPTURE");
+    fprintf(stdout, "PASS plot viewer lifetime, legacy viewer fallback, configured devices and helper diagnostics\n");
   }
 
   /** Plot toolbar follows the active table; arrays retain their shapes and pending edits. */
@@ -4174,9 +4243,7 @@ public:
                 "array Plot preserves multidimensional shapes, all pages and pending edits");
         require(editor.dirty && editor.currentFilename.isEmpty() && editor.binaryBtn->isChecked(),
                 "array Plot preserves unsaved state and binary save choice");
-        for (const QByteArray &argument : arguments)
-          if (argument.endsWith("plot.sdds"))
-            require(QFileInfo::exists(QString::fromUtf8(argument)), "array plot snapshot outlives the plotting process");
+        require(QFileInfo(capture + ".viewer").size() > 0, "array plot reaches the viewer");
       };
       QWidget *plotButton = editor.mainToolBar->widgetForAction(editor.plotAction);
       require(plotButton, "Plot has a toolbar button");
@@ -5936,6 +6003,8 @@ public:
 /** Run the named regressions and retain fixtures under the build directory. */
 int main(int argc, char **argv) {
   setbuf(stdout, nullptr);
+  qunsetenv("SDDS_DEVICE");
+  qunsetenv("MPL_DEVICE");
   fprintf(stdout, "sddseditor_tests: initializing Qt offscreen\n");
   QApplication app(argc, argv);
   setlocale(LC_NUMERIC, "C"); // Match main.cc: SDDS numbers always use a decimal point.
@@ -6009,6 +6078,7 @@ int main(int argc, char **argv) {
   SDDSEditorTests::search();
   SDDSEditorTests::panelSearch();
   SDDSEditorTests::plot(artifacts.path());
+  SDDSEditorTests::plotLifecycle(artifacts.path());
   SDDSEditorTests::reviewFixes(artifacts.path());
   SDDSEditorTests::sparseClipboard();
   SDDSEditorTests::parameterGrid(artifacts.path());

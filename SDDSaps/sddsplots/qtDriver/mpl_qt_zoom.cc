@@ -1,6 +1,7 @@
 #include "mpl_qt.h"
 #include <cstring>
 #include <string>
+#include <QProcess>
 
 std::string formatFixedZoomScales(double xminLimit, double xmaxLimit,
                                   double yminLimit, double ymaxLimit,
@@ -18,6 +19,49 @@ std::string formatFixedZoomScales(double xminLimit, double xmaxLimit,
 }
 
 void newzoom() {
+  if (!sddsplotCommandArguments.isEmpty()) {
+    const bool reset = userx0 == 0 && userx1 == 0 && usery0 == 0 && usery1 == 0;
+    if (reset) {
+      userx1 = XMAX;
+      usery1 = YMAX;
+    }
+    QTemporaryFile output;
+    if (!output.open())
+      return;
+    QStringList arguments = sddsplotCommandArguments.mid(1);
+    if (!reset) {
+      // As in the legacy replot path, replace the original axis bounds and zoom.
+      for (auto argument = arguments.begin(); argument != arguments.end();) {
+        if (argument->startsWith("-sc", Qt::CaseInsensitive) ||
+            argument->startsWith("-lim", Qt::CaseInsensitive) ||
+            argument->startsWith("-z", Qt::CaseInsensitive))
+          argument = arguments.erase(argument);
+        else
+          ++argument;
+      }
+      // Requests inherit scales set before the first request.
+      arguments.prepend(QString::fromStdString(formatFixedZoomScales(
+          MTRACKX(userx0), MTRACKX(userx1), MTRACKY(usery0), MTRACKY(usery1),
+          1, 1, 0, 0, false, false)).trimmed());
+    }
+    arguments << "-output=" + output.fileName();
+    QProcess renderer;
+    renderer.start(sddsplotCommandArguments.first(), arguments);
+    if (!renderer.waitForFinished(-1) || renderer.exitStatus() != QProcess::NormalExit || renderer.exitCode() != 0) {
+      fprintf(stderr, "Plot re-render failed: %s\n", renderer.readAllStandardError().constData());
+      return;
+    }
+    if (output.size()) {
+      ifp = fopen(output.fileName().toLocal8Bit().constData(), "rb");
+      if (ifp) {
+        currentPlot = destroyallplotrec();
+        readdata();
+        fclose(ifp);
+        ifp = nullptr;
+      }
+    }
+    return;
+  }
   char *original = NULL;
   char *op = NULL;
   char *tmp = NULL;
@@ -217,7 +261,7 @@ void newzoom() {
 }
 
 bool replotCurrentData() {
-  if (!sddsplotCommandline2 || !cur)
+  if ((!sddsplotCommandline2 && sddsplotCommandArguments.isEmpty()) || !cur)
     return false;
 
   double savedUserx0 = userx0;

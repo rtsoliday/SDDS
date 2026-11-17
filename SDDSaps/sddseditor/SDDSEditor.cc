@@ -35,6 +35,10 @@
 #include <QScrollBar>
 #include <QMenu>
 #include <QProcess>
+#include <QProcessEnvironment>
+#include <QStandardPaths>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QApplication>
 #include <QCloseEvent>
 #include <hdf5.h>
@@ -6162,6 +6166,15 @@ SDDSEditor::SDDSEditor(bool darkPalette, QWidget *parent)
 }
 
 SDDSEditor::~SDDSEditor() {
+  // Stop the plot helpers before destroying the widgets their callbacks use.
+  for (QProcess *process : findChildren<QProcess *>(QString(), Qt::FindDirectChildrenOnly)) {
+    disconnect(process, nullptr, this, nullptr);
+    if (process->state() != QProcess::NotRunning) {
+      process->kill();
+      process->waitForFinished();
+    }
+    delete process;
+  }
   /*
    * ~QWidget hides a window that is still visible (Restart quits without closing
    * it in Qt 5).  Hiding runs the tables' models and the message dock's handler,
@@ -11508,23 +11521,16 @@ void SDDSEditor::plotArray(int column) {
   plotData(column, true);
 }
 
-/**
- * Delete the plot snapshots that no running program names.  Programs cannot be
- * listed this way on Windows or if ps fails, so there a snapshot stays until the editor closes.
- */
-void SDDSEditor::sweepPlotSnapshots() {
-#ifndef _WIN32
-  if (plotSnapshots.isEmpty())
-    return;
-  QProcess programs;
-  programs.start(QStringLiteral("ps"), {QStringLiteral("-A"), QStringLiteral("-ww"), QStringLiteral("-o"), QStringLiteral("args=")});
-  if (!programs.waitForFinished(5000) || programs.exitStatus() != QProcess::NormalExit || programs.exitCode() != 0)
-    return;
-  const QByteArray running = programs.readAllStandardOutput();
-  for (int i = plotSnapshots.size() - 1; i >= 0; --i)
-    if (!running.contains(QFile::encodeName(plotSnapshots[i]->path())))
-      plotSnapshots.removeAt(i);
+/** Prefer deployed helpers beside the editor, then the user's PATH. */
+static QString plotExecutable(const QString &name) {
+  const QDir directory(QCoreApplication::applicationDirPath());
+  QString candidate = directory.filePath(name);
+#ifdef Q_OS_WIN
+  candidate += ".exe";
 #endif
+  if (QFileInfo(candidate).isExecutable())
+    return candidate;
+  return QStandardPaths::findExecutable(name);
 }
 
 /** Launch sddsplot with a portable snapshot of the current unsaved document. */
@@ -11535,15 +11541,11 @@ void SDDSEditor::plotData(int index, bool array) {
     message(tr("Select a numeric array to plot"));
     return;
   }
-  sweepPlotSnapshots();
   auto snapshot = std::make_shared<QTemporaryDir>();
   // Text snapshots can be read by sddsplot regardless of its native longdouble
   // representation or the document's selected binary save format.
   if (!snapshot->isValid() || !writeDatasetFile(snapshot->filePath("plot.sdds"), true))
     return;
-  // sddsplot hands its plot to a detached mpl_qt and exits; mpl_qt runs sddsplot
-  // on this file again to zoom, so the file must outlast the process started here.
-  plotSnapshots.append(snapshot);
 
   const QString name = QString::fromLocal8Bit(array ? dataset.layout.array_definition[index].name :
                                                      dataset.layout.column_definition[index].name);
@@ -11574,20 +11576,83 @@ void SDDSEditor::plotData(int index, bool array) {
     args << QString("-col=%1").arg(literalName);
   }
 
-  QProcess *process = new QProcess(this);
-  connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-          process, [process](int, QProcess::ExitStatus) {
-            process->deleteLater();
-          });
-  connect(process, &QProcess::errorOccurred, this,
-          [this, process, snapshot](QProcess::ProcessError error) {
-            if (error == QProcess::FailedToStart) {
-              plotSnapshots.removeOne(snapshot);
-              QMessageBox::warning(this, tr("SDDS"), tr("Failed to start sddsplot"));
-              process->deleteLater();
-            }
-          });
-  process->start("sddsplot", args);
+  const QString renderer = plotExecutable("sddsplot");
+  if (renderer.isEmpty()) {
+    message(tr("Plot requires sddsplot beside the editor or on PATH"));
+    return;
+  }
+  auto launch = [this, snapshot](const QString &program, const QStringList &arguments,
+                                  const QString &input, const std::function<void()> &success,
+                                  const std::function<void()> &legacyViewerFallback = {},
+                                  const QString &viewerDirectory = {}) {
+    QProcess *process = new QProcess(this);
+    if (!input.isEmpty())
+      process->setStandardInputFile(input);
+    if (!viewerDirectory.isEmpty()) {
+      auto environment = QProcessEnvironment::systemEnvironment();
+      const QString path = environment.value("PATH");
+      environment.insert("PATH", path.isEmpty() ? viewerDirectory : viewerDirectory + QDir::listSeparator() + path);
+      process->setProcessEnvironment(environment);
+    }
+    connect(process, &QProcess::errorOccurred, this, [this, process, snapshot, program](QProcess::ProcessError error) {
+      if (error == QProcess::FailedToStart) {
+        message(tr("Failed to start %1: %2").arg(QFileInfo(program).fileName(), process->errorString()));
+        process->deleteLater();
+      }
+    });
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+            [this, process, snapshot, program, success, legacyViewerFallback](int code, QProcess::ExitStatus status) {
+      const QString diagnostic = QString::fromLocal8Bit(process->readAllStandardError()).trimmed();
+      if (legacyViewerFallback && status == QProcess::NormalExit && code == 1 &&
+          diagnostic.contains(QStringLiteral("Invalid option -commandFile"))) {
+        legacyViewerFallback();
+      } else if (status != QProcess::NormalExit || code != 0) {
+        message(tr("%1 failed (%2): %3").arg(QFileInfo(program).fileName()).arg(code).arg(diagnostic));
+      } else if (success) {
+        success();
+      }
+      process->deleteLater();
+    });
+    process->start(program, arguments);
+  };
+
+  const auto launchDefaultDevice = [this, snapshot, renderer, args, launch](const QString &viewerDirectory = {}) {
+    // A viewer started by sddsplot can outlive its renderer process.
+    launch(renderer, args, {}, [this, snapshot]() { detachedPlotSnapshots.append(snapshot); }, {}, viewerDirectory);
+  };
+  if (qEnvironmentVariableIsSet("SDDS_DEVICE") || qEnvironmentVariableIsSet("MPL_DEVICE")) {
+    launchDefaultDevice();
+    return;
+  }
+  const QString viewer = plotExecutable("mpl_qt");
+  if (viewer.isEmpty()) {
+    launchDefaultDevice();
+    return;
+  }
+
+  // Owning mpl_qt directly keeps the snapshot available for zoom/replot.
+  args << "-device=qt";
+  QJsonArray command;
+  command.append(renderer);
+  for (const QString &arg : args)
+    command.append(arg);
+  QFile commandFile(snapshot->filePath("command.json"));
+  const QByteArray commandBytes = QJsonDocument(command).toJson(QJsonDocument::Compact);
+  if (!commandFile.open(QIODevice::WriteOnly) || commandFile.write(commandBytes) != commandBytes.size()) {
+    message(tr("Failed to write plot command"));
+    return;
+  }
+  commandFile.close();
+  const QString stream = snapshot->filePath("plot.mpl");
+  launch(renderer, args + QStringList{"-output=" + stream}, QString(),
+         [this, snapshot, viewer, stream, launch, launchDefaultDevice]() {
+    if (QFileInfo(stream).size() <= 0) {
+      message(tr("sddsplot produced no plot data"));
+      return;
+    }
+    launch(viewer, {"-commandFile", snapshot->filePath("command.json")}, stream, {},
+           [launchDefaultDevice, viewer]() { launchDefaultDevice(QFileInfo(viewer).absolutePath()); });
+  });
 }
 
 void SDDSEditor::sortColumn(int column, Qt::SortOrder order) {

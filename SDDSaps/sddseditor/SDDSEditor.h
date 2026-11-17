@@ -23,6 +23,7 @@
 #include <QUndoStack>
 #include <QPointer>
 #include <QCloseEvent>
+#include <memory>
 
 class QTemporaryDir;
 class QTimer;
@@ -192,7 +193,6 @@ private:
   /** Serialize current data without changing the document saved state. */
   bool writeDatasetFile(const QString &path, bool forceAscii = false);
   void plotData(int index, bool array);
-  void sweepPlotSnapshots();
   void clearColumnSelection();
   bool writeHDF(const QString &path);
   bool writeCSV(const QString &path);
@@ -338,8 +338,8 @@ private:
   QVector<int> lastArraySelectionColumns;
   QVector<int> pendingColumnHeaderColumns;
   QVector<int> pendingArrayHeaderColumns;
-  /** Copies of the document that open plot windows reread to zoom. */
-  QVector<std::shared_ptr<QTemporaryDir>> plotSnapshots;
+  /** Snapshots used by viewers launched by sddsplot's default device. */
+  QVector<std::shared_ptr<QTemporaryDir>> detachedPlotSnapshots;
 };
 
 #endif // SDDSEDITOR_H
