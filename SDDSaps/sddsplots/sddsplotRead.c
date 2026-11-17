@@ -86,6 +86,54 @@ static long apply_plot_definitions(SDDS_TABLE *table, PLOT_REQUEST *plreq)
   return 1;
 }
 
+/**
+ * @brief Apply requested conversions to the layout or to values on the current page.
+ *
+ * The same conversion requests are applied to each input file. A missing primitive
+ * field or a different source unit is a warning for that file. Enum fields require
+ * explicit conversion before scaling.
+ */
+static void convert_plot_units(SDDS_TABLE *table, PLOT_SPEC *plspec)
+{
+  long i;
+  for (i = 0; i < plspec->conversions; i++) {
+    CONVERSION_DEFINITION *conversion = plspec->conversion[i];
+    int32_t (*match)(SDDS_DATASET *, char ***, int32_t, int32_t, ...);
+    int32_t (*setUnits)(SDDS_DATASET *, char *, char *, char *, double);
+    int32_t (*getType)(SDDS_DATASET *, char *);
+    int32_t count = 1, j;
+    char **matches = NULL;
+
+    if (conversion->is_array) {
+      match = SDDS_MatchArrays;
+      setUnits = SDDS_SetArrayUnitsConversion;
+      getType = SDDS_GetNamedArrayType;
+    } else if (conversion->is_column) {
+      match = SDDS_MatchColumns;
+      setUnits = SDDS_SetColumnUnitsConversion;
+      getType = SDDS_GetNamedColumnType;
+    } else {
+      match = SDDS_MatchParameters;
+      setUnits = SDDS_SetParameterUnitsConversion;
+      getType = SDDS_GetNamedParameterType;
+    }
+    if (has_wildcards(conversion->name))
+      count = match(table, &matches, SDDS_MATCH_STRING, FIND_ANY_TYPE, conversion->name, SDDS_0_PREVIOUS | SDDS_OR);
+    for (j = 0; j < count; j++) {
+      char *name = matches ? matches[j] : conversion->name;
+      if (!setUnits(table, name, conversion->new_units, conversion->old_units, conversion->factor)) {
+        fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
+        if (getType(table, name) == SDDS_ENUM)
+          SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors | SDDS_EXIT_PrintErrors);
+        SDDS_ClearErrors();
+      }
+      if (matches)
+        free(matches[j]);
+    }
+    free(matches);
+  }
+}
+
 void read_sddsplot_data(PLOT_SPEC *plspec)
 {
   long ireq, ifile, idata, iset, points, datapage = 1, pagesRead, i, j;
@@ -107,8 +155,6 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
   REQUESTDATA *requestData;
   long justAddedSlots, presparseOffset, presparseInterval;
   int32_t nx, ny, nx1, ny1;
-  long matches=0;
-  char **matchname=NULL;
   
   plspec->dataset = NULL;
   plspec->datasets = iset = 0;
@@ -144,65 +190,8 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
     if (!(mplFile=CheckForMplFile(filename[file], plspec->plot_request, plspec->plot_requests)) &&
         !SDDS_InitializeInput(&table, filename[file]))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-    for (i=0; i<plspec->conversions; i++) {
-      if (plspec->conversion[i]->is_array) {
-        if (has_wildcards(plspec->conversion[i]->name)) {
-          matches = SDDS_MatchArrays(&table, &matchname, SDDS_MATCH_STRING, FIND_ANY_TYPE, plspec->conversion[i]->name, SDDS_0_PREVIOUS|SDDS_OR);
-          for (j=0 ; j<matches; j++) {
-            if (SDDS_SetArrayUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-              fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-            }
-            free(matchname[j]);
-          }
-          if (matchname) free(matchname);
-          matchname = NULL;
-        } else {
-          if (SDDS_SetArrayUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-            fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-          }
-        }
-      }
-      if (plspec->conversion[i]->is_column) {
-        if (has_wildcards(plspec->conversion[i]->name)) {
-          matches = SDDS_MatchColumns(&table, &matchname, SDDS_MATCH_STRING, FIND_ANY_TYPE, plspec->conversion[i]->name, SDDS_0_PREVIOUS|SDDS_OR);
-          for (j=0 ; j<matches; j++) {
-            if (SDDS_SetColumnUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-              fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-            }
-            free(matchname[j]);
-          }
-          if (matchname) free(matchname);
-          matchname = NULL;
-        } else {
-          if (SDDS_SetColumnUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-            fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-          }
-        }
-      }
-      if (plspec->conversion[i]->is_parameter) {
-        if (has_wildcards(plspec->conversion[i]->name)) {
-          matches = SDDS_MatchParameters(&table, &matchname, SDDS_MATCH_STRING, FIND_ANY_TYPE, plspec->conversion[i]->name, SDDS_0_PREVIOUS|SDDS_OR);
-          for (j=0 ; j<matches; j++) {
-            if (SDDS_SetParameterUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-              fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-            }
-            free(matchname[j]);
-          }
-          if (matchname) free(matchname);
-          matchname = NULL;
-        } else {
-          if (SDDS_SetParameterUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-            fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-          }
-        }
-      }
-    }
+    if (!mplFile)
+      convert_plot_units(&table, plspec);
     presparseInterval = 1;
     presparseOffset = 0;
     for (ireq=1; ireq<plspec->plot_requests; ireq++) {
@@ -250,65 +239,8 @@ void read_sddsplot_data(PLOT_SPEC *plspec)
       fprintf(stderr, "memory: %ld\n", memory_count());
       fprintf(stderr, "page %ld read\n", datapage);
 #endif
-      for (i=0; i<plspec->conversions; i++) {
-        if (plspec->conversion[i]->is_array) {
-          if (has_wildcards(plspec->conversion[i]->name)) {
-            matches = SDDS_MatchArrays(&table, &matchname, SDDS_MATCH_STRING, FIND_ANY_TYPE, plspec->conversion[i]->name, SDDS_0_PREVIOUS|SDDS_OR);
-            for (j=0 ; j<matches; j++) {
-              if (SDDS_SetArrayUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-                fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-                SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-              }
-              free(matchname[j]);
-            }
-            if (matchname) free(matchname);
-            matchname = NULL;
-          } else {
-            if (SDDS_SetArrayUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-              fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-            }
-          }
-        }
-        if (plspec->conversion[i]->is_column) {
-          if (has_wildcards(plspec->conversion[i]->name)) {
-            matches = SDDS_MatchColumns(&table, &matchname, SDDS_MATCH_STRING, FIND_ANY_TYPE, plspec->conversion[i]->name, SDDS_0_PREVIOUS|SDDS_OR);
-            for (j=0 ; j<matches; j++) {
-              if (SDDS_SetColumnUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-                fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-                SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-              }
-              free(matchname[j]);
-            }
-            if (matchname) free(matchname);
-            matchname = NULL;
-          } else {
-            if (SDDS_SetColumnUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-              fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-            }
-          }
-        }
-        if (plspec->conversion[i]->is_parameter) {
-          if (has_wildcards(plspec->conversion[i]->name)) {
-            matches = SDDS_MatchParameters(&table, &matchname, SDDS_MATCH_STRING, FIND_ANY_TYPE, plspec->conversion[i]->name, SDDS_0_PREVIOUS|SDDS_OR);
-            for (j=0 ; j<matches; j++) {
-              if (SDDS_SetParameterUnitsConversion(&table, matchname[j], plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-                fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-                SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-              }
-              free(matchname[j]);
-            }
-            if (matchname) free(matchname);
-            matchname = NULL;
-          } else {
-            if (SDDS_SetParameterUnitsConversion(&table, plspec->conversion[i]->name, plspec->conversion[i]->new_units, plspec->conversion[i]->old_units, plspec->conversion[i]->factor) == 0) {
-              fprintf(stderr, "Problem with units conversion (read_sddsplot_data)\n");
-              SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-            }
-          }
-        }
-      }
+      if (!mplFile)
+        convert_plot_units(&table, plspec);
       for (ireq=1; ireq<plspec->plot_requests; ireq++) {
         plreq = plspec->plot_request+ireq;
         for (ifile=0; ifile<plreq->filenames; ifile++) {

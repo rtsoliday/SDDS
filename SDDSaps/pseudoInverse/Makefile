@@ -21,6 +21,8 @@ ifeq ($(OS), Linux)
     endif
   endif
   ifeq ($(USE_MATLIB),1)
+    # The fallback still links libmdbmth, which uses OpenMP on Linux.
+    LDFLAGS += -fopenmp
     PROD_SYS_LIBS := $(MKL_LIB) $(LAPACK_LIB) $(GSL_LINK_LIBS) $(GD_LIB) $(PNG_LIB) $(LZMA_LIB) $(Z_LIB) $(PROD_SYS_LIBS)
     PROD_LIBS = -lmdbcommon -lmatlib -lfftpack -lSDDS1 -lrpnlib -lmdbmth -lmdblib -lmeschach
   else

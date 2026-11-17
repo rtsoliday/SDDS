@@ -301,8 +301,8 @@ int ConvertRankOneDatasets(hid_t file_id, GLOBAL_VARS *gv) {
     } else if (typeClass == H5T_FLOAT && H5Tget_size(datatype) == 4) {
       sddsTypes[datasets] = SDDS_FLOAT;
       elementSizes[datasets] = sizeof(float);
-    } else if (typeClass == H5T_INTEGER && H5Tget_size(datatype) == 4 && sign != H5T_SGN_NONE) {
-      sddsTypes[datasets] = SDDS_LONG;
+    } else if (typeClass == H5T_INTEGER && H5Tget_size(datatype) == 4) {
+      sddsTypes[datasets] = sign == H5T_SGN_NONE ? SDDS_ULONG : SDDS_LONG;
       elementSizes[datasets] = sizeof(int32_t);
     } else if (typeClass == H5T_INTEGER && H5Tget_size(datatype) == 2) {
       sddsTypes[datasets] = sign == H5T_SGN_NONE ? SDDS_USHORT : SDDS_SHORT;

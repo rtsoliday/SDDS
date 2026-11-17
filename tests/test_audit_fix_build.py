@@ -91,6 +91,14 @@ def test_revision_define_is_not_recorded(tmp_path):
   assert '-DSVN_VERSION=\\"GIT_audit\\"' in command_for(output, "-c sddsquery.c")
 
 
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux matrix backend selection")
+def test_matrix_fallback_links_openmp(tmp_path):
+  values = query("SDDSaps/pseudoInverse", tmp_path, ("PROD_LIBS", "LDFLAGS"),
+                 "MKL_CFLAG=", "MKL_LIB=", "LAPACK_CFLAG=", "LAPACK_LIB=")
+  assert "-lmatlib" in values["PROD_LIBS"].split()
+  assert "-fopenmp" in values["LDFLAGS"].split()
+
+
 def test_install_removes_stale_mpl_qt_3d(tmp_path):
   """The former standalone 3D viewer is removed from both install trees."""
   stale = [tmp_path / "bin" / "mpl_qt_3d", tmp_path / "extensions" / "mpl_qt_3d"]

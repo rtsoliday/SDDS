@@ -444,6 +444,21 @@ def test_unit_conversion_rejects_enums(tmp_path, encoding, kind, name, wildcard)
   assert "enum" in result.stderr.lower() or "numeric" in result.stderr.lower()
 
 
+@pytest.mark.parametrize("second_column", ["z", "y"])
+def test_unit_conversion_allows_heterogeneous_inputs(tmp_path, second_column):
+  first, second, output = (tmp_path / name for name in ("first.sdds", "second.sdds", "plot.json"))
+  for path, name, units in [(first, "y", "m"), (second, second_column, "s")]:
+    path.write_text(f"SDDS1\n&column name=x,type=double &end\n"
+                    f"&column name={name},type=double,units={units} &end\n"
+                    "&data mode=ascii &end\n2\n1 2\n2 3\n")
+  result = subprocess.run([str(BIN_DIR / "sddsplot"), "-device=json", f"-output={output}",
+                           "-convertUnits=column,y,cm,m,100", "-column=x,y", str(first),
+                           f"-column=x,{second_column}", str(second)],
+                          capture_output=True, text=True, timeout=30)
+  assert result.returncode == 0, result.stderr
+  assert [trace["y"] for trace in traces(json.loads(output.read_text()))] == [[200, 300], [2, 3]]
+
+
 @pytest.mark.parametrize("encoding", ENCODINGS)
 @pytest.mark.parametrize("kind", ("column", "parameter"))
 def test_enum_matching_uses_labels(tmp_path, encoding, kind):
