@@ -85,7 +85,7 @@ ifneq ($(MPI_CC),)
 DIRS += pgapack
 endif
 
-.PHONY: all $(SDDSPP_DIR) $(DIRS) clean distclean test
+.PHONY: all $(SDDSPP_DIR) $(DIRS) clean distclean test test-quick test-library
 
 all: $(SDDSPP_DIR) $(DIRS)
 
@@ -219,9 +219,26 @@ distclean: clean
 	rm -rf bin/$(OS)-$(ARCH)
 	rm -rf lib/$(OS)-$(ARCH)
 
-test: all
-	$(MAKE) -C SDDSlib enum-test
-	$(MAKE) -C SDDSlib++ test
+test-library: SDDSlib
+	$(MAKE) -C $(SDDSPP_DIR) test
+
+test: all test-library
 	$(MAKE) -C SDDSaps/sddsplots array-test-driver
 	$(MAKE) -C SDDSaps/pseudoInverse enum-name-test-driver enum-weight-test-driver enum-complex-name-test-driver
 	$(PYTEST)
+
+# Exercise the main CLI data paths while the full target runs all combinations.
+QUICK_TESTS := \
+  tests/test_sddscheck.py::test_sddscheck_ok \
+  tests/test_sddscheck.py::test_sddscheck_bad_header \
+  tests/test_sddsconvert.py::test_sddsconvert \
+  tests/test_sddsconvert.py::test_convert_preserves_input_after_later_page_read_error \
+  tests/test_sdds6_cli_review_regressions.py::test_cast_applies_mapping_to_enum_target \
+  tests/test_sddscombine.py::test_append \
+  tests/test_sddscombine.py::test_merge_parameter \
+  tests/test_sddsxref.py::test_equate \
+  tests/test_sddsprocess.py::test_numeric_definition_evaluation_conversion_and_casting \
+  tests/test_hdf2sdds.py::test_rank_one_unsigned_columns
+
+test-quick: SDDSaps test-library
+	$(PYTEST) $(QUICK_TESTS)

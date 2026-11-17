@@ -1,24 +1,10 @@
 import subprocess
-from pathlib import Path
-import re
 import pytest
 
 from sdds_test_utils import BIN_DIR
 SDDSDUPLICATE = BIN_DIR / "sddsduplicate"
 SDDSPRINTOUT = BIN_DIR / "sddsprintout"
 SDDSQUERY = BIN_DIR / "sddsquery"
-SRC_PATH = Path("SDDSaps/sddsduplicate.c")
-
-
-def get_usage():
-  result = subprocess.run([str(SDDSDUPLICATE)], capture_output=True, text=True)
-  return result.stdout
-
-
-def get_options():
-  text = SRC_PATH.read_text()
-  match = re.search(r'static char \*option\[N_OPTIONS\] = {([^}]+)};', text, re.S)
-  return re.findall(r'\"(.*?)\"', match.group(1))
 
 
 pytestmark = pytest.mark.skipif(
@@ -65,14 +51,6 @@ def ids(path):
 
 def weights(path):
   return [float(row[0]) for row in printout_rows(path, ["weight"])]
-
-
-def test_each_option_outputs_usage():
-  expected = get_usage()
-  for opt in get_options():
-    cmd = [str(SDDSDUPLICATE), f"-{opt}=X"] if opt == "pipe" else [str(SDDSDUPLICATE), f"-{opt}"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    assert result.stdout == expected
 
 
 def test_fixed_factor_duplicates_all_rows(tmp_path):

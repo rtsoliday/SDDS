@@ -210,11 +210,15 @@ process-global even though updates are protected against data races.
 For details, see [SDDSlib/doc/thread-safety.md](SDDSlib/doc/thread-safety.md).
 
 ## Tests
-Simple regression tests are provided for many of the SDDS command line tools. After building the project run:
-```bash
-pytest -q
-```
-The tests require the binaries in `bin/Linux-x86_64` and use `SDDSlib/demo/example.sdds` as sample data.
+
+Use `make test-quick` for the C and C++ library tests and a focused set of CLI
+checks covering validation, conversion, appending and merging, joins, numerical
+processing, and HDF5 round trips. Use `make test` for the full suite, including
+the complete CLI regression matrix. Both targets build their prerequisites.
+
+To rerun the Python suite after building, use `pytest -q` from the repository
+root. Pytest discovers tests under `tests/` and skips generated files in
+`tests/artifacts/`.
 
 
 ## FAQ

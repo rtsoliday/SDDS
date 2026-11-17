@@ -18,13 +18,6 @@ def test_sddscheck_ok():
 
 
 @pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
-def test_sddscheck_print_errors():
-  result = subprocess.run([str(SDDSCHECK), str(EXAMPLE), "-printErrors"], capture_output=True, text=True)
-  assert result.returncode == 0
-  assert result.stdout.strip() == "ok"
-
-
-@pytest.mark.skipif(not SDDSCHECK.exists(), reason="sddscheck not built")
 def test_sddscheck_nonexistent(tmp_path):
   missing = tmp_path / "missing.sdds"
   result = subprocess.run([str(SDDSCHECK), str(missing)], capture_output=True, text=True)

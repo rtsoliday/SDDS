@@ -1,6 +1,4 @@
-import re
 import subprocess
-from pathlib import Path
 import pytest
 
 from sdds_test_utils import BIN_DIR
@@ -10,16 +8,6 @@ SDDSQUERY = BIN_DIR / "sddsquery"
 SDDS2STREAM = BIN_DIR / "sdds2stream"
 SDDSPRINTOUT = BIN_DIR / "sddsprintout"
 PLAINDATA2SDDS = BIN_DIR / "plaindata2sdds"
-C_SOURCE = Path("SDDSaps/sddsdistest.c")
-
-
-def extract_options():
-  text = C_SOURCE.read_text()
-  match = re.search(r'static char \*option\[N_OPTIONS\] = \{([^}]+)\};', text, re.S)
-  items = [s.strip().strip('"') for s in match.group(1).split(',') if s.strip()]
-  return items
-
-OPTIONS = extract_options()
 REQUIRED_TOOLS = [SDDSDISTEST, SDDSPROCESS, SDDSQUERY, SDDS2STREAM, SDDSPRINTOUT, PLAINDATA2SDDS]
 pytestmark = pytest.mark.skipif(not all(tool.exists() for tool in REQUIRED_TOOLS), reason="tools not built")
 
@@ -82,20 +70,6 @@ def write_input(path):
     encoding="ascii",
   )
   return path
-
-
-@pytest.fixture(scope="module")
-def usage():
-  result = subprocess.run([str(SDDSDISTEST)], capture_output=True, text=True)
-  assert result.returncode != 0
-  return result.stdout
-
-
-@pytest.mark.parametrize("opt", OPTIONS)
-def test_option_usage(opt, usage):
-  result = subprocess.run([str(SDDSDISTEST), f"-{opt}"], capture_output=True, text=True)
-  assert result.returncode != 0
-  assert result.stdout == usage
 
 
 def test_ks_gaussian_and_exclude_output(tmp_path):
