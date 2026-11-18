@@ -1,0 +1,96 @@
+\begin{sddsprog}{sddslockin}
+  \item \textbf{description:}
+  \verb|sddslockin| performs lock-in (synchronous) detection of one or more columns of data as a function of a common
+  independent variable, giving the amplitude and phase of each column at a list of specified frequencies.  For a
+  frequency $f$ and a page with $N$ rows of data $(x_i, y_i)$, it computes
+  \begin{equation}
+    S = \frac{1}{N}\sum_i y_i \sin(2\pi f x_i), \qquad C = \frac{1}{N}\sum_i y_i \cos(2\pi f x_i),
+  \end{equation}
+  and reports the amplitude $2\sqrt{S^2+C^2}$ and the phase ${\rm atan2}(C,S)$, so that $y = A\sin(2\pi f x + \phi)$
+  yields $A$ and $\phi$.  The frequency is in units of the inverse of the units of the independent column; for
+  example, an independent column {\tt Pass} gives frequencies in cycles per pass (tunes).
+
+  Each lock-in is a single term of a Fourier transform evaluated at exactly the requested frequency.  This makes the
+  program the natural choice when one or a few frequencies are known in advance, for example the drive frequency of a
+  frequency-response measurement: there is no need to select an FFT bin, the frequency need not fall on the FFT
+  frequency grid, and the independent variable need not be uniformly spaced.  The estimate is exact when the data span
+  an integer number of periods of the frequency with uniform sampling; otherwise it has leakage of order 1/(number of
+  periods), and a nonzero mean of the data also leaks into the result unless \verb|-removeMean| is given.  The cost is
+  proportional to the number of rows times the number of frequencies, so for a full spectrum \progref{sddsfft} is much
+  faster; \verb|-sequence| and \verb|-equispaced| are best used to examine a limited frequency range in detail.
+
+  Several dependent columns may be analyzed at once.  The sine and cosine are computed once per row and shared by all
+  columns, so additional columns add little to the run time.
+  \item \textbf{examples:}
+  Find the amplitude and phase of the energy oscillation at the drive tune of a simulated frequency-response
+  measurement, ignoring the first 4000 turns of transient:
+\begin{verbatim}
+sddsprocess run.w1 -pipe=out -filter=column,Pass,4000,1e12 \
+  | sddslockin -pipe=in run.lockin -column=Pass,Cdelta \
+      -atValues=9.342e-4 -removeMean
+\end{verbatim}
+  Analyze all centroid columns at two frequencies, using 8 threads:
+\begin{verbatim}
+sddslockin run.w1 run.lockin -column=Pass,C* \
+  -atValues=9.342e-4,1.868e-3 -threads=8
+\end{verbatim}
+  Scan 1001 frequencies from 0 to 0.02 around a known line, at frequencies listed in another file, or from 0 to
+  the Nyquist frequency in steps of $10^{-4}$:
+\begin{verbatim}
+sddslockin run.w1 run.scan -column=Pass,Cx,Cy -sequence=1001,0,0.02
+sddslockin run.w1 run.scan -column=Pass,Cx -fileValues=tunes.sdds,nu
+sddslockin run.w1 run.scan -column=Pass,Cx -equispaced=1e-4 -removeMean
+\end{verbatim}
+  \item \textbf{synopsis:}
+\begin{verbatim}
+sddslockin [-pipe[=input][,output]] [inputFile] [outputFile]
+  -column=independentVariable,dependentVariable[,dependentVariable...]
+  { -atValues=listOfFrequencies |
+    -fileValues=filename,columnName |
+    -sequence=points[,start,end] |
+    -equispaced=spacing[,start,end] }
+  [-removeMean] [-threads=number]
+\end{verbatim}
+  \item \textbf{files:}
+  \emph{inputFile} is an SDDS file containing the independent column and the dependent columns.  If it contains
+  multiple pages, each is analyzed separately and gives one page of \emph{outputFile}.
+
+  \emph{outputFile} has one row per frequency, in a column {\tt Frequency}.  For each dependent column
+  \emph{name}, it has columns \emph{name}{\tt Amplitude} (in the units of \emph{name}) and \emph{name}{\tt Phase}
+  (in radians), and a parameter \emph{name}{\tt MeanRemoved} giving the mean subtracted with \verb|-removeMean| (zero
+  otherwise).  The parameters {\tt LockinIndependentVariable} and {\tt LockinRows} give the name of the independent
+  column and the number of rows analyzed.  All parameters of \emph{inputFile} are transferred to \emph{outputFile}.
+  \item \textbf{switches:}
+    \begin{itemize}
+      \item \verb|-pipe[=input][,output]| --- The standard SDDS Toolkit pipe option.
+      \item {\tt -column={\em independentVariable},{\em dependentVariable}[,{\em dependentVariable}...]} --- Specifies
+      the independent column, followed by one or more dependent columns.  The dependent columns may be given as names,
+      as wildcard patterns, or as any combination of the two.  Every numeric column that matches any entry is analyzed
+      once, in the order given; a wildcard never selects the independent column or a non-numeric column.  A
+      dependent column named explicitly must exist, but a wildcard pattern may match nothing provided that some
+      column is selected.
+      \item {\tt -atValues={\em listOfFrequencies}} --- Specifies a comma-separated list of frequencies.
+      \item {\tt -fileValues={\em filename},{\em columnName}} --- Specifies that the frequencies are the values in
+      column {\em columnName} of the first page of SDDS file {\em filename}.
+      \item {\tt -sequence={\em points}[,{\em start},{\em end}]} --- Specifies {\em points} equally spaced
+      frequencies, at least two.  If {\em start} and {\em end} are given, they specify the range, with {\em end}
+      greater than {\em start}.  If they are not given, the range is from 0 to the Nyquist frequency of each page,
+      $1/(2\Delta x)$, where $\Delta x$ is the mean spacing of the independent column; the frequencies may then differ
+      from page to page.
+      \item {\tt -equispaced={\em spacing}[,{\em start},{\em end}]} --- Specifies frequencies separated by
+      {\em spacing}.  The range is determined as for \verb|-sequence|.
+      \item \verb|-removeMean| --- Subtracts the mean of each dependent column, page by page, before detection, so
+      that it cannot leak into the result.  This matters when the data do not span an integer number of periods.
+      \item {\tt -threads={\em number}} --- Specifies the number of threads to use (default 1).  When there are at
+      least as many frequencies as threads, the frequencies are divided among the threads; otherwise the sums over rows
+      are.  With a single frequency the run time is usually dominated by reading the file, so threads help most with
+      many frequencies.
+    \end{itemize}
+  \item \textbf{see also:}
+    \begin{itemize}
+      \item \progref{sddsfft}
+      \item \progref{sddsnaff}
+      \item \progref{sddssinefit}
+    \end{itemize}
+  \item \textbf{author:} Claude Code, M. Borland, ANL/APS.
+\end{sddsprog}

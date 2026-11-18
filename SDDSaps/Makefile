@@ -61,6 +61,7 @@ PROD = agilentArb2sdds \
         sddsfindin2dgrid \
         sddsgenericfit \
         sddsgfit \
+        sddslockin \
         sddslorentzianfit \
         sddshist \
         sddsimageprofiles \
@@ -140,6 +141,7 @@ sddsgenericfit_SRC = sddsgenericfit.c SDDSaps.c
 sddsinteg_SRC = sddsinteg.c SDDSutils.c
 sddsinterp_SRC = sddsinterp.c SDDSutils.c
 sddskde_SRC = sddskde.c SDDSutils.c
+sddslockin_SRC = sddslockin.c SDDSutils.c
 sddskde2d_SRC = sddskde2d.c SDDSutils.c
 sddsmultihist_SRC = sddsmultihist.c SDDSutils.c
 sddsmxref_SRC = sddsmxref.c SDDSaps.c
@@ -194,7 +196,7 @@ ifeq ($(OS), Windows)
   PROD_LIBS = csa.lib nnetwork.lib mdbcommon.lib matlib.lib fftpack.lib SDDS1.lib rpnlib.lib $(GSL_LINK_LIBS) mdbmth.lib mdblib.lib lzma.lib z.lib xls.lib
   TIFF_LIBS = tiff.lib 
 endif
-CUSTOM_LINK_PRODUCTS += sdds2tiff tiff2sdds sdds2mpl sddsanalyticsignal sddscorrelate sddsderiv sddsdistest sddsfdfilter sddsfft sdds2dfft sddsgenericfit sddsinteg sddsinterp sddskde sddskde2d sddsmultihist sddsmxref sddsnaff sddsoutlier sddsprocess sddsrowstats sddsrunstats sddsshiftcor sddssplinefit sddsspotanalysis sddsxref sddsselect
+CUSTOM_LINK_PRODUCTS += sdds2tiff tiff2sdds sdds2mpl sddsanalyticsignal sddscorrelate sddsderiv sddsdistest sddsfdfilter sddsfft sdds2dfft sddsgenericfit sddsinteg sddsinterp sddskde sddskde2d sddslockin sddsmultihist sddsmxref sddsnaff sddsoutlier sddsprocess sddsrowstats sddsrunstats sddsshiftcor sddssplinefit sddsspotanalysis sddsxref sddsselect
 
 include ../Makefile.build
 
@@ -247,6 +249,9 @@ $(OBJ_DIR)/sddskde$(EXEEXT): $(sddskde_OBJS) $(PROD_DEPS)
 
 $(OBJ_DIR)/sddskde2d$(EXEEXT): $(sddskde2d_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddskde2d_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
+
+$(OBJ_DIR)/sddslockin$(EXEEXT): $(sddslockin_OBJS) $(PROD_DEPS)
+	$(LINKEXE) $(OUTPUTEXE) $(sddslockin_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)
 
 $(OBJ_DIR)/sddsmultihist$(EXEEXT): $(sddsmultihist_OBJS) $(PROD_DEPS)
 	$(LINKEXE) $(OUTPUTEXE) $(sddsmultihist_OBJS) $(LDFLAGS) $(LIB_LINK_DIRS) $(PROD_LIBS) $(PROD_SYS_LIBS)

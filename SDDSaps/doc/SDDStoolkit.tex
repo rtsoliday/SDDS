@@ -752,6 +752,9 @@ applying a filter that is specified as a table of attenuation and phase as a fun
 \item \progref{sddsfft} --- Does Fast Fourier Transforms of column data.  Example application: finding signficant
 frequency components in time-varying data, or finding the integer tune of an accelerator from a difference orbit.
 
+\item \progref{sddslockin} --- Does lock-in detection of column data, giving amplitude and phase at specified
+frequencies.  Example application: finding the response at the drive frequency of a frequency-response measurement.
+
 \item \progref{sddsnaff} --- Does Numerical Analysis of Fundamental Frequencies, a more accurate
 method of determining principle frequencies in signals than the FFT.
 
@@ -1238,6 +1241,7 @@ only the x values, since these are more interesting:
 \input{sddskde.tex}
 \input{sddskde2d.tex}
 \input{sddslocaldensity.tex}
+\input{sddslockin.tex}
 \input{sddslorentzianfit.tex}
 \input{sddsmakedataset.tex}
 \input{sddsmatrix2column.tex}
