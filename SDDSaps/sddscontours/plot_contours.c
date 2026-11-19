@@ -33,7 +33,8 @@ void go_plot_contours(
     long contour_label_offset, long layout[2], long ix, long iy,
     char *shapes, int *pen, long flags, long pause_interval,
     SHAPE_DATA *shape, long nshapes, unsigned long long tsetFlags, double xlabelScale, double ylabelScale,
-    short noSetup, long thickness, long fill_screen, double *user_pspace)
+    short noSetup, long thickness, long contour_linetype, long contour_thickness,
+    char *contour_label_format, long fill_screen, double *user_pspace)
 {
     double map[4], average, spread;
     double pmin, pmax, qmin, qmax;
@@ -179,13 +180,18 @@ void go_plot_contours(
       }
     }
 
-    draw_contours(data, xmin, xmax, ymin, ymax, nx, ny, contour_level, n_contours, thickness, flags);
+    if (contour_thickness<=0)
+        contour_thickness = thickness;
+    /* set_linetype() resets thickness to 1 in some drivers, so order matters here */
+    set_linetype(contour_linetype);
+    set_linethickness(contour_thickness);
+    draw_contours(data, xmin, xmax, ymin, ymax, nx, ny, contour_level, n_contours, contour_thickness, flags);
     if (contour_label_interval!=0) {
-        set_linetype(pen[2]);
-        set_linethickness(thickness);
+        set_linetype(contour_linetype);
+        set_linethickness(contour_thickness);
         label_contours(data, nx, ny, contour_level, n_contours,
             contour_label_interval, contour_label_offset,
-            xmin, (double)dx, ymin, (double)dy);
+            xmin, (double)dx, ymin, (double)dy, contour_label_format);
         }
 
     if (nshapes)
@@ -210,7 +216,8 @@ void label_contours(
     double xmin,
     double dx,
     double ymin,
-    double dy
+    double dy,
+    char *label_format
     )
 {
     register long i;
@@ -237,7 +244,9 @@ void label_contours(
         }
 
     value = fabs((max_contour-min_contour)/n_contours);
-    if (value>1e3 || value<1e-2) 
+    if (label_format)
+        snprintf(format, sizeof(format), "%s", label_format);
+    else if (value>1e3 || value<1e-2)
         strcpy(format, "$d%.2le$i");
     else if (value>1e2)
         strcpy(format, "%.0lf");
@@ -247,7 +256,7 @@ void label_contours(
         strcpy(format, "%.2lf");
 
     for (i=label_offset; i<n_contours; i+=label_interval) {
-        sprintf(s, format, value=contour_level[i]);
+        snprintf(s, sizeof(s), format, value=contour_level[i]);
         label_contour(data, nx, ny, (double)value, s, xmin, dx, ymin, dy,
                 2*(double)((max_contour-min_contour)/n_contours), label_mode);
         }
