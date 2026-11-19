@@ -113,8 +113,11 @@ char *USAGE = "sddscontour [-pipe] [<SDDSfilename>]\n\
  [-rpndefinitionsfiles=<filename>[,...]]\n\
  [-rpnexpressions=<setup-expression>[,...][,algebraic]]\n\
  [-rpntransform=<expression>[,algebraic]] [-fixedrange] [-showGaps]\n\
- [[-shade=<number>[,<min>,<max>,gray]] | [-contours=<number>[,<min>,<max>]]] \n\
- [-levelList=<listOfLevels>] [-limitLevels={minimum=<value>,}{maximum=<value>}]\n\
+ [-shade=<number>[,<min>,<max>][,gray]]\n\
+ [-contours=<number>[,<min>,<max>][,linetype=<integer>][,thickness=<integer>][,label][,format=<string>]]\n\
+ [-levelList=<listOfLevels>[,linetype=<integer>][,thickness=<integer>][,label][,format=<string>]]\n\
+ -shade may be combined with -contours or -levelList to overlay contour lines on the color map.\n\
+ [-limitLevels={minimum=<value>,}{maximum=<value>}]\n\
  [-mapShade=<hue0>,<hue1>] \n\
  [-scales=<xl>,<xh>,<yl>,<yh>] [-pspace=<plo>,<phi>,<qlo>,<qhi>] [-v1v2Preferred] \n\
  [-labelcontours=interval[,offset]] [-logscale[=<floor>]]\n\
@@ -143,7 +146,7 @@ char *USAGE = "sddscontour [-pipe] [<SDDSfilename>]\n\
             {y0value=<value> | q0value=<value> | y0parameter=<name> | q0parameter=<name>},\n\
             {y1value=<value> | q1value=<value> | y1parameter=<name> | q1parameter=<name>}\n\
             [,linetype=<integer>][,thickness=<integer>][,clip]\n\
-Program by Michael Borland. (This is version 5, December 2019)\n";
+Program by Michael Borland. (This is version 6, November 2026)\n";
 
 static char *drawlineUsage = "-drawLine=\n\
 {x0value=<value> | p0value=<value> | x0parameter=<name> | p0parameter=<name>}, \n\
@@ -192,6 +195,77 @@ typedef struct
   long is_parameter;
 } CONVERSION_DEFINITION;
 
+/* Describes the contour lines, which are independent of the shading
+   so that -shade can be overlaid with -contours or -levelList.
+*/
+typedef struct
+{
+  long levels;              /* from -contours; 0 means use the default count */
+  double min, max;          /* range over which to distribute them */
+  short levelsGiven, rangeGiven;
+  long listCount;           /* from -levelList */
+  double *list;
+  long linetype;
+  long thickness;           /* 0 means follow the global -thickness */
+  short label;              /* label every line with its level */
+  char *format;             /* printf format for those labels; NULL means choose one */
+} CONTOUR_SPEC;
+
+/* Accepts a printf format with a single conversion suitable for a double, so
+   that a user-supplied format can't be used to misinterpret the argument.
+*/
+static long validLabelFormat(char *format) {
+  long conversions = 0;
+  while (*format) {
+    if (*format++ != '%')
+      continue;
+    if (*format == '%') {
+      format++;
+      continue;
+      }
+    while (*format && !strchr("efgEG", *format)) {
+      if (!strchr("+- #0123456789.lL", *format))
+        return 0;
+      format++;
+      }
+    if (!*format++)
+      return 0;
+    conversions++;
+    }
+  return conversions == 1;
+}
+
+/* Returns 1 if the item was consumed as a line-appearance qualifier,
+   0 if it is not a qualifier, -1 if it is a malformed one.
+*/
+static long contourLineQualifier(char *item, CONTOUR_SPEC *spec) {
+  char *equals;
+  long length, value;
+  if (!(equals = strchr(item, '='))) {
+    if (!(length = strlen(item)) || strncmp(item, "label", length) != 0)
+      return 0;
+    spec->label = 1;
+    return 1;
+    }
+  if (!(length = equals - item))
+    return 0;
+  if (strncmp(item, "format", length) == 0) {
+    if (!validLabelFormat(equals + 1))
+      return -1;
+    spec->format = equals + 1;
+    return 1;
+    }
+  if (sscanf(equals + 1, "%ld", &value) != 1)
+    return -1;
+  if (strncmp(item, "linetype", length) == 0 && value >= 0)
+    spec->linetype = value;
+  else if (strncmp(item, "thickness", length) == 0 && value >= 1)
+    spec->thickness = value;
+  else
+    return -1;
+  return 1;
+}
+
 double *fill_levels(double **level, double min, double max, long levels);
 void getDimensionParameters(SDDS_TABLE *SDDS_table, char *name_of_name, char **variable,
                             char **variableUnits,
@@ -221,7 +295,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
                   double dx, double dy, double *xintervals, double *yintervals,
                   char *device, long *frameEnded, char *title, char *xlabel,
                   char *ylabel, char *topline, double min_level, double max_level, double levelLimit[2],
-                  long levels, long levelLists, double *levelList, double hue0, double hue1, long *layout,
+                  long shade_levels, CONTOUR_SPEC *contourSpec, double hue0, double hue1, long *layout,
                   long *ixl, long *iyl, long thickness, unsigned long long tsetFlags,
                   SHAPE_DATA *shape, long shapes, int *pen, long *flags,
                   long pause_interval, long columnmatches, char **columnname, long columns,
@@ -352,7 +426,8 @@ void sddscontour_main(char *input_line)
   double dx, dy, xmin, xmax, ymin, ymax, yaxisScale = 0, xaxisScale = 0, xmin0, xmax0, ymin0, ymax0;
   char *ymaxPar, *yminPar, *xmaxPar, *xminPar, *maxPar, *minPar;
   double *xintervals, *yintervals;
-  long levels, label_contour_interval, contour_label_offset;
+  long shade_levels, label_contour_interval, contour_label_offset;
+  CONTOUR_SPEC contourSpec;
   long do_shade, interp_flags = 0;
   double max_level = 0, min_level = 0, hue0, hue1;
   char *device, *output;
@@ -397,8 +472,6 @@ void sddscontour_main(char *input_line)
   char **shadelist;
   long shade_items, drawlines = 0;
   DRAW_LINE_SPEC *drawLineSpec = NULL;
-  long levelLists = 0;
-  double *levelList = NULL;
   short xlog = 0;
   FONT_SIZE fontsize;
   CONVERSION_DEFINITION **ucd=NULL;
@@ -406,6 +479,7 @@ void sddscontour_main(char *input_line)
   short show_gaps = 0;
 
   memset(&fontsize, 0, sizeof(fontsize));
+  memset(&contourSpec, 0, sizeof(contourSpec));
   fontsize.autosize = 1;
   xlabelScale = ylabelScale = 1.0;
   rpn_definitions_file = rpn_expression = NULL;
@@ -420,7 +494,7 @@ void sddscontour_main(char *input_line)
   data_value = NULL;
   shape = NULL;
   x_lowpass = y_lowpass = nx_interp = ny_interp = 0;
-  levels = shapes = label_contour_interval = contour_label_offset = do_shade = 0;
+  shade_levels = shapes = label_contour_interval = contour_label_offset = do_shade = 0;
   flags = verbosity = swap_xy = swap_array = fixed_range = 0;
   columnmatch = NULL;
   indepcolumn = NULL;
@@ -701,25 +775,39 @@ void sddscontour_main(char *input_line)
           return (1);
         }
         break;
-      case SET_CONTOURS:
-        if (s_arg[i_arg].n_items == 2) {
-          if (sscanf(s_arg[i_arg].list[1], "%ld", &levels) != 1) {
-            fprintf(stderr, "Error (sddscontour): incorrect -contours syntax (invalid number of levels)\n");
+      case SET_CONTOURS: {
+        char **contourList;
+        long contour_items = 0, qualifier;
+        contourList = tmalloc(sizeof(*contourList) * s_arg[i_arg].n_items);
+        for (i = 1; i < s_arg[i_arg].n_items; i++) {
+          if ((qualifier = contourLineQualifier(s_arg[i_arg].list[i], &contourSpec)) < 0) {
+            fprintf(stderr, "Error (sddscontour): invalid -contours qualifier: %s\n", s_arg[i_arg].list[i]);
             return (1);
           }
-        } else if (s_arg[i_arg].n_items == 4) {
-          if (sscanf(s_arg[i_arg].list[1], "%ld", &levels) != 1 ||
-              sscanf(s_arg[i_arg].list[2], "%lf", &min_level) != 1 ||
-              sscanf(s_arg[i_arg].list[3], "%lf", &max_level) != 1 ||
-              min_level >= max_level) {
+          if (!qualifier)
+            contourList[contour_items++] = s_arg[i_arg].list[i];
+        }
+        contourSpec.levelsGiven = 1;
+        if (contour_items >= 1 &&
+            (sscanf(contourList[0], "%ld", &contourSpec.levels) != 1 || contourSpec.levels < 0)) {
+          fprintf(stderr, "Error (sddscontour): incorrect -contours syntax (invalid number of levels)\n");
+          return (1);
+        }
+        if (contour_items == 3) {
+          if (sscanf(contourList[1], "%lf", &contourSpec.min) != 1 ||
+              sscanf(contourList[2], "%lf", &contourSpec.max) != 1 ||
+              contourSpec.min >= contourSpec.max) {
             fprintf(stderr, "Error (sddscontour): incorrect -contours syntax\n");
             return (1);
           }
-        } else {
+          contourSpec.rangeGiven = 1;
+        } else if (contour_items > 1) {
           fprintf(stderr, "Error (sddscontour): incorrect -contours syntax (wrong number of items)\n");
           return (1);
         }
+        free(contourList);
         break;
+      }
       case SET_SHAPES:
       case SET_SYMBOLS:
         if (s_arg[i_arg].n_items < 4) {
@@ -909,7 +997,7 @@ void sddscontour_main(char *input_line)
         break;
       case SET_SHADE:
         do_shade = 1;
-        levels = 100;
+        shade_levels = 100;
         min_level = max_level = 0;
         shadelist = tmalloc(sizeof(*shadelist) * s_arg[i_arg].n_items);
         shade_items = 0;
@@ -927,8 +1015,8 @@ void sddscontour_main(char *input_line)
           return (1);
         }
         if (shade_items >= 2) {
-          if (sscanf(shadelist[1], "%ld", &levels) != 1 ||
-              levels == 0) {
+          if (sscanf(shadelist[1], "%ld", &shade_levels) != 1 ||
+              shade_levels == 0) {
             fprintf(stderr, "Error (sddscontour): incorrect -shade syntax (invalid number of levels)\n");
             return (1);
           }
@@ -941,8 +1029,8 @@ void sddscontour_main(char *input_line)
             return (1);
           }
         }
-        if (levels > 100) {
-          levels = 100;
+        if (shade_levels > 100) {
+          shade_levels = 100;
         }
         free(shadelist);
         break;
@@ -1256,24 +1344,33 @@ void sddscontour_main(char *input_line)
           return (1);
         }
         break;
-      case SET_LEVELLIST:
-        if (s_arg[i_arg].n_items < 2) {
-          fprintf(stderr, "Error (%s): invalid -levelList syntax\n", argv[0]);
-          return (1);
-        }
-        if (levelLists != 0) {
+      case SET_LEVELLIST: {
+        long listCount = 0, qualifier;
+        if (contourSpec.listCount != 0) {
           fprintf(stderr, "Error (%s): invalid syntax: specify -levelList once only\n", argv[0]);
           return (1);
         }
-        levelLists = s_arg[i_arg].n_items - 1;
-        levelList = trealloc(levelList, sizeof(*levelList) * (levelLists));
-        for (i = 0; i < levelLists; i++) {
-          if (sscanf(s_arg[i_arg].list[i + 1], "%lf", &levelList[i]) != 1) {
+        contourSpec.list = trealloc(contourSpec.list, sizeof(*contourSpec.list) * (s_arg[i_arg].n_items));
+        for (i = 1; i < s_arg[i_arg].n_items; i++) {
+          if ((qualifier = contourLineQualifier(s_arg[i_arg].list[i], &contourSpec)) < 0) {
+            fprintf(stderr, "Error (%s): invalid -levelList qualifier: %s\n", argv[0], s_arg[i_arg].list[i]);
+            return (1);
+          }
+          if (qualifier)
+            continue;
+          if (sscanf(s_arg[i_arg].list[i], "%lf", &contourSpec.list[listCount]) != 1) {
             fprintf(stderr, "Error (%s): invalid -levelList syntax or value\n", argv[0]);
             return (1);
           }
+          listCount++;
         }
+        if (!listCount) {
+          fprintf(stderr, "Error (%s): invalid -levelList syntax (no levels given)\n", argv[0]);
+          return (1);
+        }
+        contourSpec.listCount = listCount;
         break;
+      }
       case SET_FIXFONTSIZE:
         fontsize.autosize = 0;
         fontsize.all = -1;
@@ -1765,7 +1862,7 @@ void sddscontour_main(char *input_line)
                  dx, dy, xintervals, yintervals,
                  device, &frameEnded, title, xlabel,
                  ylabel, topline, min_level, max_level, levelLimit,
-                 levels, levelLists, levelList, hue0, hue1, layout,
+                 shade_levels, &contourSpec, hue0, hue1, layout,
                  &ixl, &iyl, thickness, tsetFlags,
                  shape, shapes, pen, &flags,
                  pause_interval, columnmatches, columnname, columns,
@@ -2882,7 +2979,7 @@ void sddscontour_main(char *input_line)
                         dx, dy, xintervals, yintervals,
                         device, &frameEnded, title, xlabel,
                         ylabel, topline, min_level, max_level, levelLimit,
-                        levels, levelLists, levelList, hue0, hue1, layout,
+                        shade_levels, &contourSpec, hue0, hue1, layout,
                         &ixl, &iyl, thickness, tsetFlags,
                         shape, shapes, pen, &flags,
                         pause_interval, columnmatches, columnname, columns,
@@ -2954,7 +3051,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
                   char *device, long *frameEnded, char *title, char *xlabel,
                   char *ylabel, char *topline, double min_level, double max_level,
                   double levelLimit[2],
-                  long levels, long levelLists, double *levelList, double hue0, double hue1, long *layout,
+                  long shade_levels, CONTOUR_SPEC *contourSpec, double hue0, double hue1, long *layout,
                   long *ixl, long *iyl, long thickness, unsigned long long tsetFlags,
                   SHAPE_DATA *shape, long shapes, int *pen, long *flags,
                   long pause_interval, long columnmatches, char **columnname, long columns,
@@ -3022,9 +3119,16 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
     }
   }
   if (threeD) {
+    /* 3D surfaces have no contour lines, so -contours just colors the surface */
+    double surfaceMin = min_level, surfaceMax = max_level;
+    if (surfaceMin == surfaceMax && contourSpec->rangeGiven) {
+      surfaceMin = contourSpec->min;
+      surfaceMax = contourSpec->max;
+    }
     plot3DSurface(data_value, nx, ny, xmin, xmax, ymin, ymax, xlabel,
-                  ylabel, title, topline, *flags, levels,
-                  min_level, max_level, hue0, hue1, do_shade == 2, xlog,
+                  ylabel, title, topline, *flags,
+                  shade_levels ? shade_levels : contourSpec->levels,
+                  surfaceMin, surfaceMax, hue0, hue1, do_shade == 2, xlog,
                   tsetFlags);
     if (xintervals)
       free(xintervals);
@@ -3044,7 +3148,7 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
       gray = 1;
     go_shade_grid(device, title, xlabel, ylabel, topline,
                   data_value, xmin, xmax, ymin, ymax, xintervals, yintervals, nx, ny,
-                  min_level, max_level, levels ? levels : 100,
+                  min_level, max_level, shade_levels ? shade_levels : 100,
                   hue0, hue1, layout, *ixl, *iyl,
                   NULL, pen, *flags, pause_interval,
                   thickness, tsetFlags, colorName, colorUnits, xlabelScale, ylabelScale, gray,
@@ -3052,24 +3156,38 @@ long plot_contour(double **data_value, long nx, long ny, long verbosity,
     *flags |= DEVICE_DEFINED;
     PlotShapesData(shape, shapes, xmin, xmax, ymin, ymax);
   }
-  if (!do_shade || contour_label_interval) {
-    if (levelLists) {
-      levels = levelLists;
-      level = levelList;
+  if (!do_shade || contour_label_interval || contourSpec->label || contourSpec->levelsGiven || contourSpec->listCount) {
+    long n_contours;
+    if (contourSpec->label && !contour_label_interval)
+      contour_label_interval = 1;
+    if (contourSpec->listCount) {
+      n_contours = contourSpec->listCount;
+      level = contourSpec->list;
     } else {
-      if (!(level = fill_levels(&level,
-                                min_level,
-                                max_level,
-                                (levels ? levels : 10) + (do_shade ? 1 : 0))))
+      double lowest = min_level, highest = max_level;
+      n_contours = contourSpec->levels ? contourSpec->levels : 10;
+      if (contourSpec->rangeGiven) {
+        lowest = contourSpec->min;
+        highest = contourSpec->max;
+      } else if (do_shade) {
+        /* Over a color map, lines on the data extremes degenerate into the
+           plot border, so distribute them over the interior instead. */
+        double delta = (highest - lowest) / (n_contours + 1);
+        lowest += delta;
+        highest -= delta;
+      }
+      if (!(level = fill_levels(&level, lowest, highest, n_contours)))
         return 0;
     }
     go_plot_contours(device, title, xlabel, ylabel, topline,
                      data_value, xmin, xmax, ymin, ymax,
-                     dx, dy, nx, ny, level, levels ? levels : 10,
+                     dx, dy, nx, ny, level, n_contours,
                      contour_label_interval, contour_label_offset,
                      layout, *ixl, *iyl, NULL, pen,
                      *flags, pause_interval,
-                     shape, shapes, tsetFlags, xlabelScale, ylabelScale, do_shade, thickness, fill_screen, user_pspace);
+                     shape, shapes, tsetFlags, xlabelScale, ylabelScale, do_shade, thickness,
+                     contourSpec->linetype, contourSpec->thickness, contourSpec->format,
+                     fill_screen, user_pspace);
     *flags |= DEVICE_DEFINED;
   }
   if (yStringLabels && yStringCount > 0 && !(*flags & NO_SCALES)) {
