@@ -89,7 +89,7 @@ void label_contour(
 void label_contours(
     double **data, long nx, long ny, double *contour_level, long n_contours,
     long label_interval, long label_offset, double xmin, double dx, double ymin,
-    double dy);
+    double dy, char *label_format);
 void plot_shapes(char *shapes, long do_swap_xy, int linetype);
 typedef struct {
   char *filename;
@@ -120,7 +120,8 @@ void go_plot_contours(
     long contour_label_offset, long layout[2], long ix, long iy,
     char *shapes, int *pen, long flags, long pause_interval,
     SHAPE_DATA *shape, long nshapes, unsigned long long tsetFlags, double xlabelScale, double ylabelScale, short no_setup,
-    long thickness, long fill_screen, double *user_pspace);
+    long thickness, long contour_linetype, long contour_thickness, char *contour_label_format,
+    long fill_screen, double *user_pspace);
 void label_contours(
     double **data,
     long nx,
@@ -132,7 +133,8 @@ void label_contours(
     double xmin,
     double dx,
     double ymin,
-    double dy
+    double dy,
+    char *label_format
     );
 void label_contour(
     double **data,

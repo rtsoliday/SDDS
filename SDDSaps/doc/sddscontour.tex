@@ -137,24 +137,41 @@ Use \verb|-v1v2preferred| to force the first method to be used when both paramet
         \end{itemize}
     \item Shade and contour control:
 \begin{flushleft}{\tt
-\{-shade={\em number}[,{\em min},{\em max},gray] | -contours={\em number}[,{\em min},{\em max}]\}
+[-shade={\em number}[,{\em min},{\em max}][,gray]]
+[-contours={\em number}[,{\em min},{\em max}][,linetype={\em integer}][,thickness={\em integer}][,label][,format={\em string}]]
 [-labelcontours={\em interval}[,{\em offset}]]
-[-levellist={\em listOfLevels}] [-limitlevels={minimum=<value>,}{maximum=<value>}]
+[-levellist={\em listOfLevels}[,linetype={\em integer}][,thickness={\em integer}][,label][,format={\em string}]]
+[-limitlevels={minimum=<value>,}{maximum=<value>}]
 [-mapshade={\em hue0},{\em hue1}]
 }\end{flushleft}
         \begin{itemize}
         \item \verb|shade| --- Specifies that a color (or grey-scale) map should be produced, with the
         indicated {\em number} of shades mapped onto the range from {\em min} to {\em max}.  If {\em min}
         and {\em max} are not given, they are taken to be equal to the minimum and maximum data values.
+        If {\em number} is not given, 100 shades are used.
         \item \verb|contours| --- Specifies that contour lines should be drawn, with the
         indicated {\em number} of lines for the range from {\em min} to {\em max}.  If {\em min}
         and {\em max} are not given, they are taken to be equal to the minimum and maximum data values.
+        If {\em number} is not given, 10 lines are used.  \verb|linetype| and \verb|thickness| set the
+        appearance of the lines; by default the lines are black and use the global \verb|-thickness| value.
+        \verb|label| places the level value next to each line, equivalent to \verb|-labelcontours=1|.
+        \verb|format| gives the {\tt printf}-style format used for those labels, which must contain a single
+        \verb|e|, \verb|f|, or \verb|g| conversion; by default a format is chosen from the level spacing.
         \item \verb|labelcontours| --- Specifies that every {\em interval}$^{th}$ contour line, starting with
         the {\em offset}$^{th}$ line, should be labeled with the contour value.
-        \item \verb|levellist| --- Gives an explicit comma-separated list of contour or shade levels to use.
+        \item \verb|levellist| --- Gives an explicit comma-separated list of contour levels to use, in place
+        of the evenly-spaced levels implied by \verb|contours|.  \verb|linetype|, \verb|thickness|,
+        \verb|label|, and \verb|format| have the same meaning as for \verb|contours|.
         \item \verb|limitlevels| --- Restricts contour or shade levels to the specified range.
         \item \verb|mapshade| --- Maps the shades from hue {\em hue0} to {\em hue1} instead of the default rainbow.
         \end{itemize}
+        \verb|shade| may be combined with \verb|contours| or \verb|levellist| to overlay contour lines on a
+        color map.  The two are independent: \verb|shade| controls only the number and range of the color
+        bands, while \verb|contours| or \verb|levellist| controls only the overlaid lines.  For example,
+        \verb|-shade=100,0,500 -contours=6,100,400| gives a color bar spanning 0 to 500 with six lines at
+        100, 160, \ldots, 400.  When \verb|contours| is used over a color map without an explicit
+        {\em min} and {\em max}, the lines are distributed over the interior of the data range, since lines
+        at the extremes would coincide with the edge of the plot.
     \item Image processing:
 \begin{flushleft}{\tt
 [-interpolate={\em nx},{\em ny}[,{floor | ceiling | antiripple}]] [-filter={\em xcutoff},{\em ycutoff}]
