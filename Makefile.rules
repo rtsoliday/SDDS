@@ -305,12 +305,19 @@ ifeq ($(IMPROV_BUILD),1)
 endif
 ifeq ($(SWING_BUILD),1)
   # Swing uses Ubuntu-built dependencies, independently of the Improv mount.
-  SWING_HDF5_DIR ?= /soft/hdf5/1.14.2/gcc-10.3/serial
-  SWING_FFTW_DIR ?= /soft/fftw/3.3.10/swing-gcc-9.4.0
-  SWING_GSL_DIR ?= /soft/gsl/2.7.1/gcc11.3
-  SWING_PNG_DIR ?= /soft/libpng/1.6.41.git/swing
-  SWING_TIFF_DIR ?= /soft/libtiff/4.5.1/swing/gcc10.3
-  SWING_XZ_DIR ?= /soft/xz/5.2.2
+  # Since the November 2026 Ubuntu 22.04 upgrade these come from the LCRC
+  # stack's gcc builds for ubuntu22.04 (serial HDF5); the old /soft/<pkg> trees are gone.
+  SWING_STACK_DIR ?= /soft/lcrc-stack/install/linux-x86_64_v3
+  SWING_HDF5_DIR ?= $(SWING_STACK_DIR)/hdf5-1.14.6-jrzpcccwot5lnftkyua2itfugxj7q543
+  SWING_FFTW_DIR ?= $(SWING_STACK_DIR)/fftw-3.3.11-c7drdhl6ktqpglwftjhceyzciu23auur
+  SWING_GSL_DIR ?= $(SWING_STACK_DIR)/gsl-2.8-slyrp7aznbbk3c76tvwcpppba33olj7z
+  SWING_PNG_DIR ?= $(SWING_STACK_DIR)/libpng-1.6.58-jat6cifzw53jml4gw3jhgs7xnmjktat6
+  SWING_TIFF_DIR ?= $(SWING_STACK_DIR)/libtiff-4.7.1-d32zduy4cq7c5mqk7fztvvxzoytejlji
+  SWING_XZ_DIR ?= $(SWING_STACK_DIR)/xz-5.8.3-zsm2ywtyeqxy5mjdzonu4e6ugghoynob
+  # The stack's RPATHs name its build prefix (/apps/install), which Swing does not
+  # mount, so list the libraries' own dependencies: szip/libaec for HDF5, libjpeg for TIFF.
+  SWING_DEP_LIB_DIRS ?= $(SWING_STACK_DIR)/libaec-1.1.7-qr6xm2bmmquybfhqk7d4tbe7t5ddi7li/lib \
+                        $(SWING_STACK_DIR)/libjpeg-turbo-3.1.3-d3nlcgn5rnc2vji5yz2g5em2a357bm3p/lib
   SWING_GD_INCLUDE_DIR ?= /home/soliday/swing/build-deps/usr/include
   SWING_MKL_DIR ?= /gpfs/fs1/soft/swing/spack-0.16.1/opt/spack/linux-ubuntu20.04-x86_64/gcc-9.3.0/intel-oneapi-mkl-2023.1.0-fnkpcat/mkl/2023.1.0
   # Use the installed MKL even when its module has not exported MKLROOT.
@@ -326,7 +333,10 @@ ifeq ($(SWING_BUILD),1)
   TIFF_LIB = $(SWING_TIFF_DIR)/lib/libtiff.so
   GD_LIB = /lib/x86_64-linux-gnu/libgd.so.3
   JPEG_LIB = /lib/x86_64-linux-gnu/libjpeg.so.8
-  SWING_RUNTIME_LIB_DIRS = $(addsuffix /lib,$(SWING_HDF5_DIR) $(SWING_FFTW_DIR) $(SWING_GSL_DIR) $(SWING_PNG_DIR) $(SWING_TIFF_DIR) $(SWING_XZ_DIR))
+  SWING_RUNTIME_LIB_DIRS = $(addsuffix /lib,$(SWING_HDF5_DIR) $(SWING_FFTW_DIR) $(SWING_GSL_DIR) $(SWING_PNG_DIR) $(SWING_TIFF_DIR) $(SWING_XZ_DIR)) $(SWING_DEP_LIB_DIRS)
+  # Old-style DT_RPATH also covers indirect dependencies (libhdf5.so -> libsz,
+  # libtiff.so -> libjpeg), which DT_RUNPATH does not.
+  LDFLAGS += -Wl$(build_comma)--disable-new-dtags
   LDFLAGS += $(addprefix -Wl$(build_comma)-rpath$(build_comma),$(SWING_RUNTIME_LIB_DIRS))
   # Linking Intel's OpenMP runtime on Swing loads two OpenMP libraries.
   IOMP5_LIB_DIR =
